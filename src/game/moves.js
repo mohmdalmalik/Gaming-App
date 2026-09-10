@@ -41,8 +41,10 @@ function throughDoorwayTarget(state, floor, grid, cfg, to, allowed) {
   return -1;
 }
 
-export function planMove(state, floor, grid, cfg, from, to, allowed) {
+// Plan a walk for `player` (a rules player from state.players) from `from` to the tap `to`.
+export function planMove(state, floor, grid, cfg, player, from, to, allowed) {
   if (state.finished) return { ok: false, reason: 'finished' };
+  if (player.escaped) return { ok: false, reason: 'escaped' };
   let target = throughDoorwayTarget(state, floor, grid, cfg, to, allowed);
   if (target < 0) target = nearestWalkable(grid, to[0], to[1], cfg.grid.tapSnapRadius, allowed);
   if (target < 0) return { ok: false, reason: 'noFloor' };
@@ -53,8 +55,8 @@ export function planMove(state, floor, grid, cfg, from, to, allowed) {
   // The room the player is actually standing in comes first, so a pending doorway crossing
   // (player half a cell short of the boundary) is counted too.
   const rooms = roomSequence(grid, cells);
-  if (rooms[0] !== state.currentRoom) rooms.unshift(state.currentRoom);
-  const verdict = canAffordRoute(state, floor, rooms);
+  if (rooms[0] !== player.currentRoom) rooms.unshift(player.currentRoom);
+  const verdict = canAffordRoute(state, floor, player, rooms);
   if (!verdict.ok) return { ok: false, ...verdict, rooms };
   const waypoints = smoothPath(grid, cells, allowed, cfg.player.clearance * 0.5);
   waypoints[0] = [from[0], from[1]];

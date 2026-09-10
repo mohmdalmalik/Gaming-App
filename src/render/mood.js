@@ -19,8 +19,9 @@ export function createMood(roomViews, hemi, cfg) {
   const skyBase = new THREE.Color(cfg.render.hemisphere.sky);
   const target = new THREE.Color();
   return {
-    update(state, dt, time) {
-      const room = roomViews.get(state.currentRoom)?.room;
+    // `roomId` is the room the active player is in: the whole scene's light level follows it.
+    update(roomId, dt, time) {
+      const room = roomViews.get(roomId)?.room;
       const ambient = room?.mood.ambient ?? 0.6;
       const k = Math.min(1, dt * cfg.render.ambientLerp);
       hemi.intensity += (cfg.render.hemisphere.baseIntensity * ambient - hemi.intensity) * k;
@@ -33,8 +34,8 @@ export function createMood(roomViews, hemi, cfg) {
         for (const { light, base } of view.lights) light.intensity = base * reveal * fl;
       }
     },
-    snap(state) {
-      const room = roomViews.get(state.currentRoom)?.room;
+    snap(roomId) {
+      const room = roomViews.get(roomId)?.room;
       hemi.intensity = cfg.render.hemisphere.baseIntensity * (room?.mood.ambient ?? 0.6);
       hemi.color.set(room?.mood.color || '#ffffff').lerp(skyBase, 0.5);
     },

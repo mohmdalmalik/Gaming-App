@@ -105,7 +105,10 @@ export function buildGrid(floor, cfg) {
     grid.landings.set(d.id, perSide);
   }
 
-  // Sanity: every room should be reachable on foot from the start.
+  // Sanity: every start spot is on the floor and every room is reachable on foot.
+  for (const [sx, sz] of floor.start.positions) {
+    if (nearestWalkable(grid, sx, sz, 0.3, () => true) < 0) floor.problems.push(`Start position (${sx}, ${sz}) is not on walkable floor`);
+  }
   const startIdx = nearestWalkable(grid, floor.start.pos[0], floor.start.pos[1], 2, () => true);
   if (startIdx < 0) floor.problems.push('Start position is not on walkable floor');
   else {

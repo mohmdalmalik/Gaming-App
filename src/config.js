@@ -25,14 +25,21 @@ export const config = {
   },
 
   player: {
-    speed: 2.2,           // walking speed
-    turnSpeed: 9,         // how quickly the player turns to face the walking direction (per second)
-    clearance: 0.3,       // minimum distance the player's centre keeps from walls and furniture
-    radius: 0.3,          // visual capsule radius
-    height: 1.65,         // visual capsule height (total)
-    bobAmplitude: 0.035,  // vertical bob while walking
-    bobFrequency: 7,      // bob cycles per second at full speed
+    speed: 2.0,           // walking speed
+    turnSpeed: 9,         // how quickly a character turns to face the walking direction (per second)
+    clearance: 0.3,       // minimum distance a character's centre keeps from walls and furniture
     arriveDistance: 0.06, // how close counts as "reached the waypoint"
+  },
+
+  character: {
+    strideFrequency: 1.5,     // walk cycles per second (one cycle = two steps)
+    legSwing: 0.55,           // radians
+    armSwing: 0.38,           // radians
+    bobAmplitude: 0.03,       // vertical bob while walking
+    ringRadius: 0.42,         // coloured floor ring under each character
+    ringActiveOpacity: 0.95,
+    ringInactiveOpacity: 0.35,
+    markerHeight: 0.3,        // how far the active marker floats above the head
   },
 
   grid: {
@@ -59,7 +66,6 @@ export const config = {
     hemisphere: { sky: '#ffffff', ground: '#3a3438', baseIntensity: 0.6 },
     ambientLerp: 1.5,     // how quickly the global light level follows the current room's mood (per second)
     revealDuration: 0.6,  // seconds for a newly discovered room to "rise" into view
-    frontierPulseSpeed: 2.2,
   },
 
   palette: {
@@ -72,6 +78,7 @@ export const config = {
     frontier: '#ffcc66',
     exit: '#8ff5b0',
   },
+
 
   exit: {
     overlayDelay: 0.7,    // seconds after entering the exit room before the overlay appears

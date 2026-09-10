@@ -23,8 +23,12 @@
 
     <div id="hud" hidden>
       <div class="hud-top-left">
-        <div id="room-name" class="pill">—</div>
-        <div id="turn" class="pill small">Turn 1</div>
+        <div id="active-player" class="pill player">—</div>
+        <div id="room-name" class="pill small">—</div>
+        <div id="round" class="pill small">Round 1</div>
+      </div>
+      <div class="hud-top-center">
+        <div id="turn-order" class="turn-order"></div>
       </div>
       <div class="hud-top-right">
         <div id="action-points" class="pill">Action points: —</div>
@@ -62,9 +66,12 @@
 
     <div id="exit-overlay" class="overlay center" hidden>
       <div class="card">
-        <h1>You found the exit</h1>
+        <h1 id="exit-title">You found the exit</h1>
         <p id="exit-summary" class="muted"></p>
-        <button id="btn-restart" class="btn primary big" type="button">Restart</button>
+        <div class="button-row">
+          <button id="btn-continue" class="btn primary big" type="button">Continue</button>
+          <button id="btn-restart" class="btn big" type="button">Restart</button>
+        </div>
       </div>
     </div>
 

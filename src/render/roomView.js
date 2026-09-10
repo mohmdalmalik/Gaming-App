@@ -91,13 +91,13 @@ export function createRoomViews(floor, cfg, scene) {
   return views;
 }
 
-// A doorway shows a floor strip once either side is known, and a glowing frame while it
-// still leads somewhere undiscovered.
+// A doorway shows a floor strip once either side is known, and a steady bright frame while
+// it still leads somewhere undiscovered. (No pulsing: highlights must not read as flicker.)
 export function createDoorwayViews(floor, cfg, scene) {
   const views = new Map();
   const H = cfg.walls.height;
   const t = cfg.walls.thickness;
-  const frontierMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(cfg.palette.frontier), transparent: true, opacity: 0.9, depthWrite: false, toneMapped: false });
+  const frontierMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(cfg.palette.frontier), toneMapped: false });
   const stripMat = lambert(cfg.palette.doorStrip);
 
   for (const d of floor.doorways) {
@@ -106,7 +106,7 @@ export function createDoorwayViews(floor, cfg, scene) {
 
     const strip = new THREE.Mesh(unitPlane, stripMat);
     strip.scale.set(along ? sizeAlong : sizeAcross, 1, along ? sizeAcross : sizeAlong);
-    strip.position.set(d.center[0], 0.01, d.center[1]);
+    strip.position.set(d.center[0], 0.02, d.center[1]);
     strip.visible = false;
     scene.add(strip);
 
@@ -128,10 +128,9 @@ export function createDoorwayViews(floor, cfg, scene) {
     marker.add(lintel);
     const bar = new THREE.Mesh(unitBox, frontierMat);
     bar.scale.set(along ? d.width : sizeAcross + 0.02, 0.03, along ? sizeAcross + 0.02 : d.width);
-    bar.position.set(d.center[0], 0.015, d.center[1]);
+    bar.position.set(d.center[0], 0.03, d.center[1]);
     marker.add(bar);
     marker.visible = false;
-    marker.renderOrder = 1;
     scene.add(marker);
 
     views.set(d.id, {
@@ -145,10 +144,5 @@ export function createDoorwayViews(floor, cfg, scene) {
     });
   }
 
-  return {
-    views,
-    update(time) {
-      frontierMat.opacity = 0.55 + 0.4 * (0.5 + 0.5 * Math.sin(time * cfg.render.frontierPulseSpeed * Math.PI));
-    },
-  };
+  return { views };
 }

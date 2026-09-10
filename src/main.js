@@ -1,16 +1,17 @@
 // Entry point: builds the floor from data, sets up rendering, input and interface, and
-// runs the game loop.
+// runs the game loop. Five players take turns on one device (hot-seat).
 import * as THREE from 'three';
 import { config as cfg } from './config.js';
 import { floor1 } from './data/floor1.js';
+import { roster } from './data/characters.js';
 import { buildFloor } from './game/floor.js';
 import { buildGrid } from './game/grid.js';
-import { createState, resetState, endTurn } from './game/state.js';
+import { createState, resetState, endTurn, activePlayer, nextPlayer } from './game/state.js';
 import { createScene } from './render/scene.js';
 import { createRoomViews, createDoorwayViews } from './render/roomView.js';
 import { updateCutaway } from './render/cutaway.js';
 import { createMood } from './render/mood.js';
-import { createPlayerView } from './render/playerView.js';
+import { createCharacterView } from './render/characterView.js';
 import { createCameraRig } from './camera.js';
 import { createInput } from './input.js';
 import { createPlayer } from './player.js';
@@ -26,15 +27,16 @@ if (floor.problems.length) {
   // A broken floor file is a bug worth stopping for, not something to limp past.
   throw new Error(`Problems in the floor data:\n• ${floor.problems.join('\n• ')}`);
 }
-const state = createState(floor);
-const player = createPlayer(cfg, floor.start.pos);
+const state = createState(floor, roster);
+const startSpot = i => floor.start.positions[i % floor.start.positions.length];
+const movers = roster.map((_, i) => createPlayer(cfg, startSpot(i)));
 
 // --- Rendering -------------------------------------------------------------------------
 const container = document.getElementById('view');
 const view = createScene(container, cfg);
 const roomViews = createRoomViews(floor, cfg, view.scene);
 const doorways = createDoorwayViews(floor, cfg, view.scene);
-const playerView = createPlayerView(cfg, view.scene);
+const characters = roster.map(def => createCharacterView(def, cfg, view.scene));
 const mood = createMood(roomViews, view.hemi, cfg);
 const rig = createCameraRig(view.camera, cfg);
 
@@ -47,13 +49,13 @@ let running = false;
 let exitTimer = null;
 
 const discovery = createDiscovery({
-  floor, grid, state, player, cfg,
+  floor, grid, state, movers, cfg,
   on: {
-    reject(reason, plan) {
+    reject(reason, plan, player) {
       if (reason === 'notEnoughActionPoints') {
-        hud.toast(state.actionPoints === 0
-          ? 'No action points left — tap End turn.'
-          : `That route needs ${plan.cost} action points — you have ${state.actionPoints}.`);
+        hud.toast(player.actionPoints === 0
+          ? `${player.name} has no action points left — tap End turn.`
+          : `That route needs ${plan.cost} action points — ${player.name} has ${player.actionPoints}.`);
       } else if (reason === 'noPath') {
         hud.toast("Can't find a way there.");
       }
@@ -61,9 +63,9 @@ const discovery = createDiscovery({
     roomEntered(result) {
       syncViews(true);
       hud.update(state, floor);
-      if (result.isExit) {
+      if (result.escaped) {
         clearTimeout(exitTimer);
-        exitTimer = setTimeout(showExit, cfg.exit.overlayDelay * 1000);
+        exitTimer = setTimeout(() => showExit(result.player), cfg.exit.overlayDelay * 1000);
       }
     },
   },
@@ -79,21 +81,45 @@ function syncViews(animate) {
     const a = state.discovered.has(dv.doorway.a), b = state.discovered.has(dv.doorway.b);
     dv.setState({ known: a || b, frontier: a !== b });
   }
+  characters.forEach((cv, i) => cv.setActive(i === state.activeIndex && !state.finished));
 }
 
-function showExit() {
-  overlays.showExit(`Turn ${state.turn} · ${state.discovered.size} of ${floor.roomList.length} rooms explored`);
+function activeMover() { return movers[state.activeIndex]; }
+
+function showExit(player) {
+  const explored = `${state.discovered.size} of ${floor.roomList.length} rooms explored`;
+  if (state.finished) {
+    overlays.showExit({ title: 'Everyone found the exit!', summary: `Round ${state.round} · ${explored}`, canContinue: false });
+  } else {
+    const next = nextPlayer(state);
+    overlays.showExit({
+      title: `${player.name} found the exit!`,
+      summary: `Round ${state.round} · ${explored} · ${state.players.filter(p => !p.escaped).length} still inside`,
+      canContinue: true,
+      continueLabel: next ? `Continue → ${next.name}` : 'Continue',
+    });
+  }
+}
+
+function passTurn() {
+  const result = endTurn(state, floor);
+  syncViews(false);
+  hud.update(state, floor);
+  if (result.finished) return;
+  rig.setFocus(activeMover().x, activeMover().z);
+  mood.snap(activePlayer(state).currentRoom);
+  hud.toast(`${result.to.name}'s turn — ${floor.rules.actionPointsPerTurn} action points.`);
 }
 
 function restart() {
   clearTimeout(exitTimer);
   resetState(state, floor);
-  player.reset(floor.start.pos[0], floor.start.pos[1]);
+  movers.forEach((m, i) => m.reset(startSpot(i)[0], startSpot(i)[1]));
   discovery.refresh();
   syncViews(false);
-  rig.setFocus(player.x, player.z, true);
+  rig.setFocus(activeMover().x, activeMover().z, true);
   rig.reset();
-  mood.snap(state);
+  mood.snap(activePlayer(state).currentRoom);
   hud.update(state, floor);
   overlays.hideExit();
   map.close();
@@ -108,10 +134,8 @@ function begin() {
 }
 
 function doEndTurn() {
-  if (state.finished) return;
-  endTurn(state, floor);
-  hud.update(state, floor);
-  hud.toast(`Turn ${state.turn} — action points restored.`);
+  if (state.finished || overlays.exitOpen) return;
+  passTurn();
 }
 
 // --- Screen ↔ ground plane ----------------------------------------------------------------
@@ -136,7 +160,7 @@ function groundToScreen(x, z) {
 
 createInput(view.renderer.domElement, {
   onTap(x, y) {
-    if (!running || map.isOpen) return;
+    if (!running || map.isOpen || overlays.exitOpen) return;
     const p = screenToGround(x, y);
     if (p) discovery.walkTo(p.x, p.z);
   },
@@ -155,14 +179,15 @@ createInput(view.renderer.domElement, {
 hud.on('rotateLeft', () => rig.rotateLeft());
 hud.on('rotateRight', () => rig.rotateRight());
 hud.on('endTurn', doEndTurn);
-hud.on('map', () => map.toggle(state, player));
+hud.on('map', () => map.toggle(state, movers));
 overlays.onBegin(begin);
+overlays.onContinue(() => { overlays.hideExit(); passTurn(); });
 overlays.onRestart(restart);
 
 // --- Initial state -----------------------------------------------------------------------
 syncViews(false);
-rig.setFocus(player.x, player.z, true);
-mood.snap(state);
+rig.setFocus(activeMover().x, activeMover().z, true);
+mood.snap(activePlayer(state).currentRoom);
 hud.update(state, floor);
 view.compile();
 
@@ -174,16 +199,15 @@ view.renderer.setAnimationLoop(now => {
   last = now;
   const time = now / 1000;
   if (running) {
-    player.update(dt);
+    activeMover().update(dt);
     discovery.update();
   }
-  rig.setFocus(player.x, player.z);
+  rig.setFocus(activeMover().x, activeMover().z);
   rig.update(dt);
   for (const rv of roomViews.values()) rv.update(dt);
-  doorways.update(time);
-  mood.update(state, dt, time);
+  mood.update(activePlayer(state).currentRoom, dt, time);
   updateCutaway(roomViews, rig, state, cfg, dt);
-  playerView.update(player, dt);
+  characters.forEach((cv, i) => cv.update(movers[i], dt));
   view.render();
   if (++frames === 2) overlays.setReady(); // first frames are on screen: allow "Tap to begin"
 });
@@ -191,11 +215,13 @@ document.addEventListener('visibilitychange', () => { last = performance.now(); 
 
 // --- Debug / test hooks (also handy from the browser console) ----------------------------
 window.__game = {
-  cfg, floor, grid, state, player, rig, roomViews, doorways, discovery, view,
+  cfg, floor, grid, state, movers, rig, roomViews, doorways, characters, discovery, view,
   begin, restart, endTurn: doEndTurn,
+  activePlayer: () => activePlayer(state),
+  activeMover,
   walkTo: (x, z) => discovery.walkTo(x, z),
   rotate: steps => rig.rotate(steps),
-  toggleMap: () => map.toggle(state, player),
+  toggleMap: () => map.toggle(state, movers),
   isMapOpen: () => map.isOpen,
   isRunning: () => running,
   groundToScreen,

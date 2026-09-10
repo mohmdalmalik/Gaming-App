@@ -1,50 +1,48 @@
 # Progress
 
-_Last updated at the end of the session that built the greybox prototype._
+_Last updated after the second greybox pass (characters, five hot-seat players, 14-room floor)._
 
-## Done — greybox prototype (development plan step 1)
-- Dollhouse camera following the player: fixed angle, 90° snap rotation buttons, pinch zoom with limits, two-finger pan that eases back, tuning values in `src/config.js`.
-- Capsule player; tap/click to walk with grid pathfinding around furniture, smooth turning, walk bob.
-- Test floor in `src/data/floor1.js`: Guest Suite → West Corridor → Lounge (two exits) → Service Passage with two dead ends (Storage Room, Service Room) / South Corridor → Lift Landing → Fire Exit. 9 rooms.
-- Discovery: only the suite is visible at first; doorways to unexplored rooms glow; tapping the glow walks you through and reveals the room permanently.
-- Action points from data: 10 to start, free inside a room, 1 per doorway, locked at 0 until End turn.
-- Mood per room from data: warm/bright at the start and lounge, cooler and dimmer beyond, flickering light in the Service Passage; the whole scene's light level follows the current room.
-- "You found the exit" overlay with Restart; "Tap to begin" start overlay (disabled until the 3D view has rendered); HUD (room name, turn, action points, rotate, End turn, map); 2D map of discovered rooms with doorways, unexplored exits marked "?", player position.
-- Committed to `main` (commit "Add greybox prototype of the gameplay view").
+## Done
+### Pass 1 — greybox prototype
+- Dollhouse camera (follow, 90° snap rotation, pinch zoom with limits, two-finger pan that eases back), tap-to-walk with pathfinding, room discovery with glowing doorways, action points, per-room mood lighting, exit overlay, HUD, 2D map, "Tap to begin".
+
+### Pass 2 — characters, players, bigger floor
+- Placeholder articulated characters (head, torso, arms, legs, walk cycle) replace the capsule. Male and female body types; six outfits in `src/data/characters.js` (suit with tie, tuxedo with bow tie, white dinner jacket; emerald A-line, burgundy column, midnight-blue ballgown), distinguished by silhouette and colour. Built as a swappable view so glTF models can replace it later.
+- Five players, hot-seat: each has a different outfit and a coloured floor ring; the active one has a marker above the head. Only the active player moves; *End turn* passes to the next player and refills their points. HUD shows whose turn it is, the turn order strip, the room, the round, and who is next on the End turn button. The 2D map shows all five.
+- Action points: 5 per turn; 1 per doorway including going back into known rooms; free inside the room (`rules` in `src/data/floor1.js`).
+- New floor: 14 rooms around a central landing with four doorways (west, north, east, south), a loop on the north/east side, three dead ends (guest suite, storage, dining room), one exit, warm → uneasy progression.
+- Reaching the exit takes that player out (overlay "X found the exit!" → Continue passes the turn); when everyone has escaped, "Everyone found the exit!" with Restart.
+- Lighting: flicker only where a room's data says so; doorway highlights are opaque and steady (the pulse is gone).
 
 ## Validation status
-- `tests/logic-check.mjs` (pure rules in Node) and `tests/browser-test.mjs` (headless Chromium, real taps/clicks + `window.__game`, ~60 checks: load with no console errors, discovery, action points, End turn, rotate/cutaway, map, exit, restart, pinch, pan, wheel, draw calls, constant shader count) **all pass**. Setup and run instructions are in the header of each file.
-- **Not yet tested on a real iPad.** The owner should test on the device first (see the handover list below).
-- GitHub Pages could not be checked from the build sandbox. If https://mohmdalmalik.github.io/Gaming-App/ shows 404, enable Pages once: repository → Settings → Pages → Deploy from a branch → `main` / `/ (root)` → Save.
-- Automated review: only the **iPad Safari / touch** lens completed (it also confirmed: touch taps, long-press not a tap, pinch clamping, pan, tap cooldown after multi-touch, pointercancel leaves no stuck state, map overlay sizing, WebGL context loss recovers, no console errors). Its two minor findings are fixed (0-AP pill styling; a 20 s load watchdog message). The other lenses — spec compliance, game logic, rendering/performance, architecture — and the three independent browser testers did **not** run (usage limit). A future session should run those.
+- `node tests/logic-check.mjs` (pure rules) and `node tests/browser-test.mjs` (headless Chromium, real taps/clicks, ~70 checks incl. the full hot-seat flow, an escape, rotation skipping, restart, gestures) **all pass** with no console errors. Setup instructions are in the file headers.
+- Not yet tested on a real iPad.
+- Automated review lenses (logic, rendering, iPad touch, spec) — see the handover for what ran.
 
 ## What the owner should test on the iPad (Safari, landscape)
-1. Open the preview; "Loading…" should become "Tap to begin" within a few seconds. Tap it.
-2. Tap on the floor: the capsule walks there, around furniture, and turns smoothly.
-3. Tap the glowing door frame: the corridor appears, action points go 10 → 9, the room name updates.
-4. Pinch to zoom (it should stop at sensible limits); two-finger drag to look around (it drifts back after ~1 s); ↺ ↻ rotate the view in 90° steps and the lowered walls change sides.
-5. Explore to both dead ends (Storage Room, Service Room): the light should turn cooler and dimmer, with a flicker in the Service Passage.
-6. Use up all points: a message appears when trying to leave a room with 0; End turn restores 10.
-7. Map button (bottom-right): only visited rooms, "?" on unexplored doors, your position; close it.
-8. Reach the Fire Exit via the South Corridor and Lift Landing: overlay appears; Restart puts you back in the suite with everything reset.
-9. Feel: walking speed, camera angle, zoom range, wall stub height, brightness — all in `src/config.js`; room moods in `src/data/floor1.js`.
+1. Open the preview, tap **Tap to begin**. Five figures stand in the landing; Victor (gold ring, marker over his head) is up. Check the five look clearly different and roughly person-sized against the walls.
+2. Tap the floor: only Victor walks; arms and legs swing. Tap one of the four glowing doorways: he goes through, points 5 → 4, the room appears.
+3. **End turn → Eleanor**: the highlight, marker and camera move to her; she has 5 points; the strip at the top shows who is up. Send each player a different way.
+4. Spend all points: the pill turns red and a message names the player; End turn passes on.
+5. Go back into a room you already know: it also costs 1 (as asked).
+6. Watch for flicker: the Back Stairs Passage and Service Corridor lights should flicker; nothing else — and the yellow doorway frames must be steady.
+7. Reach the Fire Exit (east: East Corridor → Service Corridor → Service Stairs → Fire Exit): "found the exit" overlay, Continue passes the turn, and that player is skipped afterwards (crossed out in the strip).
+8. Map: all five dots in their colours; the active one has an arrow.
+9. Feel: walking speed, stride, camera angle, zoom — `src/config.js`; outfits and colours — `src/data/characters.js`; rooms — `src/data/floor1.js`.
 
-## Open product questions for the owner (defaults chosen for now)
-- 9 rooms instead of ~7–8 (the Service Passage makes both dead ends true dead ends). Keep, or attach the dead ends directly to the lounge?
-- Every doorway crossing costs 1 point, including walking back through rooms you already know. With 0 points you cannot even backtrack until End turn. Intended, or should only *new* rooms cost a point?
-- A tap that needs more points than you have is refused with a message. Alternative: walk as far as the points allow.
-- Restart drops you straight back into the suite (no "Tap to begin" again). OK?
-- Extras not on the list: the map marks unexplored doorways with "?", and the HUD shows a turn counter. Keep?
-- The map is drawn north-up and does not rotate with the camera. OK?
+## Open product questions (defaults chosen for now)
+- When a player reaches the exit they leave the game and the others continue; the game ends when all five are out. Alternative: first to escape wins/ends the game.
+- Player names (Victor, Eleanor, Marcus, Beatrice, Henry) are placeholders.
+- Backtracking into a known room costs a point (as asked); with 0 points a player is stuck until End turn.
+- The map and the turn counter ("Round N") are kept from pass 1.
 
 ## Not built yet (by design)
-Main menu lobby, character selection, receptionist intro, health bars, cards, searchable objects, sound, real art.
+Main menu lobby, character selection screen, receptionist intro, health bars, cards, searchable objects, sound, real art.
 
 ## Next steps
-1. Owner tests on the iPad and reports what feels wrong; tune `src/config.js` / `src/data/floor1.js` accordingly.
-2. Confirm the open product questions above.
-3. Review pass over the code (see Validation status) and fix anything confirmed.
-4. Development plan step 2: menu with 3D lobby, character selection, receptionist intro, health and cards, searchable objects.
+1. iPad test of this pass; tune feel and character proportions from feedback.
+2. Confirm the open questions above.
+3. Development plan step 2: menu with 3D lobby, character selection (the outfits already exist in data), receptionist intro, health and cards, searchable objects.
 
 ## Known limitations
 - Three.js comes from a CDN; the first load needs an internet connection.

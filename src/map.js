@@ -1,5 +1,7 @@
 // 2D map overlay: discovered rooms, their doorways/connections and the player's position.
 
+import { activePlayer } from './game/state.js';
+
 export function createMap(doc, floor, cfg) {
   const overlay = doc.getElementById('map-overlay');
   const canvas = doc.getElementById('map-canvas');
@@ -8,8 +10,8 @@ export function createMap(doc, floor, cfg) {
   let open = false;
   let last = null;
 
-  function draw(state, player) {
-    last = { state, player };
+  function draw(state, movers) {
+    last = { state, movers };
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
     const cw = canvas.clientWidth, ch = canvas.clientHeight;
     if (cw === 0 || ch === 0) return;
@@ -29,13 +31,14 @@ export function createMap(doc, floor, cfg) {
     const oz = (ch - (maxZ - minZ) * scale) / 2 - minZ * scale;
     const X = x => ox + x * scale, Z = z => oz + z * scale;
 
-    // Rooms
+    // Rooms (the active player's room is highlighted)
+    const activeRoom = activePlayer(state).currentRoom;
     for (const r of rooms) {
       const x = X(r.min[0]), z = Z(r.min[1]), w = r.size[0] * scale, h = r.size[1] * scale;
-      ctx.fillStyle = tint(r.mood.color, r.id === state.currentRoom ? 0.42 : 0.22);
+      ctx.fillStyle = tint(r.mood.color, r.id === activeRoom ? 0.42 : 0.22);
       ctx.fillRect(x, z, w, h);
-      ctx.lineWidth = r.id === state.currentRoom ? 3 : 1.5;
-      ctx.strokeStyle = r.id === state.currentRoom ? '#e6b45a' : 'rgba(255,255,255,0.55)';
+      ctx.lineWidth = r.id === activeRoom ? 3 : 1.5;
+      ctx.strokeStyle = r.id === activeRoom ? activePlayer(state).color : 'rgba(255,255,255,0.55)';
       ctx.strokeRect(x, z, w, h);
       ctx.fillStyle = '#f2eee6';
       ctx.font = `${Math.max(11, Math.min(15, scale * 0.5))}px system-ui, sans-serif`;
@@ -67,27 +70,36 @@ export function createMap(doc, floor, cfg) {
       }
     }
 
-    // Player
-    const px = X(player.x), pz = Z(player.z);
-    ctx.save();
-    ctx.translate(px, pz);
-    ctx.rotate(-player.heading + Math.PI); // heading 0 faces +z (south) in world = down on the map
-    ctx.fillStyle = '#e6b45a';
-    ctx.beginPath();
-    ctx.moveTo(0, -9); ctx.lineTo(6, 6); ctx.lineTo(0, 3); ctx.lineTo(-6, 6); ctx.closePath();
-    ctx.fill();
-    ctx.restore();
-    ctx.strokeStyle = '#1d1509';
-    ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.arc(px, pz, 3, 0, Math.PI * 2); ctx.stroke();
+    // Players: a dot per player in their colour; the active one gets a heading arrow.
+    const active = activePlayer(state);
+    for (const p of state.players) {
+      const mover = movers[p.index];
+      const px = X(mover.x), pz = Z(mover.z);
+      const isActive = p === active;
+      ctx.save();
+      ctx.translate(px, pz);
+      if (isActive) {
+        ctx.rotate(-mover.heading + Math.PI); // heading 0 faces +z (south) in world = down on the map
+        ctx.fillStyle = p.color;
+        ctx.beginPath();
+        ctx.moveTo(0, -11); ctx.lineTo(7, 7); ctx.lineTo(0, 3.5); ctx.lineTo(-7, 7); ctx.closePath();
+        ctx.fill();
+      } else {
+        ctx.globalAlpha = p.escaped ? 0.45 : 1;
+        ctx.fillStyle = p.color;
+        ctx.beginPath(); ctx.arc(0, 0, 5, 0, Math.PI * 2); ctx.fill();
+        ctx.strokeStyle = '#1d1509'; ctx.lineWidth = 1.5; ctx.stroke();
+      }
+      ctx.restore();
+    }
   }
 
   const api = {
     get isOpen() { return open; },
-    open(state, player) { open = true; overlay.hidden = false; requestAnimationFrame(() => draw(state, player)); },
+    open(state, movers) { open = true; overlay.hidden = false; requestAnimationFrame(() => draw(state, movers)); },
     close() { open = false; overlay.hidden = true; },
-    toggle(state, player) { open ? api.close() : api.open(state, player); },
-    redraw() { if (open && last) draw(last.state, last.player); },
+    toggle(state, movers) { open ? api.close() : api.open(state, movers); },
+    redraw() { if (open && last) draw(last.state, last.movers); },
   };
   closeBtn.addEventListener('click', () => api.close());
   overlay.addEventListener('click', e => { if (e.target === overlay) api.close(); });

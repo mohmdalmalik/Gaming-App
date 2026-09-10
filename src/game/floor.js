@@ -198,11 +198,13 @@ export function buildFloor(data, cfg) {
     max: [Math.max(...roomList.map(r => r.max[0])), Math.max(...roomList.map(r => r.max[1]))],
   };
 
+  // Start room and the spots (room-relative) where the players stand at the beginning.
   const startRoom = rooms.get(data.start?.room);
   if (!startRoom) problems.push(`Start room "${data.start?.room}" not found`);
-  const start = startRoom
-    ? { room: startRoom.id, pos: [startRoom.center[0] + (data.start.pos?.[0] || 0), startRoom.center[1] + (data.start.pos?.[1] || 0)] }
-    : { room: roomList[0]?.id, pos: roomList[0] ? [...roomList[0].center] : [0, 0] };
+  const base = startRoom || roomList[0];
+  const rel = data.start?.positions?.length ? data.start.positions : [data.start?.pos || [0, 0]];
+  const positions = base ? rel.map(p => [base.center[0] + p[0], base.center[1] + p[1]]) : [[0, 0]];
+  const start = { room: base?.id, pos: positions[0], positions };
 
   const exits = roomList.filter(r => r.isExit);
   if (exits.length === 0) problems.push('No room is marked isExit: true');
@@ -220,7 +222,7 @@ export function buildFloor(data, cfg) {
   return {
     id: data.id,
     name: data.name,
-    rules: { moveWithinRoomCost: 0, enterRoomCost: 1, startActionPoints: 10, ...(data.rules || {}) },
+    rules: { moveWithinRoomCost: 0, enterRoomCost: 1, actionPointsPerTurn: 5, ...(data.rules || {}) },
     rooms,
     roomList,
     doorways,

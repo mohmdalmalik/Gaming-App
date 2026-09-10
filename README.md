@@ -6,7 +6,7 @@ The full product vision lives in **[docs/GAME_CONCEPT.md](docs/GAME_CONCEPT.md)*
 
 ## Status
 
-**Greybox prototype** (step 1 of the development plan): the gameplay view built from plain placeholder shapes — boxes for walls and furniture, a capsule for the player. It exists to test the camera, touch controls, walking, room discovery, dead ends, mood changes and the exit on an iPad. No art, menu, characters, sound or cards yet.
+**Greybox prototype, second pass**: the gameplay view built from plain placeholder shapes — boxes for walls and furniture, simple articulated figures for the characters. Five players share one device and take turns (hot-seat) exploring a 14-room floor from a central landing. It exists to test the camera, touch controls, walking, turn-taking, room discovery, dead ends, mood changes and the exit on an iPad. No art, menu, sound or cards yet.
 
 ## Open the preview
 
@@ -26,6 +26,8 @@ Works on iPad Safari (landscape, touch) and on desktop with a mouse:
 | Move the view | two-finger drag (it drifts back to the player) | right- or middle-button drag |
 | Rotate the view | ↺ ↻ buttons | same |
 | Map / End turn | buttons | same |
+
+Five players take turns on the same device: only the highlighted player (coloured ring, marker above the head, name top-left) can move; *End turn* passes control to the next name in the strip at the top and gives them 5 action points. Reaching the Fire Exit takes that player out of the game; the others keep playing.
 
 ## Run locally
 
@@ -47,10 +49,11 @@ src/
   main.js             starts everything and runs the game loop; exposes window.__game for tests
   config.js           all tuning values (camera, player speed, zoom limits, colours…)
   data/floor1.js      THE FLOOR: rooms, doorways, furniture, moods and the action-point rules
+  data/characters.js  body types, outfits and the five players (name, outfit, colour)
   game/               pure rules, no rendering (reusable by a server later)
     floor.js          turns the data into world geometry: rooms, walls, doorways, checks
     grid.js           walkable grid + A* pathfinding + path smoothing
-    state.js          game state: discovered rooms, action points, turns, exit
+    state.js          game state: players, whose turn, action points, discovered rooms, escapes
     moves.js          plans a walk from a tap: discovery rules + action-point check
   render/             Three.js placeholder visuals (the part to replace with real art)
     scene.js          renderer, scene, camera, global light, resizing
@@ -58,11 +61,11 @@ src/
     roomView.js       rooms (floor, walls, furniture, lights) and doorway markers
     cutaway.js        lowers the walls that face the camera
     mood.js           per-room light colour/intensity/flicker, global light level
-    playerView.js     the player capsule
+    characterView.js  placeholder articulated characters (the seam for real character models)
   camera.js           camera rig: follow, 90° snap rotation, zoom, pan, ease back
   input.js            touch + mouse gestures → tap / pinch / drag / wheel
-  player.js           walking along a path, turning, walk bob
-  discovery.js        glue: taps → plan → walk; room changes → reveal + charge points
+  player.js           one character's movement along a path
+  discovery.js        glue for the active player: taps → plan → walk; room changes → reveal + charge points
   hud.js  map.js  overlays.js   on-screen interface, 2D map, start/exit/error overlays
 docs/                 concept, decisions, progress
 ```

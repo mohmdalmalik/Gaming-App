@@ -1,5 +1,6 @@
-// Player movement: follows a list of waypoints at walking speed, turning smoothly toward
-// the direction of travel, with a subtle bob while moving. Pure numbers, no rendering.
+// Movement of one character: follows a list of waypoints at walking speed, turning smoothly
+// toward the direction of travel. Pure numbers, no rendering (the walk animation lives in
+// the character view).
 
 function wrapAngle(a) {
   while (a > Math.PI) a -= 2 * Math.PI;
@@ -14,8 +15,6 @@ export function createPlayer(cfg, start) {
     heading: 0,        // radians; forward = (sin heading, cos heading)
     path: [],
     walking: false,
-    bob: 0,
-    bobPhase: 0,
     destination: null,
 
     setPath(points) {
@@ -23,7 +22,7 @@ export function createPlayer(cfg, start) {
       this.destination = this.path.length ? this.path[this.path.length - 1] : null;
     },
     stop() { this.path = []; this.destination = null; },
-    reset(x, z) { this.x = x; this.z = z; this.heading = 0; this.stop(); this.walking = false; this.bob = 0; this.bobPhase = 0; },
+    reset(x, z) { this.x = x; this.z = z; this.heading = 0; this.stop(); this.walking = false; },
 
     update(dt) {
       let remaining = cfg.player.speed * dt;
@@ -43,13 +42,7 @@ export function createPlayer(cfg, start) {
         if (step >= dist - 1e-9) this.path.shift();
       }
       this.walking = moved;
-      if (moved) {
-        this.bobPhase += dt * cfg.player.bobFrequency * Math.PI * 2;
-        this.bob = Math.abs(Math.sin(this.bobPhase)) * cfg.player.bobAmplitude;
-      } else {
-        this.bob += (0 - this.bob) * Math.min(1, dt * 10);
-        if (!this.path.length) this.destination = null;
-      }
+      if (!moved && !this.path.length) this.destination = null;
       return moved;
     },
   };

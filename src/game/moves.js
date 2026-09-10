@@ -52,7 +52,7 @@ function throughDoorwayTarget(state, floor, grid, cfg, player, to, allowed) {
 // Plan a walk for `player` (a rules player from state.players) from `from` to the tap `to`.
 export function planMove(state, floor, grid, cfg, player, from, to, allowed) {
   if (state.finished) return { ok: false, reason: 'finished' };
-  if (player.escaped) return { ok: false, reason: 'escaped' };
+  if (!player.alive) return { ok: false, reason: 'dead' };
   let target = throughDoorwayTarget(state, floor, grid, cfg, player, to, allowed);
   if (target < 0) target = nearestWalkable(grid, to[0], to[1], cfg.grid.tapSnapRadius, allowed);
   if (target < 0) return { ok: false, reason: 'noFloor' };

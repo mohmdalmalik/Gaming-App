@@ -134,6 +134,7 @@ export const floor1 = {
       name: 'Back Stairs Passage',
       center: [7, -10.5],
       size: [2.4, 5],
+      dark: true,
       mood: { color: '#c8ccd8', intensity: 0.5, ambient: 0.35, flicker: { min: 0.2, max: 1.0, speed: 12 } },
       doorways: [{ wall: 'south', at: 0, width: 1.2, to: 'kitchen' }],
       furniture: [
@@ -173,6 +174,7 @@ export const floor1 = {
       name: 'Service Corridor',
       center: [13, -2.5],
       size: [4, 11],
+      dark: true,
       mood: { color: '#c4c8d4', intensity: 0.6, ambient: 0.4, lights: [[0, -3], [0, 2]], flicker: { min: 0.35, max: 1.0, speed: 9 } },
       doorways: [
         { wall: 'south', at: 0, width: 1.2, to: 'storage' },
@@ -188,6 +190,7 @@ export const floor1 = {
       name: 'Storage Room',
       center: [13, 5],
       size: [5, 4],
+      dark: true,
       mood: { color: '#a9b9d2', intensity: 0.45, ambient: 0.3 },
       doorways: [],
       furniture: [

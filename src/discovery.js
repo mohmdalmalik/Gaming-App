@@ -20,7 +20,7 @@ export function createDiscovery({ floor, grid, state, movers, cfg, on = {} }) {
       const mover = movers[player.index];
       const plan = planMove(state, floor, grid, cfg, player, [mover.x, mover.z], [wx, wz], allowed);
       if (!plan.ok) {
-        if (plan.reason !== 'finished' && plan.reason !== 'escaped') on.reject?.(plan.reason, plan, player);
+        if (plan.reason !== 'finished' && plan.reason !== 'dead') on.reject?.(plan.reason, plan, player);
         return plan;
       }
       mover.setPath(plan.waypoints);

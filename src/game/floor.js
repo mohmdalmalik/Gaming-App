@@ -26,6 +26,7 @@ export function buildFloor(data, cfg) {
       id: r.id,
       name: r.name,
       isExit: !!r.isExit,
+      dark: !!r.dark,          // enterable, but cannot be searched without a Flashlight
       center: [cx, cz],
       size: [w, d],
       min: [cx - w / 2, cz - d / 2],

@@ -1,60 +1,87 @@
 # Progress
 
-_Last updated after the second greybox pass (characters, five hot-seat players, 14-room floor)._
+_Last updated after the rules pass (Hotel Escape mechanics on the greybox)._
 
 ## Done
-### Pass 1 — greybox prototype
-- Dollhouse camera (follow, 90° snap rotation, pinch zoom with limits, two-finger pan that eases back), tap-to-walk with pathfinding, room discovery with glowing doorways, action points, per-room mood lighting, exit overlay, HUD, 2D map, "Tap to begin".
+### Pass 1 — greybox exploration
+Dollhouse camera (follow, 90° snap rotation, pinch zoom, two-finger pan), tap-to-walk with
+pathfinding, room discovery with glowing doorways, per-room mood lighting, HUD, 2D map.
 
-### Pass 2 — characters, players, bigger floor
-- Placeholder articulated characters (head, torso, arms, legs, walk cycle) replace the capsule. Male and female body types; six outfits in `src/data/characters.js` (suit with tie, tuxedo with bow tie, white dinner jacket; emerald A-line, burgundy column, midnight-blue ballgown), distinguished by silhouette and colour. Built as a swappable view so glTF models can replace it later.
-- Five players, hot-seat: each has a different outfit and a coloured floor ring; the active one has a marker above the head. Only the active player moves; *End turn* passes to the next player and refills their points. HUD shows whose turn it is, the turn order strip, the room, the round, and who is next on the End turn button. The 2D map shows all five.
-- Action points: 5 per turn; 1 per doorway including going back into known rooms; free inside the room (`rules` in `src/data/floor1.js`).
-- New floor: 14 rooms around a central landing with four doorways (west, north, east, south), a loop on the north/east side, three dead ends (guest suite, storage, dining room), one exit, warm → uneasy progression.
-- Reaching the exit takes that player out (overlay "X found the exit!" → Continue passes the turn); when everyone has escaped, "Everyone found the exit!" with Restart.
-- Lighting: flicker only where a room's data says so; doorway highlights are opaque and steady (the pulse is gone).
+### Pass 2 — characters and five hot-seat players
+Placeholder articulated figures (male/female body types, six outfits by silhouette and
+colour), five players taking turns on one device, per-player coloured rings and an active
+marker, a 14-room floor around a central landing.
 
-## Fixes applied after the pass-2 review
-A code review (rules lens; the rest hit the usage limit) found five issues; four are fixed and covered by tests:
-- End turn while a figure was mid-walk left the walk queued — it would resume by itself and spend a point on that player's next turn. The outgoing player is now halted on hand-over.
-- A figure frozen by End turn (or an escaped one) kept swinging its arms and legs in place. Halting clears the walking flag, so it stands still.
-- Tapping End turn in the brief gap before the "found the exit" overlay could advance the turn twice and skip a player. Input is now locked during that gap.
-- Tapping a doorway back into a room you already knew sometimes stopped on the near side. Tapping any doorway beside you now reliably takes you through.
-
-Still open (deferred, documented below): the five figures do not avoid each other, so the active player's path can pass through a standing figure.
+### Pass 3 — the rules (this pass)
+The full Hotel Escape rules from `docs/GAME_RULES.md` play on the greybox:
+- **Turn actions** replace free roaming: usable doors blink; tap a door and confirm to move
+  (1 AP) and walk to a free spot in the room; free repositioning inside a room; Search (1 AP);
+  use a card (Bandage, 1 AP); Attack (1 AP, in an encounter). End turn refills AP to 4 and
+  passes to the next living player. AP and whose turn it is are always shown.
+- **Cards & hands**: the deck and every card type from the spec; 4 cards dealt per player with
+  a guaranteed Lantern; one player secretly possessed and holding the 3 Possession cards; a
+  hand panel showing each player's cards, health, the possessed tell, and who they've unmasked.
+- **Searching**: 1 AP draws a card; dark rooms need a Flashlight.
+- **Forced encounters**: entering a room with someone (first meeting there that round) forces
+  Trade or Attack. The trade is a secret two-card exchange with the Lantern-blocks-Possession
+  rule, the reveal-on-block, and the per-room-per-round lock, exactly as written. Knife
+  (1 HP, reusable), Revolver (2 HP, 2 shots then discarded), Bandage healing.
+- **Possession** spreads through successful trades with a private notification.
+- **Win conditions**: a clean player with 3 Lanterns reaching the Fire Exit wins for the
+  humans; everyone possessed (or all clean dead) wins for the possessed side. A clear end
+  screen names the winner, reveals who was possessed, and offers a New game.
+- All rule numbers live in `src/data/rules.js`.
 
 ## Validation status
-- `node tests/logic-check.mjs` (pure rules) and `node tests/browser-test.mjs` (headless Chromium, real taps/clicks, ~70 checks incl. the full hot-seat flow, an escape, rotation skipping, restart, gestures) **all pass** with no console errors. Setup instructions are in the file headers.
+- `node tests/rules-check.mjs` (pure rules), `node tests/logic-check.mjs` (floor/grid), and
+  `node tests/browser-test.mjs` (headless Chromium: load with no console errors, the full turn
+  flow, search + dark rooms, hand + bandage, trade block/reveal, possession spread, attack,
+  both win screens, restart) **all pass**. Setup is in each file's header.
 - Not yet tested on a real iPad.
-- Automated review lenses (logic, rendering, iPad touch, spec) — see the handover for what ran.
 
-## What the owner should test on the iPad (Safari, landscape)
-1. Open the preview, tap **Tap to begin**. Five figures stand in the landing; Victor (gold ring, marker over his head) is up. Check the five look clearly different and roughly person-sized against the walls.
-2. Tap the floor: only Victor walks; arms and legs swing. Tap one of the four glowing doorways: he goes through, points 5 → 4, the room appears.
-3. **End turn → Eleanor**: the highlight, marker and camera move to her; she has 5 points; the strip at the top shows who is up. Send each player a different way.
-4. Spend all points: the pill turns red and a message names the player; End turn passes on.
-5. Go back into a room you already know: it also costs 1 (as asked).
-6. Watch for flicker: the Back Stairs Passage and Service Corridor lights should flicker; nothing else — and the yellow doorway frames must be steady.
-7. Reach the Fire Exit (east: East Corridor → Service Corridor → Service Stairs → Fire Exit): "found the exit" overlay, Continue passes the turn, and that player is skipped afterwards (crossed out in the strip).
-8. Map: all five dots in their colours; the active one has an arrow.
-9. Feel: walking speed, stride, camera angle, zoom — `src/config.js`; outfits and colours — `src/data/characters.js`; rooms — `src/data/floor1.js`.
+## What to test on the iPad (Safari, landscape) — exercising every mechanic
+1. **Start & tell.** Tap to begin. Open **Hand**: one player each turn will see a purple "You
+   are POSSESSED" banner and Possession cards — note who (in hot-seat you can see it). Everyone
+   has a Lantern.
+2. **Move & search.** On a turn, tap a blinking door → **Move**. Then **Search** for a card.
+   Walk to a dark room (Back Stairs Passage, Storage, Service Corridor) and try to Search
+   without a Flashlight — it refuses; search one after finding a Flashlight.
+3. **Trade — block & reveal.** Send the possessed player and a clean player into the same room
+   (move one onto the other). On the forced encounter choose **Trade**: give the Possession
+   card as the possessed player, give a **Lantern** as the clean one — possession is blocked,
+   the clean player now "knows" the possessed one (check their Hand banner), and the Lantern
+   changed hands.
+4. **Trade — possession spreads.** Repeat, but have the clean player give a non-Lantern — they
+   become possessed and now hold a Possession card (check their Hand).
+5. **Attack.** Give a player a turn with a Knife or Revolver in hand, meet someone, choose
+   **Attack** — the target loses health (watch the hearts in the turn strip). Two revolver
+   shots discard it. Reduce someone to 0 to see them die and be skipped.
+6. **Bandage.** After taking damage, open **Hand** and Use a Bandage to heal a bar.
+7. **Win — humans.** Collect three Lanterns on one clean player (search / trade for them) and
+   walk into the Fire Exit → "The humans escaped!".
+8. **Win — possessed.** Let possession spread until no clean player is left → "The hotel keeps
+   them", with the possessed revealed. New game reshuffles.
+9. **Feel:** rule numbers in `src/data/rules.js`; the floor and dark rooms in
+   `src/data/floor1.js`; camera/character feel in `src/config.js`.
 
-## Open product questions (defaults chosen for now)
-- When a player reaches the exit they leave the game and the others continue; the game ends when all five are out. Alternative: first to escape wins/ends the game.
+## Open items (from the spec §11, deferred)
+- Master Key, Lock Pick and Barricade are dealt (deck matches the spec) but have no effect —
+  locked/hidden rooms are out of this build. Their cards say so.
+- Deck balance, a possessed-side catch-up mechanic, and locked rooms wait for real
+  multiplayer testing.
 - Player names (Victor, Eleanor, Marcus, Beatrice, Henry) are placeholders.
-- Backtracking into a known room costs a point (as asked); with 0 points a player is stuck until End turn.
-- The map and the turn counter ("Round N") are kept from pass 1.
-
-## Not built yet (by design)
-Main menu lobby, character selection screen, receptionist intro, health bars, cards, searchable objects, sound, real art.
-
-## Next steps
-1. iPad test of this pass; tune feel and character proportions from feedback.
-2. Confirm the open questions above.
-3. Development plan step 2: menu with 3D lobby, character selection (the outfits already exist in data), receptionist intro, health and cards, searchable objects.
 
 ## Known limitations
-- The five characters do not path around one another: the active player's route can pass through a standing figure, and two players can end a turn on the same spot. Rules are unaffected (each player is tracked separately); it is a visual issue in a hot-seat game. A future pass can block the other players' cells while planning the active player's move.
-- Three.js comes from a CDN; the first load needs an internet connection.
-- Safari's edge-swipe (back/forward) cannot be blocked by a web page: start two-finger drags away from the screen edges, or add the page to the Home Screen.
-- Pixel ratio is capped at 1.5 for smoothness; `window.__game.setPixelRatio(2)` in the console compares sharpness.
+- Hot-seat shows all hidden information to the one player — by design for this build.
+- Characters still don't path around each other (the active player's route can pass through a
+  standing figure). Arrivals now avoid landing on top of someone.
+- Three.js loads from a CDN; the first load needs an internet connection.
+- Safari edge-swipe can't be blocked in-page; start two-finger drags away from the edges, or
+  add to the Home Screen.
+
+## Next steps
+1. iPad test of the rules; tune numbers and feel from feedback.
+2. Decide the deferred items above.
+3. Later passes: main menu with the 3D lobby, character selection (outfits already in data),
+   receptionist intro; then real art, sound, and true multiplayer (where hidden roles finally
+   become hidden).

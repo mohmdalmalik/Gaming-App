@@ -1,11 +1,10 @@
-// Full-screen overlays: "Tap to begin", "found the exit", and load errors.
+// Full-screen overlays: "Tap to begin", the end screen (who won), and load errors.
 
 export function createOverlays(doc) {
   const start = doc.getElementById('start-overlay');
-  const exit = doc.getElementById('exit-overlay');
-  const exitTitle = doc.getElementById('exit-title');
-  const exitSummary = doc.getElementById('exit-summary');
-  const continueBtn = doc.getElementById('btn-continue');
+  const end = doc.getElementById('end-overlay');
+  const endTitle = doc.getElementById('end-title');
+  const endSummary = doc.getElementById('end-summary');
   const restartBtn = doc.getElementById('btn-restart');
   const error = doc.getElementById('error-overlay');
   const errorMessage = doc.getElementById('error-message');
@@ -15,19 +14,12 @@ export function createOverlays(doc) {
     // The 3D view has rendered: the begin button becomes usable.
     setReady() { beginBtn.disabled = false; beginBtn.textContent = 'Tap to begin'; },
     onBegin(fn) { beginBtn.addEventListener('click', e => { e.preventDefault(); fn(); }); },
-    onContinue(fn) { continueBtn.addEventListener('click', e => { e.preventDefault(); fn(); }); },
     onRestart(fn) { restartBtn.addEventListener('click', e => { e.preventDefault(); fn(); }); },
     showStart() { start.hidden = false; },
     hideStart() { start.hidden = true; },
-    showExit({ title, summary, canContinue, continueLabel }) {
-      exitTitle.textContent = title;
-      exitSummary.textContent = summary || '';
-      continueBtn.hidden = !canContinue;
-      continueBtn.textContent = continueLabel || 'Continue';
-      exit.hidden = false;
-    },
-    hideExit() { exit.hidden = true; },
-    get exitOpen() { return !exit.hidden; },
+    showEnd(title, summary) { endTitle.textContent = title; endSummary.textContent = summary || ''; end.hidden = false; },
+    hideEnd() { end.hidden = true; },
+    get endOpen() { return !end.hidden; },
     showError(message) { errorMessage.textContent = message; error.hidden = false; start.hidden = true; },
   };
 }

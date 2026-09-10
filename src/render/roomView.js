@@ -99,6 +99,9 @@ export function createDoorwayViews(floor, cfg, scene) {
   const t = cfg.walls.thickness;
   const frontierMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(cfg.palette.frontier), toneMapped: false });
   const stripMat = lambert(cfg.palette.doorStrip);
+  // A separate blinking floor bar shown on doorways the active player may step through this
+  // turn. Its opacity pulses (a deliberate action cue, not the ambient mood flicker).
+  const usableMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(cfg.palette.usable || '#7fe0a0'), transparent: true, opacity: 0.8, depthWrite: false, toneMapped: false });
 
   for (const d of floor.doorways) {
     const along = d.axis === 'x';
@@ -133,16 +136,32 @@ export function createDoorwayViews(floor, cfg, scene) {
     marker.visible = false;
     scene.add(marker);
 
+    // The usable-door blink bar (a bright threshold strip on the floor).
+    const blink = new THREE.Mesh(unitPlane, usableMat);
+    blink.scale.set(along ? d.width + 0.2 : sizeAcross + 0.3, 1, along ? sizeAcross + 0.3 : d.width + 0.2);
+    blink.position.set(d.center[0], 0.04, d.center[1]);
+    blink.visible = false;
+    blink.renderOrder = 2;
+    scene.add(blink);
+
     views.set(d.id, {
       doorway: d,
       strip,
       marker,
+      blink,
       setState({ known, frontier }) {
         strip.visible = known;
         marker.visible = frontier;
       },
+      setUsable(v) { blink.visible = v; },
     });
   }
 
-  return { views };
+  return {
+    views,
+    // Pulse the usable-door bars together.
+    update(time) {
+      usableMat.opacity = 0.35 + 0.45 * (0.5 + 0.5 * Math.sin(time * 4));
+    },
+  };
 }

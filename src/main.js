@@ -1,12 +1,18 @@
-// Entry point: builds the floor from data, sets up rendering, input and interface, and
-// runs the game loop. Five players take turns on one device (hot-seat).
+// Entry point: builds the floor, sets up rendering, interface and the turn-based rules of
+// Hotel Escape, and runs the game loop. Five players take turns on one device (hot-seat).
 import * as THREE from 'three';
 import { config as cfg } from './config.js';
+import { rules } from './data/rules.js';
 import { floor1 } from './data/floor1.js';
 import { roster } from './data/characters.js';
 import { buildFloor } from './game/floor.js';
 import { buildGrid } from './game/grid.js';
-import { createState, resetState, endTurn, activePlayer, nextPlayer } from './game/state.js';
+import {
+  createState, resetState, endTurn, activePlayer, nextPlayer, checkWin,
+  usableDoorways, pendingEncounters, lockEncounter,
+} from './game/state.js';
+import { search, useBandage, resolveTrade, resolveAttack } from './game/actions.js';
+import { CARDS } from './game/cards.js';
 import { createScene } from './render/scene.js';
 import { createRoomViews, createDoorwayViews } from './render/roomView.js';
 import { updateCutaway } from './render/cutaway.js';
@@ -19,15 +25,15 @@ import { createDiscovery } from './discovery.js';
 import { createHud } from './hud.js';
 import { createMap } from './map.js';
 import { createOverlays } from './overlays.js';
+import { createHand } from './ui/hand.js';
+import { createEncounter } from './ui/encounter.js';
 
 // --- World (pure data + rules) ---------------------------------------------------------
 const floor = buildFloor(floor1, cfg);
 const grid = buildGrid(floor, cfg);
-if (floor.problems.length) {
-  // A broken floor file is a bug worth stopping for, not something to limp past.
-  throw new Error(`Problems in the floor data:\n• ${floor.problems.join('\n• ')}`);
-}
-const state = createState(floor, roster);
+if (floor.problems.length) throw new Error(`Problems in the floor data:\n• ${floor.problems.join('\n• ')}`);
+let seed = (Date.now() & 0x7fffffff) || 1;
+const state = createState(floor, roster, seed);
 const startSpot = i => floor.start.positions[i % floor.start.positions.length];
 const movers = roster.map((_, i) => createPlayer(cfg, startSpot(i)));
 
@@ -44,38 +50,27 @@ const rig = createCameraRig(view.camera, cfg);
 const hud = createHud(document, cfg);
 const map = createMap(document, floor, cfg);
 const overlays = createOverlays(document);
+const hand = createHand(document, cfg, { onUseBandage });
+const encounter = createEncounter(document, cfg);
 
 let running = false;
-let exitTimer = null;
-let escaping = false; // a player has reached the exit; the overlay is about to open
+let pendingArrival = null;   // enterRoom result waiting for the walk to finish
+let selectedMove = null;     // a door move awaiting confirmation
+
+const uiBusy = () => map.isOpen || hand.isOpen || encounter.isOpen || overlays.endOpen;
 
 const discovery = createDiscovery({
   floor, grid, state, movers, cfg,
   on: {
-    reject(reason, plan, player) {
-      if (reason === 'notEnoughActionPoints') {
-        hud.toast(player.actionPoints === 0
-          ? `${player.name} has no action points left — tap End turn.`
-          : `That route needs ${plan.cost} action points — ${player.name} has ${player.actionPoints}.`);
-      } else if (reason === 'noPath') {
-        hud.toast("Can't find a way there.");
-      }
-    },
     roomEntered(result) {
+      pendingArrival = result;
       syncViews(true);
       hud.update(state, floor);
-      if (result.escaped) {
-        // Let the figure finish stepping into the exit room, then show the overlay. Until it
-        // opens, block End turn so a tap in this gap can't advance the turn twice.
-        escaping = true;
-        clearTimeout(exitTimer);
-        exitTimer = setTimeout(() => showExit(result.player), cfg.exit.overlayDelay * 1000);
-      }
     },
   },
 });
 
-// Bring every render-side flag in line with the game state.
+// --- Render sync -------------------------------------------------------------------------
 function syncViews(animate) {
   for (const [id, rv] of roomViews) {
     const known = state.discovered.has(id);
@@ -88,63 +83,123 @@ function syncViews(animate) {
   characters.forEach((cv, i) => cv.setActive(i === state.activeIndex && !state.finished));
 }
 
+// Blink the doors the active player may use this turn.
+function refreshUsable() {
+  const usable = new Set(state.finished ? [] : usableDoorways(state, floor, activePlayer(state)).map(d => d.id));
+  for (const dv of doorways.views.values()) dv.setUsable(usable.has(dv.doorway.id));
+}
+
+function refresh() { hud.update(state, floor); refreshUsable(); hand.refresh(); }
+
 function activeMover() { return movers[state.activeIndex]; }
 
-function showExit(player) {
-  escaping = false; // the overlay now guards input in place of the escaping flag
-  const explored = `${state.discovered.size} of ${floor.roomList.length} rooms explored`;
-  if (state.finished) {
-    overlays.showExit({ title: 'Everyone found the exit!', summary: `Round ${state.round} · ${explored}`, canContinue: false });
-  } else {
-    const next = nextPlayer(state);
-    overlays.showExit({
-      title: `${player.name} found the exit!`,
-      summary: `Round ${state.round} · ${explored} · ${state.players.filter(p => !p.escaped).length} still inside`,
-      canContinue: true,
-      continueLabel: next ? `Continue → ${next.name}` : 'Continue',
-    });
-  }
+// --- Turn flow ---------------------------------------------------------------------------
+function begin() {
+  overlays.hideStart();
+  hud.show();
+  running = true;
+  refresh();
 }
 
 function passTurn() {
+  hud.hideConfirm(); selectedMove = null;
   const result = endTurn(state, floor);
-  // Stop the player handing over so a half-finished walk can't resume (and spend a fresh
-  // point) when their turn comes round again, and so their figure stops animating in place.
   movers[result.from.index]?.halt();
   syncViews(false);
-  hud.update(state, floor);
-  if (result.finished) return;
+  if (result.finished) { refresh(); return; }
   rig.setFocus(activeMover().x, activeMover().z);
   mood.snap(activePlayer(state).currentRoom);
-  hud.toast(`${result.to.name}'s turn — ${floor.rules.actionPointsPerTurn} action points.`);
+  refresh();
+  hud.toast(`${result.to.name}'s turn — ${rules.actionPointsPerTurn} action points.`);
+}
+
+function doEndTurn() {
+  if (!running || state.finished || uiBusy() || activeMover().walking) return;
+  passTurn();
+}
+
+// The active player finished walking into a new room: check the exit, then any encounters.
+function onArrive() {
+  const player = activePlayer(state);
+  const room = floor.rooms.get(player.currentRoom);
+  pendingArrival = null;
+  if (room?.isExit && checkWin(state, floor, player)) { showEnd(); return; }
+  runEncounters(player, pendingEncounters(state, floor, player));
+}
+
+function runEncounters(player, queue) {
+  while (queue.length) {
+    const q = queue.shift();
+    if (q.alive && q.currentRoom === player.currentRoom
+      && !state.encounterLocks.has(`${player.currentRoom}:${Math.min(player.index, q.index)}-${Math.max(player.index, q.index)}`)) {
+      openEncounter(player, q, queue);
+      return;
+    }
+  }
+  refresh(); // no (more) encounters — the turn continues
+}
+
+function openEncounter(P, Q, queue) {
+  hud.hideConfirm(); selectedMove = null;
+  encounter.start({
+    state, P, Q,
+    onResolveTrade: (cardIdP, cardIdQ) => resolveTrade(state, floor, P, Q, cardIdP, cardIdQ),
+    onResolveAttack: weaponId => resolveAttack(state, floor, P, Q, weaponId),
+    onDone: () => {
+      lockEncounter(state, P.currentRoom, P.index, Q.index);
+      syncViews(false); refresh();
+      if (state.finished) { showEnd(); return; }
+      runEncounters(P, queue);
+    },
+  });
+}
+
+function onSearch() {
+  if (!running || state.finished || uiBusy() || activeMover().walking) return;
+  const player = activePlayer(state);
+  const r = search(state, floor, player);
+  if (!r.ok) {
+    hud.toast(r.reason === 'dark' ? 'This room is dark — you need a Flashlight to search.'
+      : r.reason === 'ap' ? 'No action points left to search.'
+      : r.reason === 'empty' ? 'Nothing left to find here.' : 'Cannot search now.');
+    return;
+  }
+  hud.toast(`${player.name} found a ${CARDS[r.card.type].name}.`);
+  refresh();
+}
+
+function onUseBandage(cardId) {
+  const r = useBandage(state, activePlayer(state), cardId);
+  if (!r.ok) {
+    hud.toast(r.reason === 'full' ? 'Already at full health.' : r.reason === 'ap' ? 'No action points left.' : 'Cannot use that now.');
+    return;
+  }
+  refresh();
+}
+
+function showEnd() {
+  const possessedNames = state.players.filter(p => p.possessed).map(p => p.name).join(', ');
+  const dead = state.players.filter(p => !p.alive).map(p => p.name);
+  const parts = [`Possessed: ${possessedNames || 'nobody'}`];
+  if (dead.length) parts.push(`Dead: ${dead.join(', ')}`);
+  parts.push(`Round ${state.round}`);
+  if (state.won === 'humans') overlays.showEnd('The humans escaped!', `A clean guest reached the Fire Exit with the Exit Key. ${parts.join(' · ')}`);
+  else overlays.showEnd('The hotel keeps them', `No clean guest is left to escape. ${parts.join(' · ')}`);
+  refreshUsable();
 }
 
 function restart() {
-  clearTimeout(exitTimer);
-  escaping = false;
-  resetState(state, floor);
+  seed = (Date.now() & 0x7fffffff) || 1;
+  resetState(state, floor, seed);
   movers.forEach((m, i) => m.reset(startSpot(i)[0], startSpot(i)[1]));
+  pendingArrival = null; selectedMove = null;
   discovery.refresh();
   syncViews(false);
   rig.setFocus(activeMover().x, activeMover().z, true);
   rig.reset();
   mood.snap(activePlayer(state).currentRoom);
-  hud.update(state, floor);
-  overlays.hideExit();
-  map.close();
-}
-
-function begin() {
-  // Future audio unlock point: iOS only allows sound created synchronously inside a tap
-  // handler like this one. No sound in this pass.
-  overlays.hideStart();
-  hud.show();
-  running = true;
-}
-
-function doEndTurn() {
-  if (state.finished || overlays.exitOpen || escaping) return;
-  passTurn();
+  overlays.hideEnd(); hand.close(); map.close(); hud.hideConfirm();
+  refresh();
 }
 
 // --- Screen ↔ ground plane ----------------------------------------------------------------
@@ -167,14 +222,76 @@ function groundToScreen(x, z) {
   return { x: rect.left + ((v.x + 1) / 2) * rect.width, y: rect.top + ((1 - v.y) / 2) * rect.height };
 }
 
+// The usable doorway (if any) near a ground point, and the room it leads to.
+function usableDoorwayNear(px, pz, player) {
+  const t = cfg.walls.thickness;
+  let best = null, bestD = Infinity;
+  for (const d of usableDoorways(state, floor, player)) {
+    const along = d.axis === 'x';
+    const halfAlong = d.width / 2 + 0.6, halfAcross = t + 0.7;
+    const da = along ? Math.abs(px - d.center[0]) : Math.abs(pz - d.center[1]);
+    const dc = along ? Math.abs(pz - d.center[1]) : Math.abs(px - d.center[0]);
+    if (da <= halfAlong && dc <= halfAcross) {
+      const dist = da + dc;
+      if (dist < bestD) { bestD = dist; best = d; }
+    }
+  }
+  if (!best) return null;
+  return { door: best, dest: best.a === player.currentRoom ? best.b : best.a };
+}
+
+// A free standing spot in a discovered room: the centre, or a nearby ring position not on
+// another player.
+function standingSlot(roomId, forIndex) {
+  const room = floor.rooms.get(roomId);
+  const [cx, cz] = room.center;
+  const others = movers.filter((m, i) => i !== forIndex && state.players[i].alive);
+  const occupied = (x, z) => others.some(m => Math.hypot(m.x - x, m.z - z) < 0.7);
+  const walkable = (x, z) => { const c = grid.cellAt(x, z); return c >= 0 && grid.walkable[c]; };
+  const ring = [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [-1, 1], [1, -1], [-1, -1]];
+  for (const [ox, oz] of ring) {
+    const x = cx + ox * 0.95, z = cz + oz * 0.95;
+    if (walkable(x, z) && !occupied(x, z)) return { x, z };
+  }
+  return { x: cx, z: cz };
+}
+
+// Where to walk when moving through `door` into `dest`. A discovered room takes the standing
+// slot (its centre / a free spot beside others); an undiscovered room can only be entered as
+// far as the doorway landing until it is revealed.
+function moveTargetInto(dest, door, forIndex) {
+  if (state.discovered.has(dest)) return standingSlot(dest, forIndex);
+  const room = floor.rooms.get(dest);
+  const depth = cfg.walls.thickness + cfg.player.clearance + 0.5;
+  if (door.axis === 'x') return { x: door.center[0], z: door.center[1] + (Math.sign(room.center[1] - door.center[1]) || 1) * depth };
+  return { x: door.center[0] + (Math.sign(room.center[0] - door.center[0]) || 1) * depth, z: door.center[1] };
+}
+
 createInput(view.renderer.domElement, {
   onTap(x, y) {
-    if (!running || map.isOpen || overlays.exitOpen || escaping) return;
+    if (!running || state.finished || uiBusy() || activeMover().walking) return;
     const p = screenToGround(x, y);
-    if (p) discovery.walkTo(p.x, p.z);
+    if (!p) return;
+    const player = activePlayer(state);
+    // 1. A usable door → offer to move there.
+    const near = usableDoorwayNear(p.x, p.z, player);
+    if (near) {
+      const slot = moveTargetInto(near.dest, near.door, player.index);
+      const plan = discovery.plan(slot.x, slot.z);
+      if (plan.ok) {
+        selectedMove = plan;
+        hud.showConfirm(`Move to ${floor.rooms.get(near.dest).name}?`, `Move · ${plan.cost} AP`);
+      } else {
+        hud.toast('Cannot reach that room.');
+      }
+      return;
+    }
+    // 2. Otherwise, a free reposition inside the current room.
+    const plan = discovery.plan(p.x, p.z);
+    if (plan.ok && plan.cost === 0) discovery.go(plan);
+    else if (plan.ok) hud.toast('Tap a glowing doorway to change rooms.');
   },
   onPinch(factor) { if (running) rig.zoomBy(factor); },
-  // The ground point under the fingers stays under the fingers, whatever the zoom.
   onDrag(fromX, fromY, toX, toY) {
     if (!running) return;
     const a = screenToGround(fromX, fromY, hitA);
@@ -188,9 +305,14 @@ createInput(view.renderer.domElement, {
 hud.on('rotateLeft', () => rig.rotateLeft());
 hud.on('rotateRight', () => rig.rotateRight());
 hud.on('endTurn', doEndTurn);
-hud.on('map', () => map.toggle(state, movers));
+hud.on('search', onSearch);
+hud.on('hand', () => { if (running && !uiBusy()) hand.open(state, floor); });
+hud.on('map', () => { if (!encounter.isOpen && !overlays.endOpen) map.toggle(state, movers); });
+hud.onConfirm(
+  () => { if (selectedMove) { discovery.go(selectedMove); selectedMove = null; hud.hideConfirm(); } },
+  () => { selectedMove = null; hud.hideConfirm(); },
+);
 overlays.onBegin(begin);
-overlays.onContinue(() => { overlays.hideExit(); passTurn(); });
 overlays.onRestart(restart);
 
 // --- Initial state -----------------------------------------------------------------------
@@ -207,37 +329,55 @@ view.renderer.setAnimationLoop(now => {
   const dt = Math.min(0.05, Math.max(0, (now - last) / 1000));
   last = now;
   const time = now / 1000;
-  if (running) {
+  if (running && !state.finished) {
     activeMover().update(dt);
     discovery.update();
+    if (pendingArrival && !activeMover().walking && activeMover().path.length === 0) onArrive();
   }
   rig.setFocus(activeMover().x, activeMover().z);
   rig.update(dt);
   for (const rv of roomViews.values()) rv.update(dt);
+  doorways.update(time);
   mood.update(activePlayer(state).currentRoom, dt, time);
   updateCutaway(roomViews, rig, state, cfg, dt);
   characters.forEach((cv, i) => cv.update(movers[i], dt));
   view.render();
-  if (++frames === 2) overlays.setReady(); // first frames are on screen: allow "Tap to begin"
+  if (++frames === 2) overlays.setReady();
 });
 document.addEventListener('visibilitychange', () => { last = performance.now(); });
 
-// --- Debug / test hooks (also handy from the browser console) ----------------------------
+// --- Debug / test hooks ------------------------------------------------------------------
 window.__game = {
-  cfg, floor, grid, state, movers, rig, roomViews, doorways, characters, discovery, view,
+  cfg, rules, floor, grid, state, movers, rig, roomViews, doorways, characters, discovery, view,
   begin, restart, endTurn: doEndTurn,
   activePlayer: () => activePlayer(state),
+  nextPlayer: () => nextPlayer(state),
   activeMover,
   walkTo: (x, z) => discovery.walkTo(x, z),
+  moveToRoom,             // scripted move through a door (used by tests)
+  search: () => onSearch(),
+  openHand: () => hand.open(state, floor),
   rotate: steps => rig.rotate(steps),
   toggleMap: () => map.toggle(state, movers),
   isMapOpen: () => map.isOpen,
+  encounterOpen: () => encounter.isOpen,
   isRunning: () => running,
+  isFinished: () => state.finished,
   groundToScreen,
   screenToGround: (x, y) => { const p = screenToGround(x, y, new THREE.Vector3()); return p ? [p.x, p.z] : null; },
   roomCenter: id => floor.rooms.get(id)?.center ?? null,
   programCount: () => view.renderer.info.programs.length,
   setPixelRatio: cap => view.setPixelRatio(cap),
-  setExposure: x => { view.renderer.toneMappingExposure = x; },
-  setLight: (roomId, intensity) => { for (const l of roomViews.get(roomId)?.lights ?? []) l.base = intensity * cfg.render.pointLightScale; },
 };
+
+// Move the active player into an adjacent room by id (walks through the shared door).
+// Returns the plan; the walk and any encounter resolve over subsequent frames.
+function moveToRoom(destId) {
+  const player = activePlayer(state);
+  const door = (floor.rooms.get(player.currentRoom)?.doorways || []).find(d => d.a === destId || d.b === destId);
+  if (!door) return { ok: false, reason: 'noDoor' };
+  const slot = moveTargetInto(destId, door, player.index);
+  const plan = discovery.plan(slot.x, slot.z);
+  if (plan.ok) discovery.go(plan);
+  return plan;
+}

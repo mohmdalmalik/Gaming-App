@@ -85,7 +85,7 @@ export function createMap(doc, floor, cfg) {
         ctx.moveTo(0, -11); ctx.lineTo(7, 7); ctx.lineTo(0, 3.5); ctx.lineTo(-7, 7); ctx.closePath();
         ctx.fill();
       } else {
-        ctx.globalAlpha = p.escaped ? 0.45 : 1;
+        ctx.globalAlpha = !p.alive ? 0.4 : 1;
         ctx.fillStyle = p.color;
         ctx.beginPath(); ctx.arc(0, 0, 5, 0, Math.PI * 2); ctx.fill();
         ctx.strokeStyle = '#1d1509'; ctx.lineWidth = 1.5; ctx.stroke();

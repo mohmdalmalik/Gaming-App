@@ -76,6 +76,7 @@ export const config = {
     playerMarker: '#3a2a1a',
     doorStrip: '#57575f',
     frontier: '#ffcc66',
+    usable: '#7fe0a0',   // blink bar on doors the active player can step through
     exit: '#8ff5b0',
   },
 
@@ -87,4 +88,7 @@ export const config = {
   ui: {
     toastDuration: 2.2,
   },
+
+  attackCost: 1,   // mirror of rules.actionCost.attack for the encounter modal
+
 };

@@ -14,18 +14,28 @@ export function createDiscovery({ floor, grid, state, movers, cfg, on = {} }) {
     refresh() { allowed = buildAllowed(state, floor, grid); },
     activeMover() { return movers[state.activeIndex]; },
 
-    // Ask the active player to walk to a world position. Returns what happened.
-    walkTo(wx, wz) {
+    // Work out a walk for the active player without committing it.
+    plan(wx, wz) {
       const player = activePlayer(state);
       const mover = movers[player.index];
-      const plan = planMove(state, floor, grid, cfg, player, [mover.x, mover.z], [wx, wz], allowed);
+      return planMove(state, floor, grid, cfg, player, [mover.x, mover.z], [wx, wz], allowed);
+    },
+    // Commit a plan (start walking).
+    go(plan) {
+      const player = activePlayer(state);
+      movers[player.index].setPath(plan.waypoints);
+      on.route?.(plan, player);
+      return plan;
+    },
+    // Plan and commit in one step (used by tests and simple callers).
+    walkTo(wx, wz) {
+      const player = activePlayer(state);
+      const plan = this.plan(wx, wz);
       if (!plan.ok) {
         if (plan.reason !== 'finished' && plan.reason !== 'dead') on.reject?.(plan.reason, plan, player);
         return plan;
       }
-      mover.setPath(plan.waypoints);
-      on.route?.(plan, player);
-      return plan;
+      return this.go(plan);
     },
 
     // Call every frame: notices when the active player has crossed into another room.

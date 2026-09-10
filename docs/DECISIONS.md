@@ -14,7 +14,9 @@ Short record of the choices that shape the code and why, so another coding agent
 ## Players and turns (hot-seat)
 - `state.players` holds per-player rules state (current room, action points, escaped); discovered rooms are shared by everyone. Only `state.activeIndex` may move; `endTurn` passes control to the next player who has not escaped and refills their points from `rules.actionPointsPerTurn`. A round is one pass round the table.
 - Reaching the exit marks that player *escaped* and skips them in the rotation; the game ends when everyone has escaped. (Alternative — first to escape ends the game — is a one-line change in `state.enterRoom`.)
-- Movement objects (`src/player.js`) are one per player; only the active one is updated each frame, the others stand still.
+- Movement objects (`src/player.js`) are one per player; only the active one is updated each frame, the others stand still. Handing over the turn `halt`s the outgoing player (clears any queued path and the walking flag) so a half-finished walk can't resume — and spend a fresh point — when their turn comes round again, and so their figure doesn't keep animating a walk in place.
+- When a player reaches the exit the overlay is delayed briefly so the figure is seen stepping in; input (taps and End turn) is locked during that gap so a tap can't advance the turn while the escape is still being resolved.
+- Tapping a doorway takes the player through it whether or not the far room is already discovered: the destination is simply the room the player is not currently in. (Only frontier doorways used to do this, so re-crossing a known doorway sometimes stopped short depending on which grid cell was nearest.)
 
 ## Characters (`src/data/characters.js`, `src/render/characterView.js`)
 - Body types (male/female proportions) and outfits (colours + silhouette: tie/bow tie/lapels, A-line/column/full skirt) are data. The roster names five players with an outfit and a marker colour each.

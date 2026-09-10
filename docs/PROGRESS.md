@@ -14,6 +14,15 @@ _Last updated after the second greybox pass (characters, five hot-seat players, 
 - Reaching the exit takes that player out (overlay "X found the exit!" → Continue passes the turn); when everyone has escaped, "Everyone found the exit!" with Restart.
 - Lighting: flicker only where a room's data says so; doorway highlights are opaque and steady (the pulse is gone).
 
+## Fixes applied after the pass-2 review
+A code review (rules lens; the rest hit the usage limit) found five issues; four are fixed and covered by tests:
+- End turn while a figure was mid-walk left the walk queued — it would resume by itself and spend a point on that player's next turn. The outgoing player is now halted on hand-over.
+- A figure frozen by End turn (or an escaped one) kept swinging its arms and legs in place. Halting clears the walking flag, so it stands still.
+- Tapping End turn in the brief gap before the "found the exit" overlay could advance the turn twice and skip a player. Input is now locked during that gap.
+- Tapping a doorway back into a room you already knew sometimes stopped on the near side. Tapping any doorway beside you now reliably takes you through.
+
+Still open (deferred, documented below): the five figures do not avoid each other, so the active player's path can pass through a standing figure.
+
 ## Validation status
 - `node tests/logic-check.mjs` (pure rules) and `node tests/browser-test.mjs` (headless Chromium, real taps/clicks, ~70 checks incl. the full hot-seat flow, an escape, rotation skipping, restart, gestures) **all pass** with no console errors. Setup instructions are in the file headers.
 - Not yet tested on a real iPad.
@@ -45,6 +54,7 @@ Main menu lobby, character selection screen, receptionist intro, health bars, ca
 3. Development plan step 2: menu with 3D lobby, character selection (the outfits already exist in data), receptionist intro, health and cards, searchable objects.
 
 ## Known limitations
+- The five characters do not path around one another: the active player's route can pass through a standing figure, and two players can end a turn on the same spot. Rules are unaffected (each player is tracked separately); it is a visual issue in a hot-seat game. A future pass can block the other players' cells while planning the active player's move.
 - Three.js comes from a CDN; the first load needs an internet connection.
 - Safari's edge-swipe (back/forward) cannot be blocked by a web page: start two-finger drags away from the screen edges, or add the page to the Home Screen.
 - Pixel ratio is capped at 1.5 for smoothness; `window.__game.setPixelRatio(2)` in the console compares sharpness.

@@ -22,6 +22,9 @@ export function createPlayer(cfg, start) {
       this.destination = this.path.length ? this.path[this.path.length - 1] : null;
     },
     stop() { this.path = []; this.destination = null; },
+    // Fully halt: drop any queued path and clear the walking flag so the character view
+    // stops animating a walk in place. Used when a turn is handed over mid-walk.
+    halt() { this.path = []; this.destination = null; this.walking = false; },
     reset(x, z) { this.x = x; this.z = z; this.heading = 0; this.stop(); this.walking = false; },
 
     update(dt) {

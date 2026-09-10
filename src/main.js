@@ -47,6 +47,7 @@ const overlays = createOverlays(document);
 
 let running = false;
 let exitTimer = null;
+let escaping = false; // a player has reached the exit; the overlay is about to open
 
 const discovery = createDiscovery({
   floor, grid, state, movers, cfg,
@@ -64,6 +65,9 @@ const discovery = createDiscovery({
       syncViews(true);
       hud.update(state, floor);
       if (result.escaped) {
+        // Let the figure finish stepping into the exit room, then show the overlay. Until it
+        // opens, block End turn so a tap in this gap can't advance the turn twice.
+        escaping = true;
         clearTimeout(exitTimer);
         exitTimer = setTimeout(() => showExit(result.player), cfg.exit.overlayDelay * 1000);
       }
@@ -87,6 +91,7 @@ function syncViews(animate) {
 function activeMover() { return movers[state.activeIndex]; }
 
 function showExit(player) {
+  escaping = false; // the overlay now guards input in place of the escaping flag
   const explored = `${state.discovered.size} of ${floor.roomList.length} rooms explored`;
   if (state.finished) {
     overlays.showExit({ title: 'Everyone found the exit!', summary: `Round ${state.round} · ${explored}`, canContinue: false });
@@ -103,6 +108,9 @@ function showExit(player) {
 
 function passTurn() {
   const result = endTurn(state, floor);
+  // Stop the player handing over so a half-finished walk can't resume (and spend a fresh
+  // point) when their turn comes round again, and so their figure stops animating in place.
+  movers[result.from.index]?.halt();
   syncViews(false);
   hud.update(state, floor);
   if (result.finished) return;
@@ -113,6 +121,7 @@ function passTurn() {
 
 function restart() {
   clearTimeout(exitTimer);
+  escaping = false;
   resetState(state, floor);
   movers.forEach((m, i) => m.reset(startSpot(i)[0], startSpot(i)[1]));
   discovery.refresh();
@@ -134,7 +143,7 @@ function begin() {
 }
 
 function doEndTurn() {
-  if (state.finished || overlays.exitOpen) return;
+  if (state.finished || overlays.exitOpen || escaping) return;
   passTurn();
 }
 
@@ -160,7 +169,7 @@ function groundToScreen(x, z) {
 
 createInput(view.renderer.domElement, {
   onTap(x, y) {
-    if (!running || map.isOpen || overlays.exitOpen) return;
+    if (!running || map.isOpen || overlays.exitOpen || escaping) return;
     const p = screenToGround(x, y);
     if (p) discovery.walkTo(p.x, p.z);
   },

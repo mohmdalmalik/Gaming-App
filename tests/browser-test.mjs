@@ -271,6 +271,40 @@ check(!s.chips.some(c => c.includes('escaped')), 'nobody marked escaped');
 const lit = await game(() => [...window.__game.roomViews.values()].filter(v => v.lights.some(l => l.light.intensity > 0)).map(v => v.room.id));
 check(lit.length === 1 && lit[0] === 'hall', `only the hall is lit after restart (${lit})`);
 
+console.log('13b. regression fixes from the review');
+// End turn while a player is mid-walk halts them: no auto-resume, no frozen walk cycle.
+await game(() => window.__game.restart());
+await page.waitForTimeout(150);
+const far = await game(() => window.__game.groundToScreen(3.0, 2.6));
+await page.touchscreen.tap(far.x, far.y);
+const queued = await game(() => window.__game.movers[0].path.length);
+await page.waitForTimeout(200);
+await page.click('#btn-end-turn');
+await page.waitForTimeout(200);
+const halted = await game(() => ({ walking: window.__game.movers[0].walking, path: window.__game.movers[0].path.length, active: window.__game.activePlayer().name }));
+check(queued > 0, 'a walk was queued for Victor');
+check(!halted.walking && halted.path === 0 && halted.active === 'Eleanor', `mid-walk End turn halts Victor and passes to Eleanor (${JSON.stringify(halted)})`);
+// End turn during the 0.7 s before the exit overlay is a no-op (does not advance the turn twice).
+await game(() => { const g = window.__game; g.restart(); g.cfg.exit.overlayDelay = 4; const p = g.activePlayer();
+  for (const id of ['corridorE', 'serviceCorridor', 'stairs']) g.state.discovered.add(id);
+  g.discovery.refresh(); // the allowed-cell set must reflect the rooms we just marked discovered
+  p.currentRoom = 'stairs'; g.movers[0].reset(g.roomCenter('stairs')[0], g.roomCenter('stairs')[1]); });
+await page.evaluate(() => { const d = window.__game.floor.doorways.find(d => d.id === 'stairs->exit'); window.__game.walkTo(d.center[0], d.center[1]); });
+await page.waitForFunction(() => window.__game.activePlayer().escaped, null, { timeout: 20000, polling: 50 });
+const beforeGap = await game(() => ({ active: window.__game.activePlayer().name, overlay: document.getElementById('exit-overlay').hidden }));
+await page.click('#btn-end-turn');
+await page.waitForTimeout(150);
+const afterGap = await game(() => ({ active: window.__game.activePlayer().name, overlay: document.getElementById('exit-overlay').hidden }));
+check(beforeGap.active === 'Victor' && afterGap.active === 'Victor' && afterGap.overlay, `End turn blocked in the pre-overlay window (before ${beforeGap.active}, after ${afterGap.active})`);
+await page.waitForFunction(() => !document.getElementById('exit-overlay').hidden, null, { timeout: 6000 });
+const overlayNext = await game(() => document.getElementById('btn-continue').textContent);
+check(/Eleanor/.test(overlayNext), `overlay still offers Continue → Eleanor, no player skipped (${overlayNext})`);
+await page.click('#btn-continue');
+await page.waitForTimeout(150);
+check((await snapshot()).active === 'Eleanor', 'Continue passes exactly one turn, to Eleanor');
+await game(() => window.__game.restart());
+await page.waitForTimeout(200);
+
 console.log('14. performance sanity');
 const perf = await page.evaluate(async () => {
   const r = window.__game.view.renderer;

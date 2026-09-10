@@ -82,5 +82,16 @@ const dE = floor.doorways.find(d => d.id === 'hall->corridorE');
 plan = planMove(s2, floor, grid, config, p1, floor.start.pos, dE.center, allowed);
 check(plan.ok && plan.rooms.join('>') === 'hall>corridorE' && plan.cost === 1, `tapping the east doorway plans hall>corridorE for 1 point`);
 check(roomAt(floor, ...plan.waypoints[plan.waypoints.length - 1]) === 'corridorE', 'the plan ends inside corridorE');
+// Tapping a doorway between two KNOWN rooms goes through from either side (not a coin toss).
+const s3 = createState(floor, roster);
+const p3 = activePlayer(s3);
+enterRoom(s3, floor, p3, 'corridorE');
+enterRoom(s3, floor, p3, 'hall'); // back in the hall, corridorE now discovered
+const allowed3 = buildAllowed(s3, floor, grid);
+const planA = planMove(s3, floor, grid, config, p3, floor.rooms.get('hall').center, dE.center, allowed3);
+check(planA.ok && planA.rooms.at(-1) === 'corridorE' && planA.cost === 1, `known east doorway from hall → corridorE (${planA.rooms?.join('>')}, cost ${planA.cost})`);
+p3.currentRoom = 'corridorE';
+const planB = planMove(s3, floor, grid, config, p3, floor.rooms.get('corridorE').center, dE.center, allowed3);
+check(planB.ok && planB.rooms.at(-1) === 'hall' && planB.cost === 1, `known east doorway from corridorE → hall (${planB.rooms?.join('>')}, cost ${planB.cost})`);
 console.log(failures ? `\n${failures} FAILED` : '\nALL LOGIC CHECKS PASSED');
 process.exit(failures ? 1 : 0);

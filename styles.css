@@ -61,6 +61,7 @@ html, body {
   padding: 8px 14px; font-size: 16px; font-weight: 600; letter-spacing: 0.01em;
   backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
 }
+.pill.empty { border-color: #e06a5a; color: #ffb3a7; }
 .pill.small { font-size: 13px; font-weight: 500; color: var(--muted); padding: 5px 12px; }
 
 .btn {

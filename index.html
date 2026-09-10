@@ -77,6 +77,14 @@
   </div>
 
   <script type="module">
+    // If the 3D engine is still not ready after a while (stalled network), say so instead of
+    // leaving a silent "Loading…" button.
+    setTimeout(() => {
+      if (!document.getElementById('btn-begin').disabled) return;
+      document.getElementById('error-message').textContent = 'Still loading the 3D engine — check the internet connection and reload the page.';
+      document.getElementById('error-overlay').hidden = false;
+      document.getElementById('start-overlay').hidden = true;
+    }, 20000);
     import('./src/main.js').catch((err) => {
       console.error(err);
       const box = document.getElementById('error-overlay');

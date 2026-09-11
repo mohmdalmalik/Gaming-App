@@ -9,7 +9,7 @@ import {
   createState, resetState, activePlayer, nextPlayer, endTurn, enterRoom, checkWin,
   usableDoorways, pendingEncounters, lockEncounter, hasEncounterLock, playersInRoom,
 } from '../src/game/state.js';
-import { search, useBandage, resolveTrade, resolveAttack, tradeableCards } from '../src/game/actions.js';
+import { search, canSearch, useBandage, resolveTrade, resolveAttack, tradeableCards } from '../src/game/actions.js';
 
 let failures = 0;
 const check = (cond, msg) => { console.log((cond ? '  ok   ' : '  FAIL ') + msg); if (!cond) failures++; };
@@ -52,9 +52,13 @@ check(nextPlayer(state).index === 2, 'nextPlayer skips a dead player');
 console.log('movement & action points');
 state = createState(floor, roster, 3);
 const p0 = activePlayer(state);
-check(usableDoorways(state, floor, p0).length === 4, 'the central hall shows 4 usable doorways');
+check(usableDoorways(state, floor, p0).length === 4, 'the central hall shows 4 usable doorways with a full turn');
 let r = enterRoom(state, floor, p0, 'corridorE');
-check(r.cost === rules.actionCost.move && p0.actionPoints === rules.actionPointsPerTurn - 1 && p0.currentRoom === 'corridorE', 'moving costs 1 AP and updates the room');
+check(r.cost === 2 && p0.actionPoints === rules.actionPointsPerTurn - 2 && p0.currentRoom === 'corridorE', 'entering a new room costs 2 (discover + move)');
+r = enterRoom(state, floor, p0, 'hall');
+check(r.cost === 1 && p0.actionPoints === rules.actionPointsPerTurn - 3, 'stepping back into a known room costs 1');
+p0.actionPoints = 1;
+check(usableDoorways(state, floor, p0).length === 1, 'with 1 AP only the already-known door is usable (new rooms need 2)');
 p0.actionPoints = 0;
 check(usableDoorways(state, floor, p0).length === 0, 'no usable doorways with 0 AP');
 
@@ -62,17 +66,22 @@ check(usableDoorways(state, floor, p0).length === 0, 'no usable doorways with 0 
 console.log('searching');
 state = createState(floor, roster, 8);
 const s0 = activePlayer(state);
+s0.currentRoom = 'hall';
+check(!search(state, floor, s0).ok && !canSearch(state, floor, s0).ok, 'a corridor / hall cannot be searched');
+s0.currentRoom = 'dining';
 const before = s0.hand.length, ap0 = s0.actionPoints;
 r = search(state, floor, s0);
-check(r.ok && s0.hand.length === before + 1 && s0.actionPoints === ap0 - 1, 'search draws a card for 1 AP');
-// dark room needs a flashlight
+check(r.ok && s0.hand.length === before + 1 && s0.actionPoints === ap0 - 1, 'a searchable room draws a card for 1 AP');
+r = search(state, floor, s0);
+check(!r.ok && r.reason === 'searched', 'a room can only be searched once');
+// dark searchable room needs a flashlight
 s0.currentRoom = 'storage';
 s0.hand = s0.hand.filter(c => c.type !== 'flashlight');
 r = search(state, floor, s0);
 check(!r.ok && r.reason === 'dark', 'cannot search a dark room without a Flashlight');
 s0.hand.push({ id: 'fl', type: 'flashlight' });
 r = search(state, floor, s0);
-check(r.ok, 'with a Flashlight a dark room can be searched');
+check(r.ok, 'with a Flashlight a dark searchable room can be searched');
 
 // --- Trade: possession spreads unless a Lantern blocks -----------------------------------
 console.log('trade & possession');

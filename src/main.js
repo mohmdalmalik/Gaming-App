@@ -80,7 +80,7 @@ function syncViews(animate) {
     const a = state.discovered.has(dv.doorway.a), b = state.discovered.has(dv.doorway.b);
     dv.setState({ known: a || b, frontier: a !== b });
   }
-  characters.forEach((cv, i) => cv.setActive(i === state.activeIndex && !state.finished));
+  characters.forEach((cv, i) => { cv.setDead(!state.players[i].alive); cv.setActive(i === state.activeIndex && !state.finished); });
 }
 
 // Blink the doors the active player may use this turn.
@@ -118,38 +118,29 @@ function doEndTurn() {
   passTurn();
 }
 
-// The active player finished walking into a new room: check the exit, then any encounters.
+// The active player finished walking into a new room: check the exit, then a single forced
+// encounter — with a player of their choosing when more than one is here.
 function onArrive() {
   const player = activePlayer(state);
   const room = floor.rooms.get(player.currentRoom);
   pendingArrival = null;
   if (room?.isExit && checkWin(state, floor, player)) { showEnd(); return; }
-  runEncounters(player, pendingEncounters(state, floor, player));
+  const candidates = pendingEncounters(state, floor, player);
+  if (candidates.length) openEncounter(player, candidates);
+  else refresh();
 }
 
-function runEncounters(player, queue) {
-  while (queue.length) {
-    const q = queue.shift();
-    if (q.alive && q.currentRoom === player.currentRoom
-      && !state.encounterLocks.has(`${player.currentRoom}:${Math.min(player.index, q.index)}-${Math.max(player.index, q.index)}`)) {
-      openEncounter(player, q, queue);
-      return;
-    }
-  }
-  refresh(); // no (more) encounters — the turn continues
-}
-
-function openEncounter(P, Q, queue) {
+function openEncounter(P, candidates) {
   hud.hideConfirm(); selectedMove = null;
   encounter.start({
-    state, P, Q,
-    onResolveTrade: (cardIdP, cardIdQ) => resolveTrade(state, floor, P, Q, cardIdP, cardIdQ),
-    onResolveAttack: weaponId => resolveAttack(state, floor, P, Q, weaponId),
-    onDone: () => {
+    state, P, candidates,
+    onResolveTrade: (Q, cardIdP, cardIdQ) => resolveTrade(state, floor, P, Q, cardIdP, cardIdQ),
+    onResolveAttack: (Q, weaponId) => resolveAttack(state, floor, P, Q, weaponId),
+    onDone: (Q) => {
+      // One meeting per entry: only the chosen pair is locked; the others aren't forced.
       lockEncounter(state, P.currentRoom, P.index, Q.index);
       syncViews(false); refresh();
-      if (state.finished) { showEnd(); return; }
-      runEncounters(P, queue);
+      if (state.finished) showEnd();
     },
   });
 }
@@ -159,7 +150,9 @@ function onSearch() {
   const player = activePlayer(state);
   const r = search(state, floor, player);
   if (!r.ok) {
-    hud.toast(r.reason === 'dark' ? 'This room is dark — you need a Flashlight to search.'
+    hud.toast(r.reason === 'notSearchable' ? 'There is nothing to search in here.'
+      : r.reason === 'searched' ? 'This room has already been searched.'
+      : r.reason === 'dark' ? 'This room is dark — you need a Flashlight to search.'
       : r.reason === 'ap' ? 'No action points left to search.'
       : r.reason === 'empty' ? 'Nothing left to find here.' : 'Cannot search now.');
     return;
@@ -350,6 +343,7 @@ document.addEventListener('visibilitychange', () => { last = performance.now(); 
 window.__game = {
   cfg, rules, floor, grid, state, movers, rig, roomViews, doorways, characters, discovery, view,
   begin, restart, endTurn: doEndTurn,
+  refresh,                // re-sync HUD/doors after tests mutate state directly
   activePlayer: () => activePlayer(state),
   nextPlayer: () => nextPlayer(state),
   activeMover,

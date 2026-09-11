@@ -104,37 +104,45 @@ console.log('3. move by tapping a door + confirm');
 const doorPt = await game(() => { const d = window.__game.floor.doorways.find(d => d.id === 'hall->corridorE'); return window.__game.groundToScreen(d.center[0], d.center[1]); });
 await page.touchscreen.tap(doorPt.x, doorPt.y);
 await page.waitForTimeout(150);
-check(await game(() => !document.getElementById('confirm-bar').hidden), 'tapping a door shows the move-confirm bar');
+check(await game(() => !document.getElementById('confirm-bar').hidden && /2 AP/.test(document.getElementById('btn-confirm-move').textContent)), 'tapping an undiscovered door shows a 2 AP confirm');
 await page.click('#btn-confirm-move');
 await settle();
 let a = await active();
-check(a.room === 'corridorE' && a.ap === 3, `moved into East Corridor for 1 AP (${a.room}, ${a.ap})`);
+check(a.room === 'corridorE' && a.ap === 2, `discovering + entering East Corridor cost 2 AP (${a.room}, ${a.ap})`);
 
 console.log('4. free reposition inside a room (no AP)');
 const inside = await game(() => window.__game.groundToScreen(...(() => { const c = window.__game.roomCenter('corridorE'); return [c[0] + 1.5, c[1]]; })()));
 await page.touchscreen.tap(inside.x, inside.y);
 await settle();
-a = await active();
-check(a.ap === 3, `repositioning inside the room is free (${a.ap})`);
+check((await active()).ap === 2, `repositioning inside the room is free (${(await active()).ap})`);
 
 // --- 5. Search ---------------------------------------------------------------------------
-console.log('5. search (and dark rooms)');
+console.log('5. search (searchable, once, dark)');
+// A corridor cannot be searched — the button is disabled.
+check(await game(() => document.getElementById('btn-search').disabled), 'the Search button is disabled in a corridor');
+// A searchable room draws once.
+await game(() => { const g = window.__game, p = g.activePlayer(); ['dining'].forEach(r => g.state.discovered.add(r)); g.discovery.refresh(); p.currentRoom = 'dining'; const c = g.roomCenter('dining'); g.movers[g.state.activeIndex].reset(c[0], c[1]); p.actionPoints = 4; g.refresh(); });
 let before = (await active()).hand.length;
 await page.click('#btn-search');
 await page.waitForTimeout(200);
 a = await active();
-check(a.hand.length === before + 1 && a.ap === 2, `search drew a card for 1 AP (${a.hand.length} cards, ${a.ap} AP)`);
-// dark room without a flashlight
-await game(() => { const g = window.__game, p = g.activePlayer(); g.state.discovered.add('storage'); g.discovery.refresh(); p.currentRoom = 'storage'; const c = g.roomCenter('storage'); g.movers[g.state.activeIndex].reset(c[0], c[1]); p.hand = p.hand.filter(c => c.type !== 'flashlight'); p.actionPoints = 4; });
+check(a.hand.length === before + 1 && a.ap === 3, `a searchable room drew a card for 1 AP (${a.hand.length} cards, ${a.ap} AP)`);
+check(await game(() => document.getElementById('btn-search').disabled), 'Search is disabled after the room has been searched once');
+before = (await active()).hand.length;
+await game(() => window.__game.search());
+await page.waitForTimeout(120);
+check((await active()).hand.length === before, 'a room cannot be searched twice');
+// A dark searchable room needs a Flashlight.
+await game(() => { const g = window.__game, p = g.activePlayer(); g.state.discovered.add('storage'); g.discovery.refresh(); p.currentRoom = 'storage'; const c = g.roomCenter('storage'); g.movers[g.state.activeIndex].reset(c[0], c[1]); p.hand = p.hand.filter(c => c.type !== 'flashlight'); p.actionPoints = 4; g.refresh(); });
 const darkBefore = (await active()).hand.length;
-await page.click('#btn-search');
+await game(() => window.__game.search());
 await page.waitForTimeout(150);
 check(await game(() => /Flashlight/.test(document.getElementById('toast').textContent)) && (await active()).hand.length === darkBefore, 'a dark room cannot be searched without a Flashlight');
-await game(() => { window.__game.activePlayer().hand.push({ id: 'fl', type: 'flashlight' }); });
+await game(() => { window.__game.activePlayer().hand.push({ id: 'fl', type: 'flashlight' }); window.__game.refresh(); });
 const flBefore = (await active()).hand.length;
 await page.click('#btn-search');
 await page.waitForTimeout(200);
-check((await active()).hand.length === flBefore + 1, 'with a Flashlight the dark room can be searched');
+check((await active()).hand.length === flBefore + 1, 'with a Flashlight the dark searchable room can be searched');
 
 // --- 6. Hand panel + bandage -------------------------------------------------------------
 console.log('6. hand panel & bandage');
@@ -195,6 +203,45 @@ check(await game(() => /1 damage/.test(document.getElementById('encounter-body')
 await clickBtn('Continue');
 await page.waitForTimeout(150);
 check(await game(() => window.__game.state.players[1].health === 2), 'the target lost 1 HP');
+
+// --- 9b. a killed player lies dead with blood --------------------------------------------
+console.log('9b. killing a player lays them out with blood');
+await arrange('corridorE', { vHand: ['revolver', 'trinket'], oHand: ['trinket'] });
+await game(() => { window.__game.state.players[1].health = 2; });
+await openEncounter('corridorE');
+await clickBtn('Attack');
+await page.waitForTimeout(120);
+await clickCard('v0');       // revolver, 2 damage
+await page.waitForTimeout(150);
+check(await game(() => /dead/i.test(document.getElementById('encounter-body').textContent)), 'the kill is announced');
+await clickBtn('Continue');
+await page.waitForTimeout(200);
+const death = await game(() => {
+  const g = window.__game;
+  const cv = g.characters[1];
+  const bloodShown = cv.group.children.some(ch => ch.type === 'Group' && ch.visible && ch.children.some(m => m.geometry && m.geometry.type === 'CircleGeometry'));
+  return { alive: g.state.players[1].alive, bloodShown, chipDead: document.querySelectorAll('#turn-order .chip')[1].className.includes('dead') };
+});
+check(!death.alive && death.bloodShown && death.chipDead, `the dead player lies with a blood pool and is crossed out (${JSON.stringify(death)})`);
+await shot('r5-dead');
+
+// --- 9c. choosing whom to meet when a room holds two -------------------------------------
+console.log('9c. choose who to meet when a room has two people');
+await arrange('corridorE', { vHand: ['trinket', 'lantern'], oHand: ['trinket'] });
+await game(() => { const g = window.__game; const M = g.state.players[2]; M.currentRoom = 'corridorE'; M.alive = true; const c = g.roomCenter('corridorE'); g.movers[2].reset(c[0] + 1.2, c[1] + 0.6); });
+await page.evaluate(() => window.__game.moveToRoom('corridorE'));
+await settle();
+await page.waitForFunction(() => window.__game.encounterOpen(), null, { timeout: 8000 });
+const chooser = await game(() => ({ title: document.getElementById('encounter-title').textContent, buttons: [...document.querySelectorAll('#encounter-actions button')].map(b => b.textContent) }));
+check(/Who do you meet/i.test(chooser.title) && chooser.buttons.length === 2, `a chooser lists both people (${chooser.buttons.join(', ')})`);
+await page.evaluate(() => [...document.querySelectorAll('#encounter-actions button')].find(b => /Eleanor/.test(b.textContent)).click());
+await page.waitForTimeout(120);
+await clickBtn('Trade'); await page.waitForTimeout(120);
+await clickCard('v0'); await page.waitForTimeout(120);
+await clickCard('o0'); await page.waitForTimeout(120);
+await clickBtn('Continue'); await page.waitForTimeout(150);
+const lockRes = await game(() => ({ open: window.__game.encounterOpen(), locks: [...window.__game.state.encounterLocks] }));
+check(!lockRes.open && lockRes.locks.length === 1, `only the chosen pair is met and locked, the third person is not forced (${JSON.stringify(lockRes.locks)})`);
 
 // --- 10. Win: humans escape --------------------------------------------------------------
 console.log('10. win — a clean player reaches the exit with 3 Lanterns');

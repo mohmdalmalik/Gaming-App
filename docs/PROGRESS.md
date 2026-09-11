@@ -12,7 +12,13 @@ Placeholder articulated figures (male/female body types, six outfits by silhouet
 colour), five players taking turns on one device, per-player coloured rings and an active
 marker, a 14-room floor around a central landing.
 
-### Pass 3 — the rules (this pass)
+### Pass 4 — rules refinements (this pass)
+- Entering an **undiscovered** room now costs **2 AP** (1 discover + 1 move); a known room costs 1. Usable-door blink and the confirm bar reflect the real cost.
+- **Searching**: only searchable room types (guest suite, lounge, library, kitchen, storage, dining) can be searched — not corridors/landings/stairs — and each room only once. The Search button disables when a room can't be searched.
+- **Encounters**: entering a room with several people lets you **choose which one** to trade or attack; only that pair is locked for the round.
+- **Death**: a killed character lies on the floor with a blood pool where they fell.
+
+### Pass 3 — the rules
 The full Hotel Escape rules from `docs/GAME_RULES.md` play on the greybox:
 - **Turn actions** replace free roaming: usable doors blink; tap a door and confirm to move
   (1 AP) and walk to a free spot in the room; free repositioning inside a room; Search (1 AP);

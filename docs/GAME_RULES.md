@@ -11,11 +11,11 @@ A hidden-role social game set in a trapped hotel. Players explore room by room, 
 ## 3. Health
 - Each player has 3 health bars.
 - A Bandage card restores 1 bar (max 3).
-- Reaching 0 health = dead and out of the game.
+- Reaching 0 health = dead and out of the game. A dead player's character stays lying on the floor where they fell (with a little blood).
 
 ## 4. Action Points (AP)
 - 4 AP at the start of each turn.
-- Costs: move into a room (incl. an already-discovered room) 1 AP; search the current room 1 AP; use a card 1 AP; attack 1 AP (requires a weapon).
+- Costs: discovering a new room costs 1 AP and entering it costs 1 AP, so moving into an undiscovered room costs 2 AP total; moving into a room you already know costs 1 AP. Search the current room 1 AP; use a card 1 AP; attack 1 AP (requires a weapon).
 - Repositioning within the current room is free.
 - "End turn" passes control to the next player and refreshes AP to 4.
 - At 0 AP no further paid actions; end the turn.
@@ -23,7 +23,7 @@ A hidden-role social game set in a trapped hotel. Players explore room by room, 
 ## 5. Turn structure
 1. Usable doors blink; the player selects one and confirms.
 2. Character spends 1 AP and walks to the centre of the chosen room, or stands beside players already there (never overlapping).
-3. If they entered a room with another player AND it is their first meeting with that player in this room this round, an ENCOUNTER is forced (section 7).
+3. If they entered a room holding one or more other players, and it is their first meeting there this round, an ENCOUNTER is forced (section 7). When more than one other player is present, the entering player chooses which one to meet.
 4. The player may also search, use cards, or heal (1 AP each).
 5. When done or out of AP, end the turn.
 - A "round" = one full cycle where every living player has taken a turn. Encounter locks reset at the start of each round.
@@ -36,10 +36,11 @@ A hidden-role social game set in a trapped hotel. Players explore room by room, 
 - Branching routes, some dead ends, one exit room.
 - Mood shifts warm→uneasy deeper in. Flicker only where room data specifies; doorways do not flicker.
 - Some rooms are DARK: a player may enter and move through them, but cannot SEARCH a dark room without a Flashlight.
+- Only certain room types can be searched (e.g. bedrooms, storage, lounges); corridors, landings and stairs cannot be searched. Each room can be searched only once (by any player).
 - 2D map (bottom-right button) shows only discovered rooms and player positions.
 
 ## 7. Encounters: Trade or Attack
-When an encounter is forced, the entering player chooses ONE:
+When an encounter is forced, the entering player first chooses WHICH other player to face (if more than one is present), then chooses ONE of:
 
 ### Trade (default)
 - Both players secretly select one card; cards exchange simultaneously.
@@ -96,7 +97,7 @@ Lanterns do double duty: DEFEND against possession in a trade AND are the escape
 - Each player draws 4 cards, guaranteed at least one Lantern.
 
 ### Searching
-- Searching a room (1 AP) draws a card or reveals a hidden item placed in that room. Main way new items enter play. Dark rooms require a Flashlight to search.
+- Searching a room (1 AP) draws a card or reveals a hidden item placed in that room. Main way new items enter play. Only searchable room types can be searched (not corridors/landings/stairs) and each room can be searched only once. Dark rooms require a Flashlight to search.
 
 ## 11. Open items (NOT in the next build)
 - Deck balance once real multiplayer testing begins.

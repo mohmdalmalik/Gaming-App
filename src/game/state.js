@@ -45,9 +45,16 @@ export function resetState(state, floor, seed) {
   state.round = 1;      // one round = every living player has taken a turn
   state.turn = 1;       // counts individual turns
   state.encounterLocks = new Set();
+  state.searchedRooms = new Set(); // a room can only be searched once
   state.finished = false;
   state.won = null;     // 'humans' | 'possessed'
   return state;
+}
+
+// What it costs to step into `roomId`: a known room is just the move; an undiscovered room
+// also costs the discover point (revealing it), so entering a new room costs 2.
+export function moveCostInto(state, roomId) {
+  return rules.actionCost.move + (state.discovered.has(roomId) ? 0 : rules.actionCost.discover);
 }
 
 export const activePlayer = state => state.players[state.activeIndex];
@@ -63,17 +70,18 @@ export function nextPlayer(state) {
 }
 
 // Cost of walking a route that visits these rooms in order (consecutive duplicates removed).
-export function routeCost(floor, roomSequence) {
-  let transitions = 0;
+// Each step into a new room costs the move point, plus the discover point if that room is
+// still undiscovered. Moving within a room is free.
+export function routeCost(state, floor, roomSequence) {
+  let transitions = 0, cost = 0;
   for (let i = 1; i < roomSequence.length; i++) {
-    if (roomSequence[i] !== roomSequence[i - 1]) transitions++;
+    if (roomSequence[i] !== roomSequence[i - 1]) { transitions++; cost += moveCostInto(state, roomSequence[i]); }
   }
-  const cost = transitions * rules.actionCost.move; // moving within a room is free
   return { transitions, cost };
 }
 
 export function canAffordRoute(state, floor, player, roomSequence) {
-  const { transitions, cost } = routeCost(floor, roomSequence);
+  const { transitions, cost } = routeCost(state, floor, roomSequence);
   if (state.finished) return { ok: false, cost, transitions, reason: 'finished' };
   if (!player.alive) return { ok: false, cost, transitions, reason: 'dead' };
   if (cost > player.actionPoints) return { ok: false, cost, transitions, reason: 'notEnoughActionPoints' };
@@ -85,10 +93,11 @@ export function canAffordRoute(state, floor, player, roomSequence) {
 export function enterRoom(state, floor, player, roomId) {
   const result = { player, room: roomId, revealed: false, cost: 0, enteredExit: false };
   if (roomId === player.currentRoom) return result;
-  result.cost = rules.actionCost.move;
+  const revealing = !state.discovered.has(roomId);
+  result.cost = rules.actionCost.move + (revealing ? rules.actionCost.discover : 0);
   player.actionPoints = Math.max(0, player.actionPoints - result.cost);
   player.currentRoom = roomId;
-  if (!state.discovered.has(roomId)) { state.discovered.add(roomId); result.revealed = true; }
+  if (revealing) { state.discovered.add(roomId); result.revealed = true; }
   result.enteredExit = !!floor.rooms.get(roomId)?.isExit;
   return result;
 }
@@ -125,10 +134,12 @@ export function checkWin(state, floor, enteredExitBy = null) {
 
 // --- Rooms & doorways --------------------------------------------------------------------
 
-// Doorways the active player may step through this turn (adjacent rooms, one move affordable).
+// Doorways the active player can afford to step through this turn (a known neighbour costs 1,
+// an undiscovered one costs 2 — the move plus discovering it).
 export function usableDoorways(state, floor, player) {
-  if (state.finished || !player.alive || player.actionPoints < rules.actionCost.move) return [];
-  return (floor.rooms.get(player.currentRoom)?.doorways || []).slice();
+  if (state.finished || !player.alive) return [];
+  return (floor.rooms.get(player.currentRoom)?.doorways || [])
+    .filter(d => player.actionPoints >= moveCostInto(state, d.otherRoom(player.currentRoom)));
 }
 
 // Doorways with exactly one side discovered: the places still to be explored.

@@ -5,14 +5,25 @@ import { rules } from '../data/rules.js';
 import { CARDS, takeCard, isWeapon } from './cards.js';
 import { checkWin } from './state.js';
 
-// Search the current room for a card (1 AP). Dark rooms need a Flashlight in hand.
-export function search(state, floor, player) {
+// Whether the current room can still be searched by `player` right now.
+export function canSearch(state, floor, player) {
   const room = floor.rooms.get(player.currentRoom);
   if (state.finished) return { ok: false, reason: 'finished' };
+  if (!room?.searchable) return { ok: false, reason: 'notSearchable' };
+  if (state.searchedRooms.has(player.currentRoom)) return { ok: false, reason: 'searched' };
   if (player.actionPoints < rules.actionCost.search) return { ok: false, reason: 'ap' };
-  if (room?.dark && !player.hand.some(c => c.type === 'flashlight')) return { ok: false, reason: 'dark' };
+  if (room.dark && !player.hand.some(c => c.type === 'flashlight')) return { ok: false, reason: 'dark' };
   if (!state.drawPile.length) return { ok: false, reason: 'empty' };
+  return { ok: true };
+}
+
+// Search the current room for a card (1 AP). Only searchable rooms, once each; dark rooms
+// need a Flashlight in hand.
+export function search(state, floor, player) {
+  const gate = canSearch(state, floor, player);
+  if (!gate.ok) return gate;
   player.actionPoints -= rules.actionCost.search;
+  state.searchedRooms.add(player.currentRoom);
   const card = state.drawPile.shift();
   player.hand.push(card);
   return { ok: true, card };

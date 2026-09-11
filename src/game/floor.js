@@ -27,6 +27,7 @@ export function buildFloor(data, cfg) {
       name: r.name,
       isExit: !!r.isExit,
       dark: !!r.dark,          // enterable, but cannot be searched without a Flashlight
+      searchable: !!r.searchable, // only certain rooms can be searched at all (not corridors)
       center: [cx, cz],
       size: [w, d],
       min: [cx - w / 2, cz - d / 2],

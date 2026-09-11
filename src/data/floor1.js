@@ -76,6 +76,7 @@ export const floor1 = {
     {
       id: 'suite412',
       name: 'Guest Suite 412',
+      searchable: true,
       center: [-15, 0],
       size: [6, 5],
       mood: { color: '#ffd2a0', intensity: 1.2, ambient: 0.9 },
@@ -104,6 +105,7 @@ export const floor1 = {
     {
       id: 'lounge',
       name: 'Lounge',
+      searchable: true,
       center: [0, -15.5],
       size: [8, 7],
       mood: { color: '#ffe2b4', intensity: 1.3, ambient: 1.0, lights: [[-2, -1.5], [2, 1.5]] },
@@ -119,6 +121,7 @@ export const floor1 = {
     {
       id: 'library',
       name: 'Library',
+      searchable: true,
       center: [7, -15.5],
       size: [6, 5],
       mood: { color: '#e8d8b8', intensity: 0.7, ambient: 0.55 },
@@ -145,6 +148,7 @@ export const floor1 = {
     {
       id: 'kitchen',
       name: 'Kitchen',
+      searchable: true,
       center: [8, -5.5],
       size: [6, 5],
       mood: { color: '#c0ccd8', intensity: 0.6, ambient: 0.4 },
@@ -188,6 +192,7 @@ export const floor1 = {
     {
       id: 'storage',
       name: 'Storage Room',
+      searchable: true,
       center: [13, 5],
       size: [5, 4],
       dark: true,
@@ -229,6 +234,7 @@ export const floor1 = {
     {
       id: 'dining',
       name: 'Dining Room',
+      searchable: true,
       center: [0, 7],
       size: [8, 6],
       mood: { color: '#ffd8a0', intensity: 1.1, ambient: 0.85 },

@@ -1,6 +1,7 @@
 // On-screen interface: whose turn it is, health, action points, the turn order, the action
 // bar (search / hand / end turn), a move-confirm bar, and short toast messages.
 import { activePlayer, nextPlayer } from './game/state.js';
+import { canSearch } from './game/actions.js';
 import { rules } from './data/rules.js';
 import { lanternCount } from './game/cards.js';
 
@@ -68,7 +69,7 @@ export function createHud(doc, cfg) {
       el.ap.classList.toggle('empty', p.actionPoints === 0);
       el.endTurn.textContent = state.finished ? 'Game over' : next && next !== p ? `End turn → ${next.name}` : 'End turn';
       el.endTurn.disabled = state.finished;
-      el.search.disabled = state.finished || p.actionPoints < rules.actionCost.search;
+      el.search.disabled = !canSearch(state, floor, p).ok;
       if (!chips || chips.length !== state.players.length) buildOrder(state);
       state.players.forEach((q, i) => {
         chips[i].classList.toggle('active', i === state.activeIndex);

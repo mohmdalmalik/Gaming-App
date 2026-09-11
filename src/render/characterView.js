@@ -149,24 +149,54 @@ export function createCharacterView(playerDef, cfg, scene) {
     body.add(skirt);
   }
 
+  // A blood pool, revealed when the character dies (a couple of overlapping dark-red discs).
+  const bloodMat = new THREE.MeshBasicMaterial({ color: new THREE.Color('#6b0f12'), transparent: true, opacity: 0.85, depthWrite: false, toneMapped: false });
+  const blood = new THREE.Group();
+  for (const [bx, bz, r] of [[0, 0.15, 0.5], [0.28, 0.35, 0.28], [-0.22, 0.45, 0.22]]) {
+    const disc = new THREE.Mesh(new THREE.CircleGeometry(r, 16), bloodMat);
+    disc.rotation.x = -Math.PI / 2;
+    disc.position.set(bx, 0.03, bz);
+    blood.add(disc);
+  }
+  blood.visible = false;
+  group.add(blood);
+
   scene.add(group);
 
   let phase = 0;
   let amp = 0;     // 0 = standing, 1 = full walk cycle
   let active = false;
+  let dead = false;
 
   return {
     group,
     def: playerDef,
     outfit,
     setActive(v) {
-      active = v;
-      marker.visible = v;
-      ringMat.opacity = v ? c.ringActiveOpacity : c.ringInactiveOpacity;
-      ring.scale.set(c.ringRadius * (v ? 1.15 : 1), 1, c.ringRadius * (v ? 1.15 : 1));
+      active = v && !dead;
+      marker.visible = active;
+      ringMat.opacity = active ? c.ringActiveOpacity : c.ringInactiveOpacity;
+      ring.scale.set(c.ringRadius * (active ? 1.15 : 1), 1, c.ringRadius * (active ? 1.15 : 1));
+    },
+    // Lay the figure out on the floor with a little blood, or stand it back up (on restart).
+    setDead(v) {
+      dead = v;
+      blood.visible = v;
+      ring.visible = !v;
+      marker.visible = false;
+      if (v) {
+        body.rotation.set(-Math.PI / 2, 0, 0.15); // collapsed on its back
+        body.position.y = 0.12;
+        legs[0].rotation.x = 0.2; legs[1].rotation.x = -0.15;
+        arms[0].rotation.x = 0.5; arms[1].rotation.x = -0.4;
+      } else {
+        body.rotation.set(0, 0, 0);
+        body.position.y = 0;
+      }
     },
     update(mover, dt) {
       group.position.set(mover.x, 0, mover.z);
+      if (dead) return; // a dead figure keeps its collapsed pose where it fell
       group.rotation.y = mover.heading;
       const target = mover.walking ? 1 : 0;
       amp += (target - amp) * Math.min(1, dt * 10);

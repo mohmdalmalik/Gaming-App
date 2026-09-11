@@ -5,11 +5,13 @@
 export const rules = {
   actionPointsPerTurn: 4,   // AP each living player gets at the start of their turn
   actionCost: {
-    move: 1,                // move into a room (incl. an already-discovered one)
-    search: 1,              // search the current room
-    useCard: 1,             // play a card (e.g. Bandage, Barricade)
+    move: 1,                // step into a room you already know
+    discover: 1,            // extra cost the first time a room is entered (revealing it)
+    search: 1,              // search the current room (once per room, searchable rooms only)
+    useCard: 1,             // play a card (e.g. Bandage)
     attack: 1,              // attack in a forced encounter (needs a weapon)
   },
+  // Entering an undiscovered room costs move + discover (2); a known room costs move (1).
 
   maxHealth: 3,             // health bars per player
   handSize: 4,             // cards dealt to each player at the start

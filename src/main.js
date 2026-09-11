@@ -15,6 +15,7 @@ import { search, useBandage, resolveTrade, resolveAttack, discardCard, overHandL
 import { CARDS } from './game/cards.js';
 import { createScene } from './render/scene.js';
 import { createRoomViews, createDoorwayViews } from './render/roomView.js';
+import { dressRooms } from './render/roomDressing.js';
 import { updateCutaway } from './render/cutaway.js';
 import { createMood } from './render/mood.js';
 import { createCharacterView } from './render/characterView.js';
@@ -320,6 +321,13 @@ rig.setFocus(activeMover().x, activeMover().z, true);
 mood.snap(activePlayer(state).currentRoom);
 hud.update(state, floor);
 view.compile();
+
+// Dress the starting room with the real glTF furniture (async — the models are local files,
+// so this is quick). The greybox shows until it loads; if a piece fails the room just keeps
+// its greybox. Recompile once dressed so the new materials don't stall the first frames.
+dressRooms(roomViews, floor, cfg)
+  .then(() => view.compile())
+  .catch(err => console.warn('room dressing failed:', err && err.message));
 
 // --- Game loop ---------------------------------------------------------------------------
 let last = performance.now();

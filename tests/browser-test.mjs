@@ -82,6 +82,10 @@ check(info.rooms === 14, `${info.rooms} rooms`);
 
 console.log('2. begin & HUD');
 await page.tap('#btn-begin');
+// The dressed starting room is fill-rate heavy under the software (swiftshader) renderer used
+// here — a real GPU is unaffected. Drop the render resolution so timed walks finish quickly;
+// this is a test-harness speed knob only and changes no game logic.
+await page.evaluate(() => window.__game.setPixelRatio(0.5));
 await page.waitForTimeout(300);
 const hud = await game(() => ({
   hudShown: !document.getElementById('hud').hidden,

@@ -46,6 +46,37 @@ Short record of the choices that shape the code and why, so another coding agent
 - Soft **contact shadows** (one shared radial-gradient texture, `materials.makeShadow`) sit under each character and furniture piece to ground them on the floor — cheaper than real shadow maps and enough for the greybox. Furniture is tinted toward each room's mood colour like the walls, so the boxes sit in the room rather than reading as separate cool grey.
 - Pixel ratio is capped at 1.5 (iPads report 2). Slightly softer, much cheaper per frame. `window.__game.setPixelRatio(2)` lets the owner compare on the device.
 
+## Real art — room dressing (first pass, starting room only)
+- **Assets**: Kenney's CC0 *Furniture Kit* and *Building Kit* (glTF/`.glb`), organised under
+  `assets/models/furniture/` and `assets/models/building/` (with the shared `Textures/colormap.png`
+  kept beside the shell pieces so their relative texture references resolve). Loaded at run time
+  with `three/addons/loaders/GLTFLoader.js` (already on the import map).
+- **One cheap material everywhere**: `render/models.js` converts every loaded PBR material to the
+  same `MeshLambertMaterial` the greybox uses and **recolours by material name** toward warm
+  walnut / cream / brass (late-80s grand-hotel Art Deco). Changing the whole look is a one-file
+  edit to the `PALETTE` there. Models are cached and cloned (shared geometry + materials); a
+  per-instance `overrides` map recolours one clone (e.g. the rug's deep red-brown).
+- **Data-driven, room-agnostic**: which room gets dressed and with what shell/decor lives in
+  `src/data/dressing.js` (keyed by room id — only listed rooms are touched, everything else stays
+  greybox). The **colliding furniture stays in the room data** (`floor1.js` `furniture`, now with
+  `model` / `yaw` / `props` fields): collision and the visible model come from the *same*
+  footprint, so you can't walk through what you see. `render/roomDressing.js` applies it: hides the
+  greybox floor + furniture boxes (their contact shadows are kept to ground the models), lays a
+  wooden floor as a single `InstancedMesh` of the 2 m tile, rebuilds each wall segment from tiled
+  wall pieces **slotted back into the cutaway** (an inner node bakes out the model's height so the
+  existing metre-based `setWallHeight` still lowers them), then places furniture + non-colliding
+  decor (rug, cushions, coat rack). `buildFloor` passes the presentation fields through untouched;
+  the game logic still only reads `center`/`size`.
+- **Warm lamp lighting**: the starting room's `mood.lights` gained a few points that the dressing
+  drops down to lamp height and warms; lamp shades are emissive so they read as the source. Light
+  **count is fixed before `renderer.compile()`** (added via the data, created up front at intensity
+  0) so no shader recompile stalls on the iPad — the same rule the greybox already followed.
+- **Performance**: ~180 draw calls / ~7 k triangles for the fully dressed starting room; trivial
+  for a real GPU. It is *fill-rate* heavy only under the headless software renderer (many pixels ×
+  ~19 point lights), so `browser-test.mjs` renders at half resolution — a test-harness speed knob,
+  no game change. If the iPad ever struggles once several rooms are dressed, instance repeated
+  furniture and merge each room's static meshes (the seam is all in `models.js`/`roomDressing.js`).
+
 ## Input
 - Pointer Events on the canvas handle touch and mouse alike. One finger = tap to walk (only if it stayed single-finger, moved ≤ 10 px and lasted ≤ 450 ms); two fingers = pinch zoom + pan; right/middle mouse drag = pan; wheel = zoom (ctrl+wheel = trackpad pinch); Safari's gesture events are used only when no touch pointers are active (desktop trackpad). `touch-action: none` plus non-passive `touchmove`/`gesture*` listeners stop iPad Safari from zooming or scrolling the page.
 - No audio yet. The "Tap to begin" click handler is the place to unlock audio later (iOS only allows it inside a tap).

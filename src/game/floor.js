@@ -41,6 +41,12 @@ export function buildFloor(data, cfg) {
           kind: f.kind || 'block',
           color: f.color,
           emissive: f.emissive,
+          // Presentation hints passed straight through for the room-dressing layer (which glTF
+          // model to draw for this footprint, its rotation, and any props on top). The game
+          // logic ignores them — collision only uses center/size below.
+          model: f.model,
+          yaw: f.yaw,
+          props: f.props,
           center: [cx + fx, cz + fz],
           size: [fw, fh, fd],
           min: [cx + fx - fw / 2, cz + fz - fd / 2],

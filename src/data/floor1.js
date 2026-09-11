@@ -44,7 +44,14 @@ export const floor1 = {
       name: 'Fourth Floor Landing',
       center: [0, 0],
       size: [8, 8],
-      mood: { color: '#ffd9a8', intensity: 1.5, ambient: 1.0 },
+      // Warm, cosy landing: several soft lamp points (index 0 is the ceiling fill, the rest sit
+      // by the lamp models — see dressing.js). Bright ambient so the entry feels welcoming.
+      mood: { color: '#ffcf95', intensity: 1.35, ambient: 1.0, lights: [[0, 0], [3.5, -1.9], [3.4, 3.4], [-3.3, 1.4]] },
+      // This room is DRESSED with real glTF furniture (see src/data/dressing.js). Each piece's
+      // `size` is its collision footprint AND drives the walkable grid, so the models you see
+      // match what you can walk around. `model` names the glTF; `yaw` rotates it (degrees);
+      // `props` are decorative items placed on top (no collision). Doorway lanes (the 1.2 m gap
+      // in the middle of each wall) and the five start spots are kept clear.
       doorways: [
         { wall: 'west', at: 0, width: 1.2, to: 'corridorW' },
         { wall: 'north', at: 0, width: 1.2, to: 'corridorN' },
@@ -52,11 +59,25 @@ export const floor1 = {
         { wall: 'south', at: 0, width: 1.2, to: 'dining' },
       ],
       furniture: [
-        { kind: 'liftDoors', pos: [-2.5, -3.7], size: [1.8, 2.6, 0.3] },
-        { kind: 'consoleTable', pos: [3.5, -1.8], size: [0.4, 0.8, 1.2] },
-        { kind: 'plant', pos: [3.2, -3.2], size: [0.4, 1.1, 0.4] },
-        { kind: 'plant', pos: [-3.2, 3.2], size: [0.4, 1.1, 0.4] },
-        { kind: 'bench', pos: [2.6, 3.4], size: [1.6, 0.5, 0.5] },
+        // North wall: the lift (two doors) and a pair of bookcases east of the doorway.
+        { kind: 'lift', pos: [-2.6, -3.62], size: [1.8, 2.1, 0.36] },
+        { kind: 'bookcase', model: 'furniture/bookcaseClosedWide.glb', yaw: 180, pos: [2.5, -3.66], size: [0.8, 0.79, 0.28] },
+        { kind: 'bookcase', model: 'furniture/bookcaseOpen.glb', yaw: 180, pos: [1.5, -3.68, ], size: [0.42, 0.88, 0.26] },
+        { kind: 'plant', model: 'furniture/pottedPlant.glb', pos: [3.45, -3.4], size: [0.34, 0.54, 0.34] },
+        { kind: 'plant', model: 'furniture/pottedPlant.glb', pos: [-3.5, -2.2], size: [0.34, 0.54, 0.34] },
+        // East wall: a console table with a table lamp.
+        { kind: 'console', model: 'furniture/sideTableDrawers.glb', yaw: -90, pos: [3.55, -1.9], size: [0.42, 0.38, 0.6],
+          props: [{ model: 'furniture/lampSquareTable.glb', pos: [0, 0.384, 0] }] },
+        // South-east: a floor lamp in the corner.
+        { kind: 'floorLamp', model: 'furniture/lampSquareFloor.glb', pos: [3.4, 3.4], size: [0.32, 1.7, 0.32] },
+        // South-west seating group: a sofa, two lounge chairs and a glass coffee table on a rug,
+        // with a small side table + lamp beside the sofa.
+        { kind: 'sofa', model: 'furniture/loungeSofa.glb', yaw: 90, pos: [-3.35, 2.7], size: [0.44, 0.46, 0.98] },
+        { kind: 'sideTable', model: 'furniture/sideTable.glb', pos: [-3.35, 1.45], size: [0.53, 0.38, 0.24],
+          props: [{ model: 'furniture/lampRoundTable.glb', pos: [0, 0.384, 0] }] },
+        { kind: 'coffeeTable', model: 'furniture/tableCoffeeGlass.glb', pos: [-2.2, 2.7], size: [0.66, 0.23, 0.4] },
+        { kind: 'chair', model: 'furniture/loungeChair.glb', yaw: 180, pos: [-2.2, 3.5], size: [0.49, 0.46, 0.41] },
+        { kind: 'chair', model: 'furniture/loungeChair.glb', yaw: 90, pos: [-1.35, 2.7], size: [0.41, 0.46, 0.49] },
       ],
     },
 

@@ -1,8 +1,25 @@
 # Progress
 
-_Last updated after the rules pass (Hotel Escape mechanics on the greybox)._
+_Last updated after the first graphics pass (starting room dressed with real models)._
 
 ## Done
+### Pass 6 — first graphics pass (starting room only)
+The **starting room** ("Fourth Floor Landing") is now dressed with real Kenney CC0 glTF models —
+a warm, cosy, late-1980s grand-hotel sitting room — as a visual test of the art direction. Every
+other room is still greybox and untouched, and all gameplay, rules, camera, controls, characters,
+doorways and collision are unchanged.
+- **Assets organised** from the loose repo-root upload into `assets/models/furniture/` and
+  `assets/models/building/` (texture in `building/Textures/`).
+- **Warm walnut / cream / brass** recolour of the neutral kit, warm wood floor, wall panelling,
+  polished-brass lift doors, and a seating group (sofa, two lounge chairs, glass coffee table on a
+  red-brown rug), bookcases, a console + table lamps, a floor lamp, plants and a coat rack.
+- **Warm lamp lighting** via the existing per-room mood system (lights dropped to lamp height,
+  emissive lampshades).
+- The loader (`src/render/models.js`) and dressing (`src/render/roomDressing.js` + data in
+  `src/data/dressing.js`) are room-agnostic, so the same approach can dress other rooms later.
+- See `docs/DECISIONS.md` → "Real art — room dressing" for how it fits together.
+
+
 ### Pass 1 — greybox exploration
 Dollhouse camera (follow, 90° snap rotation, pinch zoom, two-finger pan), tap-to-walk with
 pathfinding, room discovery with glowing doorways, per-room mood lighting, HUD, 2D map.
@@ -54,6 +71,11 @@ The full Hotel Escape rules from `docs/GAME_RULES.md` play on the greybox:
 - Not yet tested on a real iPad.
 
 ## What to test on the iPad (Safari, landscape) — exercising every mechanic
+0. **The dressed starting room (new).** Tap to begin: the first room should look like a warm hotel
+   sitting room — wood floor, walnut walls, brass lift doors, a sofa/chairs/coffee-table seating
+   group on a rug, bookcases, lamps and plants — while everything still plays as before. Walk
+   around: you should move freely, not walk through furniture, and all four doorways still work.
+   Every other room is still greybox (that's expected — this pass dressed one room only).
 1. **Start & tell.** Tap to begin. Open **Hand**: one player each turn will see a purple "You
    are POSSESSED" banner and Possession cards — note who (in hot-seat you can see it). Everyone
    has a Lantern.

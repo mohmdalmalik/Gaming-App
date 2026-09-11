@@ -78,6 +78,36 @@ The full Hotel Escape rules from `docs/GAME_RULES.md` play on the greybox:
 9. **Feel:** rule numbers in `src/data/rules.js`; the floor and dark rooms in
    `src/data/floor1.js`; camera/character feel in `src/config.js`.
 
+## Graphics pass 1 — BLOCKED on asset access (starting room dressing)
+Goal: dress ONLY the starting room ("Fourth Floor Landing", room id `hall` in
+`src/data/floor1.js`) with real CC0 glTF models (Kenney Furniture Kit + Building Kit)
+as a warm late-1980s grand-hotel sitting room, keeping the room's size, doorways,
+collision and warm mood lighting exactly as they are, and structured so other rooms
+can be dressed the same way later.
+
+**Status: STOPPED at STEP 1 (acquire assets). The asset sources are blocked from this
+environment, so no models could be downloaded. No visuals were changed — the starting
+room is still greybox. No placeholder "fake" art was substituted (as instructed).**
+
+What was tested (all through the environment's outbound proxy):
+- `https://kenney.nl/...` (the kit pages and its media/download CDN) → **403, blocked**
+  ("CONNECT tunnel failed" — the proxy refuses the host).
+- `https://github.com/...` and `https://api.github.com/...` → **403, blocked**.
+- `https://raw.githubusercontent.com/...` → reachable, but no official Kenney kit is
+  published at a raw path, so it can't supply the models.
+
+To unblock (owner action needed — pick one):
+1. **Allowlist the domains** for this environment so downloads work: `kenney.nl`
+   (and its media/asset CDN). If GitHub mirrors are preferred instead, also
+   `github.com` + `api.github.com`. Then re-run this pass.
+2. **Upload the files yourself.** Download the two kits from kenney.nl on your iPad
+   (Kenney "Furniture Kit" and "Building Kit", both CC0), and add the glTF/GLB files
+   into `assets/models/` in the repo. A small subset is enough for one room: a sofa,
+   1–2 chairs, a coffee/side table, a cabinet or sideboard, a rug if present, plus a
+   wall panel and floor piece. Once they're in the repo I'll wire them in.
+
+Nothing else in the project was touched; all game logic, rooms and tests are unchanged.
+
 ## Open items (from the spec §11, deferred)
 - Master Key, Lock Pick and Barricade are dealt (deck matches the spec) but have no effect —
   locked/hidden rooms are out of this build. Their cards say so.

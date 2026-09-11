@@ -2,7 +2,7 @@
 // by the floor model; swapping in real models later means replacing this file, not the
 // game logic.
 import * as THREE from 'three';
-import { unitBox, unitPlane, lambert, tinted, easeOutCubic } from './materials.js';
+import { unitBox, unitPlane, lambert, tinted, makeShadow, easeOutCubic } from './materials.js';
 
 export function createRoomViews(floor, cfg, scene) {
   const views = new Map();
@@ -31,11 +31,18 @@ export function createRoomViews(floor, cfg, scene) {
       return { wall, mesh, height: H };
     });
 
+    // Furniture is tinted toward the room's mood like the walls (unless it carries its own
+    // colour, e.g. the exit door), so the boxes sit in the room instead of reading as a
+    // separate cool grey. Each piece gets a soft contact shadow to ground it.
     const furniture = room.furniture.map(f => {
-      const mesh = new THREE.Mesh(unitBox, lambert(f.color || pal.furniture, f.emissive));
+      const mat = f.color ? lambert(f.color, f.emissive) : tinted(pal.furniture, tint, cfg.render.moodTint);
+      const mesh = new THREE.Mesh(unitBox, mat);
       mesh.scale.set(f.size[0], f.size[1], f.size[2]);
       mesh.position.set(f.center[0], 0, f.center[1]);
       group.add(mesh);
+      const shadow = makeShadow(f.size[0] + 0.35, f.size[2] + 0.35);
+      shadow.position.set(f.center[0], 0.012, f.center[1]);
+      group.add(shadow);
       return { data: f, mesh, height: f.size[1] };
     });
 

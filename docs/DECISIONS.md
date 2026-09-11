@@ -43,6 +43,7 @@ Short record of the choices that shape the code and why, so another coding agent
 - Each room's floor and wall greys are pulled 20% toward the room's mood colour (`config.render.moodTint`) so the warm→cold shift also shows in the surfaces, not only in the light.
 - A light flickers only where the room's `mood.flicker` says so (currently the back passage and the service corridor). Doorway highlights are opaque and steady — an earlier pulsing version read as flicker on the device.
 - 16 point lights on this floor (14 rooms, two with a second light).
+- Soft **contact shadows** (one shared radial-gradient texture, `materials.makeShadow`) sit under each character and furniture piece to ground them on the floor — cheaper than real shadow maps and enough for the greybox. Furniture is tinted toward each room's mood colour like the walls, so the boxes sit in the room rather than reading as separate cool grey.
 - Pixel ratio is capped at 1.5 (iPads report 2). Slightly softer, much cheaper per frame. `window.__game.setPixelRatio(2)` lets the owner compare on the device.
 
 ## Input

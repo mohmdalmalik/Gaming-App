@@ -37,6 +37,35 @@ export function tinted(base, toward, amount) {
   return m;
 }
 
+// A soft round contact shadow: one shared radial-gradient texture + material, dropped under
+// characters and furniture to ground them on the floor. Cheap (no shadow maps).
+let _shadowMat = null;
+export function shadowMaterial() {
+  if (_shadowMat) return _shadowMat;
+  const size = 128;
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  const g = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+  g.addColorStop(0, 'rgba(0,0,0,0.55)');
+  g.addColorStop(0.55, 'rgba(0,0,0,0.28)');
+  g.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, size, size);
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  _shadowMat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false, toneMapped: false });
+  return _shadowMat;
+}
+
+// A contact-shadow mesh sized to a footprint (flat on the floor, just above y=0).
+export function makeShadow(width, depth = width) {
+  const m = new THREE.Mesh(unitPlane, shadowMaterial());
+  m.scale.set(width, 1, depth);
+  m.position.y = 0.012;
+  return m;
+}
+
 export function easeOutCubic(t) {
   t = Math.min(1, Math.max(0, t));
   return 1 - Math.pow(1 - t, 3);

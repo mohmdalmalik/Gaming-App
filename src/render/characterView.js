@@ -5,7 +5,7 @@
 // same { group, update(mover, dt, active), setActive } surface; the game logic never
 // touches anything inside.
 import * as THREE from 'three';
-import { lambert } from './materials.js';
+import { lambert, makeShadow } from './materials.js';
 import { bodyTypes, outfits } from '../data/characters.js';
 
 // Boxes hanging down from their pivot (limbs) and standing up from it (torso parts).
@@ -161,6 +161,11 @@ export function createCharacterView(playerDef, cfg, scene) {
   blood.visible = false;
   group.add(blood);
 
+  // A soft contact shadow so the figure is grounded on the floor.
+  const shadow = makeShadow(0.95);
+  shadow.position.y = 0.011;
+  group.add(shadow);
+
   scene.add(group);
 
   let phase = 0;
@@ -184,6 +189,7 @@ export function createCharacterView(playerDef, cfg, scene) {
       blood.visible = v;
       ring.visible = !v;
       marker.visible = false;
+      shadow.scale.set(v ? 1.5 : 0.95, 1, v ? 1.15 : 0.95); // spread out under a fallen body
       if (v) {
         body.rotation.set(-Math.PI / 2, 0, 0.15); // collapsed on its back
         body.position.y = 0.12;

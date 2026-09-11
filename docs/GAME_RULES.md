@@ -96,6 +96,9 @@ Lanterns do double duty: DEFEND against possession in a trade AND are the escape
 ### Starting hands
 - Each player draws 4 cards, guaranteed at least one Lantern.
 
+### Hand limit
+- A player may hold at most 6 cards. If they end their turn holding more than 6, they discard down to 6 before control passes on (the player chooses which cards to discard).
+
 ### Searching
 - Searching a room (1 AP) draws a card or reveals a hidden item placed in that room. Main way new items enter play. Only searchable room types can be searched (not corridors/landings/stairs) and each room can be searched only once. Dark rooms require a Flashlight to search.
 

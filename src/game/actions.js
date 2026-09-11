@@ -29,6 +29,17 @@ export function search(state, floor, player) {
   return { ok: true, card };
 }
 
+// Discard a card from a player's hand (used to obey the hand limit at end of turn). Free.
+export function discardCard(state, player, cardId) {
+  const card = takeCard(player.hand, cardId);
+  return card ? { ok: true, card } : { ok: false, reason: 'noCard' };
+}
+
+// How many cards a player must shed to obey the hand limit (0 if within it).
+export function overHandLimit(player) {
+  return Math.max(0, player.hand.length - rules.handLimit);
+}
+
 // Play a Bandage (1 AP) to restore a health bar.
 export function useBandage(state, player, cardId) {
   if (state.finished) return { ok: false, reason: 'finished' };

@@ -21,36 +21,47 @@
   <div id="app">
     <div id="view"></div>
 
+    <div id="possess-tint" class="possess-tint" hidden></div>
+
     <div id="hud" hidden>
-      <div class="hud-top-left">
-        <div id="active-player" class="pill player">
-          <span class="pill-name">—</span>
-          <span id="possessed-tell" class="tell" title="Possessed" hidden>☠</span>
-        </div>
-        <div id="health" class="health" aria-label="Health"></div>
-        <div class="pill-row">
-          <div id="room-name" class="pill small">—</div>
-          <div id="round" class="pill small">Round 1</div>
-        </div>
-      </div>
+      <!-- Top: the other players, small and unobtrusive; the active one is highlighted. -->
       <div class="hud-top-center">
-        <div id="turn-order" class="turn-order"></div>
+        <div id="players-strip" class="players-strip"></div>
       </div>
       <div class="hud-top-right">
-        <div id="action-points" class="pill">AP: —</div>
+        <div id="room-name" class="pill small">—</div>
+        <div id="round" class="pill small">Round 1</div>
       </div>
 
+      <!-- Bottom-left: the active player — portrait (normal / possessed), name, health, AP. -->
       <div class="hud-bottom-left">
-        <button id="btn-search" class="btn" type="button">Search <span class="ap-cost">1</span></button>
-        <button id="btn-hand" class="btn" type="button">Hand</button>
-        <button id="btn-end-turn" class="btn wide" type="button">End turn</button>
+        <div id="player-panel" class="player-panel">
+          <div id="portrait-slot" class="portrait-slot"></div>
+          <div class="player-meta">
+            <div id="active-player" class="player-name">—</div>
+            <div id="health" class="health" aria-label="Health"></div>
+            <div id="action-points" class="ap-line">AP —</div>
+          </div>
+        </div>
       </div>
+
+      <!-- Bottom-centre: the active player's hand, face down, with a live count. Tap to open. -->
+      <div id="hand-strip" class="hand-strip" role="button" tabindex="0" aria-label="Open hand">
+        <div id="hand-backs" class="hand-backs"></div>
+        <div id="hand-count" class="hand-count" aria-label="Cards in hand">0</div>
+      </div>
+
+      <!-- Bottom-right: actions, then the view controls. -->
       <div class="hud-bottom-right">
-        <div class="rotate-group">
+        <div class="action-row">
+          <button id="btn-search" class="btn" type="button">Search <span class="ap-cost">1</span></button>
+          <button id="btn-end-turn" class="btn wide" type="button">End turn</button>
+        </div>
+        <div class="control-row">
           <button id="btn-rotate-left" class="btn round" type="button" aria-label="Rotate view left">&#x21BA;</button>
           <button id="btn-rotate-right" class="btn round" type="button" aria-label="Rotate view right">&#x21BB;</button>
+          <button id="btn-map" class="btn round map" type="button" aria-label="Open map">&#x1F5FA;&#xFE0E;</button>
         </div>
-        <button id="btn-map" class="btn round map" type="button" aria-label="Open map">&#x1F5FA;&#xFE0E;</button>
       </div>
 
       <div id="confirm-bar" class="confirm-bar" hidden>
@@ -60,6 +71,18 @@
       </div>
 
       <div id="toast" class="toast" hidden></div>
+    </div>
+
+    <!-- Discard-down-to-the-hand-limit modal (shown at end of turn when over the limit) -->
+    <div id="discard-overlay" class="overlay center" hidden>
+      <div class="modal">
+        <div class="modal-title">Hand is full</div>
+        <div id="discard-sub" class="modal-sub"></div>
+        <div id="discard-cards" class="cards"></div>
+        <div class="modal-actions">
+          <button id="btn-discard-done" class="btn primary" type="button" disabled>Keep these 6</button>
+        </div>
+      </div>
     </div>
 
     <!-- Hand panel -->

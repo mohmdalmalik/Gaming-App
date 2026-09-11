@@ -17,6 +17,7 @@ export const rules = {
   handSize: 4,             // cards dealt to each player at the start
   guaranteedLantern: true, // every starting hand contains at least one Lantern
   lanternsToEscape: 3,     // a clean player holding this many is carrying the Exit Key
+  handLimit: 6,            // most cards a player may keep; discard down to this at end of turn
 
   // The possessed side's private supply of Possession cards (held by the possessed player
   // at setup, then circulated through successful trades). Not part of the searchable deck.

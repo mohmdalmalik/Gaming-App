@@ -12,7 +12,15 @@ Placeholder articulated figures (male/female body types, six outfits by silhouet
 colour), five players taking turns on one device, per-player coloured rings and an active
 marker, a 14-room floor around a central landing.
 
-### Pass 4 — rules refinements (this pass)
+### Pass 5 — interface pass (this pass)
+- **Portraits**: placeholder SVG faces (normal + possessed "weird eye"), behind one `makePortrait` call so real faces can replace them later.
+- **Bottom-left active-player panel**: portrait, name, three health bars, AP. When the active player is possessed the portrait shows the weird eye and a subtle screen tint appears — both driven by the possessed flag.
+- **Top players strip**: small portrait + name per player, active one highlighted with a TURN tag, dead crossed out; portraits never reveal possessed roles.
+- **Bottom hand**: the active player's cards face down with a live count badge (updates on trade/search/use/discard); tap to open the full hand.
+- **Hand limit 6**: at End turn, over-limit players discard down to 6 (choosing which) before control passes. Value in `src/data/rules.js`.
+- Layout keeps AP, turn indicator, rotate, End turn and map, with nothing overlapping and the play area clear.
+
+### Pass 4 — rules refinements
 - Entering an **undiscovered** room now costs **2 AP** (1 discover + 1 move); a known room costs 1. Usable-door blink and the confirm bar reflect the real cost.
 - **Searching**: only searchable room types (guest suite, lounge, library, kitchen, storage, dining) can be searched — not corridors/landings/stairs — and each room only once. The Search button disables when a room can't be searched.
 - **Encounters**: entering a room with several people lets you **choose which one** to trade or attack; only that pair is locked for the round.

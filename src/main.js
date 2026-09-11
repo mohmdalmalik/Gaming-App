@@ -11,7 +11,7 @@ import {
   createState, resetState, endTurn, activePlayer, nextPlayer, checkWin,
   usableDoorways, pendingEncounters, lockEncounter,
 } from './game/state.js';
-import { search, useBandage, resolveTrade, resolveAttack } from './game/actions.js';
+import { search, useBandage, resolveTrade, resolveAttack, discardCard, overHandLimit } from './game/actions.js';
 import { CARDS } from './game/cards.js';
 import { createScene } from './render/scene.js';
 import { createRoomViews, createDoorwayViews } from './render/roomView.js';
@@ -27,6 +27,7 @@ import { createMap } from './map.js';
 import { createOverlays } from './overlays.js';
 import { createHand } from './ui/hand.js';
 import { createEncounter } from './ui/encounter.js';
+import { createDiscard } from './ui/discard.js';
 
 // --- World (pure data + rules) ---------------------------------------------------------
 const floor = buildFloor(floor1, cfg);
@@ -52,12 +53,15 @@ const map = createMap(document, floor, cfg);
 const overlays = createOverlays(document);
 const hand = createHand(document, cfg, { onUseBandage });
 const encounter = createEncounter(document, cfg);
+const discard = createDiscard(document, cfg, {
+  onDiscard: cardId => { discardCard(state, activePlayer(state), cardId); refresh(); },
+});
 
 let running = false;
 let pendingArrival = null;   // enterRoom result waiting for the walk to finish
 let selectedMove = null;     // a door move awaiting confirmation
 
-const uiBusy = () => map.isOpen || hand.isOpen || encounter.isOpen || overlays.endOpen;
+const uiBusy = () => map.isOpen || hand.isOpen || encounter.isOpen || discard.isOpen || overlays.endOpen;
 
 const discovery = createDiscovery({
   floor, grid, state, movers, cfg,
@@ -115,6 +119,8 @@ function passTurn() {
 
 function doEndTurn() {
   if (!running || state.finished || uiBusy() || activeMover().walking) return;
+  // Obey the hand limit before control passes on.
+  if (overHandLimit(activePlayer(state)) > 0) { discard.open(activePlayer(state), passTurn); return; }
   passTurn();
 }
 
@@ -299,8 +305,8 @@ hud.on('rotateLeft', () => rig.rotateLeft());
 hud.on('rotateRight', () => rig.rotateRight());
 hud.on('endTurn', doEndTurn);
 hud.on('search', onSearch);
-hud.on('hand', () => { if (running && !uiBusy()) hand.open(state, floor); });
-hud.on('map', () => { if (!encounter.isOpen && !overlays.endOpen) map.toggle(state, movers); });
+hud.onHand(() => { if (running && !uiBusy()) hand.open(state, floor); });
+hud.on('map', () => { if (!encounter.isOpen && !discard.isOpen && !overlays.endOpen) map.toggle(state, movers); });
 hud.onConfirm(
   () => { if (selectedMove) { discovery.go(selectedMove); selectedMove = null; hud.hideConfirm(); } },
   () => { selectedMove = null; hud.hideConfirm(); },

@@ -18,12 +18,14 @@ const rad = deg => (deg || 0) * Math.PI / 180;
 // grand-hotel elevator and matches the concept's "polished brass").
 const liftMaterial = new THREE.MeshLambertMaterial({ color: new THREE.Color('#b0863b') });
 
-// Place a loaded model under `parent` at a world position, facing `yawDeg`, resting on `y`.
-async function place(parent, path, x, z, yawDeg, y = 0, overrides) {
+// Place a loaded model under `parent` at a world position, facing `yawDeg`, resting on `y`,
+// enlarged by `scale` (furniture is scaled up to read at a believable size next to characters).
+async function place(parent, path, x, z, yawDeg, y = 0, overrides, scale = 1) {
   try {
     const m = await loadModel(path, overrides);
     m.position.set(x, y, z);
     m.rotation.y = rad(yawDeg);
+    if (scale !== 1) m.scale.setScalar(scale);
     parent.add(m);
     return m;
   } catch (e) {
@@ -117,16 +119,16 @@ async function dressOne(view, floor, cfg, spec) {
       continue;
     }
     if (!f.model) continue;
-    const piece = await place(group, f.model, cx, cz, f.yaw);
+    await place(group, f.model, cx, cz, f.yaw, 0, undefined, f.scale || 1);
     for (const p of f.props || []) {
       const [px, py, pz] = p.pos;
-      await place(group, p.model, cx + px, cz + pz, f.yaw, py, p.overrides);
+      await place(group, p.model, cx + px, cz + pz, f.yaw, py, p.overrides, p.scale || 1);
     }
   }
 
-  // 6. Non-colliding decoration (rugs, cushions, coat rack).
+  // 6. Non-colliding decoration (rugs, cushions).
   for (const d of spec.decor || []) {
-    await place(group, d.model, room.center[0] + d.pos[0], room.center[1] + d.pos[1], d.yaw, d.y ?? 0.015, d.overrides);
+    await place(group, d.model, room.center[0] + d.pos[0], room.center[1] + d.pos[1], d.yaw, d.y ?? 0.015, d.overrides, d.scale || 1);
   }
 
   // 7. Lamp lights: drop the chosen mood-light points down to lamp height and warm them, so the

@@ -3,6 +3,17 @@
 _Last updated after the first graphics pass (starting room dressed with real models)._
 
 ## Done
+### Pass 6b — starting-room furniture refined
+Refined the dressed starting room's furniture only (lighting, gameplay, other rooms unchanged):
+- **Scale**: furniture is enlarged ≈2–2.6× so it reads at a believable size next to the
+  characters (bookcases now clearly taller than a person, a generously sized sofa). Each piece's
+  collision footprint was scaled to match.
+- **Arrangement**: composed into intentional groupings — a sofa + lounge chair around a glass
+  coffee table on a rug (south-west), a reading nook of two bookcases + a chair + a floor lamp
+  (north-east), a console with a table lamp + a plant (south-east), and the lift + coat rack +
+  plant at the entrance (north-west) — with the centre and all four doorways kept clear.
+- Verified spawns, doorways, the central walking area, and piece overlaps before committing.
+
 ### Pass 6 — first graphics pass (starting room only)
 The **starting room** ("Fourth Floor Landing") is now dressed with real Kenney CC0 glTF models —
 a warm, cosy, late-1980s grand-hotel sitting room — as a visual test of the art direction. Every

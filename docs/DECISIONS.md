@@ -59,8 +59,15 @@ Short record of the choices that shape the code and why, so another coding agent
 - **Data-driven, room-agnostic**: which room gets dressed and with what shell/decor lives in
   `src/data/dressing.js` (keyed by room id — only listed rooms are touched, everything else stays
   greybox). The **colliding furniture stays in the room data** (`floor1.js` `furniture`, now with
-  `model` / `yaw` / `props` fields): collision and the visible model come from the *same*
-  footprint, so you can't walk through what you see. `render/roomDressing.js` applies it: hides the
+  `model` / `yaw` / `scale` / `props` fields): collision and the visible model come from the *same*
+  footprint, so you can't walk through what you see.
+- **Scale**: the Kenney pieces are true-to-life size, but next to the ~1.8 m box characters they
+  read as small, so each furniture entry carries a `scale` (≈2–2.6×) that enlarges the model AND
+  is baked into its collision `size`. Bookcases stand taller than a person; the sofa/chairs are
+  generously sized. Layout is composed into wall/corner groupings (a seating group on a rug, a
+  reading nook, a console, an entrance) with the room centre and the four doorway lanes kept clear
+  so the five start spots and pathfinding are unaffected — verified by a footprint/spawn/overlap
+  check before the values were committed. `render/roomDressing.js` applies it: hides the
   greybox floor + furniture boxes (their contact shadows are kept to ground the models), lays a
   wooden floor as a single `InstancedMesh` of the 2 m tile, rebuilds each wall segment from tiled
   wall pieces **slotted back into the cutaway** (an inner node bakes out the model's height so the

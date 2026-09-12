@@ -93,6 +93,11 @@ export async function instancedFromModel(path, matrices, overrides) {
   if (!src) return null;
   const inst = new THREE.InstancedMesh(src.geometry, src.material, matrices.length);
   inst.castShadow = inst.receiveShadow = false;
+  // The instances are placed at the room's world position, but an InstancedMesh derives its
+  // bounding sphere from the base geometry at the local origin. For rooms away from the origin
+  // that makes Three.js wrongly frustum-cull the whole floor when the origin is off-screen, so
+  // the floor vanishes. Disable culling for this single, always-relevant mesh.
+  inst.frustumCulled = false;
   matrices.forEach((m, i) => inst.setMatrixAt(i, m));
   inst.instanceMatrix.needsUpdate = true;
   return inst;

@@ -3,6 +3,19 @@
 _Last updated after the first graphics pass (starting room dressed with real models)._
 
 ## Done
+### Pass 6c — furniture facing fixed + rooms dressed by theme
+- **Facing bug fixed**: furniture was placed at the wrong rotation (e.g. the hall sofa faced
+  into the wall). Worked out that every Kenney piece faces +Z at yaw 0, and set each piece's
+  rotation so it faces into the room.
+- **Themed rooms (4 total)**: dressed the **library** (bookcases — where they belong — a reading
+  chair, lamp, rug), the **lounge** (two sofas round a coffee table), and the **dining room**
+  (round table + chairs + sideboard), in addition to the **hall**. Rooms with no matching
+  models (kitchen, storage, corridors, guest suite, stairs) are left greybox on purpose — no
+  out-of-place furniture.
+- **Pathways verified**: a script moves through every doorway and checks each dressed room is
+  fully walkable — all 14 doorways pass, spawns clear, rooms 99–100% navigable.
+- **Floor-disappearing bug fixed** (instanced floor was being wrongly culled in far rooms).
+
 ### Pass 6b — starting-room furniture refined
 Refined the dressed starting room's furniture only (lighting, gameplay, other rooms unchanged):
 - **Scale**: furniture is enlarged ≈2–2.6× so it reads at a believable size next to the

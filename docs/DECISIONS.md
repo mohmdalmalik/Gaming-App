@@ -78,6 +78,20 @@ Short record of the choices that shape the code and why, so another coding agent
   drops down to lamp height and warms; lamp shades are emissive so they read as the source. Light
   **count is fixed before `renderer.compile()`** (added via the data, created up front at intensity
   0) so no shader recompile stalls on the iPad — the same rule the greybox already followed.
+- **Facing**: every Kenney piece faces +Z at yaw 0 (backrest/back at −Z). So a piece sitting
+  against a wall faces into the room with yaw = south wall 180, north 0, east −90, west 90. The
+  `yaw` in the room data follows that rule; `scale` (≈2–2.6×) sizes each model to the ~1.8 m
+  characters and is baked into the collision `size`. Placements are validated by a script
+  (footprints, spawns, all doorways, per-room reachability, overlaps) before they're committed.
+- **Rooms dressed so far** (by theme, only where the Furniture Kit fits): the **hall** (landing —
+  a seating group, a console, plants, the lift), the **library** (bookcases facing in, a reading
+  chair + lamp), the **lounge** (two sofas in an L round a coffee table), and the **dining room**
+  (round table + chairs + a sideboard). Kitchen, storage, corridors, stairs and the guest suite
+  stay greybox — the kit has no counters/beds/crates, so nothing inappropriate is forced in.
+- **Floor culling**: the tiled floor is one `InstancedMesh`; its bounding sphere is at the model
+  origin, so for rooms far from the world origin Three.js frustum-culled the whole floor when the
+  origin was off-screen (the floor vanished to the dark background). Fixed by `frustumCulled = false`
+  on that single mesh.
 - **Performance**: ~180 draw calls / ~7 k triangles for the fully dressed starting room; trivial
   for a real GPU. It is *fill-rate* heavy only under the headless software renderer (many pixels ×
   ~19 point lights), so `browser-test.mjs` renders at half resolution — a test-harness speed knob,

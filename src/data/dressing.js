@@ -24,4 +24,30 @@ export const roomDressings = {
     // ceiling fill and is left alone.
     lampLights: { indices: [1, 2, 3], height: 1.0, color: '#ffd9a0', intensityScale: 0.85 },
   },
+
+  // A few more rooms dressed by theme (same shell + a rug; the themed furniture is in floor1.js).
+  library: {
+    floor: { model: 'building/floor.glb', tile: 2.0, top: 0.1 },
+    wall: { model: 'building/wall.glb', natHeight: 2.4 },
+    decor: [
+      { model: 'furniture/rugRounded.glb', pos: [0, 0.7], yaw: 0, scale: 2.2,
+        overrides: { carpet: '#6d4636', carpetDarker: '#4a2f24' } },
+    ],
+  },
+  lounge: {
+    floor: { model: 'building/floor.glb', tile: 2.0, top: 0.1 },
+    wall: { model: 'building/wall.glb', natHeight: 2.4 },
+    decor: [
+      { model: 'furniture/rugRounded.glb', pos: [-1.6, -1.2], yaw: 0, scale: 2.7,
+        overrides: { carpet: '#7c4a39', carpetDarker: '#5a3327' } },
+    ],
+  },
+  dining: {
+    floor: { model: 'building/floor.glb', tile: 2.0, top: 0.1 },
+    wall: { model: 'building/wall.glb', natHeight: 2.4 },
+    decor: [
+      { model: 'furniture/rugRounded.glb', pos: [0, 0.6], yaw: 0, scale: 2.9,
+        overrides: { carpet: '#6d4636', carpetDarker: '#4a2f24' } },
+    ],
+  },
 };

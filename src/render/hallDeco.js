@@ -208,22 +208,8 @@ export function dressHall(view, floor, cfg) {
   const innerX_W = minX + t;
   const innerX_E = maxX - t;
 
-  // 4. Doorway brass surrounds (four openings, 1.2 m wide). Vertical jambs + a lintel; the floor
-  //    movement strips are untouched.
-  for (const d of room.doorways) {
-    const alongX = d.axis === 'x';                    // opening runs along x (north/south wall)
-    const [dx, dz] = d.center;
-    const surround = new THREE.Group();
-    const w = d.width, jamb = 0.09;
-    if (alongX) {
-      for (const s of [-1, 1]) surround.add(part(box, M.brass, dx + s * (w / 2 + jamb / 2), H / 2, dz, jamb, H, 0.12));
-      surround.add(part(box, M.brassBright, dx, H - 0.06, dz, w + jamb * 2, 0.12, 0.12));
-    } else {
-      for (const s of [-1, 1]) surround.add(part(box, M.brass, dx, H / 2, dz + s * (w / 2 + jamb / 2), 0.12, H, jamb));
-      surround.add(part(box, M.brassBright, dx, H - 0.06, dz, 0.12, 0.12, w + jamb * 2));
-    }
-    attach(surround, dx, dz);
-  }
+  // (The doorway openings are already framed by the panelling and the game's own exit markers —
+  //  no extra surround, which would z-fight with those bright markers near the doors.)
 
   // 5. The lift — north wall, west of the doorway. Recess, double doors, brass surround, sunburst
   //    pediment, floor indicator and a call button.
@@ -231,22 +217,22 @@ export function dressHall(view, floor, cfg) {
     const cx = -2.6, z = innerZ_N, lw = 1.7, doorH = 1.9;   // doors 0.05..1.95; wall is 2.8 tall
     const lift = new THREE.Group();
     lift.add(part(box, M.walnutDark, cx, 1.35, z + 0.02, lw + 0.34, 2.7, 0.06));           // backing panel
-    // brass frame (jambs + lintel + sill)
-    for (const s of [-1, 1]) lift.add(part(box, M.brass, cx + s * (lw / 2 + 0.09), 1.2, z + 0.05, 0.16, 2.4, 0.1));
-    lift.add(part(box, M.brass, cx, 2.05, z + 0.05, lw + 0.34, 0.14, 0.1));                // lintel above doors
-    lift.add(part(box, M.brass, cx, 0.05, z + 0.05, lw + 0.34, 0.1, 0.1));                 // sill
+    // brass frame (jambs + lintel + sill), pushed proud so their backs clear the wall face
+    for (const s of [-1, 1]) lift.add(part(box, M.brass, cx + s * (lw / 2 + 0.09), 1.2, z + 0.08, 0.16, 2.4, 0.1));
+    lift.add(part(box, M.brass, cx, 2.05, z + 0.08, lw + 0.34, 0.14, 0.1));                // lintel above doors
+    lift.add(part(box, M.brass, cx, 0.05, z + 0.08, lw + 0.34, 0.1, 0.1));                 // sill
     // doors (bronze) with a centre seam and brass reveal lines
     for (const s of [-1, 1]) {
       lift.add(part(box, M.bronze, cx + s * 0.43, 0.05 + doorH / 2, z + 0.06, 0.82, doorH, 0.05));
       lift.add(part(box, M.brass, cx + s * 0.82, 0.05 + doorH / 2, z + 0.085, 0.04, doorH - 0.2, 0.02));
     }
     lift.add(part(box, M.walnutDark, cx, 0.05 + doorH / 2, z + 0.07, 0.03, doorH, 0.03));  // centre seam
-    // floor indicator (lit) just above the doors
-    const ind = new THREE.Mesh(new THREE.PlaneGeometry(0.5, 0.22), new THREE.MeshBasicMaterial({ map: indicatorTexture(), toneMapped: false }));
-    ind.position.set(cx, 2.22, z + 0.09); lift.add(ind);
-    // sunburst pediment above the indicator (fits under the 2.8 m wall top)
+    // sunburst pediment above the doors (fits under the 2.8 m wall top), proud of the backing
     const ped = new THREE.Mesh(new THREE.PlaneGeometry(lw + 0.2, 0.52), new THREE.MeshLambertMaterial({ map: sunburstTexture('#24463f'), emissive: new THREE.Color('#241a08') }));
-    ped.position.set(cx, 2.5, z + 0.06); lift.add(ped);
+    ped.position.set(cx, 2.5, z + 0.075); lift.add(ped);
+    // floor indicator (lit) just above the doors, clearly in front of everything
+    const ind = new THREE.Mesh(new THREE.PlaneGeometry(0.5, 0.22), new THREE.MeshBasicMaterial({ map: indicatorTexture(), toneMapped: false }));
+    ind.position.set(cx, 2.2, z + 0.14); lift.add(ind);
     // call button (a small brass disc with a glowing centre)
     const btn = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.06, 12), M.brass);
     btn.rotation.x = Math.PI / 2; btn.position.set(cx + lw / 2 + 0.2, 1.1, z + 0.09); lift.add(btn);
@@ -255,14 +241,15 @@ export function dressHall(view, floor, cfg) {
     attach(lift, cx, z);
   }
 
-  // 6. Framed Art Deco picture — north wall, east of the doorway.
+  // 6. Framed Art Deco picture — north wall, east of the doorway. Layers step forward off the
+  //    wall with clear gaps (each front layer smaller) so no two visible faces are coplanar.
   {
     const cx = 2.3, z = innerZ_N, fw = 0.95, fh = 1.25, y = 1.75;
     const pic = new THREE.Group();
-    pic.add(part(box, M.walnut, cx, y, z + 0.03, fw + 0.14, fh + 0.14, 0.06));       // frame body
-    pic.add(part(box, M.brass, cx, y, z + 0.05, fw + 0.05, fh + 0.05, 0.04));        // brass inner lip
+    pic.add(part(box, M.walnut, cx, y, z + 0.055, fw + 0.16, fh + 0.16, 0.06));      // frame body (proud of wall)
+    pic.add(part(box, M.brass, cx, y, z + 0.085, fw + 0.06, fh + 0.06, 0.02));       // brass inner lip
     const art = new THREE.Mesh(new THREE.PlaneGeometry(fw, fh), new THREE.MeshLambertMaterial({ map: sunburstTexture('#26504a') }));
-    art.position.set(cx, y, z + 0.07); pic.add(art);
+    art.position.set(cx, y, z + 0.11); pic.add(art);                                 // canvas, in front of the frame
     attach(pic, cx, z);
   }
 

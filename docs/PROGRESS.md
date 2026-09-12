@@ -7,11 +7,16 @@ _Last updated after the first graphics pass (starting room dressed with real mod
 Recreated the reference concept for the starting room only ("Fourth Floor Landing"), all from
 lightweight procedural geometry + small canvas textures (no downloaded assets): ivory upper walls
 with walnut lower panelling and brass detailing, walnut parquet, a patterned burgundy rug, brass
-wall sconces, a framed Art Deco sunburst, brass doorway surrounds, and a proper hotel lift (double
-doors, decorative surround, sunburst pediment, floor indicator, call button). Warm lighting keeps
-wood/cream/brass distinct. Wall decorations correctly follow the wall cutaway on rotation (nothing
-floats). Layout, doorways, furniture, walking paths, characters, interface, camera and rules are
-unchanged; other rooms keep their current look. All suites pass; verified movement + cutaway.
+wall sconces, a framed Art Deco sunburst, and a proper hotel lift (double doors, decorative
+surround, sunburst pediment, floor indicator, call button). Warm lighting keeps wood/cream/brass
+distinct. Wall decorations correctly follow the wall cutaway on rotation (nothing floats). Layout,
+doorways, furniture, walking paths, characters, interface, camera and rules are unchanged; other
+rooms keep their current look. All suites pass; verified movement + cutaway.
+
+Flicker follow-up: the owner reported z-fighting near the doorways and the picture. The doorway
+surrounds overlapped the game's own bright exit markers, so they were removed (the panelling and
+those markers already frame each opening); the picture and lift pieces were re-layered so no two
+visible faces sit at the same depth. Verified in a headless screenshot; no more shimmer.
 See `docs/DECISIONS.md` → "Starting room — bespoke Art Deco pass". (Floor is basket-weave parquet;
 herringbone is an easy follow-up.)
 

@@ -3,6 +3,26 @@
 _Last updated after the first graphics pass (starting room dressed with real models)._
 
 ## Done
+### Pass 10 — starting room craftsmanship refinement
+A quality pass over the starting room (hall only), driven by feedback and the hotel reference:
+- **Furniture geometry**: the sofa, wing chair, coffee table and console are rebuilt with rounded
+  edges (Three's `RoundedBoxGeometry`) — softened cushions, gently reclined curved backs, shaped
+  rolled arms, welt/piping seams — and every leg now rises from the floor to the piece it supports
+  (no floating gaps). Matte fabric reads clearly as cloth against the wood.
+- **Surfaces**: the parquet is much quieter (close warm plank tones, hairline seams instead of
+  black gaps, soft lengthwise grain); the rug is a restrained woven burgundy with a simple gold
+  border (no busy medallion/chevrons).
+- **Brass** now uses a Phong material so it catches a restrained specular highlight from the room's
+  warm lights (polished metal) instead of the old flat self-lit look; lamp shades stay self-lit.
+- **Grounding**: the seating group sits on the rug, which was hiding its floor contact shadows, so
+  each of those pieces gets a soft shadow on the rug surface; legs connect to their furniture.
+- **Plants** are rebuilt with recognizable tapered leaf blades in a terracotta pot.
+- **Doorway indicators** are softened to a translucent brass-gold glow that fits the palette while
+  staying clearly visible (a shared indicator, so this is a subtle change in every room).
+Kept lightweight: the whole scene renders in ~350 draw calls / ~28k triangles. Layout, camera,
+characters, UI, rules and walking routes are unchanged; the shared model loader and other rooms are
+untouched. All three suites pass; inspected at normal and close zoom from all four camera angles.
+
 ### Pass 9 — starting room as the craftsmanship benchmark
 Elevated the starting room ("Fourth Floor Landing") to be the visual benchmark for the rest of the
 game, still entirely from lightweight procedural geometry + small canvas textures (no downloads).

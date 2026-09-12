@@ -114,6 +114,20 @@ Short record of the choices that shape the code and why, so another coding agent
   meant to see them when a wall opens). Grounding uses the existing soft contact shadows plus a
   couple of extra shadow blobs under the free-standing clock and luggage. Still no downloads, no
   build step, hall-only; the shared loader and other rooms are untouched.
+- **Starting room — craftsmanship refinement** (further work in `hallDeco.js`): a quality pass on
+  the same room. Furniture is rebuilt with `RoundedBoxGeometry` (from `three/addons`) so cushions,
+  arms and table/console edges are softened; backs are gently reclined (a small `rotation.x`), arms
+  are shaped with a rounded body + a cylinder roll, and a `legs4()` helper rises every leg from the
+  floor to the piece's underside so nothing floats. A rounded-box geometry cache keyed by
+  dimensions keeps this cheap. Brass moved from self-lit `MeshLambert`+emissive to `MeshPhong` with
+  a warm `specular` and modest `shininess`, so it now catches a restrained highlight from the room's
+  point lights (lamp shades stay emissive). The parquet and rug canvas textures were retoned for a
+  calmer, higher-quality read (close plank tones + hairline seams + soft grain; a woven rug field
+  with a simple gold border). Contact shadows for the seating group are re-added on the rug surface
+  (the rug plane at y≈0.02 was covering the greybox shadows at y≈0.012). Plants use flattened
+  4-sided cone "blades". The shared doorway indicator (`roomView.js`) is made slightly translucent
+  so it fits the palette as a soft glow — the one change visible in every room; everything else is
+  hall-only, and the model loader is still untouched. Scene stays light (~350 draw calls).
 - **Rooms dressed so far** (by theme, only where the Furniture Kit fits): the **hall** (landing —
   a seating group, a console, plants, the lift), the **library** (bookcases facing in, a reading
   chair + lamp), the **lounge** (two sofas in an L round a coffee table), and the **dining room**

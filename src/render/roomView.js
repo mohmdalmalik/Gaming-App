@@ -104,7 +104,10 @@ export function createDoorwayViews(floor, cfg, scene) {
   const views = new Map();
   const H = cfg.walls.height;
   const t = cfg.walls.thickness;
-  const frontierMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(cfg.palette.frontier), toneMapped: false });
+  // A warm brass-gold doorway highlight. Slightly translucent so it reads as a soft glow that fits
+  // the hotel palette rather than a hard neon bar, while staying clearly visible as the "leads
+  // somewhere new" cue. (Shared by every room — one indicator style, kept restrained.)
+  const frontierMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(cfg.palette.frontier), toneMapped: false, transparent: true, opacity: 0.72 });
   const stripMat = lambert(cfg.palette.doorStrip);
   // A separate blinking floor bar shown on doorways the active player may step through this
   // turn. Its opacity pulses (a deliberate action cue, not the ambient mood flicker).

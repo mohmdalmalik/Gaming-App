@@ -10,7 +10,24 @@
 // wall segment it belongs to and hidden when that segment lowers — so nothing floats when the
 // camera rotates. Other rooms are untouched; the shared model loader/palette is not modified.
 import * as THREE from 'three';
+import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { makeShadow } from './materials.js';
+
+// Rounded-box geometry cache (softened edges for cushions, arms, table tops...). Keyed by dims so
+// repeated sizes share one geometry; built once at dressing time, so the cost is negligible.
+const _rbCache = new Map();
+function rbox(w, h, d, r = 0.05) {
+  const key = `${w.toFixed(3)},${h.toFixed(3)},${d.toFixed(3)},${r.toFixed(3)}`;
+  let g = _rbCache.get(key);
+  if (!g) { g = new RoundedBoxGeometry(w, h, d, 3, Math.min(r, w / 2 - 0.001, h / 2 - 0.001, d / 2 - 0.001)); _rbCache.set(key, g); }
+  return g;
+}
+// A rounded-box mesh at (x,y,z) with real dimensions (no scaling, so the corner radius stays even).
+function rpart(mat, x, y, z, w, h, d, r = 0.05, ry = 0) {
+  const m = new THREE.Mesh(rbox(w, h, d, r), mat);
+  m.position.set(x, y, z); m.rotation.y = ry;
+  return m;
+}
 
 // ---- small canvas helpers ----------------------------------------------------------------
 function canvas(w, h) { const c = document.createElement('canvas'); c.width = w; c.height = h; return c; }
@@ -23,25 +40,34 @@ function tex(c, repX = 1, repY = 1) {
   return t;
 }
 
-// Walnut basket-weave parquet across the whole 8×8 floor (one non-repeating texture, so no seams).
+// Warm oak basket-weave parquet across the whole 8×8 floor (one non-repeating texture, no seams).
+// Kept QUIET: the plank shades sit close together, seams are hairline and only slightly darker than
+// the wood (not black), and each plank carries a soft lengthwise grain — so the floor reads as a
+// calm parquet rather than a high-contrast checkerboard.
 function parquetTexture() {
   const S = 1024, c = canvas(S, S), x = c.getContext('2d');
-  x.fillStyle = '#3a2414'; x.fillRect(0, 0, S, S);
+  x.fillStyle = '#6d4a2c'; x.fillRect(0, 0, S, S);
   const tile = S / 8;                 // ~1 m blocks
   const planks = 4, pw = tile / planks;
-  const shades = ['#6b4526', '#5c3a20', '#78502e', '#654223'];
+  const shades = ['#6f4c2d', '#754f30', '#6a482b', '#714d2f'];   // narrow, warm range
   for (let by = 0; by < S; by += tile) for (let bx = 0; bx < S; bx += tile) {
     const vert = (((bx / tile) + (by / tile)) % 2) === 0;
     for (let k = 0; k < planks; k++) {
+      const px = vert ? bx + k * pw : bx, py = vert ? by : by + k * pw;
+      const pwx = vert ? pw : tile, pwy = vert ? tile : pw;
       x.fillStyle = shades[(k + (bx + by) / tile) % shades.length | 0];
-      if (vert) x.fillRect(bx + k * pw + 1, by + 1, pw - 2, tile - 2);
-      else x.fillRect(bx + 1, by + k * pw + 1, tile - 2, pw - 2);
-      // a faint grain streak
-      x.strokeStyle = 'rgba(255,220,180,0.05)'; x.lineWidth = 1;
-      x.beginPath();
-      if (vert) { x.moveTo(bx + k * pw + pw * 0.5, by + 2); x.lineTo(bx + k * pw + pw * 0.5, by + tile - 2); }
-      else { x.moveTo(bx + 2, by + k * pw + pw * 0.5); x.lineTo(bx + tile - 2, by + k * pw + pw * 0.5); }
-      x.stroke();
+      x.fillRect(px, py, pwx, pwy);
+      // soft lengthwise grain (a few faint light/dark fibres per plank)
+      for (let f = 0; f < 5; f++) {
+        x.strokeStyle = f % 2 ? 'rgba(255,228,190,0.05)' : 'rgba(60,38,20,0.06)';
+        x.lineWidth = 1; x.beginPath();
+        if (vert) { const gx = px + pw * (0.2 + f * 0.15); x.moveTo(gx, py + 3); x.lineTo(gx + Math.sin(f) * 2, py + pwy - 3); }
+        else { const gy = py + pw * (0.2 + f * 0.15); x.moveTo(px + 3, gy); x.lineTo(px + pwx - 3, gy + Math.sin(f) * 2); }
+        x.stroke();
+      }
+      // hairline seam, only a touch darker than the wood
+      x.strokeStyle = 'rgba(46,30,16,0.45)'; x.lineWidth = 1;
+      x.strokeRect(px + 0.5, py + 0.5, pwx - 1, pwy - 1);
     }
   }
   return tex(c);
@@ -73,27 +99,24 @@ function wallTexture() {
   return c; // caller wraps as texture so repeat.x can be set per segment
 }
 
-// Deep burgundy rug with a stepped Art Deco gold border.
+// A restrained woven burgundy rug: a finely woven field (fine warp/weft threads with slight tone
+// variation) and a simple double-line gold border. No busy medallion or chevrons — it reads as a
+// quality woven rug, not a graphic.
 function rugTexture() {
   const W = 512, H = 384, c = canvas(W, H), x = c.getContext('2d');
-  x.fillStyle = '#5a1f28'; x.fillRect(0, 0, W, H);
-  const gold = '#caa24a', dark = '#3c1219';
-  const rings = [[18, gold, 6], [30, dark, 3], [40, gold, 2], [70, gold, 3]];
-  for (const [inset, col, lw] of rings) {
-    x.strokeStyle = col; x.lineWidth = lw; x.strokeRect(inset, inset, W - inset * 2, H - inset * 2);
+  x.fillStyle = '#6a2530'; x.fillRect(0, 0, W, H);
+  // woven weave: alternating fine vertical/horizontal threads with a little random tone
+  for (let y = 0; y < H; y += 3) for (let xi = 0; xi < W; xi += 3) {
+    const up = ((xi + y) / 3) % 2 === 0;
+    const j = (Math.sin(xi * 12.9 + y * 78.2) * 43758.5) % 1;
+    const v = 0.08 * (j - 0.5);
+    x.fillStyle = up ? `rgba(150,60,72,${0.18 + v})` : `rgba(70,26,34,${0.20 + v})`;
+    x.fillRect(xi, y, 3, 3);
   }
-  // corner chevrons
-  x.strokeStyle = gold; x.lineWidth = 3;
-  for (const [cx, cy, sx, sy] of [[52, 52, 1, 1], [W - 52, 52, -1, 1], [52, H - 52, 1, -1], [W - 52, H - 52, -1, -1]]) {
-    x.beginPath();
-    x.moveTo(cx + sx * 26, cy); x.lineTo(cx, cy); x.lineTo(cx, cy + sy * 26);
-    x.moveTo(cx + sx * 18, cy + sy * 8); x.lineTo(cx + sx * 8, cy + sy * 8); x.lineTo(cx + sx * 8, cy + sy * 18);
-    x.stroke();
-  }
-  // centre medallion
-  x.strokeStyle = 'rgba(202,162,74,0.6)'; x.lineWidth = 2;
-  x.beginPath(); x.ellipse(W / 2, H / 2, 60, 44, 0, 0, Math.PI * 2); x.stroke();
-  x.beginPath(); x.ellipse(W / 2, H / 2, 40, 28, 0, 0, Math.PI * 2); x.stroke();
+  // simple gold border, two fine lines
+  const gold = '#b89246';
+  x.strokeStyle = gold; x.lineWidth = 4; x.strokeRect(26, 26, W - 52, H - 52);
+  x.lineWidth = 2; x.strokeStyle = 'rgba(184,146,70,0.7)'; x.strokeRect(38, 38, W - 76, H - 76);
   return tex(c);
 }
 
@@ -177,25 +200,33 @@ function landscapeTexture() {
 }
 
 // ---- shared materials (hall-only; nothing here is shared with other rooms) ----------------
+// Brass is Phong so it catches a restrained specular highlight from the room's warm point lights
+// (polished metal), rather than the old flat self-lit look. A tiny emissive keeps it from going
+// dead in shadow, but the sheen now comes from the lights. Wood/fabric stay matte Lambert so cloth
+// reads clearly as cloth against the wood.
+const brassPhong = (color, emissive = '#140d03', shininess = 55) =>
+  new THREE.MeshPhongMaterial({ color, specular: '#e8cf8a', shininess, emissive });
 const M = {
-  brass: new THREE.MeshLambertMaterial({ color: '#c8a24e', emissive: '#4a3410' }),
-  brassBright: new THREE.MeshLambertMaterial({ color: '#e6c877', emissive: '#6a4e18' }),
-  brassDark: new THREE.MeshLambertMaterial({ color: '#9c7d3a', emissive: '#241a08' }),
+  brass: brassPhong('#c19a44'),
+  brassBright: brassPhong('#d8b660', '#241803', 70),
+  brassDark: brassPhong('#93762f', '#0e0902', 40),
   walnut: new THREE.MeshLambertMaterial({ map: woodGrainTexture('#5c3a20', '#77502f') }),
   walnutFlat: new THREE.MeshLambertMaterial({ color: '#5c3a20' }),
   walnutDark: new THREE.MeshLambertMaterial({ color: '#33200f' }),
   oak: new THREE.MeshLambertMaterial({ map: woodGrainTexture('#7a552f', '#946a3c', '#5a3d20') }),
   ivory: new THREE.MeshLambertMaterial({ color: '#efe7d6' }),
   cream: new THREE.MeshLambertMaterial({ color: '#e7ddc8' }),
-  bronze: new THREE.MeshLambertMaterial({ color: '#6e5a34', emissive: '#241a08' }),
+  bronze: new THREE.MeshPhongMaterial({ color: '#7a6236', specular: '#b89a5a', shininess: 30, emissive: '#0e0a04' }),
   shade: new THREE.MeshLambertMaterial({ color: '#ffe6b0', emissive: '#ffbe63' }),   // frosted, self-lit
   sofa: new THREE.MeshLambertMaterial({ map: fabricTexture('#a8814e', '#8a6738') }),   // warm camel
-  velvet: new THREE.MeshLambertMaterial({ map: fabricTexture('#4e6a4f', '#38513a') }), // deep green
+  seam: new THREE.MeshLambertMaterial({ color: '#8a6738' }),                           // sofa seam/piping
+  velvet: new THREE.MeshLambertMaterial({ map: fabricTexture('#4a6249', '#374b37') }), // muted green
+  velvetSeam: new THREE.MeshLambertMaterial({ color: '#3a4d3a' }),
   cushionA: new THREE.MeshLambertMaterial({ map: fabricTexture('#7e2632', '#5c1a24') }), // burgundy
-  cushionB: new THREE.MeshLambertMaterial({ map: fabricTexture('#c8a24e', '#a07f34') }), // gold
+  cushionB: new THREE.MeshLambertMaterial({ map: fabricTexture('#b8923f', '#94742f') }), // gold
   leather: new THREE.MeshLambertMaterial({ color: '#8a5a30' }),                        // cognac luggage
   leather2: new THREE.MeshLambertMaterial({ color: '#6e4526' }),                       // darker case
-  glass: new THREE.MeshLambertMaterial({ color: '#9fb6b4', emissive: '#20302f', transparent: true, opacity: 0.34, depthWrite: false }),
+  glass: new THREE.MeshPhongMaterial({ color: '#9fb6b4', specular: '#ffffff', shininess: 90, emissive: '#18251f', transparent: true, opacity: 0.32, depthWrite: false }),
   dark: new THREE.MeshLambertMaterial({ color: '#1c1712' }),
 };
 const box = new THREE.BoxGeometry(1, 1, 1);
@@ -232,72 +263,83 @@ function sconce(nx, nz, ry) {
 // convention the rest of the furniture data uses). Shapes are kept to shared box/cylinder geometry
 // so the whole room stays a few dozen small draw calls — light enough for the iPad.
 
-// Four turned feet at the corners of a w×d footprint.
-function feet(g, w, d, mat = M.walnutFlat, r = 0.035, h = 0.12) {
+// Four turned wood legs rising from the floor to `topY`, so the piece above physically sits on
+// them (no gap). `inset` keeps them just inside the footprint corners.
+function legs4(g, w, d, topY, mat = M.walnutFlat, r = 0.04, inset = 0.13) {
   for (const sx of [-1, 1]) for (const sz of [-1, 1])
-    g.add(tube(mat, sx * (w / 2 - 0.12), h / 2, sz * (d / 2 - 0.12), r, h, 'y'));
+    g.add(tube(mat, sx * (w / 2 - inset), topY / 2, sz * (d / 2 - inset), r, topY, 'y'));
 }
 
-// A generously upholstered two-seat sofa with rolled arms and a pair of throw cushions.
+// A generously upholstered two-seat sofa: rounded seat + back cushions, a gently reclined curved
+// back, shaped rolled arms, a welt seam along the front, wood legs and two throw cushions. Rounded
+// geometry + matte fabric read clearly as upholstery against the wood.
 function buildSofa() {
   const g = new THREE.Group(), W = 2.3, D = 0.95;
-  feet(g, W, D);
-  g.add(part(box, M.sofa, 0, 0.33, 0.02, W - 0.14, 0.30, D - 0.06));                 // seat body
-  g.add(part(box, M.sofa, 0, 0.66, -(D / 2 - 0.13), W - 0.14, 0.58, 0.16));          // back rest
-  for (let i = -1; i <= 1; i++)                                                       // seat cushions
-    g.add(part(box, M.sofa, i * ((W - 0.44) / 3 + 0.02), 0.52, 0.06, (W - 0.5) / 3, 0.15, D - 0.26));
-  for (let i = -1; i <= 1; i++)                                                       // back cushions
-    g.add(part(box, M.sofa, i * ((W - 0.44) / 3 + 0.02), 0.66, -(D / 2 - 0.22), (W - 0.5) / 3, 0.5, 0.14));
-  for (const s of [-1, 1]) {                                                          // rolled arms
-    g.add(part(box, M.sofa, s * (W / 2 - 0.09), 0.42, 0, 0.18, 0.5, D - 0.04));
-    g.add(tube(M.sofa, s * (W / 2 - 0.09), 0.66, 0.02, 0.1, D - 0.06, 'z'));
+  legs4(g, W, D, 0.16);
+  g.add(rpart(M.sofa, 0, 0.30, 0.02, W - 0.12, 0.28, D - 0.06, 0.06));                 // seat base
+  g.add(rpart(M.seam, 0, 0.17, D / 2 - 0.05, W - 0.16, 0.03, 0.05, 0.015));            // front welt seam
+  for (const s of [-1, 1]) {                                                           // shaped rolled arms
+    g.add(rpart(M.sofa, s * (W / 2 - 0.10), 0.40, 0, 0.20, 0.48, D - 0.04, 0.09));
+    g.add(tube(M.sofa, s * (W / 2 - 0.10), 0.60, 0.03, 0.11, D - 0.06, 'z'));
   }
-  g.add(part(box, M.cushionA, -(W / 2 - 0.38), 0.62, 0.06, 0.32, 0.3, 0.12, 0.3));    // throw cushions
-  g.add(part(box, M.cushionB, (W / 2 - 0.38), 0.62, 0.06, 0.32, 0.3, 0.12, -0.3));
+  const back = rpart(M.sofa, 0, 0.66, -(D / 2 - 0.15), W - 0.34, 0.60, 0.17, 0.08);    // curved back rest
+  back.rotation.x = -0.12; g.add(back);
+  for (let i = -1; i <= 1; i++) {
+    const bx = i * (W - 0.5) / 3;
+    g.add(rpart(M.sofa, bx, 0.50, 0.06, (W - 0.54) / 3, 0.17, D - 0.30, 0.07));        // domed seat cushion
+    const bc = rpart(M.sofa, bx, 0.66, -(D / 2 - 0.24), (W - 0.54) / 3, 0.44, 0.15, 0.07);
+    bc.rotation.x = -0.12; g.add(bc);                                                  // back cushion
+  }
+  const tA = rpart(M.cushionA, -(W / 2 - 0.42), 0.60, 0.05, 0.34, 0.32, 0.14, 0.06, 0.3); tA.rotation.z = 0.22; g.add(tA);
+  const tB = rpart(M.cushionB, (W / 2 - 0.42), 0.60, 0.05, 0.34, 0.32, 0.14, 0.06, -0.3); tB.rotation.z = -0.22; g.add(tB);
   return g;
 }
 
-// A high-backed wing chair in deep green velvet.
+// A high-backed wing chair in muted green velvet — curved reclined back, angled wings, shaped arms.
 function buildWingChair() {
-  const g = new THREE.Group(), W = 1.0, D = 0.95;
-  feet(g, W, D);
-  g.add(part(box, M.velvet, 0, 0.30, 0.02, W - 0.14, 0.26, D - 0.08));                // seat body
-  g.add(part(box, M.velvet, 0, 0.48, 0.06, W - 0.34, 0.14, D - 0.28));                // seat cushion
-  g.add(part(box, M.velvet, 0, 0.74, -(D / 2 - 0.12), W - 0.14, 0.72, 0.16));         // tall back
-  g.add(part(box, M.cushionA, 0, 0.6, -(D / 2 - 0.26), W - 0.36, 0.42, 0.12));        // back cushion
-  for (const s of [-1, 1]) {                                                          // wings + arms
-    g.add(part(box, M.velvet, s * (W / 2 - 0.06), 0.86, -(D / 2 - 0.30), 0.12, 0.4, 0.36));
-    g.add(part(box, M.velvet, s * (W / 2 - 0.07), 0.42, 0.02, 0.14, 0.42, D - 0.16));
-    g.add(tube(M.velvet, s * (W / 2 - 0.07), 0.62, 0.04, 0.09, D - 0.2, 'z'));
+  const g = new THREE.Group(), W = 1.02, D = 0.98;
+  legs4(g, W, D, 0.17, M.walnutFlat, 0.035);
+  g.add(rpart(M.velvet, 0, 0.31, 0.02, W - 0.12, 0.28, D - 0.08, 0.06));               // seat base
+  g.add(rpart(M.velvetSeam, 0, 0.18, D / 2 - 0.06, W - 0.18, 0.03, 0.05, 0.015));      // welt seam
+  g.add(rpart(M.velvet, 0, 0.50, 0.05, W - 0.30, 0.15, D - 0.30, 0.07));               // seat cushion
+  const back = rpart(M.velvet, 0, 0.80, -(D / 2 - 0.13), W - 0.16, 0.82, 0.16, 0.08);  // tall curved back
+  back.rotation.x = -0.10; g.add(back);
+  const bc = rpart(M.cushionA, 0, 0.62, -(D / 2 - 0.22), W - 0.34, 0.42, 0.13, 0.07); bc.rotation.x = -0.10; g.add(bc);
+  for (const s of [-1, 1]) {
+    const wing = rpart(M.velvet, s * (W / 2 - 0.06), 0.90, -(D / 2 - 0.32), 0.12, 0.44, 0.40, 0.07);
+    wing.rotation.z = s * 0.05; g.add(wing);                                           // gently angled wing
+    g.add(rpart(M.velvet, s * (W / 2 - 0.06), 0.42, 0.03, 0.14, 0.42, D - 0.16, 0.07)); // shaped arm
+    g.add(tube(M.velvet, s * (W / 2 - 0.06), 0.60, 0.05, 0.08, D - 0.20, 'z'));         // arm roll
   }
   return g;
 }
 
-// Walnut-and-glass coffee table with a lower shelf of books.
+// Walnut-and-glass coffee table: softened apron frame connecting the four legs, a glass top and a
+// lower shelf with book stacks.
 function buildCoffeeTable() {
   const g = new THREE.Group(), W = 1.28, D = 0.72;
   for (const sx of [-1, 1]) for (const sz of [-1, 1])
-    g.add(tube(M.walnut, sx * (W / 2 - 0.05), 0.2, sz * (D / 2 - 0.05), 0.03, 0.4, 'y'));
-  g.add(part(box, M.walnut, 0, 0.40, D / 2 - 0.03, W, 0.05, 0.06));                    // aprons
-  g.add(part(box, M.walnut, 0, 0.40, -(D / 2 - 0.03), W, 0.05, 0.06));
-  for (const s of [-1, 1]) g.add(part(box, M.walnut, s * (W / 2 - 0.03), 0.40, 0, 0.06, 0.05, D));
-  const glass = part(box, M.glass, 0, 0.43, 0, W - 0.06, 0.03, D - 0.06); glass.renderOrder = 3; g.add(glass);
-  g.add(part(box, M.walnutFlat, 0, 0.14, 0, W - 0.14, 0.03, D - 0.14));                // lower shelf
-  const books = buildBooks(3, 0.22); books.position.set(-0.2, 0.16, 0.06); books.rotation.y = 0.2; g.add(books);
-  const books2 = buildBooks(2, 0.2); books2.position.set(0.28, 0.16, -0.04); books2.rotation.y = -0.4; g.add(books2);
+    g.add(tube(M.walnut, sx * (W / 2 - 0.06), 0.19, sz * (D / 2 - 0.06), 0.035, 0.38, 'y'));  // legs 0..0.38
+  g.add(rpart(M.walnut, 0, 0.40, D / 2 - 0.05, W - 0.04, 0.06, 0.06, 0.02));           // aprons (tie the legs)
+  g.add(rpart(M.walnut, 0, 0.40, -(D / 2 - 0.05), W - 0.04, 0.06, 0.06, 0.02));
+  for (const s of [-1, 1]) g.add(rpart(M.walnut, s * (W / 2 - 0.05), 0.40, 0, 0.06, 0.06, D - 0.04, 0.02));
+  const glass = rpart(M.glass, 0, 0.44, 0, W - 0.02, 0.03, D - 0.02, 0.01); glass.renderOrder = 3; g.add(glass);
+  g.add(rpart(M.walnutFlat, 0, 0.13, 0, W - 0.16, 0.03, D - 0.16, 0.02));              // lower shelf
+  const books = buildBooks(3, 0.22); books.position.set(-0.2, 0.145, 0.06); books.rotation.y = 0.2; g.add(books);
+  const books2 = buildBooks(2, 0.2); books2.position.set(0.28, 0.145, -0.04); books2.rotation.y = -0.4; g.add(books2);
   return g;
 }
 
-// A low sideboard/console with three drawers and brass pulls.
+// A low sideboard/console with softened edges, three drawers with brass pulls, on wood legs.
 function buildConsole() {
   const g = new THREE.Group(), W = 1.25, D = 0.45;
-  g.add(part(box, M.walnut, 0, 0.54, 0, W, 0.46, D - 0.02));                           // carcass
-  g.add(part(box, M.walnutFlat, 0, 0.79, 0, W + 0.06, 0.04, D + 0.04));                // top
+  legs4(g, W, D, 0.18, M.walnutDark, 0.035, 0.08);
+  g.add(rpart(M.walnut, 0, 0.48, 0, W, 0.60, D - 0.02, 0.03));                         // carcass 0.18..0.78
+  g.add(rpart(M.walnutFlat, 0, 0.80, 0, W + 0.06, 0.04, D + 0.04, 0.02));              // top
   for (let i = -1; i <= 1; i++) {
-    g.add(part(box, M.oak, i * 0.4, 0.54, D / 2, 0.36, 0.4, 0.02));                    // drawer front
-    g.add(tube(M.brass, i * 0.4, 0.54, D / 2 + 0.03, 0.02, 0.18, 'x'));               // pull
+    g.add(rpart(M.oak, i * 0.4, 0.50, D / 2 - 0.005, 0.36, 0.42, 0.03, 0.02));         // drawer front
+    g.add(tube(M.brass, i * 0.4, 0.50, D / 2 + 0.02, 0.02, 0.18, 'x'));                // brass pull
   }
-  feet(g, W, D, M.walnutDark, 0.03, 0.14);
   return g;
 }
 
@@ -335,18 +377,29 @@ function buildBooks(n = 3, w = 0.24) {
   return g;
 }
 
-// A potted plant: brass planter + layered low-poly foliage.
+// A potted plant with recognizable leaf blades: a terracotta pot and a spray of long, tapered
+// leaves fanning up and outward (each a flattened 4-sided blade), a couple arching over.
+const leafGeo = new THREE.ConeGeometry(0.075, 0.6, 4);   // slim 4-sided blade, reused for every leaf
+const leafMats = ['#3f6b39', '#4e7d43', '#5a8c49', '#356032'].map(c => new THREE.MeshLambertMaterial({ color: c }));
 function buildPlant() {
   const g = new THREE.Group();
-  const pot = new THREE.Mesh(new THREE.CylinderGeometry(0.17, 0.22, 0.4, 16), M.brassDark);
-  pot.position.y = 0.2; g.add(pot);
-  g.add(tube(M.dark, 0, 0.4, 0, 0.15, 0.02, 'y'));                                     // soil
-  const greens = [new THREE.MeshLambertMaterial({ color: '#3f6b3a' }), new THREE.MeshLambertMaterial({ color: '#4f7d44' }), new THREE.MeshLambertMaterial({ color: '#5c8a4a' })];
-  const spots = [[0, 0.75, 0, 0.34], [-0.14, 0.62, 0.08, 0.26], [0.15, 0.66, -0.05, 0.24], [0.05, 0.92, 0.02, 0.22]];
-  spots.forEach(([x, y, z, r], i) => {
-    const leaf = new THREE.Mesh(new THREE.IcosahedronGeometry(r, 0), greens[i % greens.length]);
-    leaf.position.set(x, y, z); leaf.scale.y = 1.3; g.add(leaf);
-  });
+  const pot = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.13, 0.34, 18), new THREE.MeshLambertMaterial({ color: '#9c5a3c' }));
+  pot.position.y = 0.17; g.add(pot);
+  g.add(tube(M.brassDark, 0, 0.33, 0, 0.185, 0.05, 'y'));                              // pot rim
+  g.add(tube(M.dark, 0, 0.34, 0, 0.15, 0.02, 'y'));                                    // soil
+  const N = 9;
+  for (let i = 0; i < N; i++) {
+    const a = (i / N) * Math.PI * 2 + i * 0.7;
+    const tilt = 0.35 + (i % 3) * 0.18;                    // how far the blade leans out
+    const len = 0.9 + (i % 2) * 0.2;
+    const leaf = new THREE.Mesh(leafGeo, leafMats[i % leafMats.length]);
+    leaf.scale.set(1, len, 0.34);                          // flatten into a blade
+    leaf.position.set(Math.cos(a) * 0.06, 0.34, Math.sin(a) * 0.06);
+    leaf.rotation.set(Math.sin(a) * tilt, -a, Math.cos(a) * tilt);
+    // lift so the blade base sits in the pot, not through the floor
+    leaf.position.y = 0.34 + Math.cos(tilt) * len * 0.28;
+    g.add(leaf);
+  }
   return g;
 }
 
@@ -549,19 +602,24 @@ export function dressHall(view, floor, cfg) {
 
   // 9. Bespoke furniture, replacing the generic Kenney pieces for this hero room. Positions and
   //    yaws mirror the collision data in floor1.js (so the walkable grid still matches), FRONT
-  //    facing into the room. Each sits on the existing soft contact shadow from the greybox.
+  //    facing into the room. Pieces off the rug keep the greybox contact shadow; the seating group
+  //    stands ON the rug (y≈0.02), which hides those, so each gets a shadow on the rug surface.
   const cX = room.center[0], cZ = room.center[1];
   const place = (obj, x, z, yaw) => { obj.position.set(x, 0, z); obj.rotation.y = yaw; group.add(obj); };
+  const rugShadow = (x, z, w, d) => { const s = makeShadow(w, d); s.position.set(x, 0.032, z); group.add(s); };
   place(buildSofa(), cX - 2.4, cZ + 3.35, Math.PI);            // sofa, south wall
+  rugShadow(cX - 2.4, cZ + 3.35, 2.6, 1.2);
   place(buildWingChair(), cX - 3.35, cZ + 2.0, Math.PI / 2);   // wing chair, west wall
+  rugShadow(cX - 3.35, cZ + 2.0, 1.25, 1.3);
   place(buildCoffeeTable(), cX - 2.1, cZ + 2.35, 0);           // glass coffee table on the rug
+  rugShadow(cX - 2.1, cZ + 2.35, 1.5, 0.95);
   place(buildPlant(), cX + 3.5, cZ + 3.5, 0);                  // SE plant
   place(buildPlant(), cX + 3.4, cZ - 3.4, 0);                  // NE plant
 
   // Console (east wall) dressed with a lamp, telephone, books and a standing photo — built as the
   // console's children so they rotate with it.
   {
-    const con = buildConsole(), top = 0.81;
+    const con = buildConsole(), top = 0.82;
     const lamp = buildTableLamp(); lamp.position.set(-0.4, top, -0.02); con.add(lamp);
     const phone = buildTelephone(); phone.position.set(0.14, top, 0.04); phone.rotation.y = 0.3; con.add(phone);
     const bk = buildBooks(3, 0.22); bk.position.set(0.46, top, -0.04); bk.rotation.y = -0.5; con.add(bk);

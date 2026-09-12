@@ -115,10 +115,12 @@ async function dressOne(view, floor, cfg, spec) {
   }
 
   // 5. Colliding furniture: one model per entry (+ any props on top). `lift` is a pair of doors.
+  //    The bespoke Deco hall builds all of its own furniture (see hallDeco.js), so skip the
+  //    generic pieces there — collision still comes from the same floor1.js footprints.
   for (const f of room.furniture) {
+    if (deco) continue;
     const [cx, cz] = f.center;
     if (f.kind === 'lift') {
-      if (deco) continue;   // the Deco hall builds its own detailed lift
       for (const dx of [-0.45, 0.45]) {
         const leaf = await place(group, 'building/door-rotate-square-a.glb', cx + dx, cz, 90);
         if (leaf) { leaf.scale.z = 0.9 / 1.025; leaf.traverse(o => { if (o.isMesh) o.material = liftMaterial; }); }

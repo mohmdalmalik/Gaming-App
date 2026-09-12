@@ -92,8 +92,28 @@ Short record of the choices that shape the code and why, so another coding agent
   protruding decoration is registered on the wall segment it sits on and hidden when that segment
   lowers (a thin wrapper around `view.setWallHeight`), so nothing floats when the camera rotates —
   verified programmatically. It uses its own materials/textures and does not touch the shared
-  model loader/palette, so other rooms are unchanged. Furniture and lamp lights still come from
-  the generic dressing. (Floor is basket-weave parquet for now; herringbone is a possible tweak.)
+  model loader/palette, so other rooms are unchanged. (Floor is basket-weave parquet for now;
+  herringbone is a possible tweak.)
+- **Starting room — benchmark craftsmanship pass** (extends `hallDeco.js`): the hall is now the
+  visual reference for the rest of the game. It replaces the generic Kenney furniture with its own
+  bespoke, procedurally-modelled pieces (a camel two-seat sofa with rolled arms + throw cushions, a
+  green velvet wing chair, a walnut-and-glass coffee table with a book shelf, a three-drawer console
+  with brass pulls) built from shared box/cylinder geometry and coordinated wood-grain + fabric
+  CanvasTextures. `roomDressing.js` skips the generic furniture for `deco` rooms (`if (deco)
+  continue;`), but the collision/walkable grid is unchanged — it still comes from the same
+  `floor1.js` footprints, so the models match what you can walk around. Architectural relief was
+  added as real geometry: a walnut skirting board, a picture rail and a cream crown cornice run
+  along every wall segment, and each of the four doorways gets a refined walnut surround (two jambs
+  + a header + a brass fillet). The surrounds sit **proud of the wall and outside** the game's gold
+  doorway markers, so they never share a plane with them (no z-fighting) and never hide the
+  "leads somewhere" cue. Period objects dress the room: a glowing brass table lamp, a rotary
+  telephone, book stacks, a second framed picture (a warm landscape) on the east wall, a longcase
+  (grandfather) clock against the west wall, and a stack of cognac suitcases by the lift. Every
+  wall-mounted piece (surrounds, mouldings, art, clock, sconces) is registered on its wall segment,
+  so it lowers/hides correctly on cutaway; furniture and the low luggage stay visible (you're
+  meant to see them when a wall opens). Grounding uses the existing soft contact shadows plus a
+  couple of extra shadow blobs under the free-standing clock and luggage. Still no downloads, no
+  build step, hall-only; the shared loader and other rooms are untouched.
 - **Rooms dressed so far** (by theme, only where the Furniture Kit fits): the **hall** (landing —
   a seating group, a console, plants, the lift), the **library** (bookcases facing in, a reading
   chair + lamp), the **lounge** (two sofas in an L round a coffee table), and the **dining room**

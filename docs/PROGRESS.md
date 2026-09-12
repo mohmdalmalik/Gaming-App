@@ -3,6 +3,22 @@
 _Last updated after the first graphics pass (starting room dressed with real models)._
 
 ## Done
+### Pass 9 — starting room as the craftsmanship benchmark
+Elevated the starting room ("Fourth Floor Landing") to be the visual benchmark for the rest of the
+game, still entirely from lightweight procedural geometry + small canvas textures (no downloads).
+Bespoke upholstered furniture replaces the generic kit for this room only: a camel two-seat sofa
+(rolled arms + throw cushions), a green velvet wing chair, a walnut-and-glass coffee table with a
+book shelf, and a three-drawer console with brass pulls — with coordinated wood-grain and fabric
+textures. Added real architectural relief (walnut skirting, a picture rail, a cream crown cornice)
+and refined walnut door surrounds around all four openings, kept clear of the game's gold doorway
+markers so there is no flicker and the "leads somewhere" cue still shows. Carefully placed period
+objects: a glowing brass table lamp, a rotary telephone, book stacks, a second framed picture (a
+warm landscape), a longcase clock and a luggage stack by the lift. The centre and the four doorway
+lanes stay clear; collision/walkability is unchanged (it still comes from the same floor1.js
+footprints). Everything wall-mounted lowers/hides correctly on camera rotation. Other rooms and the
+shared model loader are untouched. All three suites pass; inspected from all four camera angles.
+See `docs/DECISIONS.md` → "Starting room — benchmark craftsmanship pass".
+
 ### Pass 8 — Art Deco upgrade of the starting room
 Recreated the reference concept for the starting room only ("Fourth Floor Landing"), all from
 lightweight procedural geometry + small canvas textures (no downloaded assets): ivory upper walls

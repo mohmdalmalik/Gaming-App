@@ -66,23 +66,23 @@ export const floor1 = {
       furniture: [
         // North-west — the entrance: the lift (two doors), a coat rack and a plant.
         { kind: 'lift', pos: [-2.6, -3.6], size: [1.8, 2.1, 0.36] },
-        { kind: 'coatRack', model: 'furniture/coatRackStanding.glb', scale: 2.0, pos: [-3.55, -2.7], size: [0.55, 1.54, 0.55] },
-        { kind: 'plant', model: 'furniture/pottedPlant.glb', scale: 2.2, pos: [-3.5, -1.6], size: [0.56, 1.18, 0.64] },
-        // South-west — the main seating group: a sofa and a lounge chair around a glass coffee
-        // table on a rug, with a floor lamp against the west wall.
-        { kind: 'sofa', model: 'furniture/loungeSofa.glb', yaw: 0, scale: 2.1, pos: [-2.5, 3.35], size: [2.06, 0.97, 0.86] },
-        { kind: 'chair', model: 'furniture/loungeChair.glb', yaw: 90, scale: 2.0, pos: [-3.35, 2.2], size: [0.82, 0.92, 0.98] },
-        { kind: 'coffeeTable', model: 'furniture/tableCoffeeGlass.glb', yaw: 0, scale: 2.0, pos: [-2.2, 2.4], size: [1.32, 0.46, 0.8] },
-        { kind: 'floorLamp', model: 'furniture/lampRoundFloor.glb', scale: 2.3, pos: [-3.55, 1.3], size: [0.35, 1.98, 0.41] },
+        { kind: 'coatRack', model: 'furniture/coatRackStanding.glb', scale: 2.4, pos: [-3.5, -2.7], size: [0.66, 1.85, 0.66] },
+        { kind: 'plant', model: 'furniture/pottedPlant.glb', scale: 2.5, pos: [-3.5, -1.5], size: [0.64, 1.34, 0.73] },
+        // South-west — the main seating group: a big sofa and a lounge chair around a glass
+        // coffee table on a rug, with a floor lamp against the west wall.
+        { kind: 'sofa', model: 'furniture/loungeSofa.glb', yaw: 0, scale: 2.5, pos: [-2.4, 3.3], size: [2.45, 1.15, 1.02] },
+        { kind: 'chair', model: 'furniture/loungeChair.glb', yaw: 90, scale: 2.5, pos: [-3.3, 2.0], size: [1.02, 1.15, 1.23] },
+        { kind: 'coffeeTable', model: 'furniture/tableCoffeeGlass.glb', yaw: 0, scale: 2.2, pos: [-2.0, 2.3], size: [1.45, 0.51, 0.88] },
+        { kind: 'floorLamp', model: 'furniture/lampRoundFloor.glb', scale: 2.4, pos: [-3.5, 1.05], size: [0.36, 2.06, 0.42] },
         // North-east — a reading nook: two bookcases in an L, a lounge chair facing them, a lamp.
-        { kind: 'bookcase', model: 'furniture/bookcaseClosedWide.glb', yaw: 180, scale: 2.6, pos: [2.1, -3.5], size: [2.08, 2.05, 0.65] },
-        { kind: 'bookcase', model: 'furniture/bookcaseOpen.glb', yaw: -90, scale: 2.6, pos: [3.5, -2.4], size: [0.65, 2.29, 1.04] },
-        { kind: 'chair', model: 'furniture/loungeChair.glb', yaw: 0, scale: 2.0, pos: [2.2, -2.5], size: [0.98, 0.92, 0.82] },
-        { kind: 'floorLamp', model: 'furniture/lampSquareFloor.glb', scale: 2.3, pos: [3.55, -3.45], size: [0.28, 1.98, 0.28] },
+        { kind: 'bookcase', model: 'furniture/bookcaseClosedWide.glb', yaw: 180, scale: 3.0, pos: [2.2, -3.43], size: [2.4, 2.37, 0.75] },
+        { kind: 'bookcase', model: 'furniture/bookcaseOpen.glb', yaw: -90, scale: 2.9, pos: [3.5, -2.4], size: [0.72, 2.55, 1.16] },
+        { kind: 'chair', model: 'furniture/loungeChair.glb', yaw: 0, scale: 2.5, pos: [2.2, -2.4], size: [1.23, 1.15, 1.02] },
+        { kind: 'floorLamp', model: 'furniture/lampSquareFloor.glb', scale: 2.4, pos: [3.6, -3.5], size: [0.29, 2.06, 0.29] },
         // South-east — a console table with a table lamp, and a plant in the corner.
-        { kind: 'console', model: 'furniture/sideTableDrawers.glb', yaw: -90, scale: 2.1, pos: [3.5, 1.9], size: [0.81, 0.81, 1.12],
-          props: [{ model: 'furniture/lampSquareTable.glb', scale: 2.0, pos: [0, 0.81, 0] }] },
-        { kind: 'plant', model: 'furniture/pottedPlant.glb', scale: 2.2, pos: [3.5, 3.5], size: [0.56, 1.18, 0.64] },
+        { kind: 'console', model: 'furniture/sideTableDrawers.glb', yaw: -90, scale: 2.4, pos: [3.4, 2.0], size: [0.93, 0.92, 1.28],
+          props: [{ model: 'furniture/lampSquareTable.glb', scale: 2.2, pos: [0, 0.92, 0] }] },
+        { kind: 'plant', model: 'furniture/pottedPlant.glb', scale: 2.5, pos: [3.5, 3.5], size: [0.64, 1.34, 0.73] },
       ],
     },
 

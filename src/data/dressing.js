@@ -16,7 +16,7 @@ export const roomDressings = {
     // Non-colliding decoration (sized to sit under/on the scaled-up furniture).
     decor: [
       // A large rug under the south-west seating group (deep warm red-brown, not the kit's coral).
-      { model: 'furniture/rugRounded.glb', pos: [-2.5, 2.6], yaw: 0, scale: 1.85,
+      { model: 'furniture/rugRounded.glb', pos: [-2.4, 2.5], yaw: 0, scale: 2.2,
         overrides: { carpet: '#7c4a39', carpetDarker: '#5a3327' } },
     ],
     // Lamp lights: which of the room's mood-light indices (from mood.lights in floor1.js) sit

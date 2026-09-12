@@ -42,10 +42,11 @@ export function buildFloor(data, cfg) {
           color: f.color,
           emissive: f.emissive,
           // Presentation hints passed straight through for the room-dressing layer (which glTF
-          // model to draw for this footprint, its rotation, and any props on top). The game
-          // logic ignores them — collision only uses center/size below.
+          // model to draw for this footprint, its rotation, how much to enlarge it, and any props
+          // on top). The game logic ignores them — collision only uses center/size below.
           model: f.model,
           yaw: f.yaw,
+          scale: f.scale,
           props: f.props,
           center: [cx + fx, cz + fz],
           size: [fw, fh, fd],

@@ -11,6 +11,7 @@
 import * as THREE from 'three';
 import { loadModel, instancedFromModel } from './models.js';
 import { roomDressings } from '../data/dressing.js';
+import { dressHall } from './hallDeco.js';
 
 const rad = deg => (deg || 0) * Math.PI / 180;
 
@@ -70,9 +71,14 @@ async function dressOne(view, floor, cfg, spec) {
   if (view.floorMesh) view.floorMesh.visible = false;
   for (const f of view.furniture) f.mesh.visible = false;
 
+  // Bespoke Art Deco hall: build the parquet floor, panelled walls and Deco decorations
+  // procedurally. Generic floor/walls/decor below are skipped; furniture + lamp lights still run.
+  const deco = spec.style === 'deco';
+  if (deco) dressHall(view, floor, cfg);
+
   // 2. Wooden floor: one InstancedMesh of the 2 m tile, so the whole floor is a single draw
   //    call. The tile's top sits at y = 0 (model top is at `spec.floor.top`).
-  if (spec.floor) {
+  if (spec.floor && !deco) {
     const tile = spec.floor.tile;
     const nx = Math.max(1, Math.round(room.size[0] / tile));
     const nz = Math.max(1, Math.round(room.size[1] / tile));
@@ -89,7 +95,7 @@ async function dressOne(view, floor, cfg, spec) {
 
   // 3. Wall panels: swap each greybox wall segment's mesh for a tiled run, keeping the same
   //    `w` entry so the cutaway loop still finds it.
-  if (spec.wall) {
+  if (spec.wall && !deco) {
     for (const w of view.walls) {
       const run = await buildWallRun(w.wall, spec.wall);
       group.remove(w.mesh);
@@ -112,6 +118,7 @@ async function dressOne(view, floor, cfg, spec) {
   for (const f of room.furniture) {
     const [cx, cz] = f.center;
     if (f.kind === 'lift') {
+      if (deco) continue;   // the Deco hall builds its own detailed lift
       for (const dx of [-0.45, 0.45]) {
         const leaf = await place(group, 'building/door-rotate-square-a.glb', cx + dx, cz, 90);
         if (leaf) { leaf.scale.z = 0.9 / 1.025; leaf.traverse(o => { if (o.isMesh) o.material = liftMaterial; }); }
@@ -126,8 +133,8 @@ async function dressOne(view, floor, cfg, spec) {
     }
   }
 
-  // 6. Non-colliding decoration (rugs, cushions).
-  for (const d of spec.decor || []) {
+  // 6. Non-colliding decoration (rugs, cushions). The Deco hall builds its own rug.
+  for (const d of (deco ? [] : spec.decor) || []) {
     await place(group, d.model, room.center[0] + d.pos[0], room.center[1] + d.pos[1], d.yaw, d.y ?? 0.015, d.overrides, d.scale || 1);
   }
 

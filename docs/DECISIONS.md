@@ -83,6 +83,17 @@ Short record of the choices that shape the code and why, so another coding agent
   `yaw` in the room data follows that rule; `scale` (≈2–2.6×) sizes each model to the ~1.8 m
   characters and is baked into the collision `size`. Placements are validated by a script
   (footprints, spawns, all doorways, per-room reachability, overlaps) before they're committed.
+- **Starting room — bespoke Art Deco pass** (`src/render/hallDeco.js`, `style: 'deco'` in the hall
+  dressing): the hall is rebuilt from procedural geometry + small CanvasTextures (no downloads):
+  ivory-and-walnut panelling with a brass chair rail, walnut parquet, a patterned burgundy rug,
+  brass sconces, a framed Deco sunburst, brass doorway surrounds and a proper double-door lift
+  with a sunburst pediment, floor indicator and call button. **Cutaway-safe**: the panelled wall
+  meshes stay 1-unit-tall groups in `view.walls` (the existing cutaway squashes them), and every
+  protruding decoration is registered on the wall segment it sits on and hidden when that segment
+  lowers (a thin wrapper around `view.setWallHeight`), so nothing floats when the camera rotates —
+  verified programmatically. It uses its own materials/textures and does not touch the shared
+  model loader/palette, so other rooms are unchanged. Furniture and lamp lights still come from
+  the generic dressing. (Floor is basket-weave parquet for now; herringbone is a possible tweak.)
 - **Rooms dressed so far** (by theme, only where the Furniture Kit fits): the **hall** (landing —
   a seating group, a console, plants, the lift), the **library** (bookcases facing in, a reading
   chair + lamp), the **lounge** (two sofas in an L round a coffee table), and the **dining room**

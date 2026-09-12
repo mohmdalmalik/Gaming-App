@@ -3,6 +3,18 @@
 _Last updated after the first graphics pass (starting room dressed with real models)._
 
 ## Done
+### Pass 8 — Art Deco upgrade of the starting room
+Recreated the reference concept for the starting room only ("Fourth Floor Landing"), all from
+lightweight procedural geometry + small canvas textures (no downloaded assets): ivory upper walls
+with walnut lower panelling and brass detailing, walnut parquet, a patterned burgundy rug, brass
+wall sconces, a framed Art Deco sunburst, brass doorway surrounds, and a proper hotel lift (double
+doors, decorative surround, sunburst pediment, floor indicator, call button). Warm lighting keeps
+wood/cream/brass distinct. Wall decorations correctly follow the wall cutaway on rotation (nothing
+floats). Layout, doorways, furniture, walking paths, characters, interface, camera and rules are
+unchanged; other rooms keep their current look. All suites pass; verified movement + cutaway.
+See `docs/DECISIONS.md` → "Starting room — bespoke Art Deco pass". (Floor is basket-weave parquet;
+herringbone is an easy follow-up.)
+
 ### Pass 7 — two rule refinements + a furniture placement fix
 - **Possession cards & the hand limit**: Possession cards no longer count toward the 6-card
   hand limit (a possessed player is never forced to discard because of them) and are hidden

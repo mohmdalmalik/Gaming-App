@@ -165,8 +165,10 @@ export const hasEncounterLock = (state, roomId, i, j) => state.encounterLocks.ha
 export const lockEncounter = (state, roomId, i, j) => state.encounterLocks.add(encounterKey(roomId, i, j));
 
 // Players `player` must have a forced encounter with, having just entered their room:
-// everyone else alive in the room they have not already met there this round.
+// everyone else alive in the room they have not already met there this round. A SAFE room
+// never forces an encounter, so none are pending there.
 export function pendingEncounters(state, floor, player) {
+  if (floor.rooms.get(player.currentRoom)?.safe) return [];
   return playersInRoom(state, player.currentRoom, player.id)
     .filter(q => !hasEncounterLock(state, player.currentRoom, player.index, q.index));
 }

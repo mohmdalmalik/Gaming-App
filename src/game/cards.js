@@ -62,6 +62,13 @@ export function deal(deck, playerCount) {
 }
 
 // --- Hand helpers ------------------------------------------------------------------------
+// Possession cards are the possessed side's hidden supply. They do NOT count toward the hand
+// limit and are hidden from the public card count, so no-one can deduce who is possessed from
+// the number of cards on screen. They remain fully tradeable.
+export const isCountable = card => card.type !== 'possession';
+export const countableCards = hand => hand.filter(isCountable);
+export const countableCount = hand => hand.reduce((n, c) => n + (isCountable(c) ? 1 : 0), 0);
+
 export const countType = (hand, type) => hand.reduce((n, c) => n + (c.type === type ? 1 : 0), 0);
 export const hasType = (hand, type) => hand.some(c => c.type === type);
 export const lanternCount = hand => countType(hand, 'lantern');

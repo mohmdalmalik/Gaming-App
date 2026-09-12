@@ -9,7 +9,7 @@ import { buildFloor } from './game/floor.js';
 import { buildGrid } from './game/grid.js';
 import {
   createState, resetState, endTurn, activePlayer, nextPlayer, checkWin,
-  usableDoorways, pendingEncounters, lockEncounter,
+  usableDoorways, pendingEncounters, lockEncounter, playersInRoom,
 } from './game/state.js';
 import { search, useBandage, resolveTrade, resolveAttack, discardCard, overHandLimit } from './game/actions.js';
 import { CARDS } from './game/cards.js';
@@ -149,6 +149,23 @@ function openEncounter(P, candidates) {
       syncViews(false); refresh();
       if (state.finished) showEnd();
     },
+  });
+}
+
+// Voluntary trade — only offered in a SAFE room (no forced encounters, no attacks there). The
+// player picks a partner present in the room and trades by the normal rules; nothing is locked.
+function onTrade() {
+  if (!running || state.finished || uiBusy() || activeMover().walking) return;
+  const P = activePlayer(state);
+  if (!floor.rooms.get(P.currentRoom)?.safe) return;
+  const others = playersInRoom(state, P.currentRoom, P.id);
+  if (!others.length) return;
+  hud.hideConfirm(); selectedMove = null;
+  encounter.start({
+    state, P, candidates: others, mode: 'voluntary',
+    onResolveTrade: (Q, cardIdP, cardIdQ) => resolveTrade(state, floor, P, Q, cardIdP, cardIdQ),
+    onDone: () => { syncViews(false); refresh(); if (state.finished) showEnd(); },
+    onCancel: () => refresh(),
   });
 }
 
@@ -306,6 +323,7 @@ hud.on('rotateLeft', () => rig.rotateLeft());
 hud.on('rotateRight', () => rig.rotateRight());
 hud.on('endTurn', doEndTurn);
 hud.on('search', onSearch);
+hud.on('trade', onTrade);
 hud.onHand(() => { if (running && !uiBusy()) hand.open(state, floor); });
 hud.on('map', () => { if (!encounter.isOpen && !discard.isOpen && !overlays.endOpen) map.toggle(state, movers); });
 hud.onConfirm(

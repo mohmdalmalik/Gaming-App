@@ -2,7 +2,7 @@
 // forced encounter resolves — trade and attack. Pure logic; the interface calls these and
 // renders whatever they return. See docs/GAME_RULES.md §4, §7.
 import { rules } from '../data/rules.js';
-import { CARDS, takeCard, isWeapon } from './cards.js';
+import { CARDS, takeCard, isWeapon, countableCount } from './cards.js';
 import { checkWin } from './state.js';
 
 // Whether the current room can still be searched by `player` right now.
@@ -35,9 +35,10 @@ export function discardCard(state, player, cardId) {
   return card ? { ok: true, card } : { ok: false, reason: 'noCard' };
 }
 
-// How many cards a player must shed to obey the hand limit (0 if within it).
+// How many cards a player must shed to obey the hand limit (0 if within it). Possession cards
+// don't count, so a possessed player is never forced to discard because of them.
 export function overHandLimit(player) {
-  return Math.max(0, player.hand.length - rules.handLimit);
+  return Math.max(0, countableCount(player.hand) - rules.handLimit);
 }
 
 // Play a Bandage (1 AP) to restore a health bar.
@@ -109,6 +110,7 @@ export function resolveTrade(state, floor, P, Q, cardIdP, cardIdQ) {
 // the Revolver spends a shot and is discarded when empty.
 export function resolveAttack(state, floor, attacker, target, weaponId) {
   if (state.finished) return { ok: false, reason: 'finished' };
+  if (floor.rooms.get(attacker.currentRoom)?.safe) return { ok: false, reason: 'safe' };
   if (attacker.actionPoints < rules.actionCost.attack) return { ok: false, reason: 'ap' };
   const weapon = attacker.hand.find(c => c.id === weaponId && isWeapon(c));
   if (!weapon) return { ok: false, reason: 'noWeapon' };

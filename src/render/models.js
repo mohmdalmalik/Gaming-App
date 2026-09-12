@@ -68,7 +68,22 @@ function warmScene(root, overrides) {
 // are given, in which case this clone gets its own recoloured copy.
 export function loadModel(path, overrides) {
   if (!templates.has(path)) {
-    templates.set(path, loader.loadAsync(BASE + path).then(gltf => warmScene(gltf.scene, null)));
+    templates.set(path, loader.loadAsync(BASE + path).then(gltf => {
+      warmScene(gltf.scene, null);
+      // Kenney models often have an off-centre pivot, so placing one at a point pushes it into
+      // walls or leaves it floating. Wrap it and recentre the content: centred on X/Z and resting
+      // on the floor (Y = 0). Now a piece placed at a point sits centred on it and flush to the
+      // floor, matching its collision box (which is centred on the same point). Building shell
+      // pieces are already centred, so this is a no-op for them.
+      const wrap = new THREE.Group();
+      wrap.add(gltf.scene);
+      const box = new THREE.Box3().setFromObject(gltf.scene);
+      const c = new THREE.Vector3(); box.getCenter(c);
+      gltf.scene.position.x -= c.x;
+      gltf.scene.position.z -= c.z;
+      gltf.scene.position.y -= box.min.y;
+      return wrap;
+    }));
   }
   return templates.get(path).then(tpl => {
     const g = tpl.clone(true);

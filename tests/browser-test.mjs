@@ -150,7 +150,7 @@ await page.click('#btn-search');
 await page.waitForTimeout(200);
 a = await active();
 check(a.hand.length === before + 1 && a.ap === 3, `a searchable room drew a card for 1 AP (${a.hand.length} cards, ${a.ap} AP)`);
-check(await game(() => document.getElementById('hand-count').textContent === String(window.__game.activePlayer().hand.length)), 'the face-down hand count updates after searching');
+check(await game(() => document.getElementById('hand-count').textContent === String(window.__game.activePlayer().hand.filter(c => c.type !== 'possession').length)), 'the face-down hand count updates after searching');
 check(await game(() => document.getElementById('btn-search').disabled), 'Search is disabled after the room has been searched once');
 before = (await active()).hand.length;
 await game(() => window.__game.search());
@@ -286,6 +286,51 @@ await page.click('#btn-discard-done');
 await page.waitForTimeout(150);
 check(await game(() => document.getElementById('discard-overlay').hidden), 'confirming closes the discard prompt');
 check((await active()).name !== activeBefore, `control passed on after discarding (was ${activeBefore}, now ${(await active()).name})`);
+
+// --- 9e. Possession cards: not counted, never force a discard ----------------------------
+console.log('9e. possession cards do not count toward the hand limit or public count');
+await game(() => {
+  const g = window.__game, p = g.activePlayer();
+  p.alive = true; p.possessed = true;
+  p.hand = [...Array.from({ length: 6 }, (_, i) => ({ id: `it${i}`, type: 'trinket' })),
+            ...Array.from({ length: 3 }, (_, i) => ({ id: `pp${i}`, type: 'possession' }))];
+  p.actionPoints = 4; g.state.finished = false; g.refresh();
+});
+check(await game(() => document.getElementById('hand-count').textContent === '6'), 'a possessed player with 6 items + 3 possession shows a public count of 6');
+const before9e = (await active()).name;
+await page.click('#btn-end-turn');
+await page.waitForTimeout(200);
+check(await game(() => document.getElementById('discard-overlay').hidden), 'ending the turn does NOT open a discard prompt (possession cards do not count)');
+check((await active()).name !== before9e, 'control passed on without a forced discard');
+
+// --- 9f. Safe starting room: no forced encounter + voluntary trading ---------------------
+console.log('9f. the starting room is a safe zone with voluntary trading');
+await game(() => {
+  const g = window.__game, s = g.state;
+  s.finished = false;
+  const h = g.roomCenter('hall');
+  s.players.forEach((p, i) => { p.alive = true; p.possessed = false; p.currentRoom = 'hall'; g.movers[i].reset(h[0] + (i - 2) * 0.6, h[1]); });
+  s.activeIndex = 0; s.players[0].actionPoints = 4;
+  s.players[0].hand = [{ id: 'gl', type: 'lantern' }, { id: 'gt', type: 'trinket' }];
+  s.players[1].hand = [{ id: 'ht', type: 'trinket' }];
+  s.discovered.add('corridorE'); g.discovery.refresh(); s.encounterLocks.clear(); g.refresh();
+});
+// Leave the hall and come back with everyone present — a safe room forces no encounter.
+await game(() => window.__game.moveToRoom('corridorE')); await settle();
+await game(() => window.__game.moveToRoom('hall')); await settle();
+check(!await game(() => window.__game.encounterOpen()), 'returning to the safe starting room with others present forces no encounter');
+// A voluntary Trade button is offered instead.
+await game(() => { const g = window.__game; g.state.activeIndex = 0; g.activePlayer().actionPoints = 4; g.refresh(); });
+check(await game(() => !document.getElementById('btn-trade').hidden), 'a voluntary Trade button appears in the safe room');
+await page.click('#btn-trade');
+await page.waitForTimeout(150);
+check(await game(() => window.__game.encounterOpen()), 'the Trade button opens a voluntary trade');
+await page.evaluate(() => { const b = [...document.querySelectorAll('#encounter-actions button')].find(x => /Eleanor/.test(x.textContent)); b?.click(); });
+await page.waitForTimeout(120);
+await clickCard('gl'); await page.waitForTimeout(120);   // Victor gives a Lantern
+await clickCard('ht'); await page.waitForTimeout(120);   // Eleanor gives a Trinket
+await clickBtn('Continue'); await page.waitForTimeout(150);
+check(await game(() => window.__game.state.players[1].hand.some(c => c.type === 'lantern') && window.__game.state.players[0].hand.some(c => c.id === 'ht')), 'a voluntary trade in the safe room hands the Lantern over by the normal rules');
 
 // --- 10. Win: humans escape --------------------------------------------------------------
 console.log('10. win — a clean player reaches the exit with 3 Lanterns');

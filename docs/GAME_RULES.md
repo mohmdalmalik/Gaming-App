@@ -23,7 +23,7 @@ A hidden-role social game set in a trapped hotel. Players explore room by room, 
 ## 5. Turn structure
 1. Usable doors blink; the player selects one and confirms.
 2. Character spends 1 AP and walks to the centre of the chosen room, or stands beside players already there (never overlapping).
-3. If they entered a room holding one or more other players, and it is their first meeting there this round, an ENCOUNTER is forced (section 7). When more than one other player is present, the entering player chooses which one to meet.
+3. If they entered a room holding one or more other players, and it is their first meeting there this round, an ENCOUNTER is forced (section 7). When more than one other player is present, the entering player chooses which one to meet. EXCEPTION: SAFE rooms never force an encounter (section 7).
 4. The player may also search, use cards, or heal (1 AP each).
 5. When done or out of AP, end the turn.
 - A "round" = one full cycle where every living player has taken a turn. Encounter locks reset at the start of each round.
@@ -37,6 +37,7 @@ A hidden-role social game set in a trapped hotel. Players explore room by room, 
 - Mood shifts warm→uneasy deeper in. Flicker only where room data specifies; doorways do not flicker.
 - Some rooms are DARK: a player may enter and move through them, but cannot SEARCH a dark room without a Flashlight.
 - Only certain room types can be searched (e.g. bedrooms, storage, lounges); corridors, landings and stairs cannot be searched. Each room can be searched only once (by any player).
+- Some rooms are SAFE (the starting room is a safe zone; more rooms could be flagged safe later). A safe room never forces an encounter and no attacks may be made there, but players may still trade voluntarily (section 7).
 - 2D map (bottom-right button) shows only discovered rooms and player positions.
 
 ## 7. Encounters: Trade or Attack
@@ -53,6 +54,12 @@ When an encounter is forced, the entering player first chooses WHICH other playe
 - Requires a weapon. Costs 1 AP. Replaces the trade for that encounter.
 - Knife: drains 1 HP; reusable.
 - Revolver: drains 2 HP; target must be in the same room; holds 2 shots, then discarded.
+
+### Safe rooms (e.g. the starting room)
+- A SAFE room never forces an encounter — entering it with other players present does not trigger a forced trade.
+- Attacking is disabled entirely in a safe room (no Knife or Revolver may be used there).
+- Players MAY still choose to trade VOLUNTARILY in a safe room when both agree (letting clean players safely hand off Lanterns and coordinate). A voluntary trade follows the normal trade rules above.
+- Rooms are flagged in the room data (`safe: true`), so other rooms could be made safe later.
 
 ## 8. Possession (hidden role)
 - At setup exactly one player is secretly Possessed.
@@ -98,6 +105,8 @@ Lanterns do double duty: DEFEND against possession in a trade AND are the escape
 
 ### Hand limit
 - A player may hold at most 6 cards. If they end their turn holding more than 6, they discard down to 6 before control passes on (the player chooses which cards to discard).
+- Possession cards do NOT count toward the 6-card limit: a possessed player is never forced to discard because of their Possession cards, and only their normal item cards count toward the limit.
+- Possession cards are also hidden from the public card count shown on screen, so the number others can see reflects only normal item cards (it must not reveal who is possessed). Possession cards remain tradeable exactly as before — only their counting and visibility change.
 
 ### Searching
 - Searching a room (1 AP) draws a card or reveals a hidden item placed in that room. Main way new items enter play. Only searchable room types can be searched (not corridors/landings/stairs) and each room can be searched only once. Dark rooms require a Flashlight to search.

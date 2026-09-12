@@ -27,12 +27,15 @@ export function createEncounter(doc, cfg) {
     return b;
   }
 
-  // Step 0: who to meet (only when more than one player is here).
+  // Step 0: who to meet (only when more than one player is here). In a safe room this is a
+  // VOLUNTARY trade (trade only, and it can be cancelled); elsewhere it is a forced encounter.
   function choosePartner() {
-    title.textContent = 'Who do you meet?';
-    body.innerHTML = `<div class="modal-sub">${ctx.P.name} enters a room with several people. Choose one to face:</div>`;
+    const proceed = ctx.voluntary ? tradePickGiver : chooseAction;
+    title.textContent = ctx.voluntary ? 'Trade with whom?' : 'Who do you meet?';
+    body.innerHTML = `<div class="modal-sub">${ctx.P.name} ${ctx.voluntary ? 'may trade with someone here' : 'enters a room with several people'}. Choose one:</div>`;
     clearActions();
-    for (const q of ctx.candidates) actions.appendChild(button(who(q), () => { ctx.Q = q; chooseAction(); }));
+    for (const q of ctx.candidates) actions.appendChild(button(who(q), () => { ctx.Q = q; proceed(); }));
+    if (ctx.voluntary) actions.appendChild(button('Cancel', cancel));
   }
 
   // Step 1: Trade or Attack.
@@ -55,11 +58,13 @@ export function createEncounter(doc, cfg) {
     const options = tradeableCards(P);
     for (const card of options) grid.appendChild(cardTile(doc, card, { selectable: true, onSelect: c => tradePickOther(c.id) }));
     if (!options.length) grid.innerHTML = '<div class="panel-note">No tradeable cards.</div>';
-    title.textContent = 'Trade';
+    title.textContent = ctx.voluntary ? 'Voluntary trade' : 'Trade';
     body.innerHTML = `<div class="modal-sub">${P.name}, choose a card to give ${Q.name}:</div>`;
     body.appendChild(grid);
     clearActions();
-    actions.appendChild(button('Back', chooseAction));
+    // Back to the partner chooser, the Trade/Attack step, or (single-partner voluntary) cancel.
+    const back = ctx.voluntary ? (ctx.candidates.length > 1 ? choosePartner : cancel) : chooseAction;
+    actions.appendChild(button(ctx.voluntary && ctx.candidates.length === 1 ? 'Cancel' : 'Back', back));
   }
 
   function tradePickOther(cardIdP) {
@@ -121,13 +126,24 @@ export function createEncounter(doc, cfg) {
     onDone?.(Q, events);
   }
 
+  // Close a voluntary trade without exchanging anything.
+  function cancel() {
+    overlay.hidden = true;
+    const onCancel = ctx?.onCancel;
+    ctx = null;
+    onCancel?.();
+  }
+
   return {
     get isOpen() { return !overlay.hidden; },
-    // opts: { state, P, candidates, onResolveTrade(Q,cardIdP,cardIdQ), onResolveAttack(Q,weaponId), onDone(Q,events) }
+    // opts: { state, P, candidates, mode?, onResolveTrade(Q,cardIdP,cardIdQ),
+    //         onResolveAttack(Q,weaponId), onDone(Q,events), onCancel() }
+    // mode 'voluntary' (safe rooms) offers trade only and can be cancelled.
     start(opts) {
-      ctx = { ...opts, attackCost: cfg.attackCost, Q: null };
+      ctx = { ...opts, attackCost: cfg.attackCost, voluntary: opts.mode === 'voluntary', Q: null };
       overlay.hidden = false;
-      if (ctx.candidates.length === 1) { ctx.Q = ctx.candidates[0]; chooseAction(); }
+      const proceed = ctx.voluntary ? tradePickGiver : chooseAction;
+      if (ctx.candidates.length === 1) { ctx.Q = ctx.candidates[0]; proceed(); }
       else choosePartner();
     },
   };

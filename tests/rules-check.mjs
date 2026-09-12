@@ -9,7 +9,8 @@ import {
   createState, resetState, activePlayer, nextPlayer, endTurn, enterRoom, checkWin,
   usableDoorways, pendingEncounters, lockEncounter, hasEncounterLock, playersInRoom,
 } from '../src/game/state.js';
-import { search, canSearch, useBandage, resolveTrade, resolveAttack, tradeableCards } from '../src/game/actions.js';
+import { search, canSearch, useBandage, resolveTrade, resolveAttack, tradeableCards, overHandLimit } from '../src/game/actions.js';
+import { countableCount } from '../src/game/cards.js';
 
 let failures = 0;
 const check = (cond, msg) => { console.log((cond ? '  ok   ' : '  FAIL ') + msg); if (!cond) failures++; };
@@ -118,6 +119,10 @@ state = createState(floor, roster, 11);
 let attacker = state.players[0], target = state.players[1];
 attacker.hand.push({ id: 'kn', type: 'knife' });
 attacker.actionPoints = 4;
+// Attacks are only possible in a non-safe room; the starting hall is a safe zone.
+check(!resolveAttack(state, floor, attacker, target, 'kn').ok
+  && resolveAttack(state, floor, attacker, target, 'kn').reason === 'safe', 'no attacking in the safe starting room');
+attacker.currentRoom = target.currentRoom = 'corridorE';
 r = resolveAttack(state, floor, attacker, target, 'kn');
 check(r.ok && r.damage === 1 && target.health === rules.maxHealth - 1 && attacker.actionPoints === 3, 'a knife drains 1 HP for 1 AP and stays in hand');
 check(attacker.hand.some(c => c.id === 'kn'), 'the knife is reusable');
@@ -137,17 +142,33 @@ hurt.health = 1; hurt.hand.push({ id: 'bd', type: 'bandage' }); hurt.actionPoint
 r = useBandage(state, hurt, 'bd');
 check(r.ok && hurt.health === 2 && hurt.actionPoints === 3 && !hurt.hand.some(c => c.id === 'bd'), 'a bandage heals 1 for 1 AP and is used up');
 
-// --- Encounter locks ---------------------------------------------------------------------
+// --- Safe starting room ------------------------------------------------------------------
+console.log('safe room');
+state = createState(floor, roster, 4);
+check(floor.rooms.get('hall').safe && !floor.rooms.get('corridorE').safe, 'the hall is flagged safe, corridors are not');
+// All five players are together in the hall — a safe room forces no encounter.
+check(pendingEncounters(state, floor, state.players[0]).length === 0, 'no forced encounter in the safe starting room even with others present');
+
+// --- Encounter locks (in a normal room) --------------------------------------------------
 console.log('encounter locks');
 state = createState(floor, roster, 4);
-state.players[1].currentRoom = 'hall'; // both in the hall
+state.players[0].currentRoom = state.players[1].currentRoom = state.players[2].currentRoom = 'corridorE';
 const pend = pendingEncounters(state, floor, state.players[0]);
-check(pend.length === 4, 'entering the hall forces an encounter with each of the other four');
-lockEncounter(state, 'hall', 0, 1);
-check(hasEncounterLock(state, 'hall', 1, 0), 'the lock is symmetric for the pair');
-check(!pendingEncounters(state, floor, state.players[0]).some(q => q.index === 1), 'a locked pair is not forced again in the same room this round');
+check(pend.length === 2, 'entering a normal room with two others forces an encounter with each');
+lockEncounter(state, 'corridorE', 0, 1);
+check(hasEncounterLock(state, 'corridorE', 1, 0), 'the lock is symmetric for the pair');
+const after = pendingEncounters(state, floor, state.players[0]);
+check(!after.some(q => q.index === 1) && after.some(q => q.index === 2), 'a locked pair is not forced again this round, but the third player still is');
 endTurn(state, floor); for (let i = 0; i < 4; i++) endTurn(state, floor); // new round clears locks
-check(!hasEncounterLock(state, 'hall', 0, 1), 'encounter locks clear at the start of a new round');
+check(!hasEncounterLock(state, 'corridorE', 0, 1), 'encounter locks clear at the start of a new round');
+
+// --- Possession cards & the hand limit ---------------------------------------------------
+console.log('possession & hand limit');
+const items6 = Array.from({ length: 6 }, (_, i) => ({ id: `i${i}`, type: 'trinket' }));
+const poss3 = Array.from({ length: 3 }, (_, i) => ({ id: `p${i}`, type: 'possession' }));
+check(overHandLimit({ hand: [...items6, ...poss3] }) === 0, 'six item cards + three Possession cards is NOT over the hand limit');
+check(countableCount([...items6, ...poss3]) === 6, 'the public count ignores Possession cards (shows 6, not 9)');
+check(overHandLimit({ hand: [...items6, { id: 'i7', type: 'trinket' }, ...poss3] }) === 1, 'a seventh ITEM card does put a player over the limit');
 
 // --- Win conditions ----------------------------------------------------------------------
 console.log('win conditions');

@@ -2,10 +2,10 @@
 // name, health, AP), the face-down hand with a live count, the action buttons, a move-confirm
 // bar and toasts. Portraits are placeholder SVGs (see ui/portrait.js) so real faces can drop
 // in later without changing this logic.
-import { activePlayer, nextPlayer } from './game/state.js';
+import { activePlayer, nextPlayer, playersInRoom } from './game/state.js';
 import { canSearch } from './game/actions.js';
 import { rules } from './data/rules.js';
-import { lanternCount } from './game/cards.js';
+import { lanternCount, countableCount } from './game/cards.js';
 import { makePortrait } from './ui/portrait.js';
 
 const MAX_BACKS = 8; // face-down cards drawn before we just rely on the count badge
@@ -22,6 +22,7 @@ export function createHud(doc, cfg) {
     health: doc.getElementById('health'),
     ap: doc.getElementById('action-points'),
     search: doc.getElementById('btn-search'),
+    trade: doc.getElementById('btn-trade'),
     endTurn: doc.getElementById('btn-end-turn'),
     rotateLeft: doc.getElementById('btn-rotate-left'),
     rotateRight: doc.getElementById('btn-rotate-right'),
@@ -104,8 +105,12 @@ export function createHud(doc, cfg) {
       el.endTurn.textContent = state.finished ? 'Game over' : next && next !== p ? `End turn → ${next.name}` : 'End turn';
       el.endTurn.disabled = state.finished;
       el.search.disabled = !canSearch(state, floor, p).ok;
+      // Voluntary trade: offered only in a SAFE room when someone else is present to trade with.
+      const safeRoom = !!floor.rooms.get(p.currentRoom)?.safe;
+      el.trade.hidden = !(safeRoom && !state.finished && playersInRoom(state, p.currentRoom, p.id).length > 0);
 
-      renderHand(p.hand.length);
+      // Public card count excludes Possession cards, so it can never reveal a possessed role.
+      renderHand(countableCount(p.hand));
 
       // Top strip.
       if (!mini || mini.length !== state.players.length) buildStrip(state);

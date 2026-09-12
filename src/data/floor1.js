@@ -42,6 +42,7 @@ export const floor1 = {
     {
       id: 'hall',
       name: 'Fourth Floor Landing',
+      safe: true,             // safe zone: no forced encounters, no attacks; voluntary trades only
       center: [0, 0],
       size: [8, 8],
       // Warm, cosy landing: several soft lamp points (index 0 is the ceiling fill, the rest sit
@@ -69,14 +70,14 @@ export const floor1 = {
       // stay clear. `scale` enlarges the model; `size` is its collision footprint.
       furniture: [
         // The lift, on the north wall.
-        { kind: 'lift', pos: [-2.6, -3.6], size: [1.8, 2.1, 0.36] },
+        { kind: 'lift', pos: [-2.6, -3.72], size: [1.8, 2.1, 0.36] },
         // South-west — the seating group: a sofa (against the south wall, facing the room) and a
         // lounge chair (against the west wall, facing the coffee table) around a glass table on a rug.
         { kind: 'sofa', model: 'furniture/loungeSofa.glb', yaw: 180, scale: 2.5, pos: [-2.4, 3.35], size: [2.45, 1.15, 1.02] },
         { kind: 'chair', model: 'furniture/loungeChair.glb', yaw: 90, scale: 2.5, pos: [-3.35, 2.0], size: [1.02, 1.15, 1.23] },
         { kind: 'coffeeTable', model: 'furniture/tableCoffeeGlass.glb', yaw: 0, scale: 2.2, pos: [-2.1, 2.35], size: [1.45, 0.51, 0.88] },
         // East wall — a console with a table lamp, facing into the room; plants in two corners.
-        { kind: 'console', model: 'furniture/sideTableDrawers.glb', yaw: -90, scale: 2.4, pos: [3.4, 2.0], size: [0.93, 0.92, 1.28],
+        { kind: 'console', model: 'furniture/sideTableDrawers.glb', yaw: -90, scale: 2.4, pos: [3.53, 2.0], size: [0.9, 0.92, 1.28],
           props: [{ model: 'furniture/lampSquareTable.glb', scale: 2.2, pos: [0, 0.92, 0] }] },
         { kind: 'plant', model: 'furniture/pottedPlant.glb', scale: 2.5, pos: [3.5, 3.5], size: [0.64, 1.34, 0.73] },
         { kind: 'plant', model: 'furniture/pottedPlant.glb', scale: 2.5, pos: [3.4, -3.4], size: [0.64, 1.34, 0.73] },

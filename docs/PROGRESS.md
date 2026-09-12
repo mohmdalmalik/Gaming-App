@@ -3,6 +3,21 @@
 _Last updated after the first graphics pass (starting room dressed with real models)._
 
 ## Done
+### Pass 7 — two rule refinements + a furniture placement fix
+- **Possession cards & the hand limit**: Possession cards no longer count toward the 6-card
+  hand limit (a possessed player is never forced to discard because of them) and are hidden
+  from the on-screen card count, so the number others see can't reveal who is possessed. They
+  stay fully tradeable. (`countableCount` in cards.js; used by the hand limit, the HUD count and
+  the discard prompt.)
+- **Starting room is a SAFE ZONE** (`safe: true` in the room data): no forced encounters there,
+  no attacks, but players may still trade voluntarily via a new **Trade** button (trade-only,
+  cancellable, normal trade rules). Other rooms can be flagged safe the same way later.
+- **Furniture placement fix**: Kenney models have off-centre pivots, so pieces were poking
+  through or floating off walls. Models are now recentred on load (centred on X/Z, resting on
+  the floor) so every piece sits flush and matches its collision box; the hall was re-tidied.
+- `docs/GAME_RULES.md` updated for both rule changes. All suites pass (rules/logic/browser), with
+  new tests for the possession count, the safe room and voluntary trading.
+
 ### Pass 6c — furniture facing fixed + rooms dressed by theme
 - **Facing bug fixed**: furniture was placed at the wrong rotation (e.g. the hall sofa faced
   into the wall). Worked out that every Kenney piece faces +Z at yaw 0, and set each piece's

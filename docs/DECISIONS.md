@@ -88,6 +88,11 @@ Short record of the choices that shape the code and why, so another coding agent
   chair + lamp), the **lounge** (two sofas in an L round a coffee table), and the **dining room**
   (round table + chairs + a sideboard). Kitchen, storage, corridors, stairs and the guest suite
   stay greybox — the kit has no counters/beds/crates, so nothing inappropriate is forced in.
+- **Model recentring**: Kenney furniture models often carry an off-centre pivot, so placing one
+  at its intended point pushed it through a wall or left it floating. `models.js` now wraps each
+  loaded model and recentres the content (centred on X/Z, base on the floor at Y=0), so a piece
+  placed at a point sits centred on it and flush, matching its collision box. Building shell
+  pieces are already centred, so this is a no-op for them.
 - **Floor culling**: the tiled floor is one `InstancedMesh`; its bounding sphere is at the model
   origin, so for rooms far from the world origin Three.js frustum-culled the whole floor when the
   origin was off-screen (the floor vanished to the dark background). Fixed by `frustumCulled = false`

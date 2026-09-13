@@ -179,3 +179,32 @@ Implements `docs/GAME_RULES.md`. Kept pure and separate from rendering so a serv
 - Bottom-centre **hand**: the active player's cards face down (card backs, capped at 8 drawn) with a count badge that re-renders on every `refresh()` (after trading, searching, using, discarding). Tapping the strip opens the detailed face-up hand panel.
 - The AP display, turn indicator, rotate buttons, End turn and the map button are kept; the layout puts player info bottom-left, cards bottom-centre, actions + view controls bottom-right, so the middle stays clear on an iPad in landscape.
 - **Hand limit** (`rules.handLimit`, 6): at End turn a player over the limit gets a discard modal (`src/ui/discard.js`) — tap cards to drop until at 6, then Done — before control passes on. `actions.discardCard`/`overHandLimit` are the pure helpers.
+
+## Interface redesign — Art Deco player interface (pass 11)
+- The interface was restyled to the approved grand-hotel concept (charcoal-navy panels, brass
+  hairline framing, ivory serif display type) entirely in `styles.css` plus small structural
+  changes; **every DOM id/class the game code and the browser test rely on was preserved**, so the
+  redesign is mostly presentational. Two browser-test lines were updated where an interaction
+  genuinely changed (the AP label is now "x / y", and Bandage is used from the hand's detail pane).
+- **Guest strip** (`hud.js` `buildStrip`): portrait cards with names, an identity-colour underline,
+  and `Your turn` / `Next` flags (`.mini-player.active` / `.next`). Still built once per roster and
+  always drawn neutral — possession is never shown here.
+- **Active-player panel**: larger portrait, health segments (`#health`), action pips (`#ap-pips`) +
+  a numeric `#action-points` ("x / y"), and a *Private details* link that opens the hand. The
+  possessed tell (weird-eye portrait + `#possess-tint`) shows only on the current guest's own panel.
+- **Hand** (`ui/hand.js`): a bottom-docked sheet (`.overlay.sheet` + `.panel.sheet`) that keeps the
+  room visible above it. Cards are large selectable tiles (`ui/cards.js` `cardTile`, now with an
+  `.art` panel); selecting one fills a detail pane with the description, a plain-language note on how
+  the card is actually used (`USAGE`), and any valid action. Only Bandage has a Use button; Lantern
+  shows the Exit-Key track. `main.js` closes the hand on every turn change.
+- **Buttons**: two-line action buttons (label + cost/reason). Search's sub-line shows its cost or a
+  plain reason from `SEARCH_REASON` when `canSearch` fails; End turn names the next guest. Camera
+  controls (rotate + Map) are a separate `.ctl` cluster.
+- **Map** (`map.js`): a brass-framed floor plan — ivory-washed room cards, serif labels, a
+  current-position arrow, a green tick on searched rooms, dashed brass "?" marks toward unexplored
+  doors, and a legend. Only discovered rooms are drawn (discovery unchanged).
+- **Artwork drop-in**: `PORTRAIT_ART` (by outfit) in `ui/portrait.js` and `CARD_ART` (by card type)
+  in `ui/cards.js` are empty manifests; registering an image path there swaps the placeholder for a
+  real illustration with no other code change (and no missing-file requests until one is registered).
+  Placeholders are refined flat-vector busts and tinted glyph cards. See `docs/PROGRESS.md` →
+  "Artwork still needed".

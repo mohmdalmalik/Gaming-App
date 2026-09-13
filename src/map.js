@@ -20,48 +20,65 @@ export function createMap(doc, floor, cfg) {
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, cw, ch);
 
+    // A quiet charcoal ground for the plan.
+    ctx.fillStyle = '#0e1017'; ctx.fillRect(0, 0, cw, ch);
+
     const rooms = floor.roomList.filter(r => state.discovered.has(r.id));
     if (!rooms.length) return;
     const margin = 1.5;
     const minX = Math.min(...rooms.map(r => r.min[0])) - margin, maxX = Math.max(...rooms.map(r => r.max[0])) + margin;
     const minZ = Math.min(...rooms.map(r => r.min[1])) - margin, maxZ = Math.max(...rooms.map(r => r.max[1])) + margin;
-    const pad = 24;
+    const pad = 26;
     const scale = Math.min((cw - pad * 2) / (maxX - minX), (ch - pad * 2) / (maxZ - minZ));
     const ox = (cw - (maxX - minX) * scale) / 2 - minX * scale;
     const oz = (ch - (maxZ - minZ) * scale) / 2 - minZ * scale;
     const X = x => ox + x * scale, Z = z => oz + z * scale;
+    const serif = '"Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif';
+    const BRASS = '#c9a24e', BRASS_BRIGHT = '#e8ca80', IVORY = '#efe7d6';
 
-    // Rooms (the active player's room is highlighted)
+    // Rooms: ivory-washed cards with a brass edge; the active room glows brass, searched rooms
+    // carry a small brass tick, the exit reads in green.
     const activeRoom = activePlayer(state).currentRoom;
     for (const r of rooms) {
       const x = X(r.min[0]), z = Z(r.min[1]), w = r.size[0] * scale, h = r.size[1] * scale;
-      ctx.fillStyle = tint(r.mood.color, r.id === activeRoom ? 0.42 : 0.22);
-      ctx.fillRect(x, z, w, h);
-      ctx.lineWidth = r.id === activeRoom ? 3 : 1.5;
-      ctx.strokeStyle = r.id === activeRoom ? activePlayer(state).color : 'rgba(255,255,255,0.55)';
-      ctx.strokeRect(x, z, w, h);
-      ctx.fillStyle = '#f2eee6';
-      ctx.font = `${Math.max(11, Math.min(15, scale * 0.5))}px system-ui, sans-serif`;
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      const label = r.isExit ? `${r.name} (EXIT)` : r.name;
-      wrapText(ctx, label, X(r.center[0]), Z(r.center[1]), w - 8, 15);
+      const here = r.id === activeRoom, searched = state.searchedRooms.has(r.id);
+      ctx.fillStyle = here ? 'rgba(201,162,78,0.20)' : r.isExit ? 'rgba(120,200,150,0.16)' : 'rgba(239,231,214,0.08)';
+      roundRect(ctx, x + 2, z + 2, w - 4, h - 4, Math.min(8, scale * 0.2)); ctx.fill();
+      ctx.lineWidth = here ? 3 : 1.4;
+      ctx.strokeStyle = here ? BRASS_BRIGHT : r.isExit ? 'rgba(120,200,150,0.7)' : 'rgba(201,162,78,0.45)';
+      ctx.stroke();
+
+      ctx.fillStyle = here ? IVORY : 'rgba(239,231,214,0.82)';
+      ctx.font = `${here ? 'bold ' : ''}${Math.max(11, Math.min(15, scale * 0.5))}px ${serif}`;
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      const label = r.isExit ? `${r.name} · EXIT` : r.name;
+      wrapText(ctx, label, X(r.center[0]), Z(r.center[1]), w - 10, 15);
+
+      if (searched) {                          // a small brass tick in the corner
+        ctx.fillStyle = 'rgba(120,200,150,0.9)'; ctx.font = `12px ${serif}`;
+        ctx.textAlign = 'right'; ctx.textBaseline = 'top';
+        ctx.fillText('✓', x + w - 6, z + 5);
+      }
     }
 
-    // Doorways: a gap in the wall between known rooms, a glowing mark toward the unknown.
+    // Doorways: a gap between known rooms; a dashed brass mark with a "?" toward the unknown.
     for (const d of floor.doorways) {
       const aKnown = state.discovered.has(d.a), bKnown = state.discovered.has(d.b);
       if (!aKnown && !bKnown) continue;
       const frontier = aKnown !== bKnown;
-      ctx.lineWidth = frontier ? 5 : 4;
-      ctx.strokeStyle = frontier ? '#ffcc66' : '#8f8f98';
+      ctx.save();
+      ctx.lineWidth = frontier ? 4 : 4;
+      ctx.strokeStyle = frontier ? BRASS_BRIGHT : 'rgba(239,231,214,0.35)';
+      ctx.setLineDash(frontier ? [4, 3] : []);
       ctx.beginPath();
       if (d.axis === 'x') { ctx.moveTo(X(d.center[0] - d.width / 2), Z(d.center[1])); ctx.lineTo(X(d.center[0] + d.width / 2), Z(d.center[1])); }
       else { ctx.moveTo(X(d.center[0]), Z(d.center[1] - d.width / 2)); ctx.lineTo(X(d.center[0]), Z(d.center[1] + d.width / 2)); }
       ctx.stroke();
+      ctx.restore();
       if (frontier) {
-        ctx.fillStyle = '#ffcc66';
-        ctx.font = 'bold 13px system-ui, sans-serif';
+        ctx.fillStyle = BRASS_BRIGHT;
+        ctx.font = `bold 13px ${serif}`;
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
         const side = aKnown ? d.sideB : d.sideA; // the unknown side
         const off = 0.9;
         const lx = d.center[0] + (side === 'east' ? -off : side === 'west' ? off : 0);
@@ -107,9 +124,15 @@ export function createMap(doc, floor, cfg) {
   return api;
 }
 
-function tint(hex, alpha) {
-  const n = parseInt(hex.replace('#', ''), 16);
-  return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${alpha})`;
+function roundRect(ctx, x, y, w, h, r) {
+  r = Math.max(0, Math.min(r, w / 2, h / 2));
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
 }
 
 function wrapText(ctx, text, x, y, maxWidth, lineHeight) {

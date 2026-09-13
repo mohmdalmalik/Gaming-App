@@ -3,6 +3,39 @@
 _Last updated after the first graphics pass (starting room dressed with real models)._
 
 ## Done
+### Pass 11 — interface redesign (Art Deco player interface)
+Rebuilt the on-screen interface toward the two approved concept mockups — an elegant grand-hotel
+look in charcoal, ivory and brass with a warm serif for names and labels — as real interactive
+controls (not overlays on the mockups). Nothing about the camera, rooms, movement or rules changed.
+- **Guest strip**: portrait cards with names, identity-colour underlines and clear *Your turn* /
+  *Next* indicators. Possessed roles are never shown here.
+- **Active-player panel**: larger portrait, health segments, action pips (+ a numeric count) and a
+  *Private details* link. Possession stays private — only the current guest's own panel shows the
+  tell (weird-eye portrait + a faint screen tint).
+- **Hand**: a collapsible bottom sheet that keeps the room in view. Large illustrated cards; picking
+  one shows its description, how it is actually used, and any valid action. Only Bandage is a
+  standalone play; Lantern shows the Exit-Key track rather than a "Use" button. Closes on turn change.
+- **Buttons**: a clear hierarchy — Search shows its cost, or a plain-language reason when it can't
+  be used; the prominent End turn names the next guest; camera controls (rotate + Map) sit in a
+  separate cluster. Generous touch targets, no hover-only actions, safe-area spacing.
+- **Map**: a clean brass-framed floor plan with serif room names, the current position, searched
+  ticks and dashed "unexplored door" marks, plus a legend. Discovery and player-visibility rules
+  are unchanged.
+- Portraits and card art are **labelled placeholders** (flat vector busts / tinted glyph cards) with
+  drop-in support: register a file in `PORTRAIT_ART` (by outfit) or `CARD_ART` (by card type) and the
+  image is used automatically. See "Artwork still needed" below.
+All three suites pass (two interaction/assertion lines updated for the new hand flow); inspected on
+an iPad-size viewport across the strip, panel, hand, trade, map and camera rotation.
+
+#### Artwork still needed (to replace placeholders)
+Portraits (head-and-shoulders, ~3:4, transparent or dark ground), one per guest/outfit:
+Victor (black tuxedo, dark hair), Eleanor (midnight-blue ballgown), Marcus (navy suit + red tie),
+Beatrice (emerald A-line gown), Henry (white dinner jacket, older, silver hair). Drop as
+`assets/portraits/<name>.png` and register in `src/ui/portrait.js` → `PORTRAIT_ART`.
+Card illustrations (square, ~512px), one per type: lantern, flashlight, knife, revolver, bandage,
+possession, masterKey, lockPick, barricade, trinket. Drop as `assets/cards/<type>.png` and register
+in `src/ui/cards.js` → `CARD_ART`.
+
 ### Pass 10 — starting room craftsmanship refinement
 A quality pass over the starting room (hall only), driven by feedback and the hotel reference:
 - **Furniture geometry**: the sofa, wing chair, coffee table and console are rebuilt with rounded

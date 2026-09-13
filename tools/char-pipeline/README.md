@@ -34,3 +34,21 @@ node  tools/char-pipeline/preview.mjs                 # loads the .glb in Three.
 
 Conclusion: Blender modelling + `.glb` export (incl. animation) + Three.js import/playback all work
 here. We can proceed to the first rounded hotel guest (standing + walking).
+
+## First real guest — Victor
+`make_victor.py` is the real build on top of the same pipeline. It models a rounded, cartoon-style
+tuxedo guest from primitives, rigid-skins it to a simple armature, authors **Idle** and **Walk**
+Actions, and exports the shipped model `assets/characters/victor.glb`.
+
+```bash
+python3 tools/char-pipeline/make_victor.py            # rebuilds assets/characters/victor.glb
+node  tools/char-pipeline/preview_victor.mjs          # game + front views, reports clips/tris/height
+node  tools/char-pipeline/game-shots.mjs              # real in-game iPad-size screenshots (idle/walk/door)
+node  tools/char-pipeline/record_walk.mjs             # short webm of Victor walking a loop
+```
+(The `node_modules -> ../../tests/node_modules` symlink is needed for the `.mjs` scripts and is
+gitignored; recreate it with `ln -sfn ../../tests/node_modules tools/char-pipeline/node_modules`.)
+
+**Result**: `assets/characters/victor.glb` — **4,420 triangles, 6 materials, ~217 KB**, two clips
+(`Idle`, `Walk`), loads with no console errors and animates in-game. Wired into the game via the
+`tuxedo` outfit's `model` field; see `docs/DECISIONS.md` → "First real 3D character".

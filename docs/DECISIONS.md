@@ -208,3 +208,36 @@ Implements `docs/GAME_RULES.md`. Kept pure and separate from rendering so a serv
   real illustration with no other code change (and no missing-file requests until one is registered).
   Placeholders are refined flat-vector busts and tinted glyph cards. See `docs/PROGRESS.md` →
   "Artwork still needed".
+
+## First real 3D character — Victor (glTF, tuxedo outfit)
+- **What changed**: only the `tuxedo` outfit now carries `model: 'assets/characters/victor.glb'`
+  (+ `modelHeight`). Every other guest still uses the placeholder box figure. Nothing in the game
+  rules, movement, collision, camera, selection ring/marker, colours, or death behaviour changed —
+  `characterView.js` simply loads the model when an outfit has one and builds the box figure
+  otherwise. This is deliberately one guest for review before extending the style to the other four.
+- **Pipeline** (`tools/char-pipeline/`, not part of the running game): `make_victor.py` builds Victor
+  headless with **Blender 4.2 as a pip module** (`bpy`) from primitives (boxes/spheres/cylinders with
+  bevel + subsurf for rounded, cartoon shapes), assigns a material and a single-bone vertex group per
+  part, joins everything into one mesh, adds an armature and rigid-skins it, authors two Actions —
+  **Idle** (subtle breathing + sway) and **Walk** (in-place stride: legs swing, knees bend, arms
+  counter-swing, slight hip bob) — and exports `assets/characters/victor.glb` (glTF binary,
+  `export_animations`, ACTIONS mode so each Action is its own clip, Y-up). Re-run to rebuild:
+  `python tools/char-pipeline/make_victor.py`.
+- **Facing**: Blender front = −Y; `export_yup` maps it to glTF +Z, which matches the game's heading-0
+  forward (+Z), so the model faces its travel direction with no per-model rotation.
+- **Readability from the steep elevated camera**: a big cartoon head reads as a featureless ball from
+  the game's high 3/4 angle, so the head is slightly smaller, the torso a little longer, and the head
+  is tilted up (~15°) so the face catches the camera at normal zoom. Verified in real in-game shots.
+- **Integration** (`characterView.js`): `GLTFLoader` loads the model; an `AnimationMixer` cross-fades
+  Idle↔Walk by measured ground speed, and Walk's `timeScale` scales with speed so the stride matches
+  movement (existing movement code still controls travel — the model walks in place). Skinned meshes
+  use `frustumCulled = false` (posed bounds differ from bind-pose bounds). Death collapses the whole
+  model flat; the box-figure death pose is unchanged for other guests. The loader/mixer path is fully
+  isolated in `if (useModel)` branches so the placeholder code is byte-for-byte the old behaviour.
+- **Cost**: 4,420 triangles, 6 materials, ~217 KB uncompressed `.glb` — light for iPad (Draco isn't
+  available in this headless Blender, and uncompressed is simpler for Three.js; can compress later if
+  many characters ship).
+- **Portrait**: the interface still uses the **painted** `victor.jpg` portrait. A model-rendered
+  option (`assets/portraits/victor-model.jpg`) exists but is **not wired** — the head-tilt that helps
+  in-game makes a straight front render look up-nosed as a bust. Which portrait to use is an open
+  product choice for the owner; the painted one stays active until they decide.

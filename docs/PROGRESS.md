@@ -1,8 +1,25 @@
 # Progress
 
-_Last updated after the first graphics pass (starting room dressed with real models)._
+_Last updated after the first real 3D character (Victor) was modelled, rigged, animated and integrated._
 
 ## Done
+### Pass 12 — first real 3D character (Victor, glTF)
+Replaced only Victor's placeholder box figure with a real rounded, cartoon-style 3D guest built and
+animated headless in Blender (`bpy`) and exported to `assets/characters/victor.glb`.
+- **Look**: dark tuxedo, ivory shirt and bow tie, lapels, shaped hair and moustache, rounded hands
+  and shoes, expressive brows; head tilted up so the face reads from the game's steep elevated camera.
+- **Animation**: subtle **Idle** (breathing/sway) and a smooth in-place **Walk** loop that cross-fades
+  by movement speed, with stride matched to speed (existing movement code still drives travel).
+- **Integration**: `characterView.js` loads the model for the `tuxedo` outfit only; everything else
+  (movement, collision, colours, selection ring/marker, death/restart, camera, rooms, rules, and the
+  other four guests' box figures) is unchanged. Feet grounded; fits through doorways.
+- **Cost**: 4,420 triangles, 6 materials, ~217 KB. Automated checks (all three suites + headless
+  render/screenshots) pass; **not yet tested on a real iPad** — that's the owner's step.
+- **Open product choice**: keep the painted portrait or switch to a model-rendered one
+  (`assets/portraits/victor-model.jpg`, not wired). Painted stays active until the owner decides.
+- Pipeline + preview + screenshot/record scripts live in `tools/char-pipeline/` (not shipped).
+- One guest done for review before extending the style to the other four.
+
 ### Pass 11c — first real artwork (Victor + Lantern)
 Integrated the first supplied art through the existing drop-in support:
 - **Victor** now uses painted portraits — `assets/portraits/victor.jpg` (normal) and

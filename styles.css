@@ -107,7 +107,7 @@ html, body {
 .possess-tint[hidden] { display: none; }
 
 .portrait-svg { display: block; width: 100%; height: 100%; }
-.portrait-img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.portrait-img { display: block; width: 100%; height: 100%; object-fit: cover; object-position: 50% 20%; }
 /* Private possessed view when only a normal image is supplied: a cold, purple-shifted wash so the
    current guest's own portrait reads as possessed. A dedicated possessed image opts out (no class).
    The public strip always requests the neutral image, so it is never washed. */

@@ -9,7 +9,11 @@ import { outfits, bodyTypes } from '../data/characters.js';
 //   tuxedo: { normal: '…/victor.png', possessed: '…/victor-poss.png' } // both looks supplied
 // Empty until real portraits are supplied; then the image is used automatically. If only a normal
 // image is given, the private possessed view reuses it with a cold "possessed" wash (CSS).
-export const PORTRAIT_ART = {};
+export const PORTRAIT_ART = {
+  // Victor (tuxedo): supplied portraits. The public strip always requests `normal`, so his hidden
+  // role never leaks; his own active-player panel uses `possessed` when he is possessed.
+  tuxedo: { normal: 'assets/portraits/victor.jpg', possessed: 'assets/portraits/victor-possessed.jpg' },
+};
 
 export function makePortrait(doc, player, { possessed = false } = {}) {
   // Real artwork, if registered for this guest's outfit. Honour the possessed state: use a

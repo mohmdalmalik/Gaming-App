@@ -6,7 +6,9 @@ import { CARDS } from '../game/cards.js';
 // Drop-in artwork: map a card type to an image path under assets/cards/. Left empty on purpose —
 // the glyph placeholder is used until real illustrations are supplied. Add entries like
 // `bandage: 'assets/cards/bandage.png'` once the files exist and the art appears automatically.
-export const CARD_ART = {};
+export const CARD_ART = {
+  lantern: 'assets/cards/lantern.jpg',
+};
 
 // The art panel for a card type: a real illustration if one is registered, else a big glyph.
 function cardArt(doc, type) {

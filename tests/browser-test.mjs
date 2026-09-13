@@ -91,8 +91,8 @@ const hud = await game(() => ({
   hudShown: !document.getElementById('hud').hidden,
   hp: document.getElementById('health').children.length,
   strip: document.querySelectorAll('#players-strip .mini-player').length,
-  panelPortrait: !!document.querySelector('#portrait-slot svg'),
-  stripPortraits: document.querySelectorAll('#players-strip .mini-portrait svg').length,
+  panelPortrait: !!document.querySelector('#portrait-slot svg, #portrait-slot img'),
+  stripPortraits: document.querySelectorAll('#players-strip .mini-portrait svg, #players-strip .mini-portrait img').length,
   handCount: document.getElementById('hand-count').textContent,
   backs: document.querySelectorAll('#hand-backs .card-back').length,
   ap: document.getElementById('action-points').textContent,
@@ -115,10 +115,12 @@ await game(() => { window.__game.activePlayer().possessed = true; window.__game.
 const poss = await game(() => ({
   tint: !document.getElementById('possess-tint').hidden,
   panel: document.getElementById('player-panel').classList.contains('possessed'),
-  panelWeird: !!document.querySelector('#portrait-slot svg.possessed'),
-  stripNormal: document.querySelector('#players-strip .mini-player.active .portrait-svg.possessed') === null,
+  // The possessed look on the panel is either the weird-eye SVG (placeholder) or a possessed image.
+  panelWeird: !!document.querySelector('#portrait-slot svg.possessed, #portrait-slot img.possessed, #portrait-slot img[src*="possessed"]'),
+  // The public strip must never show a possessed look (no possessed SVG, no possessed image).
+  stripNormal: !document.querySelector('#players-strip .mini-player.active .portrait-svg.possessed, #players-strip .mini-player.active img.possessed, #players-strip .mini-player.active img[src*="possessed"]'),
 }));
-check(poss.tint && poss.panel && poss.panelWeird, 'a possessed active player shows the weird-eye portrait and a screen tint');
+check(poss.tint && poss.panel && poss.panelWeird, 'a possessed active player shows the possessed portrait and a screen tint');
 check(poss.stripNormal, 'the top strip never reveals a possessed role');
 await page.evaluate(w => { window.__game.activePlayer().possessed = w; window.__game.refresh(); }, wasPossessed);
 

@@ -3,6 +3,21 @@
 _Last updated after the first graphics pass (starting room dressed with real models)._
 
 ## Done
+### Pass 11c — first real artwork (Victor + Lantern)
+Integrated the first supplied art through the existing drop-in support:
+- **Victor** now uses painted portraits — `assets/portraits/victor.jpg` (normal) and
+  `victor-possessed.jpg` (private possessed look), registered in `PORTRAIT_ART` under his outfit
+  (`tuxedo`). His **public strip portrait stays the normal image** regardless of his hidden role;
+  only his own active-player panel shows the possessed portrait when he is possessed.
+- **Lantern** now uses `assets/cards/lantern.jpg`, registered in `CARD_ART`; it fills the card's
+  illustration area inside the ivory/brass frame.
+- Supplied images were downscaled to iPad-suitable copies (~768px portraits, 640px card, ~50–70 KB
+  each). Portrait cropping is framed with `object-position: 50% 20%` so the face sits well in both
+  the square strip cell and the panel.
+- Everything else keeps its placeholder. See `assets/README.md` for the naming/registration
+  convention and the remaining art needed. Layout, camera, rooms, 3D characters and rules unchanged;
+  all three suites pass (portrait assertions updated to accept an image or the SVG placeholder).
+
 ### Pass 11b — interface refinement (hand, cards, readability)
 Small refinement pass on the new interface:
 - **Open hand** balanced: larger cards that centre when the hand is short and scroll horizontally

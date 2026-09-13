@@ -108,6 +108,10 @@ html, body {
 
 .portrait-svg { display: block; width: 100%; height: 100%; }
 .portrait-img { display: block; width: 100%; height: 100%; object-fit: cover; }
+/* Private possessed view when only a normal image is supplied: a cold, purple-shifted wash so the
+   current guest's own portrait reads as possessed. A dedicated possessed image opts out (no class).
+   The public strip always requests the neutral image, so it is never washed. */
+.portrait-img.possessed { filter: saturate(0.7) brightness(0.86) hue-rotate(-24deg) contrast(1.05); }
 
 /* ---- Top player strip: portrait cards with turn / next indicators ---- */
 .players-strip { display: flex; gap: 8px; justify-content: center; }
@@ -236,15 +240,16 @@ html, body {
 .btn:active { transform: scale(0.97); }
 .btn.action, .btn.end { display: flex; flex-direction: column; align-items: flex-start; justify-content: center; gap: 1px; }
 .btn .btn-main { font-family: var(--serif); font-size: 17px; font-weight: 700; letter-spacing: 0.01em; line-height: 1.1; }
-.btn .btn-sub { font-size: 11px; font-weight: 600; color: var(--muted); letter-spacing: 0.02em; }
+.btn .btn-sub { font-size: 12.5px; font-weight: 600; color: var(--ivory-dim); letter-spacing: 0.01em; line-height: 1.2; }
 .btn.primary { background: linear-gradient(180deg, #e6c877, #c9a24e); color: var(--accent-text); border-color: var(--brass-bright); }
 .btn.primary .btn-main { color: #20170a; }
 .btn.primary .btn-sub { color: #4a3712; }
 .btn.primary:active { filter: brightness(0.96); }
 .btn.end { min-width: 150px; }
 .btn.action { min-width: 108px; }
-.btn:disabled { opacity: 0.5; cursor: default; }
-.btn:disabled .btn-sub { color: #d59b8f; }
+.btn:disabled { opacity: 0.62; cursor: default; }
+.btn:disabled .btn-main { color: var(--ivory-dim); }
+.btn:disabled .btn-sub { color: #eaa898; font-weight: 700; }
 /* legacy button shapes still used by overlays/modals */
 .btn.round { width: 52px; height: 52px; border-radius: 50%; padding: 0; font-size: 22px; line-height: 1; }
 .btn.wide { min-width: 132px; }
@@ -325,46 +330,52 @@ html, body {
 .banner.info { background: rgba(143,216,255,0.14); border-color: rgba(143,216,255,0.45); color: #bfe6ff; }
 
 /* ---- The hand: a row of large cards + a detail pane ---- */
-.hand-body { display: flex; gap: 14px; padding: 14px 16px; overflow: hidden; min-height: 0; flex: 1; }
-.hand-cards-wrap { flex: 1; min-width: 0; overflow-x: auto; overflow-y: hidden; }
+.hand-body { display: flex; gap: 18px; padding: 14px 18px 12px; overflow: hidden; min-height: 0; flex: 1; }
+/* A short hand centres; a long hand scrolls horizontally by touch (margin:auto on the row). */
+.hand-cards-wrap { flex: 1; min-width: 0; overflow-x: auto; overflow-y: hidden; -webkit-overflow-scrolling: touch; display: flex; }
 .cards { display: flex; gap: 12px; align-content: flex-start; }
-/* the hand row lays cards out horizontally; other .cards (modals) wrap */
-#hand-cards { flex-wrap: nowrap; padding: 4px 2px 10px; height: 100%; align-items: stretch; }
+#hand-cards { flex-wrap: nowrap; gap: 14px; margin: auto; padding: 6px 4px 12px; align-items: stretch; }
 .hand-detail {
-  width: 240px; flex: none; border-left: 1px solid var(--line-soft); padding-left: 16px;
+  width: 264px; flex: none; border-left: 1px solid var(--line-soft); padding-left: 18px;
   display: flex; flex-direction: column; gap: 10px; overflow-y: auto;
 }
-.hand-detail .d-name { font-family: var(--serif); font-size: 20px; font-weight: 700; color: var(--brass-bright); }
-.hand-detail .d-desc { font-size: 14px; line-height: 1.45; color: var(--ivory-dim); }
-.hand-detail .d-tag { font-size: 12px; color: var(--muted); font-style: italic; }
-.hand-detail .d-empty { color: var(--muted); font-size: 14px; margin: auto 0; }
-.lantern-track { display: flex; align-items: center; gap: 8px; margin-top: 4px; }
-.lantern-track .pip { width: 22px; height: 22px; border-radius: 6px; border: 1px solid var(--line); display: flex; align-items: center; justify-content: center; font-size: 13px; color: var(--brass-dim); }
-.lantern-track .pip.on { color: var(--brass-bright); border-color: var(--brass); background: rgba(201,162,78,0.14); }
-.lantern-track .lt-count { font-size: 12px; color: var(--muted); margin-left: 4px; }
+.hand-detail .d-name { font-family: var(--serif); font-size: 22px; font-weight: 700; color: var(--brass-bright); }
+.hand-detail .d-line { font-size: 14.5px; line-height: 1.5; color: var(--ivory); }
+.hand-detail .d-line b { color: var(--brass-bright); font-weight: 700; }
+.hand-detail .d-desc { font-size: 14.5px; line-height: 1.5; color: var(--ivory); }
+.hand-detail .d-tag { font-size: 13px; line-height: 1.4; color: var(--ivory-dim); }
+.hand-detail .d-empty { color: var(--muted); font-size: 15px; margin: auto 0; }
+.hand-detail .btn { align-self: flex-start; }
+.lantern-track { display: flex; align-items: center; gap: 8px; margin-top: 2px; }
+.lantern-track .pip { width: 24px; height: 24px; border-radius: 6px; border: 1px solid var(--line); display: flex; align-items: center; justify-content: center; font-size: 14px; color: var(--brass-dim); }
+.lantern-track .pip.on { color: var(--brass-bright); border-color: var(--brass); background: rgba(201,162,78,0.16); }
+.lantern-track .lt-count { font-size: 13px; color: var(--ivory-dim); margin-left: 4px; }
 
-/* Card tile: portrait-oriented illustrated card */
+/* Card tile: warm ivory card face, restrained brass border, a generous illustration area and a
+   clear name — matching the approved card concept. */
 .card-tile {
-  width: 132px; flex: none; border-radius: 12px; padding: 10px; display: flex; flex-direction: column; gap: 7px;
-  background: linear-gradient(180deg, rgba(30,26,20,0.5), rgba(16,14,11,0.6));
-  border: 1px solid var(--line-soft); box-shadow: inset 0 0 0 1px rgba(0,0,0,0.4);
+  width: 162px; flex: none; border-radius: 14px; padding: 10px 10px 12px; display: flex; flex-direction: column; gap: 8px;
+  background: linear-gradient(180deg, #f5eeda, #e6dabe);
+  border: 1px solid var(--brass); color: #2a2016;
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.55), 0 5px 14px rgba(0,0,0,0.4);
 }
 .card-tile .art {
-  height: 88px; border-radius: 8px; display: flex; align-items: center; justify-content: center;
-  background: #17130d;
-  background: radial-gradient(120% 100% at 50% 30%, color-mix(in srgb, var(--card-tint) 34%, #1a1712), #14110d);
-  border: 1px solid var(--line-soft); overflow: hidden;
+  height: 132px; border-radius: 9px; display: flex; align-items: center; justify-content: center;
+  background: #efe3c8;
+  background: radial-gradient(120% 100% at 50% 34%, color-mix(in srgb, var(--card-tint) 52%, #efe3c8), #d8c8a2);
+  border: 1px solid rgba(140,114,51,0.55); box-shadow: inset 0 0 0 1px rgba(255,255,255,0.45); overflow: hidden;
 }
-.card-tile .art .glyph { font-size: 40px; line-height: 1; color: var(--card-tint, var(--ivory)); text-shadow: 0 2px 6px rgba(0,0,0,0.5); }
+.card-tile .art .glyph { font-size: 58px; line-height: 1; color: #3a2c14; color: color-mix(in srgb, var(--card-tint) 68%, #3a2c14); text-shadow: 0 1px 1px rgba(255,255,255,0.4); }
 .card-tile .art img, .card-tile .art svg { width: 100%; height: 100%; object-fit: cover; }
-.card-tile .cname { font-family: var(--serif); font-weight: 700; font-size: 14px; color: var(--ivory); }
-.card-tile .cdesc { font-size: 11px; color: var(--muted); line-height: 1.3; }
-.card-tile.count .badge { align-self: flex-start; padding: 1px 8px; border-radius: 999px; font-size: 12px; font-weight: 700; background: rgba(201,162,78,0.18); color: var(--brass); }
+.card-tile .cname { font-family: var(--serif); font-weight: 700; font-size: 15px; color: #2a2016; text-align: center; }
+.card-tile .cdesc { font-size: 12px; color: #5c4a2e; line-height: 1.3; text-align: center; }
+.card-tile.count .badge { align-self: center; padding: 1px 9px; border-radius: 999px; font-size: 12px; font-weight: 700; background: rgba(140,114,51,0.2); color: #6a5326; }
 .card-tile.selectable { cursor: pointer; }
 .card-tile.selectable:active { transform: scale(0.98); }
-.card-tile.selected { border-color: var(--brass); box-shadow: 0 0 0 1px var(--brass), 0 0 16px rgba(201,162,78,0.4); }
-.card-tile.evil { border-color: rgba(180,107,255,0.55); }
-.card-tile.evil .art { border-color: rgba(180,107,255,0.4); }
+.card-tile.selected { border-color: var(--brass-bright); box-shadow: 0 0 0 2px var(--brass-bright), 0 0 20px rgba(201,162,78,0.5); }
+.card-tile.evil { border-color: #9a6bd0; }
+.card-tile.evil .art { border-color: rgba(154,107,208,0.55); }
+.card-tile.evil .art .glyph { color: #7a3fb0; }
 .card-tile .btn { margin-top: auto; min-height: 40px; padding: 8px 10px; }
 .card-tile .btn .btn-main { font-size: 14px; }
 
@@ -415,9 +426,34 @@ html, body {
 .map-legend .sw.searched { background: rgba(120,200,150,0.18); border-color: rgba(120,200,150,0.5); }
 .map-legend .sw.frontier { background: none; border-color: var(--brass); border-style: dashed; }
 
+/* Smaller landscape iPads (≈1024–1080 wide): tighten the bottom row so the player panel, the hand
+   button and the action buttons never overlap. Camera settings and gestures are untouched. */
+@media (max-width: 1120px) {
+  .hud-bottom-left { max-width: 40vw; }
+  .player-panel { gap: 10px; padding: 10px 12px 10px 10px; }
+  .player-meta { min-width: 96px; }
+  .portrait-slot { width: 60px; height: 74px; }
+  .hand-strip { gap: 8px; padding: 7px 12px; }
+  .hand-strip-label { display: none; }        /* keep the fanned backs + count */
+  .action-row { gap: 8px; }
+  .control-row { gap: 8px; }
+  .btn.action { min-width: 92px; padding: 9px 12px; }
+  .btn.end { min-width: 128px; padding: 9px 14px; }
+  .btn .btn-main { font-size: 16px; }
+  .ctl { height: 46px; min-width: 46px; padding: 0 10px; }
+  .ctl.map { font-size: 14px; }
+}
+@media (max-width: 900px) {
+  .hand-detail { width: 200px; padding-left: 14px; }
+  .card-tile { width: 144px; }
+  .card-tile .art { height: 116px; }
+  .card-tile .art .glyph { font-size: 50px; }
+  .mini-player { width: 64px; }
+  .mini-portrait { width: 54px; height: 54px; }
+}
 @media (max-width: 620px) {
-  .hand-detail { width: 180px; }
-  .mini-player { width: 62px; }
-  .mini-portrait { width: 52px; height: 52px; }
-  .player-meta { min-width: 108px; }
+  .hand-detail { width: 168px; }
+  .mini-player { width: 58px; }
+  .mini-portrait { width: 48px; height: 48px; }
+  .player-meta { min-width: 88px; }
 }

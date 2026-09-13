@@ -10,7 +10,7 @@ import { cardTile } from './cards.js';
 // How each card is actually used — so the detail pane can explain it instead of implying every
 // card has a "Use" button. Only Bandage is a standalone play; the rest are used in context.
 const USAGE = {
-  lantern: 'Given in a trade to block possession. Three of these make the Exit Key.',
+  // Lantern is explained in full by renderDetail (two functions), so it is not listed here.
   flashlight: 'Used automatically when you search a dark room.',
   knife: 'Chosen when you attack during a forced encounter.',
   revolver: 'Chosen when you attack during a forced encounter.',
@@ -66,49 +66,62 @@ export function createHand(doc, cfg, { onUseBandage }) {
 
     renderDetail(p, hand.find(c => c.id === selectedId) || null);
 
+    // Footer summary. The Exit-Key / escape hint is for clean players only — a possessed player is
+    // never shown an unconditional "reach the exit to win" message.
     const lc = lanternCount(p.hand);
-    note.textContent = `Health ${p.health}/${rules.maxHealth} · Actions ${p.actionPoints}/${rules.actionPointsPerTurn} · `
-      + `Exit Key ${lc}/${rules.lanternsToEscape} Lanterns${lc >= rules.lanternsToEscape ? ' — reach the Fire Exit to win!' : ''}`;
+    let summary = `Health ${p.health}/${rules.maxHealth} · Actions ${p.actionPoints}/${rules.actionPointsPerTurn}`;
+    if (!p.possessed) {
+      summary += ` · Exit Key ${lc}/${rules.lanternsToEscape} Lanterns`;
+      if (lc >= rules.lanternsToEscape) summary += ' — reach the Fire Exit while unpossessed to escape!';
+    }
+    note.textContent = summary;
   }
 
   function renderDetail(p, card) {
     detail.innerHTML = '';
     if (!card) { detail.innerHTML = '<div class="d-empty">Select a card to see what it does.</div>'; return; }
     const meta = CARDS[card.type];
+    const line = (html, cls = 'd-line') => { const d = doc.createElement('div'); d.className = cls; d.innerHTML = html; detail.appendChild(d); };
+
     const name = doc.createElement('div'); name.className = 'd-name';
     const shots = card.type === 'revolver' && card.shots != null ? ` · ${card.shots} shot${card.shots === 1 ? '' : 's'}` : '';
     name.textContent = `${meta.name}${shots}`;
     if (meta.evil) name.style.color = 'var(--evil)';
     detail.appendChild(name);
 
-    const desc = doc.createElement('div'); desc.className = 'd-desc'; desc.textContent = meta.desc; detail.appendChild(desc);
-    const tag = doc.createElement('div'); tag.className = 'd-tag'; tag.textContent = USAGE[card.type] || ''; detail.appendChild(tag);
+    if (card.type === 'lantern') {
+      // Two distinct functions, explained once each — no repeated line. The escape function is
+      // shown only to a player who could actually use it (never an unconditional win hint to the
+      // possessed).
+      line('<b>In a trade:</b> give it in the same exchange to block a possession attempt — the possession fails and you learn who tried.');
+      if (p.possessed) {
+        line('<b>Escape:</b> three Lanterns are the Exit Key — but only an unpossessed guest can escape, so it will not free you while you are possessed.');
+      } else {
+        line(`<b>To escape:</b> collect ${rules.lanternsToEscape} Lanterns and reach the Fire Exit while unpossessed.`);
+        const lc = lanternCount(p.hand);
+        const track = doc.createElement('div'); track.className = 'lantern-track';
+        for (let i = 0; i < rules.lanternsToEscape; i++) {
+          const pip = doc.createElement('span'); pip.className = 'pip' + (i < lc ? ' on' : ''); pip.textContent = '✦'; track.appendChild(pip);
+        }
+        const c = doc.createElement('span'); c.className = 'lt-count'; c.textContent = `${lc} / ${rules.lanternsToEscape} Lanterns held`; track.appendChild(c);
+        detail.appendChild(track);
+      }
+      return;
+    }
+
+    line(meta.desc, 'd-desc');
+    if (USAGE[card.type]) line(USAGE[card.type], 'd-tag');
 
     // Bandage is the one card played directly from the hand.
     if (card.type === 'bandage') {
+      const full = p.health >= rules.maxHealth, noAp = p.actionPoints < rules.actionCost.useCard;
+      if (full || noAp) line(full ? 'Already at full health.' : 'No actions left this turn.', 'd-tag');
       const btn = doc.createElement('button');
       btn.type = 'button'; btn.className = 'btn primary';
-      const full = p.health >= rules.maxHealth, noAp = p.actionPoints < rules.actionCost.useCard;
       btn.textContent = 'Use · 1 action';
       btn.disabled = full || noAp;
-      if (full || noAp) {
-        const why = doc.createElement('div'); why.className = 'd-tag';
-        why.textContent = full ? 'Already at full health.' : 'No actions left this turn.';
-        detail.appendChild(why);
-      }
       btn.addEventListener('click', e => { e.preventDefault(); onUseBandage(card.id); });
       detail.appendChild(btn);
-    }
-
-    // Lantern shows the Exit-Key progress track.
-    if (card.type === 'lantern') {
-      const lc = lanternCount(p.hand);
-      const track = doc.createElement('div'); track.className = 'lantern-track';
-      for (let i = 0; i < rules.lanternsToEscape; i++) {
-        const pip = doc.createElement('span'); pip.className = 'pip' + (i < lc ? ' on' : ''); pip.textContent = '✦'; track.appendChild(pip);
-      }
-      const c = doc.createElement('span'); c.className = 'lt-count'; c.textContent = `${lc} / ${rules.lanternsToEscape} Lanterns`; track.appendChild(c);
-      detail.appendChild(track);
     }
   }
 

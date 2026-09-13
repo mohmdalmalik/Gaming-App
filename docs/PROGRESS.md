@@ -3,6 +3,26 @@
 _Last updated after the first graphics pass (starting room dressed with real models)._
 
 ## Done
+### Pass 11b — interface refinement (hand, cards, readability)
+Small refinement pass on the new interface:
+- **Open hand** balanced: larger cards that centre when the hand is short and scroll horizontally
+  by touch when it is long (including extra Possession cards); the selected-card detail stays beside
+  them.
+- **Cards** match the concept: warm ivory faces, restrained brass borders, larger illustration
+  areas, clear serif names (Possession keeps its purple/evil accent on the ivory face). Names,
+  descriptions and values are all live text.
+- **Lantern** now explains its two functions once each (trade-block, and collect-three-to-escape)
+  with no repeated line. A **possessed** player is never shown an unconditional "reach the exit to
+  win": the Lantern's escape note and the footer Exit-Key hint are hidden / reworded for them.
+- **Readability**: disabled-action reasons and the card detail text are larger and higher-contrast.
+  Added responsive rules so on smaller landscape iPads (~1024px) the player panel, hand button and
+  action buttons never overlap (the "View hand" label collapses to the fanned backs + count).
+- **Image portraits** now honour the possessed state: a dedicated possessed image is used when
+  supplied, otherwise the normal image gets a cold wash — the public strip stays neutral. The
+  drop-in manifests (`PORTRAIT_ART`, `CARD_ART`) are unchanged.
+Camera settings and gestures untouched. All three suites pass; verified hand selection + scrolling,
+Bandage use, trading, turn changes and the map at 11" and 1024px landscape.
+
 ### Pass 11 — interface redesign (Art Deco player interface)
 Rebuilt the on-screen interface toward the two approved concept mockups — an elegant grand-hotel
 look in charcoal, ivory and brass with a warm serif for names and labels — as real interactive

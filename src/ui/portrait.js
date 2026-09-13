@@ -4,17 +4,26 @@
 // Callers only ask for a portrait of a player in a given state and place the returned element.
 import { outfits, bodyTypes } from '../data/characters.js';
 
-// Drop-in artwork: outfit id → image path under assets/portraits/. Empty until real portraits are
-// supplied; add e.g. `tuxedo: 'assets/portraits/victor.png'` and the image is used automatically.
+// Drop-in artwork: outfit id → an image path, OR an object with separate looks:
+//   tuxedo: 'assets/portraits/victor.png'                            // one image (normal)
+//   tuxedo: { normal: '…/victor.png', possessed: '…/victor-poss.png' } // both looks supplied
+// Empty until real portraits are supplied; then the image is used automatically. If only a normal
+// image is given, the private possessed view reuses it with a cold "possessed" wash (CSS).
 export const PORTRAIT_ART = {};
 
 export function makePortrait(doc, player, { possessed = false } = {}) {
-  // Real artwork, if registered for this guest's outfit.
-  if (PORTRAIT_ART[player.outfit]) {
+  // Real artwork, if registered for this guest's outfit. Honour the possessed state: use a
+  // dedicated possessed image when supplied, otherwise wash the normal image. The public strip
+  // always asks for the neutral look (possessed:false), so it is never washed.
+  const entry = PORTRAIT_ART[player.outfit];
+  if (entry) {
+    const normal = typeof entry === 'string' ? entry : entry.normal;
+    const possessedSrc = typeof entry === 'object' ? entry.possessed : null;
     const img = doc.createElement('img');
-    img.className = 'portrait-img';
-    img.alt = player.name;
-    img.src = PORTRAIT_ART[player.outfit];
+    img.alt = `${player.name}${possessed ? ', possessed' : ''}`;
+    if (possessed && possessedSrc) { img.className = 'portrait-img'; img.src = possessedSrc; }
+    else if (possessed) { img.className = 'portrait-img possessed'; img.src = normal; }  // wash fallback
+    else { img.className = 'portrait-img'; img.src = normal; }
     return img;
   }
 

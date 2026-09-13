@@ -225,9 +225,19 @@ Implements `docs/GAME_RULES.md`. Kept pure and separate from rendering so a serv
   `python tools/char-pipeline/make_victor.py`.
 - **Facing**: Blender front = −Y; `export_yup` maps it to glTF +Z, which matches the game's heading-0
   forward (+Z), so the model faces its travel direction with no per-model rotation.
-- **Readability from the steep elevated camera**: a big cartoon head reads as a featureless ball from
-  the game's high 3/4 angle, so the head is slightly smaller, the torso a little longer, and the head
-  is tilted up (~15°) so the face catches the camera at normal zoom. Verified in real in-game shots.
+- **Readability from the steep elevated camera** (this took two real fixes, caught by in-game shots,
+  not the isolated preview):
+  1. *Head*: the head is **upright** (no tilt) like the other guests, and the hair is a full cap that
+     OWNS the whole crown. The game camera looks down, so a tilted-up face only exposes the bald crown;
+     a first attempt that tilted the face up read as a shiny bald egg from above. Hair on top is what
+     makes a head read as a head from this angle.
+  2. *Shading + colour*: the model's PBR (`MeshStandard`) materials are converted on load to the same
+     matte `MeshLambertMaterial` the whole greybox uses (KEEPING each part's colour — no recolour),
+     exactly like the furniture loader (`models.js`). Under the warm overhead light `MeshStandard`'s
+     specular blew a bright hotspot on the round head (another "bald" read); matte Lambert removes it.
+     Model colours are authored as **sRGB hex converted to linear** for Blender's Principled base
+     colour — authoring raw linear numbers made a near-black tuxedo render mid-grey and dark hair
+     render dirty-blonde.
 - **Integration** (`characterView.js`): `GLTFLoader` loads the model; an `AnimationMixer` cross-fades
   Idle↔Walk by measured ground speed, and Walk's `timeScale` scales with speed so the stride matches
   movement (existing movement code still controls travel — the model walks in place). Skinned meshes
@@ -238,6 +248,6 @@ Implements `docs/GAME_RULES.md`. Kept pure and separate from rendering so a serv
   available in this headless Blender, and uncompressed is simpler for Three.js; can compress later if
   many characters ship).
 - **Portrait**: the interface still uses the **painted** `victor.jpg` portrait. A model-rendered
-  option (`assets/portraits/victor-model.jpg`) exists but is **not wired** — the head-tilt that helps
-  in-game makes a straight front render look up-nosed as a bust. Which portrait to use is an open
-  product choice for the owner; the painted one stays active until they decide.
+  option (`assets/portraits/victor-model.jpg`, a front bust of the actual 3D guest) exists but is
+  **not wired**. Which portrait to use is an open product choice for the owner; the painted one stays
+  active until they decide.

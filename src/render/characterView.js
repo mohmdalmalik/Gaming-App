@@ -67,10 +67,26 @@ export function createCharacterView(playerDef, cfg, scene) {
 
   if (useModel) {
     // Load the real guest. Skinned meshes can be wrongly frustum-culled from a stale bind-pose
-    // bound, so disable culling; keep the model's own materials/shading (no palette recolour).
+    // bound, so disable culling. Convert the model's PBR materials to the same matte
+    // MeshLambertMaterial the rest of the greybox uses (KEEPING each part's own colour — no
+    // recolour), exactly like the furniture loader. This is what makes the guest sit in the room:
+    // MeshStandard's specular would blow a bright hotspot on the round head under the warm overhead
+    // light, reading as a shiny bald dome; matte Lambert removes it and matches every other guest.
     gltfLoader.load(outfit.model, (gltf) => {
       const root = gltf.scene;
-      root.traverse(o => { if (o.isMesh) o.frustumCulled = false; });
+      root.traverse(o => {
+        if (!o.isMesh) return;
+        o.frustumCulled = false;
+        const flatten = (src) => {
+          const m = new THREE.MeshLambertMaterial({ color: src.color ? src.color.clone() : new THREE.Color('#cccccc') });
+          if (src.map) m.map = src.map;
+          if (src.emissive) m.emissive = src.emissive.clone();
+          if (src.transparent) { m.transparent = true; m.opacity = src.opacity; }
+          if (src.side !== undefined) m.side = src.side;
+          return m;
+        };
+        o.material = Array.isArray(o.material) ? o.material.map(flatten) : flatten(o.material);
+      });
       body.add(root);
       mixer = new THREE.AnimationMixer(root);
       const idle = gltf.animations.find(a => /idle/i.test(a.name)) || gltf.animations[0];

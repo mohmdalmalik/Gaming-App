@@ -23,13 +23,24 @@ def mat(name, rgb, rough=0.6, metal=0.0):
     if "Metallic" in b.inputs: b.inputs["Metallic"].default_value = metal
     return m
 
+# Colours are authored as sRGB hex (like the game's palette) and converted to LINEAR for Blender's
+# Principled base colour, so the round-trip Blender -> glTF -> Three.js reproduces the intended
+# shade. (Authoring raw linear numbers made everything render far too light — a near-black tuxedo
+# came out mid-grey and dark hair came out dirty-blonde.)
+def _s2l(c):
+    c = c / 255.0
+    return c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4
+def hexlin(h):
+    h = h.lstrip('#')
+    return (_s2l(int(h[0:2], 16)), _s2l(int(h[2:4], 16)), _s2l(int(h[4:6], 16)))
+
 M = {
-    "skin":  mat("Skin",  (0.86, 0.66, 0.49), 0.55),
-    "hair":  mat("Hair",  (0.11, 0.08, 0.06), 0.5),
-    "jacket":mat("Jacket",(0.07, 0.075, 0.10), 0.55),   # near-black, faint navy
-    "shirt": mat("Shirt", (0.92, 0.89, 0.80), 0.5),     # ivory
-    "accent":mat("Accent",(0.03, 0.03, 0.045), 0.4),    # bow tie / lapels / shoes (deep black)
-    "dark":  mat("Dark",  (0.02, 0.02, 0.03), 0.4),     # eyes / brows / moustache
+    "skin":  mat("Skin",  hexlin('#d9b38c'), 0.8),   # match the other guests' skin tone
+    "hair":  mat("Hair",  hexlin('#241811'), 0.85),  # dark brown
+    "jacket":mat("Jacket",hexlin('#15151a'), 0.85),  # near-black tuxedo (matches outfit colour)
+    "shirt": mat("Shirt", hexlin('#efe9dc'), 0.85),  # ivory
+    "accent":mat("Accent",hexlin('#101015'), 0.8),   # bow tie / lapels / shoes (deep black)
+    "dark":  mat("Dark",  hexlin('#0c0c11'), 0.8),   # eyes / brows / moustache
 }
 MAT_ORDER = list(M.keys())
 MAT_INDEX = {k: i for i, k in enumerate(MAT_ORDER)}
@@ -71,8 +82,9 @@ def add_cyl(r1, r2, depth, loc, mat_key, group, rot=(0,0,0), verts=16):
 
 # ---- proportions (Blender Z up; character faces -Y, i.e. Blender front) -------------------
 HIP = 0.78; KNEE = 0.42; ANKLE = 0.09; SH = 1.16; NECK = 1.20
-HEADC = 1.47; HEADR = 0.27          # still a large cartoon head, a touch smaller so it reads from above
-HEAD_TILT = -0.26                    # tilt the face up so it catches the elevated camera
+HEADC = 1.45; HEADR = 0.235         # large cartoon head, but sized so the whole figure reads as a person from above
+HEAD_TILT = 0.0                      # upright head (like the other guests). The game camera looks DOWN, so a
+                                     # tilted-up face just exposes the bare crown; hair must own the top instead.
 LEGX = 0.12; ARMX = 0.28
 
 # Legs (trousers dark = accent? use jacket-dark for trousers) --------------------------------
@@ -110,23 +122,25 @@ for s in (1, -1):
 # Head + features (all → head bone). Built, then joined + tilted up about the neck so the face
 # reads from the game's steep elevated camera. -------------------------------------------------
 head_start = len(parts)
-add_sphere(HEADR, (0, 0, HEADC), "skin", "head", scale=(1.0, 0.94, 1.06), subdiv=3)
-# Hair: one clean "helmet" sphere, slightly larger than the head and shifted up/back, giving a
-# high slicked-back hairline (matches Victor's portrait) with no fringe slab and no z-fighting.
-add_sphere(HEADR*1.06, (0, 0.05, HEADC+HEADR*0.17), "hair", "head", scale=(1.07, 1.05, 1.0), subdiv=3)
+add_sphere(HEADR, (0, 0, HEADC), "skin", "head", scale=(1.0, 0.95, 1.04), subdiv=3)
+# Hair: a full "helmet" cap that OWNS the whole crown so the top of the head reads as dark hair from
+# the game's overhead camera (like the other guests). It is concentric-ish, a touch larger than the
+# skull, raised slightly, and pulled back only enough to leave a clean forehead + hairline. The eyes
+# and brows sit forward of the hair's front edge so the face still reads head-on and in the portrait.
+add_sphere(HEADR*1.05, (0, 0.055, HEADC+0.05), "hair", "head", scale=(1.08, 1.02, 1.02), subdiv=3)
 # Ears
 for s in (1, -1):
-    add_sphere(0.06, (s*HEADR*0.98, 0.0, HEADC), "skin", "head", scale=(0.7,1,1.2))
+    add_sphere(0.055, (s*HEADR*0.98, 0.0, HEADC-0.01), "skin", "head", scale=(0.7,1,1.2))
 # Nose
-add_sphere(0.055, (0, -HEADR*0.98, HEADC-0.02), "skin", "head", scale=(1,1.2,1))
-# Eyes (dark, with a small ivory catch-light) + expressive angled brows above a clear gap.
+add_sphere(0.05, (0, -HEADR*0.98, HEADC-0.03), "skin", "head", scale=(1,1.2,1))
+# Eyes (dark, rounder, with a small ivory catch-light) below softer, lower brows.
 for s in (1, -1):
-    add_sphere(0.042, (s*0.115, -HEADR*0.9, HEADC+0.05), "dark", "head", scale=(1, 0.68, 1.15))
-    add_sphere(0.013, (s*0.10, -HEADR*0.99, HEADC+0.085), "shirt", "head")  # catch-light
-    add_box((0.11, 0.02, 0.028), (s*0.115, -HEADR*0.93, HEADC+0.185), "dark", "head", rot=(0, 0, -s*0.26), bevel=0.004)
-# Neat moustache (two angled bars under the nose)
+    add_sphere(0.036, (s*0.10, -HEADR*0.92, HEADC+0.03), "dark", "head", scale=(1, 0.62, 1.0))
+    add_sphere(0.011, (s*0.088, -HEADR*0.99, HEADC+0.055), "shirt", "head")  # catch-light
+    add_box((0.085, 0.02, 0.022), (s*0.10, -HEADR*0.95, HEADC+0.115), "dark", "head", rot=(0, 0, -s*0.12), bevel=0.004)
+# Neat moustache (two slim angled bars just under the nose)
 for s in (1, -1):
-    add_box((0.10, 0.05, 0.035), (s*0.055, -HEADR*0.86, HEADC-0.12), "dark", "head", rot=(0,0,-s*0.2), bevel=0.008)
+    add_box((0.075, 0.04, 0.026), (s*0.05, -HEADR*0.9, HEADC-0.085), "dark", "head", rot=(0,0,-s*0.16), bevel=0.008)
 
 # Join the head parts on their own, pivot at the neck, and tilt the whole head up so the face
 # reads from the elevated camera. The tilt bakes into the mesh at the final join.

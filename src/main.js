@@ -108,6 +108,7 @@ function begin() {
 
 function passTurn() {
   hud.hideConfirm(); selectedMove = null;
+  hand.close();            // private panels never carry across a turn change
   const result = endTurn(state, floor);
   movers[result.from.index]?.halt();
   syncViews(false);
@@ -325,6 +326,7 @@ hud.on('endTurn', doEndTurn);
 hud.on('search', onSearch);
 hud.on('trade', onTrade);
 hud.onHand(() => { if (running && !uiBusy()) hand.open(state, floor); });
+hud.on('private', () => { if (running && !uiBusy()) hand.open(state, floor); });
 hud.on('map', () => { if (!encounter.isOpen && !discard.isOpen && !overlays.endOpen) map.toggle(state, movers); });
 hud.onConfirm(
   () => { if (selectedMove) { discovery.go(selectedMove); selectedMove = null; hud.hideConfirm(); } },

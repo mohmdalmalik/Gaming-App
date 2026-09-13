@@ -103,7 +103,7 @@ const hud = await game(() => ({
 check(hud.hudShown && hud.hp === 3 && hud.strip === 5, `HUD: 3 health bars, 5 players in the top strip`);
 check(hud.panelPortrait && hud.stripPortraits === 5, `portraits render (panel + ${hud.stripPortraits} in the strip)`);
 check(Number(hud.handCount) >= 4 && hud.backs === Number(hud.handCount), `face-down hand shows the card count (${hud.handCount})`);
-check(hud.ap === 'AP 4 / 4', `AP starts at 4/4 (${hud.ap})`);
+check(/\b4\s*\/\s*4\b/.test(hud.ap), `AP starts at 4/4 (${hud.ap})`);
 check(hud.possessedCount === 1, 'exactly one player possessed');
 check(hud.handOk, 'every hand has a Lantern');
 check(hud.blink === 4, `4 usable doors blink from the central hall (${hud.blink})`);
@@ -174,7 +174,10 @@ await game(() => { const p = window.__game.activePlayer(); p.health = 1; p.actio
 await page.click('#hand-strip');
 await page.waitForTimeout(150);
 check(await game(() => !document.getElementById('hand-overlay').hidden), 'tapping the face-down hand opens the hand panel');
-await page.evaluate(() => [...document.querySelectorAll('#hand-cards .card-tile')].find(t => t.querySelector('.cname')?.textContent === 'Bandage')?.querySelector('button')?.click());
+// Select the Bandage tile, then use it from the detail pane.
+await page.evaluate(() => [...document.querySelectorAll('#hand-cards .card-tile')].find(t => t.querySelector('.cname')?.textContent === 'Bandage')?.click());
+await page.waitForTimeout(120);
+await page.evaluate(() => document.querySelector('#hand-detail .btn')?.click());
 await page.waitForTimeout(150);
 check((await active()).hp === 2, `bandage healed to ${(await active()).hp}`);
 await page.click('#btn-hand-close');

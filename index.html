@@ -24,50 +24,56 @@
     <div id="possess-tint" class="possess-tint" hidden></div>
 
     <div id="hud" hidden>
-      <!-- Top: the other players, small and unobtrusive; the active one is highlighted. -->
+      <!-- Top-left: where you are, and whether it's a safe zone. -->
+      <div class="hud-top-left">
+        <div id="room-name" class="place">—</div>
+        <div id="safe-badge" class="safe-badge" hidden><span class="shield">&#x1F6E1;&#xFE0E;</span>Safe zone</div>
+      </div>
+      <!-- Top-centre: the guests, with clear current-turn and next-player indicators. -->
       <div class="hud-top-center">
         <div id="players-strip" class="players-strip"></div>
       </div>
       <div class="hud-top-right">
-        <div id="room-name" class="pill small">—</div>
-        <div id="round" class="pill small">Round 1</div>
+        <div id="round" class="round-label">Round 1</div>
       </div>
 
-      <!-- Bottom-left: the active player — portrait (normal / possessed), name, health, AP. -->
+      <!-- Bottom-left: the active player — portrait (normal / possessed), name, health, actions. -->
       <div class="hud-bottom-left">
         <div id="player-panel" class="player-panel">
           <div id="portrait-slot" class="portrait-slot"></div>
           <div class="player-meta">
             <div id="active-player" class="player-name">—</div>
-            <div id="health" class="health" aria-label="Health"></div>
-            <div id="action-points" class="ap-line">AP —</div>
+            <div class="stat"><span class="stat-label">Health</span><div id="health" class="health" aria-label="Health"></div></div>
+            <div class="stat"><span class="stat-label">Actions</span><div id="ap-pips" class="ap-pips" aria-hidden="true"></div><span id="action-points" class="ap-count">— / —</span></div>
+            <button id="btn-private" class="private-link" type="button">&#x25B8; Private details</button>
           </div>
         </div>
       </div>
 
-      <!-- Bottom-centre: the active player's hand, face down, with a live count. Tap to open. -->
-      <div id="hand-strip" class="hand-strip" role="button" tabindex="0" aria-label="Open hand">
+      <!-- Bottom-centre: the active player's hand (fanned backs + count). Tap to open. -->
+      <div id="hand-strip" class="hand-strip" role="button" tabindex="0" aria-label="View hand">
         <div id="hand-backs" class="hand-backs"></div>
-        <div id="hand-count" class="hand-count" aria-label="Cards in hand">0</div>
+        <span class="hand-strip-label">View hand</span>
+        <span id="hand-count" class="hand-count" aria-label="Cards in hand">0</span>
       </div>
 
-      <!-- Bottom-right: actions, then the view controls. -->
+      <!-- Bottom-right: camera controls (kept separate) above the turn actions. -->
       <div class="hud-bottom-right">
-        <div class="action-row">
-          <button id="btn-search" class="btn" type="button">Search <span class="ap-cost">1</span></button>
-          <button id="btn-trade" class="btn" type="button" hidden>Trade</button>
-          <button id="btn-end-turn" class="btn wide" type="button">End turn</button>
-        </div>
         <div class="control-row">
-          <button id="btn-rotate-left" class="btn round" type="button" aria-label="Rotate view left">&#x21BA;</button>
-          <button id="btn-rotate-right" class="btn round" type="button" aria-label="Rotate view right">&#x21BB;</button>
-          <button id="btn-map" class="btn round map" type="button" aria-label="Open map">&#x1F5FA;&#xFE0E;</button>
+          <button id="btn-rotate-left" class="ctl round" type="button" aria-label="Rotate view left">&#x21BA;</button>
+          <button id="btn-rotate-right" class="ctl round" type="button" aria-label="Rotate view right">&#x21BB;</button>
+          <button id="btn-map" class="ctl map" type="button" aria-label="Open map"><span class="ico">&#x25A4;</span> Map</button>
+        </div>
+        <div class="action-row">
+          <button id="btn-search" class="btn action" type="button"><span class="btn-main">Search</span><span id="search-sub" class="btn-sub">1 action</span></button>
+          <button id="btn-trade" class="btn action" type="button" hidden><span class="btn-main">Trade</span><span class="btn-sub">Safe zone</span></button>
+          <button id="btn-end-turn" class="btn primary end" type="button"><span class="btn-main">End turn &#x203A;</span><span id="end-sub" class="btn-sub">Next: —</span></button>
         </div>
       </div>
 
       <div id="confirm-bar" class="confirm-bar" hidden>
         <span id="confirm-text">Move?</span>
-        <button id="btn-confirm-move" class="btn primary" type="button">Move · 1 AP</button>
+        <button id="btn-confirm-move" class="btn primary" type="button">Move &#183; 1 AP</button>
         <button id="btn-confirm-cancel" class="btn" type="button">Cancel</button>
       </div>
 
@@ -86,15 +92,20 @@
       </div>
     </div>
 
-    <!-- Hand panel -->
-    <div id="hand-overlay" class="overlay" hidden>
-      <div class="panel">
+    <!-- Hand: a collapsible bottom sheet that keeps the room in view above it -->
+    <div id="hand-overlay" class="overlay sheet" hidden>
+      <div class="panel sheet">
         <div class="panel-header">
-          <span id="hand-title">Hand</span>
+          <span id="hand-title" class="panel-title">Hand</span>
+          <span class="lock">&#x1F512; Private</span>
+          <span class="spacer"></span>
           <button id="btn-hand-close" class="btn round" type="button" aria-label="Close">&#x2715;</button>
         </div>
         <div id="hand-banner" class="banner" hidden></div>
-        <div id="hand-cards" class="cards"></div>
+        <div class="hand-body">
+          <div class="hand-cards-wrap"><div id="hand-cards" class="cards"></div></div>
+          <div id="hand-detail" class="hand-detail"></div>
+        </div>
         <div id="hand-note" class="panel-note"></div>
       </div>
     </div>
@@ -112,10 +123,15 @@
     <div id="map-overlay" class="overlay" hidden>
       <div class="map-panel">
         <div class="map-header">
-          <span>Explored rooms</span>
+          <span class="panel-title">Hotel floor plan</span>
           <button id="btn-map-close" class="btn round" type="button" aria-label="Close map">&#x2715;</button>
         </div>
         <canvas id="map-canvas"></canvas>
+        <div class="map-legend">
+          <span><span class="sw here"></span> You are here</span>
+          <span><span class="sw searched"></span> Searched</span>
+          <span><span class="sw frontier"></span> Unexplored door</span>
+        </div>
       </div>
     </div>
 

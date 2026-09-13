@@ -1,29 +1,46 @@
-// On-screen interface: the top players strip, the bottom-left active-player panel (portrait,
-// name, health, AP), the face-down hand with a live count, the action buttons, a move-confirm
-// bar and toasts. Portraits are placeholder SVGs (see ui/portrait.js) so real faces can drop
-// in later without changing this logic.
+// On-screen interface: the top guest strip (with current-turn / next indicators), the
+// bottom-left active-player panel (portrait, name, health segments, action pips), the fanned
+// hand opener with a live count, the turn-action buttons (with costs / reasons), a move-confirm
+// bar and toasts. Portraits are illustrated placeholders (see ui/portrait.js) so real art can
+// drop in later without changing this logic. Possession is never revealed on the public strip.
 import { activePlayer, nextPlayer, playersInRoom } from './game/state.js';
 import { canSearch } from './game/actions.js';
 import { rules } from './data/rules.js';
 import { lanternCount, countableCount } from './game/cards.js';
 import { makePortrait } from './ui/portrait.js';
 
-const MAX_BACKS = 8; // face-down cards drawn before we just rely on the count badge
+const MAX_BACKS = 8; // fanned face-down cards drawn before we rely on the count badge alone
+
+// Plain-language reason the Search button is unavailable right now.
+const SEARCH_REASON = {
+  notSearchable: 'Nothing to search here',
+  searched: 'Already searched',
+  dark: 'Need a Flashlight',
+  ap: 'No actions left',
+  empty: 'Nothing left to find',
+  finished: '—',
+};
 
 export function createHud(doc, cfg) {
   const el = {
     root: doc.getElementById('hud'),
     strip: doc.getElementById('players-strip'),
     room: doc.getElementById('room-name'),
+    safeBadge: doc.getElementById('safe-badge'),
     round: doc.getElementById('round'),
     panel: doc.getElementById('player-panel'),
     portrait: doc.getElementById('portrait-slot'),
     name: doc.getElementById('active-player'),
     health: doc.getElementById('health'),
+    apPips: doc.getElementById('ap-pips'),
     ap: doc.getElementById('action-points'),
+    private: doc.getElementById('btn-private'),
     search: doc.getElementById('btn-search'),
+    searchSub: doc.getElementById('search-sub'),
     trade: doc.getElementById('btn-trade'),
     endTurn: doc.getElementById('btn-end-turn'),
+    endMain: doc.querySelector('#btn-end-turn .btn-main'),
+    endSub: doc.getElementById('end-sub'),
     rotateLeft: doc.getElementById('btn-rotate-left'),
     rotateRight: doc.getElementById('btn-rotate-right'),
     map: doc.getElementById('btn-map'),
@@ -38,23 +55,23 @@ export function createHud(doc, cfg) {
     confirmCancel: doc.getElementById('btn-confirm-cancel'),
   };
   let toastTimer = 0;
-  let mini = null;            // the top-strip player cells
+  let mini = null;            // the top-strip guest cells
   let portraitKey = '';       // so the panel portrait only rebuilds when it must
 
-  // Top strip: one small (always-normal) portrait per player, built once for the roster.
+  // Top strip: one always-neutral portrait per guest, built once for the roster.
   function buildStrip(state) {
     el.strip.innerHTML = '';
     mini = state.players.map(p => {
       const cell = doc.createElement('div');
       cell.className = 'mini-player';
       cell.style.setProperty('--player-color', p.color);
-      const tag = doc.createElement('div'); tag.className = 'turn-tag';
+      const flag = doc.createElement('div'); flag.className = 'mini-flag';
       const port = doc.createElement('div'); port.className = 'mini-portrait';
       port.appendChild(makePortrait(doc, p, { possessed: false })); // never reveal roles here
       const name = doc.createElement('div'); name.className = 'mini-name'; name.textContent = p.name;
-      cell.append(tag, port, name);
+      cell.append(flag, port, name);
       el.strip.appendChild(cell);
-      return { cell, tag };
+      return { cell, flag };
     });
   }
 
@@ -65,6 +82,17 @@ export function createHud(doc, cfg) {
       bar.className = 'bar' + (i < n ? ' full' : '');
       el.health.appendChild(bar);
     }
+  }
+
+  function renderAp(n) {
+    el.apPips.innerHTML = '';
+    for (let i = 0; i < rules.actionPointsPerTurn; i++) {
+      const pip = doc.createElement('span');
+      pip.className = 'pip' + (i < n ? ' full' : '');
+      el.apPips.appendChild(pip);
+    }
+    el.ap.textContent = `${n} / ${rules.actionPointsPerTurn}`;
+    el.ap.classList.toggle('empty', n === 0);
   }
 
   function renderHand(count) {
@@ -85,7 +113,7 @@ export function createHud(doc, cfg) {
       const p = activePlayer(state);
       const next = nextPlayer(state);
 
-      // Active-player panel.
+      // Active-player panel (this is the current guest's own private view).
       el.panel.style.setProperty('--player-color', p.color);
       el.panel.classList.toggle('possessed', p.possessed);
       const key = `${p.index}:${p.possessed}:${p.outfit}`;
@@ -96,28 +124,40 @@ export function createHud(doc, cfg) {
       }
       el.name.textContent = p.name;
       renderHealth(p.health);
-      el.ap.textContent = `AP ${p.actionPoints} / ${rules.actionPointsPerTurn}`;
-      el.ap.classList.toggle('empty', p.actionPoints === 0);
+      renderAp(p.actionPoints);
       el.tint.hidden = !p.possessed;               // subtle possessed screen wash
 
-      el.room.textContent = floor.rooms.get(p.currentRoom)?.name ?? '—';
+      // Header.
+      const room = floor.rooms.get(p.currentRoom);
+      el.room.textContent = room?.name ?? '—';
+      el.safeBadge.hidden = !room?.safe;
       el.round.textContent = `Round ${state.round}`;
-      el.endTurn.textContent = state.finished ? 'Game over' : next && next !== p ? `End turn → ${next.name}` : 'End turn';
-      el.endTurn.disabled = state.finished;
-      el.search.disabled = !canSearch(state, floor, p).ok;
-      // Voluntary trade: offered only in a SAFE room when someone else is present to trade with.
-      const safeRoom = !!floor.rooms.get(p.currentRoom)?.safe;
+
+      // End turn (prominent; names the next guest).
+      if (state.finished) { el.endMain.textContent = 'Game over'; el.endSub.textContent = ''; el.endTurn.disabled = true; }
+      else { el.endMain.textContent = 'End turn ›'; el.endSub.textContent = next && next !== p ? `Next: ${next.name}` : 'Refill actions'; el.endTurn.disabled = false; }
+
+      // Search: cost when available, plain-language reason when not.
+      const gate = canSearch(state, floor, p);
+      el.search.disabled = !gate.ok;
+      el.searchSub.textContent = gate.ok ? '1 action' : (SEARCH_REASON[gate.reason] || 'Unavailable');
+
+      // Voluntary trade: only in a SAFE room when someone else is present to trade with.
+      const safeRoom = !!room?.safe;
       el.trade.hidden = !(safeRoom && !state.finished && playersInRoom(state, p.currentRoom, p.id).length > 0);
 
       // Public card count excludes Possession cards, so it can never reveal a possessed role.
       renderHand(countableCount(p.hand));
 
-      // Top strip.
+      // Top strip: current-turn + next-player indicators.
       if (!mini || mini.length !== state.players.length) buildStrip(state);
+      const nextIdx = !state.finished && next ? next.index : -1;
       state.players.forEach((q, i) => {
-        mini[i].cell.classList.toggle('active', i === state.activeIndex && !state.finished);
+        const active = i === state.activeIndex && !state.finished;
+        mini[i].cell.classList.toggle('active', active);
+        mini[i].cell.classList.toggle('next', i === nextIdx && !active);
         mini[i].cell.classList.toggle('dead', !q.alive);
-        mini[i].tag.textContent = (i === state.activeIndex && !state.finished) ? 'TURN' : '';
+        mini[i].flag.textContent = active ? 'Your turn' : (i === nextIdx ? 'Next' : '');
       });
     },
     lanternHint(player) { return `${lanternCount(player.hand)} / ${rules.lanternsToEscape} Lanterns`; },

@@ -71,6 +71,10 @@ new GLTFLoader().load(src, (gltf) => {
   else if (view === 'tq') { cam.position.set(d * 0.42, box.min.y + h * 0.82, d * 0.52); cam.lookAt(0, box.min.y + h * 0.72, 0); cam.fov = 26; }
   else if (view === 'side') { cam.position.set(d * 0.7, box.min.y + h * 0.55, 0.0); cam.lookAt(0, cy, 0); cam.fov = 30; }
   else if (view === 'back') { cam.position.set(0, box.min.y + h * 0.8, -d * 0.62); cam.lookAt(0, box.min.y + h * 0.74, 0); cam.fov = 26; }
+  else if (view === 'portrait') {   // tight bust for the interface portrait (charcoal plate)
+    scene.background = new THREE.Color('#171b27');
+    cam.position.set(0.05, box.min.y + h * 0.86, 2.15); cam.lookAt(0, box.min.y + h * 0.80, 0); cam.fov = 24;
+  }
   else if (view === 'gamescale') {  // true in-game size: pitch 56°, distance 13, fov 42 (config.js)
     const pitch = THREE.MathUtils.degToRad(56), D = 13;
     cam.position.set(0, Math.sin(pitch) * D, Math.cos(pitch) * D); cam.lookAt(0, 0, 0); cam.fov = 42;
@@ -82,8 +86,17 @@ new GLTFLoader().load(src, (gltf) => {
   mixer = new THREE.AnimationMixer(root);
   const clip = gltf.animations.find(a => a.name === clipName) || gltf.animations[0];
   if (clip) { action = mixer.clipAction(clip); action.play(); if (q.get('t') !== 'play') { mixer.setTime(t); } }
+  // Optional: project model-space points (x,y,z;x,y,z ...) to CSS pixels — used to place the
+  // "possessed" eye effect on the portrait exactly over the rendered eye.
+  const proj = [];
+  root.updateMatrixWorld(true); cam.updateMatrixWorld(true);   // project() needs current matrices
+  for (const p of (q.get('points') || '').split(';').filter(Boolean)) {
+    const [x, y, z] = p.split(',').map(Number);
+    const w = new THREE.Vector3(x, y, z); root.localToWorld(w); w.project(cam);
+    proj.push({ x: +((w.x + 1) / 2 * innerWidth).toFixed(1), y: +((1 - w.y) / 2 * innerHeight).toFixed(1) });
+  }
   window.__info = { ok: true, clips: gltf.animations.map(a => ({ name: a.name, duration: +a.duration.toFixed(3) })), meshes, tris: Math.round(tris),
-    height: +size.y.toFixed(3), width: +size.x.toFixed(3), depth: +size.z.toFixed(3), minY: +box.min.y.toFixed(3), materials: Object.fromEntries(mats) };
+    height: +size.y.toFixed(3), width: +size.x.toFixed(3), depth: +size.z.toFixed(3), minY: +box.min.y.toFixed(3), materials: Object.fromEntries(mats), points: proj };
 }, undefined, (err) => { window.__info = { ok: false, error: String(err && err.message || err) }; });
 
 renderer.setAnimationLoop(() => { if (mixer && q.get('t') === 'play') mixer.update(clock.getDelta()); renderer.render(scene, cam); });

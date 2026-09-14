@@ -112,7 +112,29 @@ Export path is derived from the repository root (`Path(__file__).resolve().paren
 hardcoded home directory.
 
 ## Completed increments
-- (none yet in this phase)
+1. `77cc0ca` — checkpoint doc, measured target spec, capture tool (`capture.mjs`), bpy helpers
+   (`victor_lib.py`), baseline gap analysis.
+2. Victor v2 model (`make_victor.py` rewrite, `preview_glb.{html,mjs}` previewer): designed skull +
+   hair cap with snapped hairline / part / quiff, tapered brows + moustache, lofted jacket with
+   conforming shirt V + peaked lapels, bow tie, capsule limbs with joint spheres, jointed rig, phased
+   walk, measured stride in GLB extras. 14,420 tris / 8 materials / 480 KB. Verified in the real game
+   at all 4 rotations (`shots/g6-r*-crop.png`, `shots/g6z-r0-crop.png`).
+   Iteration lessons: rotate parts about their OWN centre (an object-level rotation applied around
+   the world origin sent the quiff flying); thin panels need interior vertices projected onto the
+   curved chest or they sag behind it and vanish; the hair cap must receive the same shapers as the
+   skull or the skull pokes through; brows whose inner ends dip read as angry.
+3. Movement integration (`src/render/characterView.js`): the walk clip's phase is advanced by
+   distance travelled ÷ stride (stride read from the GLB extras, fallback in `characters.js`), so the
+   planted foot moves backward at exactly the ground speed at any speed; Idle↔Walk cross-fade
+   (~0.25 s game time); teleport guard; `view.debug()` hook. `tools/char-pipeline/walk_check.mjs`
+   drives short/long walks, turns, an interrupt and a doorway crossing from the real game and
+   verifies: stride in use 1.0832, phase-vs-distance error 0, mesh-vs-mover offset 0, no errors.
+   Headless SwiftShader runs ~3 fps, so wall-clock settle times there are not representative.
+4. Portraits from the model (`tools/char-pipeline/portrait.mjs` + `portrait_post.py`): a bust of the
+   actual GLB with the game's lighting/Lambert look → `assets/portraits/victor.jpg` (normal) and
+   `victor-possessed.jpg` (cold violet wash, vignette, glowing slit-pupil right eye drawn at the
+   projected eye position). Same filenames as before → `PORTRAIT_ART` unchanged; the public strip
+   still always requests the normal look. The painted portraits are replaced (owner-authorised).
 
 ## Failed attempts / lessons (keep — they save the next session time)
 - v1: tilting the head up to "catch" the camera exposed the bald crown → shiny bald egg from above.

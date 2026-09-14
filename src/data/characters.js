@@ -24,7 +24,9 @@ export const outfits = {
   tuxedo: { name: 'Tuxedo with bow tie', body: 'male', jacket: '#15151a', trousers: '#15151a', shirt: '#f3f1ea', neckwear: 'bow', neckwearColor: '#15151a', lapels: '#3a3a44',
     // Real rounded 3D guest (glTF with Idle/Walk clips). When present, characterView.js loads this
     // instead of building the placeholder box figure. Only Victor has one for this first review.
-    model: 'assets/characters/victor.glb', modelHeight: 1.8 },
+    // modelHeight places the active marker; strideLength is a fallback — the GLB carries the
+    // measured value in its extras (tools/char-pipeline/make_victor.py prints it).
+    model: 'assets/characters/victor.glb', modelHeight: 1.66, strideLength: 1.083 },
   dinnerJacket: { name: 'White dinner jacket', body: 'male', jacket: '#ece5d4', trousers: '#15151a', shirt: '#f7f5ef', neckwear: 'bow', neckwearColor: '#15151a', lapels: '#d5ccb8' },
   // Women: elegant, modest period dresses (silhouette: aline / column / full).
   dressEmerald: { name: 'Emerald A-line gown', body: 'female', bodice: '#1f6b4a', skirt: '#1f6b4a', skirtStyle: 'aline', sleeves: 'long', sash: '#c9a86a' },

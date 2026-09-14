@@ -60,8 +60,12 @@ export function createCharacterView(playerDef, cfg, scene) {
   const body = new THREE.Group();
   group.add(body);
 
-  // Model-animation state (used only when useModel).
+  // Model-animation state (used only when useModel). The walk clip is IN PLACE; its phase is driven
+  // by the distance the mover actually travelled divided by the clip's stride (metres per cycle,
+  // measured in Blender and carried in the GLB's extras), so the planted foot moves backward at
+  // exactly the ground speed and never slides — whatever the speed.
   let mixer = null, idleAction = null, walkAction = null, walkW = 0, prevX = null, prevZ = null;
+  let strideLength = outfit.strideLength || 1.0, walkDuration = 1;
   // Placeholder limbs (used only when !useModel).
   let arms = [], legs = [], skirt = null;
 
@@ -75,6 +79,7 @@ export function createCharacterView(playerDef, cfg, scene) {
     gltfLoader.load(outfit.model, (gltf) => {
       const root = gltf.scene;
       root.traverse(o => {
+        if (o.userData && typeof o.userData.strideLength === 'number') strideLength = o.userData.strideLength;
         if (!o.isMesh) return;
         o.frustumCulled = false;
         const flatten = (src) => {
@@ -92,7 +97,11 @@ export function createCharacterView(playerDef, cfg, scene) {
       const idle = gltf.animations.find(a => /idle/i.test(a.name)) || gltf.animations[0];
       const walk = gltf.animations.find(a => /walk/i.test(a.name)) || gltf.animations[1];
       if (idle) { idleAction = mixer.clipAction(idle); idleAction.play(); idleAction.setEffectiveWeight(1); }
-      if (walk) { walkAction = mixer.clipAction(walk); walkAction.play(); walkAction.setEffectiveWeight(0); }
+      if (walk) {
+        walkAction = mixer.clipAction(walk); walkAction.play(); walkAction.setEffectiveWeight(0);
+        walkAction.timeScale = 0;              // phase is advanced by distance in update(), not by time
+        walkDuration = walk.duration;
+      }
     }, undefined, (e) => console.warn('character model load failed:', outfit.model, e && e.message));
   } else {
     buildPlaceholder();
@@ -216,6 +225,10 @@ export function createCharacterView(playerDef, cfg, scene) {
     group,
     def: playerDef,
     outfit,
+    // Test/debug hook: what the animation is doing (stride in use, walk weight, walk phase 0..1).
+    debug() {
+      return { model: useModel, loaded: !!mixer, strideLength, walkDuration, walkW, walkPhase: walkAction ? walkAction.time / walkDuration : 0 };
+    },
     setActive(v) {
       active = v && !dead;
       marker.visible = active;
@@ -255,15 +268,17 @@ export function createCharacterView(playerDef, cfg, scene) {
       group.rotation.y = mover.heading;
 
       if (useModel) {
-        // Stride matched to actual ground speed; smooth cross-fade Idle <-> Walk.
+        // Walk phase from distance travelled / stride; smooth cross-fade Idle <-> Walk. A jump larger
+        // than half a stride in one frame is a teleport (restart / room placement), not a step.
         if (prevX === null) { prevX = mover.x; prevZ = mover.z; }
-        const speed = Math.hypot(mover.x - prevX, mover.z - prevZ) / Math.max(dt, 1e-4);
+        let dist = Math.hypot(mover.x - prevX, mover.z - prevZ);
         prevX = mover.x; prevZ = mover.z;
+        if (dist > strideLength * 0.5) dist = 0;
         const target = mover.walking ? 1 : 0;
-        walkW += (target - walkW) * Math.min(1, dt * 9);
+        walkW += (target - walkW) * Math.min(1, dt * 10);
         if (walkAction) {
           walkAction.setEffectiveWeight(walkW);
-          walkAction.timeScale = THREE.MathUtils.clamp(speed / cfg.player.speed, 0.5, 1.7);
+          if (dist > 0) walkAction.time = (walkAction.time + (dist / strideLength) * walkDuration) % walkDuration;
         }
         if (idleAction) idleAction.setEffectiveWeight(1 - walkW);
         if (mixer) mixer.update(dt);

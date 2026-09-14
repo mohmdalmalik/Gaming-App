@@ -4,7 +4,90 @@ _Living document. Updated after each meaningful increment so a new session (or a
 continue without redoing finished work. If you are resuming: read this whole file first, then check
 `git log` for the last working commit named below._
 
-## Goal of this phase (owner's brief, 2026-09-14)
+## ACTIVE SCOPE (owner's brief, 2026-09-14, later in the day): VICTOR'S APPEARANCE ONLY
+This supersedes the broader milestone below. Rebuild Victor's 3D look to closely match the owner's
+references: `tools/char-pipeline/ref/hotel-reference.jpg` (identity: the moustached man in the navy
+tuxedo), `ref/victor-sheet.png` (AI-generated turnaround: front / three-quarter / side / back / face
+close-ups / elevated — reconcile small inconsistencies into one coherent model; the front view is the
+neutral-proportion authority, the elevated panel is NOT a camera spec). Panels are cut from the sheet
+by `make_panels.py` into `ref/panels/` (gitignored, regenerable). No rooms, other characters, GUI or
+gameplay work until the owner approves Victor. Hotel lighting unchanged. Rig/animation reused.
+
+### Status: Victor v5 built, verified in the game, PRESENTED FOR REVIEW — do not proceed further
+- Branch `main`. Base commit `684ffd2`; this increment is the "Victor v5" commit right after it
+  (`git log -1`). Published version = working version (no separate experiment branch was needed).
+- Changed: `assets/characters/victor.glb` (v5), `assets/portraits/victor{,-possessed}.jpg` (re-rendered
+  from v5), `tools/char-pipeline/make_victor.py` (head/hair/body rewrite, CFG in % of height),
+  `victor_lib.py` (+ `shell`, `superellipse_pt`, `normal_of`, `lerp_table`), `preview_glb.{html,mjs}`
+  (+ `body@yaw` / `face@yaw` views, albedo-faithful neutral light, long lens), `portrait.mjs` (new eye
+  coordinates), NEW `compare.py`, `compare_head.py`, `make_panels.py`, `ref/`.
+
+### Measured proportions (sheet FRONT panel, % of standing height from the top; H = 1.66 m)
+hair top 0.2 · hairline 8.6 · brows 13.0 · eyes 17.3 · nose ball 20.3 · moustache 22.5–26 (centre
+23.7) · mouth 27.3 · **chin bottom 31.5** (the chin sits on the collar; earlier 28.5 % was the jaw,
+not the chin) · ears 16–27 (centre 21.2) · collar top ~32 · shoulder point 38–40 · elbow 55.5 · wrist
+66.5 · hands end 72.5 = jacket hem · knee 86.5 · ankle 96. Widths (m): skull 0.378 at the cheekbones,
+ears to 0.485, hair 0.45 at the temples; jacket 0.515 at the shoulders, 0.465 waist, 0.50 hem; legs
+±0.114, shins 0.155; shoes 0.42 long × 0.20 wide × 0.075 tall, splayed 15° outward. Depth (SIDE
+close-up): forehead 0.233 in front of the skull axis, occiput 0.215 behind; nose +0.043 from the face
+plane, moustache +0.02, chin −0.015; hair quiff 0.024 in front of the forehead, hair top flat over
+0.24 m. Features: eyes 0.040 × 0.068 at ±0.071; brows 0.036→0.116, 0.034 thick; nose ball 0.080 ×
+0.064; moustache 0.20 wide, 0.062 thick; ears 0.115 tall discs standing 0.05 out. All in `CFG` +
+the `W/DF/DB/E_TAB` (skull) and `HW/HF/HB/HE_TAB` (hair) tables in `make_victor.py`.
+
+### Design decisions
+- Skull = superellipse shell driven by height tables (half-width, front depth, back depth, squareness)
+  read off the sheet; features are placed ON the analytic face surface (`on_face`), so nothing floats.
+- Hair = its OWN cap with measured front-width and side front/back-depth tables, a rounded lip at
+  the hairline, never thinner than 14 mm over the skull; swept to HIS RIGHT (+16 mm), rounded lobe over
+  his right temple, part groove on HIS LEFT with the hair combed flat beyond it, three soft lock
+  grooves, sideburn wisps to ear-centre height, nape at 27.8 %.
+- Face: no highlight beads, no nose bridge stub (ball only), moustache as two flattened teardrop
+  tubes + a centre fill under the nose, bold tapered brows, ear discs angled 12° forward.
+- Body: sloping jacket shoulders from the collar (no shoulder-ball bulge), jacket collar (satin) round
+  the neck with 8 mm of shirt collar showing, bow tie at the chin, narrower shirt V, hem 0.24 deep.
+- Materials unchanged in kind (7 flat sRGB colours → Lambert on load); hair lightened to `#382920` so
+  the sculpted forms read; skin `#eebe95` kept (renders peach under the hall's warm lights).
+- Neutral preview light is now albedo-faithful (Lambert divides by π; hemisphere 1.5 + key 2.3) so
+  material colours can be judged before the game's lighting is applied.
+
+### Silhouette match vs the sheet (`compare.py`, equal displayed height, bands every 4 %)
+front IoU 0.855 · side 0.694* · back 0.880 · three-quarter 0.799 (v4 was 0.843 / 0.819 / 0.814).
+Head close-ups (`compare_head.py`): front widths within ±2 % of head height at every band except
+the ear band (ours reach 3 % lower); side profile within 0.02 of head height everywhere except the
+nape (ours 0.05 fuller). *Side IoU is dragged down by the shoe: the sheet's shoe is 0.45 m long but
+drawn low and thin; ours is 0.42 m and reads taller from a level camera. Front/back are the
+authority for proportions.
+
+### Verification (real game page, headless Chromium/SwiftShader)
+- `capture.mjs --rot 4` at 1194×834@2: `shots/v5g-r{0..3}.png` (+ crops, `v5g-rotations-sheet.png`).
+  Feet on the floor, faces the heading, fits the doorways, no clipping at the neck/elbows/knees.
+- `walk_check.mjs`: phase advances by distance ÷ stride (0.700 m), mesh on the mover, doorway
+  crossing OK, no console errors (wall-clock settle times are meaningless at ~3 fps).
+- `record_smooth.mjs` → `tools/char-pipeline/victor-walk.webm` (30 fps game-time stepped).
+- `scene_stats.mjs`: 339 draw calls, 48,026 triangles, 13 programs with Victor loaded.
+- Budget: victor.glb **21,020 tris / 7 materials / 684,296 bytes** (v2: 14,420 / 8 / 480 KB). Fine
+  for one hero character on an iPad; not measured on a real iPad.
+- Tests: `node tests/rules-check.mjs && node tests/logic-check.mjs && node tests/browser-test.mjs`.
+
+### Remaining differences (honest)
+1. The sheet's hair is a sculpted mass of 3–4 distinct locks; ours is one measured cap with shallow
+   grooves — right silhouette, simpler surface. At game zoom this is invisible; in the portrait it is
+   visible.
+2. Ears are plain angled discs (no helix/bowl relief). Hands are mitts with a thumb (fingers not cut).
+3. Arms hang straight; the sheet's bend slightly at the elbow with the hands turned in.
+4. The sheet is soft-shaded (ambient occlusion, gradients); the game is flat Lambert by design.
+5. The AI sheet is asymmetric (his right side ~3 cm wider from crown to jaw, ears unequal); the
+   model is symmetric except the hair sweep. The sheet's back panel is drawn ~7 % larger than its
+   front; the front was used.
+
+### Next concrete action
+Wait for the owner's review. If approved: commit any tweaks, then continue the paused milestone
+(other guests, rooms, GUI). If changes are requested: adjust `CFG` / tables in `make_victor.py`,
+rebuild, run the loop (`preview_glb.mjs … --views body@0,body@90,body@180,face@0,face@35,face@90`,
+`compare.py`, `compare_head.py`, `capture.mjs`), update this file, commit to main.
+
+## Goal of the previous phase (owner's brief, 2026-09-14, morning)
 Bring **Victor** (the first real 3D guest), his **movement** and the **player interface** up to the
 attached cartoon target image so they form a convincing, consistent visual result. Scope for THIS phase
 only: Victor's model + matching portrait; standing / walking / turning / stopping; the interface
@@ -150,6 +233,18 @@ hardcoded home directory.
 - v1: `MeshStandardMaterial` specular blew a hotspot on the round head under the warm overhead light;
   matte Lambert conversion on load (same as the furniture loader) fixed it.
 
+- (v5) The shoe splay had the wrong sign since v4 (`-s * splay` rotated the toes INWARD, so both shoes
+  merged into one slab in the front view). Check silhouettes numerically — it was visible only as a
+  0.67 width ratio at the 98 % band.
+- (v5) The sheet's chin is at 31.5 % of height, not 28.5 %: the earlier number was the jaw corner
+  (the chin hides the neck). Re-measure landmarks per row before trusting a band table.
+- (v5) `MeshLambertMaterial` divides by π: a "neutral" hemisphere 1.0 + key 1.6 renders albedo at
+  ~0.7×, which is why the peach skin looked tan. Judge colours only under the albedo-faithful preview.
+- (v5) A single offset-shell hair with a thickness field jaggs at the hairline; giving the hair its
+  own cap parameterisation (rows follow the hairline, a rounded lip, hidden inner skin) fixed it.
+- (v5) The AI turnaround is not self-consistent (asymmetric head, back panel ~7 % larger): reconcile
+  to the front panel and the face close-ups, don't chase every panel.
+
 ## Unresolved problems / honest limitations
 - Hairline shows slight stair-stepping at the temples in the portrait close-up (sphere row density);
   invisible at game size. Fix if wanted: denser rows near the hairline or a lofted cap.
@@ -180,9 +275,11 @@ automated checks, not iPad testing). Under `tools/char-pipeline/shots/` (gitigno
   41,426 tris, 13 programs (`scene_stats.mjs`).
 
 ## Next concrete action
-Phase presented for the owner's visual review (2026-09-14). Do NOT start the other characters or
-rooms until approved. If feedback arrives: adjust `make_victor.py` parameters / `styles.css`, rebuild,
-re-run `capture.mjs` + `walk_check.mjs`, commit.
+See "Status: Victor v5" at the top: Victor's appearance pass is presented for the owner's review
+(2026-09-14, evening). Do NOT start the other characters, rooms or GUI work until approved. If
+feedback arrives: adjust `CFG` / the skull and hair tables in `make_victor.py`, rebuild, re-run the
+v5 loop (`preview_glb.mjs`, `compare.py`, `compare_head.py`, `capture.mjs`, `walk_check.mjs`,
+`portrait.mjs`), update the status section, commit to main.
 
 ## Owner decisions pending
 - (none yet)

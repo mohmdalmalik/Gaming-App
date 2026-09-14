@@ -39,6 +39,7 @@ async function shot(name, view, yaw = 0) {
 }
 for (const v of VIEWS) {
   if (v === 'turn') { for (let i = 0; i < 4; i++) await shot(`turn${i}`, 'game', i * 90); }
+  else if (v.includes('@')) { const [name, yaw] = v.split('@'); await shot(`${name}-${yaw}`, name, +yaw); }   // e.g. body@35
   else await shot(v, v);
 }
 console.log('errors:', errs.length ? errs.join(' | ') : 'none');

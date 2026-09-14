@@ -1,19 +1,22 @@
-# Build "Victor" v2 — a rounded, cartoon-style hotel guest in a dark tuxedo — model + jointed rig +
-# Idle/Walk animations, exported as a lightweight .glb. Headless Blender (bpy module).
+# Build "Victor" v3 — rebuilt to match the owner's reference sheet (tools/char-pipeline/ref/).
+#   python3 tools/char-pipeline/make_victor.py   -> assets/characters/victor.glb
 #
-#   python3 tools/char-pipeline/make_victor.py            -> assets/characters/victor.glb
+# Every proportion comes from CFG below, measured on the sheet's neutral FRONT/SIDE/BACK panels
+# (row-width profiles, see docs/CHARACTER_GUI_CHECKPOINT.md "Reference, measured v3"). Heights are
+# fractions of the standing height mapped to H metres.
 #
-# Design (see docs/CHARACTER_GUI_CHECKPOINT.md, "The target, measured"):
-#   ~2.9 heads tall, shoulders ~1.25x head width, torso 29 %, legs 32 %, head 36 % of height.
-#   Head: a UV sphere shaped into a skull (cheeks, jaw taper, chin) with a hair CAP that owns the crown,
-#   a side part, a swept quiff; brows + moustache are tapered tubes; eyes/nose/ears/mouth sit on the
-#   skull surface (placed with the analytic surface function, so nothing floats).
-#   Body: a lofted tailored jacket (rounded shoulders, waist, hem) with lapels / shirt V / bow tie that
-#   CONFORM to the chest; capsule limb segments with joint spheres so elbows and knees bend cleanly
-#   with rigid weights. Colours are sRGB hex -> linear (the game converts to matte Lambert on load).
-#   Walk is authored IN PLACE with contact / passing / lift phases; the cycle's stride length is
-#   measured from the posed feet and stored in the GLB extras (userData.strideLength) so the game can
-#   match cadence to the distance actually travelled.
+# Construction (all deterministic bmesh maths in victor_lib):
+#   skull  = parametric shell: superellipse cross-sections whose half-width, front depth, back depth
+#            and squareness are HEIGHT TABLES (softly squared face, defined cheeks, rounded chin)
+#   hair   = a second shell offset from the skull along its normal by a THICKNESS FIELD (thin sides
+#            and back, a front sweep peaking over the forehead toward his right, a part step on his
+#            left, sideburns; negative below the hairline so the cap tucks inside the skin: no holes,
+#            no jagged intersections)
+#   face   = eyes / brows / nose / moustache / mouth / ears placed ON the skull surface function
+#   body   = lofted jacket (slim depth, waist, long hem), conforming shirt V + peaked lapels, bow tie,
+#            capsule limbs with joint spheres, cuffs, mitt hands with thumbs, lofted shoes
+#   rig    = same joint set as v2 (shoulder/upperarm/forearm/hand, thigh/shin/foot, hips/spine/neck/
+#            head); Idle + Walk re-authored on the new joints; stride measured and stored in extras.
 import sys, os, math
 from pathlib import Path
 import bpy, bmesh, addon_utils
@@ -31,54 +34,275 @@ except Exception as e:
 bpy.ops.wm.read_factory_settings(use_empty=True)
 scene = bpy.context.scene
 
-# ---- proportions (metres; Blender Z up; character faces -Y) ---------------------------------
-H_TOTAL = 1.66
-GROUND = 0.0
-ANKLE = 0.075; KNEE = 0.33; HIPJ = 0.62          # leg joints
-HEM = 0.60; WAIST = 0.82; CHEST = 0.96; SH = 1.04; SHTOP = 1.09; NECKB = 1.10   # jacket / torso
-HEADC = 1.36; HR = 0.245; HSX, HSY, HSZ = 1.0, 0.92, 1.02   # skull centre, radius, per-axis scale
-LEGX = 0.115; SHOULDER_X = 0.275; ELBOW = 0.79; WRIST = 0.60
-ARM_OUT = 0.045                                   # hands sit a little outward/forward (relaxed A-pose)
+# =============================================================================================
+# CONFIG — measured relationships (fractions of standing height unless noted). Blender Z up,
+# character faces -Y, HIS right is -X, HIS left is +X.
+# =============================================================================================
+H = 1.66
+def zp(pct): return H * (1.0 - pct / 100.0)         # z of a point at pct of height from the TOP
+CFG = dict(
+    # ---- head. Sheet FRONT panel, measured as % of standing height from the top (chin sits on the
+    #      collar; the neck is hidden): hair top 0.2, hairline 8.6, brows 13.0, eyes 17.6, nose ball 21.0,
+    #      moustache 22.5-26 (centre 24.2), mouth 27.3, chin bottom 31.5, ears 16-27 (centre 21.5).
+    #      Skull top is hidden under the hair (~3.8 %). Width: skin 0.236 H at the cheekbones, ears to 0.29 H,
+    #      hair 0.285 H at the temples. Depth (SIDE close-up): forehead 0.233 in front of the skull axis,
+    #      occiput 0.215 behind, nose tip +0.043 from the face plane, moustache +0.020, chin -0.015.
+    z_hair_top=zp(0.2), z_skull_top=zp(3.8), z_hairline=zp(8.6), z_brow=zp(13.0), z_eye=zp(17.3),
+    z_nose=zp(20.3), z_moustache=zp(23.7), z_mouth=zp(27.3), z_chin=zp(31.5), z_ear=zp(21.2),
+    skull_half_w=0.196,
+    ear_h=0.115, ear_w=0.078, ear_out=0.050, ear_y=0.030,
+    eye_x=0.071, eye_w=0.040, eye_h=0.068,
+    brow_x0=0.040, brow_x1=0.116, brow_thick=0.034, brow_arch=0.018,
+    nose_w=0.080, nose_h=0.064, nose_out=0.043,
+    mo_w=0.200, mo_thick=0.062, mo_out=0.020,
+    mouth_w=0.060,
+    # ---- neck / shoulders / torso (FRONT: collar top ~32 %, shoulders 36-40 %, jacket 0.326 H wide;
+    #      SIDE: collar region <= 0.24 deep, chest 0.30 deep; hem 72.5 %)
+    neck_r=0.105, neck_y=-0.03, z_shoulder_top=zp(35.5), z_shoulder_joint=zp(40.0), shoulder_x=0.222,
+    jacket_w_shoulder=0.515, jacket_d_chest=0.300, jacket_w_waist=0.465, z_waist=zp(58.0),
+    jacket_w_hem=0.500, jacket_d_hem=0.240, z_hem=zp(72.5),
+    # ---- arms (FRONT: hands end at 72 %, hand centres +-0.335; elbow ~55 %)
+    upperarm_r=0.068, forearm_r=0.058, z_elbow=zp(55.5), z_wrist=zp(66.5), z_hand_end=zp(72.5),
+    hand_x=0.335, hand_len=0.115, hand_w=0.092,
+    # ---- legs (FRONT: two legs span 0.23 H; SIDE: thigh 0.135 H deep; knee ~86 %, ankle 96 %;
+    #      shoes 0.05 H tall, 0.185 H long, both together 0.30 H wide with the splay)
+    leg_x=0.114, thigh_w=0.160, thigh_d=0.190, shin_w=0.155, shin_d=0.155,
+    z_hip_joint=zp(74.0), z_knee=zp(86.5), z_ankle=zp(96.0),
+    shoe_len=0.420, shoe_w=0.200, shoe_h=0.075, shoe_splay=0.26,
+)
+C = CFG
+# Skull tables by f (0 = chin bottom, 1 = skull top): half-width, front depth, back depth (from the
+# skull axis x=y=0), squareness. Values are metres, read off the sheet (see CFG comment).
+zc, zt = C['z_chin'], C['z_skull_top']
+def zz(f): return zc + (zt - zc) * f
+W_TAB  = [(zz(f), w) for f, w in [(0, 0), (0.02, 0.098), (0.058, 0.114), (0.112, 0.140), (0.17, 0.158), (0.227, 0.169),
+          (0.285, 0.178), (0.343, 0.184), (0.40, 0.188), (0.455, 0.189), (0.50, 0.189), (0.566, 0.189), (0.624, 0.187),
+          (0.682, 0.184), (0.74, 0.180), (0.794, 0.174), (0.851, 0.162), (0.91, 0.138), (0.967, 0.085), (1, 0)]]
+DF_TAB = [(zz(f), d) for f, d in [(0, 0), (0.02, 0.190), (0.058, 0.213), (0.112, 0.222), (0.17, 0.226), (0.227, 0.229),
+          (0.285, 0.231), (0.343, 0.233), (0.60, 0.233), (0.682, 0.232), (0.74, 0.230), (0.794, 0.226), (0.851, 0.216),
+          (0.91, 0.185), (0.967, 0.115), (1, 0)]]
+DB_TAB = [(zz(f), d) for f, d in [(0, 0), (0.02, 0.050), (0.058, 0.062), (0.112, 0.075), (0.17, 0.088), (0.227, 0.108),
+          (0.285, 0.135), (0.343, 0.150), (0.40, 0.165), (0.455, 0.180), (0.50, 0.195), (0.566, 0.208), (0.624, 0.213),
+          (0.682, 0.215), (0.74, 0.213), (0.794, 0.205), (0.851, 0.190), (0.91, 0.160), (0.967, 0.100), (1, 0)]]
+E_TAB  = [(zz(f), e) for f, e in [(0, 2.2), (0.06, 2.35), (0.17, 2.5), (0.30, 2.65), (0.45, 2.8), (0.60, 2.85), (0.75, 2.75),
+          (0.88, 2.5), (1, 2.2)]]
+
+def T(z, tab): return L.lerp_table(z, tab)
+
+def skull_at(u, z):
+    """Skull surface point at longitude u (0 front, 0.25 his right = -X, 0.5 back) and height z."""
+    w = T(z, W_TAB); df = T(z, DF_TAB); db = T(z, DB_TAB); e = T(z, E_TAB); k = 2.0 / e
+    t = 2 * math.pi * u + math.pi / 2
+    c, s = math.cos(t), math.sin(t)
+    x = math.copysign(abs(c) ** k, c) * w
+    y = -(abs(s) ** k) * df if s >= 0 else (abs(s) ** k) * db
+    return Vector((x, y, z))
+
+def skull_pt(u, v):
+    """Shell function: v in [0,1], 0 = top pole, 1 = chin pole (cosine-spaced rows)."""
+    if v <= 0.0: return Vector((0.0, -0.02, zt))
+    if v >= 1.0: return Vector((0.0, -0.06, zc))
+    z = zt - (zt - zc) * (0.5 - 0.5 * math.cos(math.pi * v))
+    return skull_at(u, z)
+
+def face_y(x, z):
+    """Front skin surface at (x, z) — for placing features ON the face. None if outside."""
+    w = T(z, W_TAB); df = T(z, DF_TAB); e = T(z, E_TAB); k = 2.0 / e
+    if w <= 1e-4 or abs(x) >= w: return None
+    c = (abs(x) / w) ** (1 / k); s = math.sqrt(max(0.0, 1 - c * c))
+    return -(s ** k) * df
+
+def face_normal(x, z):
+    e = 0.004
+    yx1, yx0 = face_y(min(x + e, T(z, W_TAB) - 1e-3), z), face_y(max(x - e, -T(z, W_TAB) + 1e-3), z)
+    yz1, yz0 = face_y(x, z + e), face_y(x, z - e)
+    if None in (yx1, yx0, yz1, yz0): return Vector((0, -1, 0))
+    n = Vector((-(yx1 - yx0) / (2 * e), -1.0, -(yz1 - yz0) / (2 * e)))   # front points -Y
+    return n.normalized()
+
+def on_face(x, z, lift=0.0):
+    y = face_y(x, z)
+    if y is None: y = -T(z, DF_TAB)
+    return Vector((x, y, z)) + face_normal(x, z) * lift
+
+def flatten_to_face(ob, factor):
+    """Compress a feature's depth toward the face surface (keeps its outline, thins its relief)."""
+    for v in ob.data.vertices:
+        y0 = face_y(v.co.x, v.co.z)
+        if y0 is None: continue
+        v.co.y = y0 + (v.co.y - y0) * factor
+    ob.data.update()
 
 # ---- materials -------------------------------------------------------------------------------
 M = {
-    'skin':   L.solid_material('Skin',   '#e9bb92'),
-    'hair':   L.solid_material('Hair',   '#22170f'),
-    'jacket': L.solid_material('Jacket', '#1e2c4b'),   # dark navy tuxedo
-    'lapel':  L.solid_material('Lapel',  '#2b3b60'),   # satin lapels: a shade lighter
-    'shirt':  L.solid_material('Shirt',  '#f1ebdc'),
-    'black':  L.solid_material('Black',  '#101014'),   # bow tie, shoes
-    'dark':   L.solid_material('Dark',   '#1a1410'),   # brows, moustache, eyes, mouth
-    'ivory':  L.solid_material('Ivory',  '#fff7e6'),   # eye highlights
+    'skin':   L.solid_material('Skin',   '#eebe95'),   # warm peach
+    'hair':   L.solid_material('Hair',   '#382920'),   # dark espresso (sculpted forms need a little value)
+    'jacket': L.solid_material('Jacket', '#1f2c50'),   # midnight navy
+    'lapel':  L.solid_material('Lapel',  '#161d36'),   # satin facing: a shade darker than the cloth
+    'shirt':  L.solid_material('Shirt',  '#f3eee2'),   # ivory
+    'black':  L.solid_material('Black',  '#111116'),   # bow tie, shoes, buttons
+    'dark':   L.solid_material('Dark',   '#221812'),   # brows, moustache, eyes, mouth (near the hair tone)
 }
-parts = []   # (object, bone)
+parts = []
 def add(ob, mat, bone):
     L.assign(ob, M[mat], bone); parts.append(ob); return ob
 
-# ---- analytic surfaces (for placing features ON the skull / chest) -------------------------
-def jaw_scale(z):
-    """Per-height (x, y) multipliers giving cheeks + a tapered jaw/chin below the eye line."""
-    t = max(0.0, (HEADC - 0.04 - z) / 0.30)      # 0 at the eye line, 1 at the chin
-    return (1.0 - 0.27 * t * t, 1.0 - 0.18 * t * t)
+# =============================================================================================
+# HEAD
+# =============================================================================================
+skull = L.shell('Skull', skull_pt, nlon=56, nlat=36, warp_u=0.08)
+add(skull, 'skin', 'head')
+# neck: a short thick cylinder, set a little forward so the nape curves in; hidden by chin and collar
+add(L.loft('Neck', [dict(z=C['z_shoulder_top'] - 0.03, w=2*C['neck_r'], d=2*C['neck_r']*0.92, r=1.0, y=C['neck_y']),
+                    dict(z=C['z_chin'] + 0.05, w=2*C['neck_r']*0.92, d=2*C['neck_r']*0.86, r=1.0, y=C['neck_y'])], n=18), 'skin', 'neck')
 
-def skull_y(x, z):
-    """Front (-Y) surface of the shaped skull at (x, z); returns None outside."""
-    rz = (z - HEADC) / (HR * HSZ)
-    if abs(rz) >= 1.0: return None
-    rr = HR * math.sqrt(1 - rz * rz)
-    sx, sy = jaw_scale(z)
-    ax, ay = rr * HSX * sx, rr * HSY * sy
-    if abs(x) >= ax: return None
-    return -ay * math.sqrt(1 - (x / ax) ** 2)
+# ---- ears: big rounded discs standing out from the skull at nose level, slightly behind the axis
+for s in (1, -1):
+    ear = L.uvsphere(f'Ear{s}', 1.0, (0, 0, 0), scale=(0.030, C['ear_w'] * 0.5, C['ear_h'] * 0.5), u=18, v=14)
+    L.rotate_verts(ear, (0.0, 0.0, s * 0.22))
+    sk = T(C['z_ear'], W_TAB)
+    L.translate_verts(ear, (s * (sk + C['ear_out'] - 0.030 + 0.006), C['ear_y'], C['z_ear']))
+    add(ear, 'skin', 'head')
+    # inner bowl: a slightly darker-lit concavity read comes from a smaller disc set into the outer one
+    bowl = L.uvsphere(f'EarBowl{s}', 1.0, (0, 0, 0), scale=(0.012, C['ear_w'] * 0.30, C['ear_h'] * 0.30), u=12, v=10)
+    L.translate_verts(bowl, (s * (sk + C['ear_out'] + 0.006 - 0.004), C['ear_y'] + 0.004, C['z_ear'] - 0.004))
+    add(bowl, 'skin', 'head')
 
+# ---- eyes: dark vertical ovals set flush into the face, no highlight beads
+for s in (1, -1):
+    p = on_face(s * C['eye_x'], C['z_eye'], 0.006)
+    eye = L.uvsphere(f'Eye{s}', 1.0, (0, 0, 0), scale=(C['eye_w'] * 0.5, 0.014, C['eye_h'] * 0.5), u=18, v=14)
+    L.translate_verts(eye, p)
+    add(eye, 'dark', 'head')
+
+# ---- brows: bold, curved, rounded inner end, tapered outer end; the arch peaks a third of the way out
+for s in (1, -1):
+    zb = C['z_brow']; x0, x1 = C['brow_x0'], C['brow_x1']; a = C['brow_arch']
+    pts = L.bezier((s * x0, 0, zb - 0.006), (s * (x0 + 0.33 * (x1 - x0)), 0, zb + a), (s * (x0 + 0.67 * (x1 - x0)), 0, zb + a), (s * x1, 0, zb - 0.012), n=14)
+    pts = [tuple(on_face(x, z, 0.006)) for x, _, z in pts]
+    rad = [C['brow_thick'] * 0.5 * (0.80 + 0.20 * math.sin(math.pi * min(1.0, i / 7)) if i < 8 else 0.28 + 0.72 * (1 - ((i - 8) / 6) ** 1.25)) for i in range(15)]
+    br = L.tube(f'Brow{s}', pts, rad, n=10); flatten_to_face(br, 0.50)
+    add(br, 'dark', 'head')
+
+# ---- nose: a round ball sitting on the moustache, with a short soft bridge up between the eyes
+ball_c = on_face(0, C['z_nose'], C['nose_out'] - 0.030)
+nose = L.uvsphere('NoseBall', 1.0, (0, 0, 0), scale=(C['nose_w'] * 0.5, 0.030, C['nose_h'] * 0.5), u=20, v=14)
+for v in nose.data.vertices:
+    if v.co.z > 0: v.co.z *= 1.15; v.co.x *= 0.92
+L.translate_verts(nose, ball_c); add(nose, 'skin', 'head')
+
+# ---- moustache: two full teardrop lobes meeting under the nose, thick near the centre, tapering to
+#      slightly raised outer tips; flattened so it stands ~2 cm off the face
+for s in (1, -1):
+    zm = C['z_moustache']; hw = C['mo_w'] * 0.5
+    pts = L.bezier((s * 0.000, 0, zm + 0.002), (s * hw * 0.38, 0, zm - 0.008), (s * hw * 0.74, 0, zm - 0.004), (s * hw, 0, zm + 0.016), n=16)
+    pts = [tuple(on_face(x, z, 0.006)) for x, _, z in pts]
+    rad = [C['mo_thick'] * 0.5 * (1.0 - 0.76 * L.smoothstep((i / 16 - 0.28) / 0.72) ** 1.15) for i in range(17)]
+    mo = L.tube(f'Moustache{s}', pts, rad, n=12); flatten_to_face(mo, 0.55)
+    add(mo, 'dark', 'head')
+
+mc = L.uvsphere('MoustacheCentre', 1.0, (0, 0, 0), scale=(0.022, 0.012, C['mo_thick'] * 0.40), u=12, v=10)
+L.translate_verts(mc, on_face(0, C['z_moustache'] - 0.004, 0.006)); add(mc, 'dark', 'head')
+
+# ---- mouth: a subtle short smile under the moustache
+pts = L.bezier((-C['mouth_w'] * 0.5, 0, C['z_mouth'] + 0.006), (-0.012, 0, C['z_mouth'] - 0.004), (0.012, 0, C['z_mouth'] - 0.004), (C['mouth_w'] * 0.5, 0, C['z_mouth'] + 0.006), n=8)
+pts = [tuple(on_face(x, z, 0.002)) for x, _, z in pts]
+add(L.tube('Mouth', pts, [0.0040 * t for t in L.taper(8, 0.5, 1.0, 0.5)], n=6), 'dark', 'head')
+
+# =============================================================================================
+# HAIR — a cap with its own measured silhouette (front width, side front/back depth by height),
+# never thinner than 14 mm over the skull, swept to HIS RIGHT with a side part on HIS LEFT
+# =============================================================================================
+def _ztab(rows): return sorted([(zp(p), v) for p, v in rows])
+HW_TAB = _ztab([(0.2, 0.09), (0.9, 0.125), (1.6, 0.145), (3.2, 0.165), (4.7, 0.183), (6.3, 0.208), (7.9, 0.224), (9.5, 0.226),
+                (11.0, 0.218), (12.6, 0.209), (14.2, 0.204), (15.8, 0.198), (17.3, 0.193), (19.0, 0.188), (20.5, 0.184),
+                (22.0, 0.176), (23.6, 0.163), (25.2, 0.148), (26.8, 0.130), (28.5, 0.112), (31.5, 0.09)])
+HF_TAB = _ztab([(0.2, 0.16), (0.9, 0.222), (1.6, 0.248), (3.2, 0.255), (4.7, 0.249), (6.3, 0.236), (7.9, 0.212), (9.5, 0.20), (31.5, 0.20)])
+HB_TAB = _ztab([(0.2, 0.02), (0.9, 0.045), (1.6, 0.071), (3.2, 0.110), (4.7, 0.138), (6.3, 0.150), (7.9, 0.165), (9.5, 0.192),
+                (11.0, 0.224), (12.6, 0.234), (14.2, 0.230), (15.8, 0.222), (17.3, 0.211), (19.0, 0.198), (20.5, 0.182),
+                (22.0, 0.165), (23.6, 0.146), (25.2, 0.118), (26.8, 0.098), (28.5, 0.078), (31.5, 0.07)])
+HE_TAB = _ztab([(0.2, 2.3), (1.6, 2.6), (4.7, 2.75), (8.0, 2.75), (12.0, 2.7), (18.0, 2.6), (31.5, 2.5)])
+HAIR_MIN = 0.014
+
+def hairline_z(u):
+    """Bottom edge of the hair by longitude: forehead 8.6 %, temples (lower on HIS RIGHT where the sweep
+    lands), a sideburn lock down to the ear's centre, clear of the ear, then down to the nape."""
+    a = abs(((u + 0.5) % 1.0) - 0.5)          # 0 front .. 0.5 back
+    right = u < 0.5
+    z_front = C['z_hairline']; z_temple = zp(10.4) if right else zp(8.8)
+    z_sb = zp(21.5); z_ear = C['z_ear'] + C['ear_h'] * 0.5 + 0.008; z_behind = zp(20.0); z_nape = zp(27.8)
+    if a < 0.10:  return z_front + (z_temple - z_front) * L.smoothstep(a / 0.10)
+    if a < 0.135: return z_temple + (z_sb - z_temple) * L.smoothstep((a - 0.10) / 0.035)        # sideburn front edge
+    if a < 0.165: return z_sb                                                                     # sideburn
+    if a < 0.20:  return z_sb + (z_ear - z_sb) * L.smoothstep((a - 0.165) / 0.035)              # up over the ear
+    if a < 0.29:  return z_ear
+    if a < 0.40:  return z_ear + (z_nape - z_ear) * L.smoothstep((a - 0.29) / 0.11)              # behind the ear
+    return z_nape
+
+def hair_outer(u, z):
+    """Outer hair surface at longitude u and height z (never inside HAIR_MIN of the skull)."""
+    t = 2 * math.pi * u + math.pi / 2
+    c, s = math.cos(t), math.sin(t)
+    w = T(z, HW_TAB); df = T(z, HF_TAB); db = T(z, HB_TAB); e = T(z, HE_TAB); k = 2.0 / e
+    x = math.copysign(abs(c) ** k, c) * w
+    y = -(abs(s) ** k) * df if s >= 0 else (abs(s) ** k) * db
+    top = L.smoothstep((C['z_hair_top'] - z) / 0.02)                       # 0 at the very top -> 1 below
+    band = L.smoothstep((zp(1.5) - z) / 0.04) * L.smoothstep((z - zp(16.0)) / 0.05)   # 2..14 %: the sweep's mass
+    # sweep: HIS RIGHT (-X) side fuller (about 2.5 cm), with a rounded lobe in the front-right quadrant
+    if x < 0: x -= 0.016 * band * (abs(c) ** 0.5)
+    lobe = math.exp(-((u - 0.10) ** 2) / (2 * 0.06 ** 2)) * math.exp(-((z - zp(8.0)) ** 2) / (2 * 0.055 ** 2))
+    x *= 1.0 + 0.11 * lobe; y *= 1.0 + 0.06 * lobe
+    # part on HIS LEFT (+X): a groove from the front hairline back over the crown, hair combed flat beyond it
+    front = L.smoothstep((0.06 - y) / 0.10)                                # 1 in the front half, 0 at the back
+    groove = math.exp(-((x - 0.10) ** 2) / (2 * 0.011 ** 2)) * front * L.smoothstep((z - (C['z_hairline'] + 0.015)) / 0.02)
+    flat = L.smoothstep((x - 0.115) / 0.035) * front
+    # lock grooves: three soft channels slanting across the top toward the lobe
+    q = x + 0.45 * y
+    locks = sum(math.exp(-((q - qc) ** 2) / (2 * 0.011 ** 2)) for qc in (-0.13, -0.045, 0.04)) * L.smoothstep((z - zp(9.0)) / 0.03)
+    r_h = math.hypot(x, y)
+    sk = skull_at(u, z); r_s = math.hypot(sk.x, sk.y)
+    r = max(r_h, r_s + HAIR_MIN)
+    r -= 0.010 * groove + 0.007 * locks
+    r = r - (r - (r_s + 0.022)) * flat * (1.0 if r > r_s + 0.022 else 0.0)
+    r = max(r, r_s + HAIR_MIN)
+    f = r / max(1e-6, r_h)
+    return Vector((x * f, y * f, z))
+
+def hair_inner(u, z):
+    sk = skull_at(u, z); r = math.hypot(sk.x, sk.y); f = max(0.0, r - 0.008) / max(1e-6, r)
+    return Vector((sk.x * f, sk.y * f, z))
+
+def hair_pt(u, v):
+    ztop = C['z_hair_top']; zh = hairline_z(u)
+    if v <= 0.0: return Vector((0.0, -0.08, ztop))
+    if v >= 1.0: return Vector((0.0, 0.0, zt - 0.02))
+    if v <= 0.60:
+        s = (v / 0.60) ** 1.7
+        return hair_outer(u, ztop - (ztop - zh) * s)
+    if v <= 0.72:
+        t = (v - 0.60) / 0.12
+        po, pi_ = hair_outer(u, zh), hair_inner(u, zh + 0.006)
+        m = (po + pi_) * 0.5 + Vector((0, 0, -0.55 * (po - pi_).length))
+        return po * (1 - t) ** 2 + m * 2 * (1 - t) * t + pi_ * t * t
+    s = (v - 0.72) / 0.28
+    return hair_inner(u, zh + 0.006 + (zt - 0.02 - zh - 0.006) * s)
+hair = L.shell('Hair', hair_pt, nlon=64, nlat=46, warp_u=0.0)
+add(hair, 'hair', 'head')
+
+# =============================================================================================
+# BODY
+# =============================================================================================
+Z_SH_TOP, Z_HEM, Z_WAIST = C['z_shoulder_top'], C['z_hem'], C['z_waist']
 JACKET_PROFILES = [
-    dict(z=HEM,        w=0.56, d=0.36, r=0.60),
-    dict(z=HEM + 0.10, w=0.54, d=0.35, r=0.60),
-    dict(z=WAIST,      w=0.52, d=0.33, r=0.60),
-    dict(z=CHEST,      w=0.585, d=0.36, r=0.62),
-    dict(z=SH,         w=0.62, d=0.365, r=0.70),
-    dict(z=SHTOP,      w=0.54, d=0.32, r=0.88),
-    dict(z=SHTOP + 0.035, w=0.30, d=0.24, r=1.0),
+    dict(z=Z_HEM,                     w=C['jacket_w_hem'],      d=C['jacket_d_hem'],        r=0.62),
+    dict(z=Z_HEM + 0.08,              w=C['jacket_w_hem']-0.01, d=C['jacket_d_hem']+0.015,  r=0.62),
+    dict(z=Z_WAIST,                   w=C['jacket_w_waist'],    d=C['jacket_d_chest']-0.02, r=0.62),
+    dict(z=Z_WAIST + 0.12,            w=C['jacket_w_waist']+0.05, d=C['jacket_d_chest'],    r=0.64),
+    dict(z=C['z_shoulder_joint']+0.02, w=C['jacket_w_shoulder']-0.015, d=C['jacket_d_chest']-0.025, r=0.72),
+    dict(z=C['z_shoulder_joint']+0.05, w=0.46,                   d=C['jacket_d_chest']-0.045, r=0.80),
+    dict(z=Z_SH_TOP,                  w=0.39,                   d=C['jacket_d_chest']-0.065, r=0.90),
+    dict(z=Z_SH_TOP + 0.030,          w=0.29,                   d=0.225,                    r=1.0),
+    dict(z=Z_SH_TOP + 0.050,          w=0.245,                  d=0.215,                    r=1.0),
 ]
 def _lerp_profile(z):
     ps = JACKET_PROFILES
@@ -90,134 +314,12 @@ def _lerp_profile(z):
             return dict(z=z, w=a['w'] + (b['w'] - a['w']) * t, d=a['d'] + (b['d'] - a['d']) * t, r=a['r'] + (b['r'] - a['r']) * t)
     return ps[-1]
 def chest_y(x, z):
-    """Front (-Y) surface of the lofted jacket at (x, z)."""
-    p = _lerp_profile(z)
-    exp = 2.0 + 6.0 * (1.0 - p['r']); k = 2.0 / exp
-    u = min(0.999, abs(x) / (p['w'] / 2))
-    c = u ** (1 / k)                       # |cos t|
-    s = math.sqrt(max(0.0, 1 - c * c))     # |sin t|
+    p = _lerp_profile(z); exp = 2.0 + 6.0 * (1.0 - p['r']); k = 2.0 / exp
+    u = min(0.999, abs(x) / (p['w'] / 2)); c = u ** (1 / k); s = math.sqrt(max(0.0, 1 - c * c))
     return -(s ** k) * p['d'] / 2
+add(L.loft('Jacket', JACKET_PROFILES, n=36), 'jacket', 'spine')
 
-# ---- head ---------------------------------------------------------------------------------
-skull = L.uvsphere('Skull', HR, (0, 0, HEADC), scale=(HSX, HSY, HSZ), u=40, v=26)
-L.scale_by_height(skull, lambda z: jaw_scale(z))
-# Shapers are applied to the skull AND (below) to the hair cap so the cap follows the skull exactly.
-SKULL_SHAPERS = [
-    dict(c=(0, -0.20 * HR, HEADC - 0.24), r=0.16, d=(0, -0.012, -0.015)),   # chin: a little forward + down
-    dict(c=( 0.24, -0.06, HEADC - 0.05), r=0.13, d=( 0.006, -0.003, 0)),     # cheeks: a soft hint
-    dict(c=(-0.24, -0.06, HEADC - 0.05), r=0.13, d=(-0.006, -0.003, 0)),
-    dict(c=(0, 0.20, HEADC + 0.06), r=0.28, d=(0, 0.02, 0.01)),              # fuller back of the skull
-]
-L.shape(skull, SKULL_SHAPERS)
-add(skull, 'skin', 'head')
-
-# Neck (short cylinder, mostly hidden by the collar)
-add(L.loft('Neck', [dict(z=NECKB - 0.02, w=0.15, d=0.14, r=1.0), dict(z=HEADC - 0.20, w=0.15, d=0.14, r=1.0)], n=16), 'skin', 'neck')
-
-# Ears
-for s in (1, -1):
-    add(L.uvsphere(f'Ear{s}', 0.036, (s * (HR * HSX * 0.985), 0.005, HEADC - 0.02), scale=(0.45, 0.85, 1.0), u=14, v=10), 'skin', 'head')
-
-# Eyes: dark ovals ON the surface + one small highlight each
-EYE_Z = HEADC + 0.035; EYE_X = 0.088
-for s in (1, -1):
-    y = skull_y(s * EYE_X, EYE_Z)
-    add(L.uvsphere(f'Eye{s}', 0.030, (s * EYE_X, y + 0.006, EYE_Z), scale=(1.0, 0.42, 1.12), u=16, v=10), 'dark', 'head')
-    add(L.uvsphere(f'Glint{s}', 0.0075, (s * EYE_X - 0.009, y - 0.006, EYE_Z + 0.011), u=8, v=6), 'ivory', 'head')
-
-# Brows: tapered tubes arching over each eye, conformed to the skull
-for s in (1, -1):
-    # Relaxed arch: the inner end sits level (not dipping toward the nose, which reads as a frown),
-    # the arch peaks two-thirds out, and the tail tapers gently downward.
-    z0 = EYE_Z + 0.064
-    p = L.bezier((s * 0.035, 0, z0 + 0.004), (s * 0.075, 0, z0 + 0.020), (s * 0.12, 0, z0 + 0.018), (s * 0.156, 0, z0 - 0.002), n=14)
-    p = [(x, skull_y(x, z) + 0.004, z) for x, _, z in p]
-    add(L.tube(f'Brow{s}', p, [0.0135 * t for t in L.taper(14, 0.5, 1.0, 0.32, power=1.3)], n=8), 'dark', 'head')
-
-# Nose: a small button sitting on the face
-NOSE_Z = HEADC - 0.035
-add(L.uvsphere('Nose', 0.034, (0, skull_y(0, NOSE_Z) - 0.016, NOSE_Z), scale=(1.0, 1.0, 0.9), u=16, v=12), 'skin', 'head')
-
-# Moustache: two curved, tapered lobes meeting under the nose (thick at the centre, tapered ends)
-MO_Z = HEADC - 0.085
-for s in (1, -1):
-    p = L.bezier((s * 0.006, 0, MO_Z + 0.002), (s * 0.045, 0, MO_Z + 0.016), (s * 0.095, 0, MO_Z + 0.008), (s * 0.128, 0, MO_Z - 0.012), n=14)
-    p = [(x, skull_y(x, z) - 0.002, z) for x, _, z in p]
-    add(L.tube(f'Moustache{s}', p, [0.019 * t for t in L.taper(14, 0.9, 1.0, 0.25, power=1.6)], n=8), 'dark', 'head')
-
-# Mouth: a subtle short line below the moustache
-MOUTH_Z = HEADC - 0.135
-p = L.bezier((-0.032, 0, MOUTH_Z + 0.003), (-0.012, 0, MOUTH_Z - 0.004), (0.012, 0, MOUTH_Z - 0.004), (0.032, 0, MOUTH_Z + 0.003), n=8)
-p = [(x, skull_y(x, z) - 0.001, z) for x, _, z in p]
-add(L.tube('Mouth', p, [0.005 * t for t in L.taper(8, 0.5, 1.0, 0.5)], n=6), 'dark', 'head')
-
-# ---- hair --------------------------------------------------------------------------------
-# A cap that owns the whole crown: a slightly larger skull whose below-hairline vertices are pushed
-# INSIDE the skull (closed mesh, no holes, no z-fighting). The hairline is a function of azimuth:
-# high on the forehead, down to just above the ears at the sides, low at the nape.
-# Orientation reminder: the character faces -Y, so HIS right is -X and HIS left is +X (a viewer looking
-# at his face sees +X on the viewer's right). The target parts the hair on HIS LEFT (+X) and sweeps it
-# toward HIS RIGHT (-X), where the quiff rises.
-HEAD_CENTRE = Vector((0, 0, HEADC))
-hair = L.uvsphere('HairCap', HR, (0, 0, HEADC), scale=(HSX * 1.055, HSY * 1.055, HSZ * 1.05), u=40, v=26)
-L.scale_by_height(hair, lambda z: jaw_scale(z))
-L.shape(hair, SKULL_SHAPERS)                      # follow the skull (else the fuller back pokes through)
-def hairline_z(x, y):
-    a = math.atan2(-y, x)                 # 0 at +X (his left side), pi/2 at the front (-Y)
-    front = max(0.0, math.sin(a)) ** 1.3   # 1 at the front, 0 at the sides/back
-    back = max(0.0, -math.sin(a))
-    z = HEADC + 0.20 * front - 0.015 * (1 - front - back) - 0.22 * back
-    # the sweep side (his right, -X) comes down a little further at the temple
-    z -= 0.022 * front * (0.5 - 0.5 * math.tanh(x / 0.05))
-    return z
-# Vertices in the first row below the hairline are SNAPPED onto the hairline curve (so the edge
-# follows it exactly instead of stair-stepping along the sphere's rows); rows further below are
-# tucked inside the skull, which keeps the cap a closed mesh with no holes.
-ROW = 2 * math.pi * HR * 1.05 / 26 * 0.55    # about one row spacing
-for v in hair.data.vertices:
-    zl = hairline_z(v.co.x, v.co.y)
-    below = zl - v.co.z
-    if 0 < below <= ROW:
-        v.co.z = zl
-        v.co = HEAD_CENTRE + (v.co - HEAD_CENTRE) * 0.995
-    elif below > ROW:
-        v.co = HEAD_CENTRE + (v.co - HEAD_CENTRE) * 0.86
-hair.data.update()
-# Volume: the whole cap swells radially with height (a round dome, not a peak), a little more on the
-# sweep side; plus a gentle forward "wave" over the forehead.
-def cap_swell(p):
-    h = L.smoothstep((p.z - (HEADC - 0.02)) / 0.30)
-    side = 0.5 - 0.5 * math.tanh(p.x / 0.08)          # 1 on his right (-X), 0 on his left
-    return 1.0 + 0.075 * h + 0.03 * h * side
-L.radial_scale(hair, HEAD_CENTRE, cap_swell)
-# Side part: a shallow groove from the front hairline back over the crown, on HIS LEFT (+X)
-PART_X = 0.07
-for i in range(10):
-    t = i / 9
-    ang = math.radians(38 + t * 105)                      # forehead (38°) -> crown (90°) -> back (143°)
-    cy, cz = -math.cos(ang), math.sin(ang)                # front is -Y: cos>0 at the front, <0 at the back
-    c = HEAD_CENTRE + Vector((PART_X, cy * HR * 1.05, cz * HR * 1.08))
-    L.shape(hair, [dict(c=tuple(c), r=0.04, d=tuple((c - HEAD_CENTRE).normalized() * -0.011), f='smooth')])
-add(hair, 'hair', 'head')
-# Quiff: a swept wave rising from the part toward his right (-X). Built at the origin, rotated about
-# its own centre, then placed — so it sits ON the cap at the front-top instead of flying off.
-quiff = L.uvsphere('Quiff', 0.10, (0, 0, 0), scale=(1.30, 0.95, 0.80), u=20, v=12)
-L.rotate_verts(quiff, (0.45, -0.25, 0.20))            # tilt up at the front, lift the -X end
-L.translate_verts(quiff, (-0.03, -0.14, HEADC + 0.205))   # sunk ~40 % into the cap so it merges
-add(quiff, 'hair', 'head')
-
-# ---- torso / jacket ------------------------------------------------------------------------
-jacket = L.loft('Jacket', JACKET_PROFILES, n=32)
-add(jacket, 'jacket', 'spine')
-
-# Shirt V, lapels, collar and bow tie all conform to the chest (chest_y) so they follow its curve.
-def flat_panel(name, outline_xz, inset, thick, mat, bone, cuts=6):
-    """A one-sided panel that CONFORMS to the chest: the outline (list of (x, z)) is triangulated and
-    subdivided so it has interior vertices, then every vertex is projected onto the chest surface at
-    depth chest_y - inset. (A plain polygon with only corner vertices is a flat chord that sags
-    behind the bulging chest and disappears — that was the invisible-shirt bug.) `thick` is unused
-    (kept for call-site symmetry); the jacket behind hides the back."""
-    # Counter-clockwise as seen from the front (-Y looking +Y: +X right, +Z up) => normal points out.
+def flat_panel(name, outline_xz, inset, mat, bone, cuts=6):
     area = 0.0
     for (x0, z0), (x1, z1) in zip(outline_xz, outline_xz[1:] + outline_xz[:1]): area += x0 * z1 - x1 * z0
     if area < 0: outline_xz = list(reversed(outline_xz))
@@ -226,229 +328,177 @@ def flat_panel(name, outline_xz, inset, thick, mat, bone, cuts=6):
     face = bm.faces.new(verts)
     bmesh.ops.triangulate(bm, faces=[face])
     bmesh.ops.subdivide_edges(bm, edges=bm.edges[:], cuts=cuts, use_grid_fill=True)
-    for v in bm.verts:
-        v.co.y = chest_y(v.co.x, v.co.z) - inset
+    for v in bm.verts: v.co.y = chest_y(v.co.x, v.co.z) - inset
     bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
-    # make sure the normals face out (-Y); flip if the mean normal points into the body
-    ny = sum(f.normal.y for f in bm.faces)
-    if ny > 0: bmesh.ops.reverse_faces(bm, faces=bm.faces[:])
-    ob = L.new_object(name, bm, smooth=True)
-    return add(ob, mat, bone)
+    if sum(f.normal.y for f in bm.faces) > 0: bmesh.ops.reverse_faces(bm, faces=bm.faces[:])
+    return add(L.new_object(name, bm, smooth=True), mat, bone)
 
-# Shirt front: a V from the collar down to the button point
-BTN_Z = WAIST + 0.02
-flat_panel('Shirt', [(-0.10, SHTOP + 0.01), (-0.015, BTN_Z - 0.045), (0.015, BTN_Z - 0.045), (0.10, SHTOP + 0.01)], 0.004, 0.02, 'shirt', 'spine')
-# Peaked lapels: from the collar point out to a peak, then down to the button point. Their inner
-# edges open into a V so the ivory shirt reads as a V between them.
+# Shirt: a narrow, tidy V from the collar to the single button
+BTN_Z = Z_WAIST + 0.05
+flat_panel('Shirt', [(-0.056, Z_SH_TOP + 0.045), (-0.014, BTN_Z - 0.02), (0.014, BTN_Z - 0.02), (0.056, Z_SH_TOP + 0.045)], 0.004, 'shirt', 'spine')
+# Peaked lapels (dark satin), thin, following the chest
 for s in (1, -1):
-    pts = [(s * 0.062, SHTOP + 0.005), (s * 0.125, SHTOP - 0.03), (s * 0.17, CHEST + 0.02), (s * 0.125, CHEST - 0.02), (s * 0.02, BTN_Z - 0.01)]
-    if s < 0: pts = list(reversed(pts))
-    flat_panel(f'Lapel{s}', pts, 0.010, 0.02, 'lapel', 'spine')
-# Collar: an ivory band around the neck base with a small opening at the front
-add(L.loft('Collar', [dict(z=SHTOP - 0.005, w=0.20, d=0.17, r=1.0), dict(z=SHTOP + 0.04, w=0.19, d=0.165, r=1.0), dict(z=SHTOP + 0.045, w=0.16, d=0.145, r=1.0)], n=20), 'shirt', 'neck')
-# Bow tie: two wings (lofted along X) + a knot, sitting on the shirt just under the collar
-BOW_Z = SHTOP - 0.005
+    pts = [(s * 0.042, Z_SH_TOP + 0.040), (s * 0.110, Z_SH_TOP - 0.010), (s * 0.155, Z_SH_TOP - 0.100), (s * 0.118, Z_SH_TOP - 0.140), (s * 0.016, BTN_Z - 0.01)]
+    flat_panel(f'Lapel{s}', pts, 0.009, 'lapel', 'spine')
+# Collar band + wing tips
+NY = C['neck_y']
+add(L.loft('Collar', [dict(z=Z_SH_TOP - 0.005, w=2*C['neck_r']+0.026, d=2*C['neck_r']+0.02, r=1.0, y=NY), dict(z=Z_SH_TOP + 0.060, w=2*C['neck_r']+0.018, d=2*C['neck_r']+0.014, r=1.0, y=NY), dict(z=Z_SH_TOP + 0.066, w=2*C['neck_r']-0.01, d=2*C['neck_r']-0.01, r=1.0, y=NY)], n=22), 'shirt', 'neck')
+add(L.loft('JacketCollar', [dict(z=Z_SH_TOP - 0.01, w=2*C['neck_r']+0.05, d=2*C['neck_r']+0.045, r=1.0, y=NY+0.012), dict(z=Z_SH_TOP + 0.052, w=2*C['neck_r']+0.036, d=2*C['neck_r']+0.032, r=1.0, y=NY+0.012), dict(z=Z_SH_TOP + 0.058, w=2*C['neck_r']+0.016, d=2*C['neck_r']+0.012, r=1.0, y=NY+0.012)], n=22), 'lapel', 'neck')
+# Bow tie: small wings + knot
+BOW_Z = Z_SH_TOP + 0.034
 for s in (1, -1):
-    wing = L.loft(f'Wing{s}', [dict(z=0.0, w=0.024, d=0.030, r=0.8), dict(z=0.035, w=0.052, d=0.055, r=0.7), dict(z=0.062, w=0.048, d=0.055, r=0.8), dict(z=0.075, w=0.022, d=0.030, r=1.0)], n=14)
-    wing.rotation_euler = Euler((0, s * math.pi / 2, 0), 'XYZ')   # local Z -> ±X
-    wing.location = Vector((s * 0.012, chest_y(s * 0.04, BOW_Z) - 0.022, BOW_Z))
-    bpy.context.view_layer.objects.active = wing; wing.select_set(True); bpy.ops.object.transform_apply(location=True, rotation=True)
+    wing = L.loft(f'Wing{s}', [dict(z=0.0, w=0.024, d=0.030, r=0.8), dict(z=0.034, w=0.056, d=0.038, r=0.7), dict(z=0.062, w=0.052, d=0.038, r=0.8), dict(z=0.076, w=0.022, d=0.030, r=1.0)], n=14)
+    L.rotate_verts(wing, (0, s * math.pi / 2, 0))
+    L.translate_verts(wing, (s * 0.010, chest_y(s * 0.035, BOW_Z) - 0.012, BOW_Z))
     add(wing, 'black', 'spine')
-add(L.uvsphere('Knot', 0.02, (0, chest_y(0, BOW_Z) - 0.03, BOW_Z), scale=(0.9, 0.8, 1.0), u=12, v=8), 'black', 'spine')
+add(L.uvsphere('Knot', 0.020, (0, chest_y(0, BOW_Z) - 0.020, BOW_Z), scale=(0.9, 0.8, 1.05), u=12, v=8), 'black', 'spine')
+# shirt studs + jacket button
+for i in range(3):
+    zb = BOW_Z - 0.055 - i * 0.045
+    add(L.uvsphere(f'Stud{i}', 0.0065, (0, chest_y(0, zb) - 0.010, zb), u=8, v=6), 'black', 'spine')
+add(L.uvsphere('Button', 0.011, (0, chest_y(0, BTN_Z) - 0.012, BTN_Z), scale=(1, 0.6, 1), u=10, v=8), 'black', 'spine')
 
-# ---- arms (capsule segments + joint spheres) ----------------------------------------------
+# ---- arms: slim capsules with joint spheres; hang with a slight outward angle
+SX, ZJ = C['shoulder_x'], C['z_shoulder_joint']
 for s, tag in ((1, 'L'), (-1, 'R')):
-    sx = s * SHOULDER_X
-    # shoulder sphere tucked in the jacket shoulder; upper arm hangs slightly outward/forward
-    add(L.uvsphere(f'Shoulder{tag}', 0.060, (s * 0.25, 0.0, SH - 0.035), u=14, v=10), 'jacket', f'upperarm.{tag}')   # inside the jacket shoulder
-    ux, uy = s * (SHOULDER_X + ARM_OUT * 0.5), -0.015
-    ua = L.capsule(f'UpperArm{tag}', 0.066, 0.058, SH - 0.02, ELBOW - 0.02, loc=(0, 0), n=16, rings=4)
-    # lean the capsule so the elbow sits outward/forward of the shoulder
+    ex = s * (SX + 0.045); ey = -0.010
+    hx = s * C['hand_x']; hy = -0.045
+    add(L.uvsphere(f'Shoulder{tag}', C['upperarm_r'] * 0.90, (s * (SX - 0.035), 0.0, ZJ - 0.02), u=14, v=10), 'jacket', f'upperarm.{tag}')
+    ua = L.capsule(f'UpperArm{tag}', C['upperarm_r'], C['upperarm_r'] * 0.9, ZJ, C['z_elbow'] - 0.01, n=16, rings=4)
     for v in ua.data.vertices:
-        t = (SH - 0.02 - v.co.z) / (SH - ELBOW)
-        v.co.x += sx + s * ARM_OUT * 0.5 * t; v.co.y += -0.015 * t
+        t = (ZJ - v.co.z) / (ZJ - C['z_elbow']); v.co.x += s * SX + (ex - s * SX) * t; v.co.y += ey * t
     add(ua, 'jacket', f'upperarm.{tag}')
-    ex, ey = s * (SHOULDER_X + ARM_OUT * 0.5), -0.015
-    add(L.uvsphere(f'Elbow{tag}', 0.053, (ex, ey, ELBOW), u=14, v=10), 'jacket', f'upperarm.{tag}')
-    fa = L.capsule(f'Forearm{tag}', 0.056, 0.047, ELBOW + 0.01, WRIST - 0.01, loc=(0, 0), n=16, rings=4)
+    add(L.uvsphere(f'Elbow{tag}', C['upperarm_r'] * 0.86, (ex, ey, C['z_elbow']), u=14, v=10), 'jacket', f'upperarm.{tag}')
+    fa = L.capsule(f'Forearm{tag}', C['forearm_r'], C['forearm_r'] * 0.86, C['z_elbow'] + 0.01, C['z_wrist'] - 0.005, n=16, rings=4)
     for v in fa.data.vertices:
-        t = (ELBOW + 0.01 - v.co.z) / (ELBOW - WRIST)
-        v.co.x += ex + s * ARM_OUT * 0.5 * t; v.co.y += ey - 0.03 * t
+        t = (C['z_elbow'] + 0.01 - v.co.z) / (C['z_elbow'] - C['z_wrist']); v.co.x += ex + (hx - ex) * t; v.co.y += ey + (hy - ey) * t
     add(fa, 'jacket', f'forearm.{tag}')
-    # cuff: a thin ivory ring at the wrist
-    cuff = L.loft(f'Cuff{tag}', [dict(z=WRIST - 0.005, w=0.098, d=0.098, r=1.0), dict(z=WRIST + 0.02, w=0.096, d=0.096, r=1.0)], n=14)
-    for v in cuff.data.vertices: v.co.x += ex + s * ARM_OUT * 0.5; v.co.y += ey - 0.03
-    add(cuff, 'shirt', f'forearm.{tag}')
-    # hand: a rounded mitt with a small thumb bump on the inside
-    hx, hy = ex + s * ARM_OUT * 0.5, ey - 0.03
-    add(L.uvsphere(f'Hand{tag}', 0.064, (hx, hy, WRIST - 0.055), scale=(0.9, 0.78, 1.05), u=16, v=12), 'skin', f'hand.{tag}')
-    add(L.uvsphere(f'Thumb{tag}', 0.028, (hx - s * 0.05, hy - 0.02, WRIST - 0.03), scale=(0.9, 0.9, 1.3), u=10, v=8), 'skin', f'hand.{tag}')
+    cuff = L.loft(f'Cuff{tag}', [dict(z=C['z_wrist'] - 0.006, w=2*C['forearm_r']*0.9, d=2*C['forearm_r']*0.9, r=1.0), dict(z=C['z_wrist'] + 0.018, w=2*C['forearm_r']*0.88, d=2*C['forearm_r']*0.88, r=1.0)], n=14)
+    L.translate_verts(cuff, (hx, hy, 0)); add(cuff, 'shirt', f'forearm.{tag}')
+    # hand: a rounded mitt (slightly flattened), softly grouped fingers as a bevelled front, a thumb on the inside
+    hand = L.loft(f'Hand{tag}', [dict(z=C['z_hand_end'], w=C['hand_w']*0.70, d=0.045, r=0.9), dict(z=C['z_hand_end']+0.03, w=C['hand_w'], d=0.058, r=0.75),
+                                 dict(z=C['z_hand_end']+0.075, w=C['hand_w']*0.98, d=0.060, r=0.7), dict(z=C['z_wrist']+0.01, w=C['hand_w']*0.72, d=0.050, r=0.95)], n=16)
+    L.translate_verts(hand, (hx, hy, 0)); add(hand, 'skin', f'hand.{tag}')
+    add(L.uvsphere(f'Thumb{tag}', 1.0, (0, 0, 0), scale=(0.016, 0.018, 0.030), u=10, v=8), 'skin', f'hand.{tag}')
+    parts[-1].data.transform(__import__('mathutils').Matrix.Translation(Vector((hx - s * (C['hand_w']*0.5 + 0.006), hy - 0.012, C['z_wrist'] - 0.035))))
 
-# ---- legs (trousers = capsules + knee spheres) + shoes ----------------------------------
+# ---- legs: capsules (slightly deeper than wide, like the sheet), knee spheres, lofted shoes
+LX = C['leg_x']
 for s, tag in ((1, 'L'), (-1, 'R')):
-    lx = s * LEGX
-    add(L.uvsphere(f'HipBall{tag}', 0.09, (lx, 0.0, HIPJ - 0.01), scale=(1, 0.95, 0.9), u=14, v=10), 'jacket', f'thigh.{tag}')
-    add(L.capsule(f'Thigh{tag}', 0.088, 0.076, HIPJ, KNEE - 0.02, loc=(lx, 0.0), n=16, rings=4), 'jacket', f'thigh.{tag}')
-    add(L.uvsphere(f'Knee{tag}', 0.073, (lx, 0.0, KNEE), u=14, v=10), 'jacket', f'thigh.{tag}')
-    add(L.capsule(f'Shin{tag}', 0.072, 0.062, KNEE + 0.01, ANKLE, loc=(lx, 0.0), n=16, rings=4), 'jacket', f'shin.{tag}')
-    # shoe: a rounded loft, longer toward the toe (-Y), with a low heel
+    lx = s * LX
+    add(L.uvsphere(f'HipBall{tag}', 1.0, (lx, 0.0, C['z_hip_joint'] + 0.02), scale=(C['thigh_w']*0.5, C['thigh_d']*0.5, 0.075), u=14, v=10), 'jacket', f'thigh.{tag}')
+    th = L.loft(f'Thigh{tag}', [dict(z=C['z_knee'] - 0.01, w=C['thigh_w']*0.92, d=C['thigh_d']*0.86, r=1.0), dict(z=(C['z_knee']+C['z_hip_joint'])/2, w=C['thigh_w'], d=C['thigh_d'], r=1.0), dict(z=C['z_hip_joint'] + 0.05, w=C['thigh_w']*0.98, d=C['thigh_d']*0.98, r=1.0)], n=18)
+    L.translate_verts(th, (lx, 0, 0)); add(th, 'jacket', f'thigh.{tag}')
+    add(L.uvsphere(f'Knee{tag}', 1.0, (lx, 0.0, C['z_knee']), scale=(C['shin_w']*0.5*0.98, C['shin_d']*0.5, 0.075), u=14, v=10), 'jacket', f'thigh.{tag}')
+    sh = L.loft(f'Shin{tag}', [dict(z=C['z_ankle'] - 0.005, w=C['shin_w']*0.98, d=C['shin_d']*0.92, r=1.0), dict(z=(C['z_ankle']+C['z_knee'])/2, w=C['shin_w']*0.96, d=C['shin_d']*0.96, r=1.0), dict(z=C['z_knee'] + 0.01, w=C['shin_w'], d=C['shin_d'], r=1.0)], n=18)
+    L.translate_verts(sh, (lx, 0, 0)); add(sh, 'jacket', f'shin.{tag}')
+    L0, W0, H0 = C['shoe_len'], C['shoe_w'], C['shoe_h']
+    # a rounded slip-on: toe well forward of the ankle, a short heel behind it; toes splayed OUTWARD
+    yc = -(L0 * 0.5 - 0.075)
     shoe = L.loft(f'Shoe{tag}', [
-        dict(z=GROUND, w=0.135, d=0.235, r=0.55, y=-0.045), dict(z=GROUND + 0.035, w=0.145, d=0.25, r=0.55, y=-0.05),
-        dict(z=GROUND + 0.075, w=0.135, d=0.215, r=0.65, y=-0.035), dict(z=GROUND + 0.105, w=0.11, d=0.14, r=0.9, y=0.0)], n=20)
-    for v in shoe.data.vertices: v.co.x += lx
-    add(shoe, 'black', f'foot.{tag}')
+        dict(z=0.0,        w=W0*0.90, d=L0*0.94, r=0.60, y=yc),
+        dict(z=H0*0.40,    w=W0,      d=L0,      r=0.60, y=yc),
+        dict(z=H0*0.75,    w=W0*0.90, d=L0*0.88, r=0.62, y=yc + 0.012),
+        dict(z=H0,         w=W0*0.68, d=L0*0.50, r=0.75, y=-0.045)], n=22)
+    L.rotate_verts(shoe, (0, 0, s * C['shoe_splay']), about=(0, 0.05, 0)); L.translate_verts(shoe, (lx, 0, 0)); add(shoe, 'black', f'foot.{tag}')
 
-# ---- join into one mesh -------------------------------------------------------------------
+# =============================================================================================
+# JOIN + RIG
+# =============================================================================================
 bpy.ops.object.select_all(action='DESELECT')
 for o in parts: o.select_set(True)
 bpy.context.view_layer.objects.active = parts[0]
 bpy.ops.object.join()
-mesh = bpy.context.active_object; mesh.name = 'Victor'
-mesh.location = (0, 0, 0)
+mesh = bpy.context.active_object; mesh.name = 'Victor'; mesh.location = (0, 0, 0)
 L.smooth_normals(mesh, 62.0)
 
-# ---- armature ------------------------------------------------------------------------------
-arm_data = bpy.data.armatures.new('VictorRig')
-arm = bpy.data.objects.new('VictorRig', arm_data)
-scene.collection.objects.link(arm)
-bpy.context.view_layer.objects.active = arm
-bpy.ops.object.mode_set(mode='EDIT')
-eb = arm_data.edit_bones
+arm_data = bpy.data.armatures.new('VictorRig'); arm = bpy.data.objects.new('VictorRig', arm_data)
+scene.collection.objects.link(arm); bpy.context.view_layer.objects.active = arm
+bpy.ops.object.mode_set(mode='EDIT'); eb = arm_data.edit_bones
 def bone(name, head, tail, parent=None):
     b = eb.new(name); b.head = head; b.tail = tail; b.roll = 0.0
     if parent: b.parent = eb[parent]
     return b
+HIPJ, KNEE, ANKLE = C['z_hip_joint'], C['z_knee'], C['z_ankle']
 bone('root',  (0, 0, 0), (0, 0, 0.12))
-bone('hips',  (0, 0, HIPJ), (0, 0, WAIST + 0.04), 'root')
-bone('spine', (0, 0, WAIST + 0.04), (0, 0, SHTOP), 'hips')
-bone('neck',  (0, 0, SHTOP), (0, 0, HEADC - 0.20), 'spine')
-bone('head',  (0, 0, HEADC - 0.20), (0, 0, HEADC + 0.30), 'neck')
+bone('hips',  (0, 0, HIPJ), (0, 0, Z_WAIST + 0.02), 'root')
+bone('spine', (0, 0, Z_WAIST + 0.02), (0, 0, Z_SH_TOP), 'hips')
+bone('neck',  (0, 0, Z_SH_TOP), (0, 0, C['z_chin'] + 0.02), 'spine')
+bone('head',  (0, 0, C['z_chin'] + 0.02), (0, 0, C['z_skull_top']), 'neck')
 for s, tag in ((1, 'L'), (-1, 'R')):
-    sx = s * SHOULDER_X; ax = s * (SHOULDER_X + ARM_OUT * 0.5)
-    bone(f'shoulder.{tag}', (s * 0.09, 0, SHTOP - 0.03), (sx, 0, SH - 0.03), 'spine')
-    bone(f'upperarm.{tag}', (sx, 0, SH - 0.03), (ax, -0.015, ELBOW), f'shoulder.{tag}')
-    bone(f'forearm.{tag}',  (ax, -0.015, ELBOW), (ax + s * ARM_OUT * 0.5, -0.045, WRIST), f'upperarm.{tag}')
-    bone(f'hand.{tag}',     (ax + s * ARM_OUT * 0.5, -0.045, WRIST), (ax + s * ARM_OUT * 0.5, -0.05, WRIST - 0.11), f'forearm.{tag}')
-    lx = s * LEGX
+    ex = s * (SX + 0.045); hx = s * C['hand_x']
+    bone(f'shoulder.{tag}', (s * 0.08, 0, Z_SH_TOP - 0.03), (s * SX, 0, ZJ), 'spine')
+    bone(f'upperarm.{tag}', (s * SX, 0, ZJ), (ex, -0.010, C['z_elbow']), f'shoulder.{tag}')
+    bone(f'forearm.{tag}',  (ex, -0.010, C['z_elbow']), (hx, -0.035, C['z_wrist']), f'upperarm.{tag}')
+    bone(f'hand.{tag}',     (hx, -0.035, C['z_wrist']), (hx, -0.04, C['z_hand_end']), f'forearm.{tag}')
+    lx = s * LX
     bone(f'thigh.{tag}', (lx, 0, HIPJ), (lx, 0, KNEE), 'hips')
     bone(f'shin.{tag}',  (lx, 0, KNEE), (lx, 0, ANKLE), f'thigh.{tag}')
-    bone(f'foot.{tag}',  (lx, 0, ANKLE), (lx, -0.16, 0.02), f'shin.{tag}')
+    bone(f'foot.{tag}',  (lx, 0, ANKLE), (lx, -0.18, 0.02), f'shin.{tag}')
 bpy.ops.object.mode_set(mode='OBJECT')
-amod = mesh.modifiers.new('Armature', 'ARMATURE'); amod.object = arm
-mesh.parent = arm
+amod = mesh.modifiers.new('Armature', 'ARMATURE'); amod.object = arm; mesh.parent = arm
 
-# ---- animation ----------------------------------------------------------------------------
+# =============================================================================================
+# ANIMATION (same authoring as v2, on the new joints)
+# =============================================================================================
 FPS = 24; scene.render.fps = FPS
-bpy.context.view_layer.objects.active = arm
-bpy.ops.object.mode_set(mode='POSE')
+bpy.context.view_layer.objects.active = arm; bpy.ops.object.mode_set(mode='POSE')
 for pb in arm.pose.bones: pb.rotation_mode = 'XYZ'
-
 def key(bname, frame, rx=0.0, ry=0.0, rz=0.0, loc=None):
-    pb = arm.pose.bones[bname]
-    pb.rotation_euler = (rx, ry, rz); pb.keyframe_insert('rotation_euler', frame=frame)
-    if loc is not None:
-        pb.location = loc; pb.keyframe_insert('location', frame=frame)
-
+    pb = arm.pose.bones[bname]; pb.rotation_euler = (rx, ry, rz); pb.keyframe_insert('rotation_euler', frame=frame)
+    if loc is not None: pb.location = loc; pb.keyframe_insert('location', frame=frame)
 def new_action(name):
-    arm.animation_data_create()
-    act = bpy.data.actions.new(name); act.use_fake_user = True
-    arm.animation_data.action = act
-    return act
+    arm.animation_data_create(); act = bpy.data.actions.new(name); act.use_fake_user = True; arm.animation_data.action = act; return act
+def fwd(a): return -a
+def stance_knee(phi): return max(0.0, math.sin(2 * math.pi * phi)) * 0.16 if phi < 0.5 else 0.0
+def swing_knee(phi): return 0.0 if phi < 0.5 else max(0.0, math.sin(2 * math.pi * (phi - 0.5))) * 1.05
 
-# Sign conventions (bones pointing DOWN, roll 0): +rx swings the tail toward +Y (BACKWARD).
-# So a forward swing is -rx. For bones pointing UP (spine/neck/head): +rx tips the tail FORWARD (-Y).
-def fwd(a): return -a          # forward swing for a downward bone
-def stance_knee(phi):          # small knee give while loaded
-    return max(0.0, math.sin(2 * math.pi * phi)) * 0.16 if phi < 0.5 else 0.0
-def swing_knee(phi):           # lift the foot through the swing (0.5 .. 1.0)
-    return 0.0 if phi < 0.5 else max(0.0, math.sin(2 * math.pi * (phi - 0.5))) * 1.05
-
-# ---- Walk: in place. phi = 0 heel contact (left), 0.25 mid-stance, 0.5 toe-off, 0.75 passing.
-new_action('Walk')
-WALK_N = 24
-A_LEG = 0.52; A_ARM = 0.42
+new_action('Walk'); WALK_N = 24; A_LEG = 0.50; A_ARM = 0.40
 def thigh_angle(phi):
-    # +A at contact, -A at toe-off, back to +A: smooth-triangle for near-linear foot travel in stance
-    c = math.cos(2 * math.pi * phi)
-    return A_LEG * math.copysign(abs(c) ** 0.85, c)
+    c = math.cos(2 * math.pi * phi); return A_LEG * math.copysign(abs(c) ** 0.85, c)
 for f in range(WALK_N + 1):
     t = f / WALK_N
     for tag, phi in (('L', t), ('R', (t + 0.5) % 1.0)):
-        th = thigh_angle(phi)
-        kn = stance_knee(phi) + swing_knee(phi)
-        # foot: keep the sole level while loaded, toe slightly down when lifted
-        if phi < 0.5: ft = -(fwd(th) + kn) * 0.9
-        else: ft = -(fwd(th) + kn) * 0.35 + 0.22 * math.sin(2 * math.pi * (phi - 0.5))
-        key(f'thigh.{tag}', f, rx=fwd(th))
-        key(f'shin.{tag}', f, rx=kn)
-        key(f'foot.{tag}', f, rx=ft)
-        # arms swing opposite to the same-side leg; elbow bends more when the arm is forward
-        arm_ph = (phi + 0.5) % 1.0
-        ua = A_ARM * math.cos(2 * math.pi * arm_ph)
-        key(f'upperarm.{tag}', f, rx=fwd(ua), rz=-0.08 * (1 if tag == 'L' else -1))
-        key(f'forearm.{tag}', f, rx=fwd(0.18 + 0.30 * (0.5 + 0.5 * math.cos(2 * math.pi * arm_ph))))
+        th = thigh_angle(phi); kn = stance_knee(phi) + swing_knee(phi)
+        ft = -(fwd(th) + kn) * 0.9 if phi < 0.5 else -(fwd(th) + kn) * 0.45 + 0.10 * math.sin(2 * math.pi * (phi - 0.5))
+        key(f'thigh.{tag}', f, rx=fwd(th)); key(f'shin.{tag}', f, rx=kn); key(f'foot.{tag}', f, rx=ft)
+        arm_ph = (phi + 0.5) % 1.0; ua = A_ARM * math.cos(2 * math.pi * arm_ph)
+        key(f'upperarm.{tag}', f, rx=fwd(ua), rz=-0.06 * (1 if tag == 'L' else -1))
+        key(f'forearm.{tag}', f, rx=fwd(0.16 + 0.28 * (0.5 + 0.5 * math.cos(2 * math.pi * arm_ph))))
         key(f'hand.{tag}', f, rx=fwd(0.05))
-    # hips: lowest at each contact (double support), highest at mid-stance; lateral sway to the stance leg
-    bob = -0.022 * (0.5 + 0.5 * math.cos(4 * math.pi * t))
-    sway = 0.012 * math.sin(2 * math.pi * t)
-    key('hips', f, rz=0.07 * math.cos(2 * math.pi * t), loc=(sway, bob, 0.0))   # bone-local Y = world Z (up)
-    key('spine', f, rx=0.06, rz=-0.05 * math.cos(2 * math.pi * t))
-    key('neck', f, rx=-0.03)
-    key('head', f, rz=0.02 * math.cos(2 * math.pi * t), rx=0.01 * math.cos(4 * math.pi * t))
+    bob = -0.020 * (0.5 + 0.5 * math.cos(4 * math.pi * t)); sway = 0.010 * math.sin(2 * math.pi * t)
+    key('hips', f, rz=0.06 * math.cos(2 * math.pi * t), loc=(sway, bob, 0.0))
+    key('spine', f, rx=0.05, rz=-0.045 * math.cos(2 * math.pi * t))
+    key('neck', f, rx=-0.03); key('head', f, rz=0.02 * math.cos(2 * math.pi * t), rx=0.01 * math.cos(4 * math.pi * t))
     key('shoulder.L', f, ry=0.0); key('shoulder.R', f, ry=0.0)
-
-# Measure the stride the clip represents: forward distance between the two ankles at the contact
-# pose (frame 0) is one STEP; a cycle is two steps. Also the toe's lowest point (grounding check).
-scene.frame_set(0)
-bpy.context.view_layer.update()
+scene.frame_set(0); bpy.context.view_layer.update()
 def world(pb_name, tail=False):
-    pb = arm.pose.bones[pb_name]
-    return arm.matrix_world @ (pb.tail if tail else pb.head)
-aL, aR = world('foot.L'), world('foot.R')
-STEP = abs(aL.y - aR.y)
-STRIDE = 2 * STEP
-toe_min = 9; toe_max = -9; heel_min = 9
+    pb = arm.pose.bones[pb_name]; return arm.matrix_world @ (pb.tail if tail else pb.head)
+STEP = abs(world('foot.L').y - world('foot.R').y); STRIDE = 2 * STEP
+toe_min = 9; toe_max = -9
 for f in range(WALK_N + 1):
     scene.frame_set(f); bpy.context.view_layer.update()
     for tag in ('L', 'R'):
-        tz = world(f'foot.{tag}', tail=True).z; hz = world(f'foot.{tag}').z
-        toe_min = min(toe_min, tz); toe_max = max(toe_max, tz); heel_min = min(heel_min, hz)
-print(f'REPORT step={STEP:.3f} stride={STRIDE:.3f} toe_z=[{toe_min:.3f},{toe_max:.3f}] ankle_min_z={heel_min:.3f}')
+        tz = world(f'foot.{tag}', tail=True).z; toe_min = min(toe_min, tz); toe_max = max(toe_max, tz)
+print(f'REPORT step={STEP:.3f} stride={STRIDE:.3f} toe_z=[{toe_min:.3f},{toe_max:.3f}]')
 
-# ---- Idle: restrained breathing, a slow weight shift, tiny head drift ---------------------
-new_action('Idle')
-IDLE_N = 72
+new_action('Idle'); IDLE_N = 72
 for f in range(IDLE_N + 1):
-    t = f / IDLE_N
-    br = math.sin(2 * math.pi * t)                 # one breath per 3 s
-    sw = math.sin(2 * math.pi * t * 0.5 + 0.8)     # slow weight shift
-    key('hips', f, rz=0.012 * sw, loc=(0.006 * sw, 0.004 * br, 0.0))
-    key('spine', f, rx=0.045 + 0.018 * br, rz=-0.008 * sw)
-    key('neck', f, rx=-0.02)
-    key('head', f, rx=0.012 * math.sin(2 * math.pi * t + 0.9), rz=0.015 * math.sin(2 * math.pi * t * 0.5))
+    t = f / IDLE_N; br = math.sin(2 * math.pi * t); sw = math.sin(2 * math.pi * t * 0.5 + 0.8)
+    key('hips', f, rz=0.010 * sw, loc=(0.005 * sw, 0.004 * br, 0.0))
+    key('spine', f, rx=0.035 + 0.016 * br, rz=-0.007 * sw); key('neck', f, rx=-0.015)
+    key('head', f, rx=0.010 * math.sin(2 * math.pi * t + 0.9), rz=0.012 * math.sin(2 * math.pi * t * 0.5))
     for tag, s in (('L', 1), ('R', -1)):
         key(f'thigh.{tag}', f, rx=0.0); key(f'shin.{tag}', f, rx=0.0); key(f'foot.{tag}', f, rx=0.0)
-        key(f'upperarm.{tag}', f, rx=fwd(0.04 * br + 0.02), rz=-s * 0.10, ry=0.0)
-        key(f'forearm.{tag}', f, rx=fwd(0.22 + 0.03 * br))
-        key(f'hand.{tag}', f, rx=fwd(0.05))
-        key(f'shoulder.{tag}', f, ry=0.0)
+        key(f'upperarm.{tag}', f, rx=fwd(0.03 * br + 0.02), rz=-s * 0.06, ry=0.0)
+        key(f'forearm.{tag}', f, rx=fwd(0.14 + 0.03 * br)); key(f'hand.{tag}', f, rx=fwd(0.04)); key(f'shoulder.{tag}', f, ry=0.0)
 bpy.ops.object.mode_set(mode='OBJECT')
+arm['strideLength'] = round(STRIDE, 4); arm['walkClipSeconds'] = round(WALK_N / FPS, 4); mesh['strideLength'] = round(STRIDE, 4)
 
-# The asset carries its own stride so the game never guesses it.
-arm['strideLength'] = round(STRIDE, 4); arm['walkClipSeconds'] = round(WALK_N / FPS, 4)
-mesh['strideLength'] = round(STRIDE, 4)
-
-# ---- report + export ---------------------------------------------------------------------
 tris = L.tri_count(mesh)
-print(f'REPORT tris={tris} materials={len(mesh.data.materials)} verts={len(mesh.data.vertices)} height={H_TOTAL}')
-out = REPO / 'assets' / 'characters' / 'victor.glb'
-out.parent.mkdir(parents=True, exist_ok=True)
-bpy.ops.object.select_all(action='DESELECT')
-arm.select_set(True); mesh.select_set(True)
-bpy.context.view_layer.objects.active = arm
-bpy.ops.export_scene.gltf(
-    filepath=str(out), export_format='GLB', use_selection=True,
-    export_apply=False, export_animations=True, export_animation_mode='ACTIONS',
-    export_yup=True, export_morph=False, export_extras=True,
-)
+print(f'REPORT tris={tris} materials={len(mesh.data.materials)} verts={len(mesh.data.vertices)} height={H}')
+out = REPO / 'assets' / 'characters' / 'victor.glb'; out.parent.mkdir(parents=True, exist_ok=True)
+bpy.ops.object.select_all(action='DESELECT'); arm.select_set(True); mesh.select_set(True); bpy.context.view_layer.objects.active = arm
+bpy.ops.export_scene.gltf(filepath=str(out), export_format='GLB', use_selection=True, export_apply=False, export_animations=True,
+                          export_animation_mode='ACTIONS', export_yup=True, export_morph=False, export_extras=True)
 print(f'REPORT file_bytes={out.stat().st_size} path={out}')

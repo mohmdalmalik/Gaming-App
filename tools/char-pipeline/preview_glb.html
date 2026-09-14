@@ -28,15 +28,18 @@ renderer.setSize(innerWidth, innerHeight);
 document.body.appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
-const isPortrait = view === 'front' || view === 'tq' || view === 'side' || view === 'back';
+const isPortrait = view === 'front' || view === 'tq' || view === 'side' || view === 'back' || view === 'body' || view === 'face';
 scene.background = new THREE.Color(isPortrait ? 0x1a1d27 : 0x8a6a3a);
 const cam = new THREE.PerspectiveCamera(isPortrait ? 28 : 42, innerWidth / innerHeight, 0.1, 100);
 
 // Lighting close to the hall: hemisphere (sky lerped to a warm mood) + a warm point light overhead.
+const NEUTRAL = (q.get('view') === 'body' || q.get('view') === 'face') && q.get('light') !== 'game';
 const hemi = new THREE.HemisphereLight(new THREE.Color('#ffffff').lerp(new THREE.Color('#ffd9a8'), 0.5), new THREE.Color('#3a3438'), 0.6);
 scene.add(hemi);
-const pt = new THREE.PointLight(new THREE.Color('#ffd9a8'), 22, 9, 2); pt.position.set(1.2, 2.6, 1.6); scene.add(pt);
-const pt2 = new THREE.PointLight(new THREE.Color('#ffd9a8'), 10, 9, 2); pt2.position.set(-2.0, 2.4, -1.0); scene.add(pt2);
+// Neutral = albedo-faithful: a front-facing Lambert surface renders at about its base colour (Lambert divides by pi)
+  if (NEUTRAL) { hemi.color.set('#ffffff'); hemi.groundColor.set('#9a9a9a'); hemi.intensity = 1.5; const dl = new THREE.DirectionalLight('#ffffff', 2.3); dl.position.set(1.5, 3, 4); scene.add(dl); }
+const pt = new THREE.PointLight(new THREE.Color('#ffd9a8'), 22, 9, 2); pt.position.set(1.2, 2.6, 1.6); if (!NEUTRAL) scene.add(pt);
+const pt2 = new THREE.PointLight(new THREE.Color('#ffd9a8'), 10, 9, 2); pt2.position.set(-2.0, 2.4, -1.0); if (!NEUTRAL) scene.add(pt2);
 if (!isPortrait) {
   const floor = new THREE.Mesh(new THREE.PlaneGeometry(8, 8), new THREE.MeshLambertMaterial({ color: 0x8a5a2e }));
   floor.rotation.x = -Math.PI / 2; scene.add(floor);
@@ -71,6 +74,14 @@ new GLTFLoader().load(src, (gltf) => {
   else if (view === 'tq') { cam.position.set(d * 0.42, box.min.y + h * 0.82, d * 0.52); cam.lookAt(0, box.min.y + h * 0.72, 0); cam.fov = 26; }
   else if (view === 'side') { cam.position.set(d * 0.7, box.min.y + h * 0.55, 0.0); cam.lookAt(0, cy, 0); cam.fov = 30; }
   else if (view === 'back') { cam.position.set(0, box.min.y + h * 0.8, -d * 0.62); cam.lookAt(0, box.min.y + h * 0.74, 0); cam.fov = 26; }
+  else if (view === 'body') {       // level full-body view like a turnaround sheet (use yaw= for 3/4, side, back)
+    scene.background = new THREE.Color('#d8d8d8');
+    cam.position.set(0, box.min.y + h * 0.52, 15.0); cam.lookAt(0, box.min.y + h * 0.50, 0); cam.fov = 7.6;   // long lens: sheet-like, little perspective
+  }
+  else if (view === 'face') {       // level face close-up like the sheet's face panels (use yaw=)
+    scene.background = new THREE.Color('#d8d8d8');
+    cam.position.set(0, box.min.y + h * 0.84, 4.0); cam.lookAt(0, box.min.y + h * 0.82, 0); cam.fov = 9;
+  }
   else if (view === 'portrait') {   // tight bust for the interface portrait (charcoal plate)
     scene.background = new THREE.Color('#171b27');
     cam.position.set(0.05, box.min.y + h * 0.86, 2.15); cam.lookAt(0, box.min.y + h * 0.80, 0); cam.fov = 24;

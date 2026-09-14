@@ -255,3 +255,53 @@ def join(objs, name):
 def tri_count(ob):
     ob.data.calc_loop_triangles()
     return len(ob.data.loop_triangles)
+
+# ---- parametric closed shells (skull, hair) ---------------------------------------------------
+def shell(name, fn, nlon=48, nlat=28, warp_u=0.0, warp_v=0.0, smooth=True):
+    """A closed latitude/longitude shell over a function fn(u, v) -> Vector, u in [0,1) longitude
+    (0 = front centre, 0.5 = back), v in (0,1) latitude (0 = top pole, 1 = bottom pole). The poles are
+    single vertices. warp_u/warp_v (0..~0.12) concentrate samples toward the front / the middle."""
+    bm = bmesh.new()
+    rings = []
+    for j in range(1, nlat):
+        s = j / nlat; v = s + warp_v * math.sin(2 * math.pi * s)
+        ring = []
+        for i in range(nlon):
+            t = i / nlon; u = (t - warp_u * math.sin(2 * math.pi * t)) % 1.0
+            ring.append(bm.verts.new(fn(u, v)))
+        rings.append(ring)
+    top = bm.verts.new(fn(0.0, 0.0)); bot = bm.verts.new(fn(0.0, 1.0))
+    for i in range(nlon):
+        j = (i + 1) % nlon
+        bm.faces.new((top, rings[0][i], rings[0][j]))
+        bm.faces.new((bot, rings[-1][j], rings[-1][i]))
+    for a, b in zip(rings[:-1], rings[1:]):
+        for i in range(nlon):
+            j = (i + 1) % nlon
+            bm.faces.new((a[i], b[i], b[j], a[j]))
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+    return new_object(name, bm, smooth)
+
+def superellipse_pt(w, d, e, t):
+    """Point on a superellipse cross-section: half-width w (X), half-depth d (Y), exponent e
+    (2 = ellipse, 4..6 = squarer), parameter t in [0, 2pi). Returns (x, y)."""
+    c, s = math.cos(t), math.sin(t); k = 2.0 / e
+    return (math.copysign(abs(c) ** k, c) * w, math.copysign(abs(s) ** k, s) * d)
+
+def normal_of(fn, u, v, e=1e-3):
+    """Outward normal of a shell function at (u, v) by finite differences."""
+    du = (fn((u + e) % 1.0, v) - fn((u - e) % 1.0, v))
+    dv = (fn(u, min(1 - e, v + e)) - fn(u, max(e, v - e)))
+    n = du.cross(dv)
+    if n.length < 1e-12: return Vector((0, 0, 1))
+    n.normalize()
+    return n
+
+def lerp_table(z, table):
+    """Piecewise-linear lookup: table = [(z0, val0), (z1, val1), ...] sorted by z."""
+    if z <= table[0][0]: return table[0][1]
+    if z >= table[-1][0]: return table[-1][1]
+    for (za, a), (zb, b) in zip(table[:-1], table[1:]):
+        if za <= z <= zb:
+            t = (z - za) / (zb - za); return a + (b - a) * t
+    return table[-1][1]

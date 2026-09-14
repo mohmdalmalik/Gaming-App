@@ -64,4 +64,21 @@ gitignored; recreate it with `ln -sfn ../../tests/node_modules tools/char-pipeli
 | `record_smooth.mjs` | deterministic 30 fps recording: steps the page clock per frame, screenshots, encodes a webm in-browser |
 | `portrait.mjs` + `portrait_post.py` | interface portraits (normal + possessed) rendered from the model |
 | `scene_stats.mjs` | live draw calls / triangles / programs with Victor loaded |
+| `make_panels.py` | cuts `ref/victor-sheet.png` into `ref/panels/` (front, tq, side, back, face close-ups, elevated) |
+| `compare.py` | sheet panel vs render silhouette at equal displayed height: IoU, width per 4 % band, overlay image |
+| `compare_head.py` | head close-up vs `face@yaw` render: widths per 5 % of head height, eye/brow/moustache blobs |
 Outputs (`shots/`, `*.glb`, `*.png`, `*.webm`, `rec/`) are gitignored; `node_modules` is a symlink to `tests/node_modules`.
+Exceptions: the owner's references `ref/victor-sheet.png` and `ref/hotel-reference.jpg` are committed.
+
+## Victor v5 loop (appearance pass)
+```bash
+python3 tools/char-pipeline/make_panels.py                       # once: cut the sheet into ref/panels/
+python3 tools/char-pipeline/make_victor.py                       # rebuild the GLB (REPORT lines: stride, tris, bytes)
+node tools/char-pipeline/preview_glb.mjs --glb assets/characters/victor.glb --out tools/char-pipeline/shots/v5 \
+     --views body@0,body@35,body@90,body@180,face@0,face@35,face@90   # neutral, sheet-like renders
+python3 tools/char-pipeline/compare.py tools/char-pipeline/ref/panels/front.png tools/char-pipeline/shots/v5-body-0.png tools/char-pipeline/shots/cmp-front.png
+python3 tools/char-pipeline/compare_head.py front tools/char-pipeline/ref/panels/face-front.png tools/char-pipeline/shots/v5-face-0.png
+node tools/char-pipeline/capture.mjs --out tools/char-pipeline/shots/v5g --w 1194 --h 834 --dpr 2 --rot 4   # real game
+node tools/char-pipeline/portrait.mjs                            # interface portraits from the model
+```
+

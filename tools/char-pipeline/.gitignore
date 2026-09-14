@@ -6,3 +6,5 @@ node_modules
 rec
 shots
 __pycache__
+!ref/victor-sheet.png
+!ref/hotel-reference.jpg

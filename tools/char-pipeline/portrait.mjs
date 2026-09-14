@@ -15,10 +15,11 @@ const CDN = 'https://cdn.jsdelivr.net/npm/three@0.186.0/';
 const GLB = path.join(REPO, 'assets/characters/victor.glb');
 const OUT = path.join(HERE, 'shots'); fs.mkdirSync(OUT, { recursive: true });
 
-// Eye centres in glTF space (Y up, face toward +Z). From make_victor.py: x = ±0.088, z_blender = HEADC + 0.035.
-const HEADC = 1.36, EYE_Y = HEADC + 0.035, EYE_Z = 0.21;
+// Eye centres in glTF space (Y up, face toward +Z). From make_victor.py CFG: eye_x = ±0.071,
+// z_eye = zp(17.3) = 1.373, face plane 0.233 in front of the skull axis (+0.004 lift).
+const EYE_X = 0.071, EYE_Y = 1.373, EYE_Z = 0.237;
 const YAW = 14;   // a touch of 3/4 turn (degrees) — the target HUD portrait is not dead-on
-const points = [[-0.088, EYE_Y, EYE_Z], [0.088, EYE_Y, EYE_Z]].map(p => p.join(',')).join(';');
+const points = [[-EYE_X, EYE_Y, EYE_Z], [EYE_X, EYE_Y, EYE_Z]].map(p => p.join(',')).join(';');
 
 const chrome = [process.env.CHROME_PATH, '/opt/pw-browsers/chromium-1194/chrome-linux/chrome'].filter(Boolean).find(fs.existsSync);
 const browser = await chromium.launch({ executablePath: chrome, headless: true, args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--no-sandbox'] });

@@ -82,6 +82,18 @@ docs/                 GAME_RULES (spec), GAME_CONCEPT, DECISIONS, PROGRESS
 tests/                Node checks (rules-check, logic-check) + a headless browser walkthrough
 ```
 
+## Character pipeline (Blender → glTF → game)
+Characters are built headless with Blender as a Python module and exported as `.glb`:
+```bash
+python3 -m pip install "bpy==4.2.0" pillow
+python3 tools/char-pipeline/make_victor.py          # rebuilds assets/characters/victor.glb
+node tools/char-pipeline/preview_glb.mjs --glb assets/characters/victor.glb --out tools/char-pipeline/shots/v
+node tools/char-pipeline/capture.mjs --out tools/char-pipeline/shots/g --rot 4   # real-game screenshots
+node tools/char-pipeline/portrait.mjs                 # interface portraits from the model
+```
+(`tools/char-pipeline/README.md` lists every tool; `docs/CHARACTER_GUI_CHECKPOINT.md` is the
+working checkpoint for the character + interface phase.)
+
 ## Changing the rules or the floor
 
 Every rule number — action points, action costs, health, hand size, deck composition, card

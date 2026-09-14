@@ -1,8 +1,26 @@
 # Progress
 
-_Last updated after the first real 3D character (Victor) was modelled, rigged, animated and integrated._
+_Last updated after pass 12b: Victor v2 (designed model), grounded movement, model portraits and the interface pass — presented for the owner's visual review._
 
 ## Done
+### Pass 12b — Victor v2, grounded movement, portraits from the model, interface pass
+Against the owner's cartoon target (measured in `docs/CHARACTER_GUI_CHECKPOINT.md`):
+- **Victor v2**: designed skull (jaw, chin, cheeks), hair cap with snapped hairline / side part /
+  quiff, tapered brows + moustache, eyes/nose/ears/mouth on the face surface; lofted tailored jacket
+  with conforming shirt V + peaked lapels, bow tie, cuffs, mitt hands, shoes; jointed rig (shoulders,
+  elbows, hips, knees, ankles). 14,420 tris, 8 materials, 480 KB.
+- **Movement**: phased walk (contact / passing / lift, hip bob, opposing arms with elbows); the game
+  advances the walk by distance travelled ÷ the clip's measured stride (in the GLB), so feet don't
+  slide; smooth Idle↔Walk fades; verified from the real game (`walk_check.mjs`).
+- **Portraits** rendered from the model (normal + private possessed) replace the painted ones.
+- **Interface**: coordinated bottom bar (no overlap at 1024×768 … 1366×1024 and in portrait), guest
+  strip on a dark plate, ≥48 px targets, drawn card icons, map with labels clear of the arrow.
+- Automated: all three suites pass; real-game screenshots at 4 rotations and 5 viewports; a
+  deterministic 30 fps recording. **Not yet tested on a real iPad.**
+- Remaining limitations (honest): hairline shows slight stepping at the temples in close-up; limb
+  segmentation (capsule joints) is visible up close; a tiny within-cycle foot slide at
+  contact/toe-off (the average is matched); headless captures can't show device frame rate.
+
 ### Pass 12 — first real 3D character (Victor, glTF)
 Replaced only Victor's placeholder box figure with a real rounded, cartoon-style 3D guest built and
 animated headless in Blender (`bpy`) and exported to `assets/characters/victor.glb`.

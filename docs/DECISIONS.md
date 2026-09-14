@@ -244,10 +244,52 @@ Implements `docs/GAME_RULES.md`. Kept pure and separate from rendering so a serv
   use `frustumCulled = false` (posed bounds differ from bind-pose bounds). Death collapses the whole
   model flat; the box-figure death pose is unchanged for other guests. The loader/mixer path is fully
   isolated in `if (useModel)` branches so the placeholder code is byte-for-byte the old behaviour.
-- **Cost**: 4,420 triangles, 6 materials, ~217 KB uncompressed `.glb` — light for iPad (Draco isn't
-  available in this headless Blender, and uncompressed is simpler for Three.js; can compress later if
-  many characters ship).
-- **Portrait**: the interface still uses the **painted** `victor.jpg` portrait. A model-rendered
-  option (`assets/portraits/victor-model.jpg`, a front bust of the actual 3D guest) exists but is
-  **not wired**. Which portrait to use is an open product choice for the owner; the painted one stays
-  active until they decide.
+- **Cost (v1)**: 4,420 triangles, 6 materials, ~217 KB. Superseded by v2 below (14,420 tris, 8
+  materials, 480 KB; still uncompressed — Draco isn't available in this headless Blender).
+- **Portrait (v1)**: kept the painted portrait. Superseded: since v2 the portraits are rendered from
+  the model (owner-authorised), see below.
+
+## Victor v2, grounded movement and the interface pass (pass 12b)
+Brief: bring Victor, his movement and the player interface up to the owner's cartoon target
+(`docs/CHARACTER_GUI_CHECKPOINT.md` has the measured target, the gap analysis, every increment and
+the lessons). Key decisions:
+- **Build from measured proportions, not guesses**: ~2.9 heads tall, shoulders 1.25× head width,
+  torso 29 % / legs 32 % / head 36 % of height. Everything is parametric in
+  `tools/char-pipeline/make_victor.py` on top of `victor_lib.py` (superellipse lofts, capsules,
+  smooth-falloff vertex shapers, tapered tubes, sRGB→linear colours). Rebuild = one command.
+- **Designed head, not a scaled sphere**: a UV-sphere skull with jaw taper, chin, cheeks and a fuller
+  back; features (eyes, brows, nose, ears, moustache, mouth) are placed with the skull's analytic
+  surface function so they sit ON the face. Hair is a closed cap that owns the crown, with vertices
+  in the first row below the hairline snapped onto the hairline curve (clean edge, no stair-step),
+  a side part on his left and a swept quiff on his right (built at the origin, rotated about its own
+  centre, then placed).
+- **Tailoring that conforms**: the jacket is a loft with rounded shoulders, waist and hem; the shirt
+  V and peaked lapels are triangulated + subdivided panels projected onto the chest surface (a
+  corner-only polygon is a flat chord that sags behind the bulging chest and vanishes).
+- **Rig for clean bends**: shoulder/upper-arm/forearm/hand and thigh/shin/foot per side, spine,
+  neck, head; limb segments are capsules with joint spheres, so rigid weights bend cleanly. Elbows
+  and knees are real joints now.
+- **Walk with phases, stride measured**: contact / mid-stance / toe-off / passing per leg, knee lift
+  in swing, hip bob + sway, pelvis/spine counter-rotation, opposing arm swing with elbow bend. The
+  cycle's stride is measured from the posed feet in Blender and written into the GLB extras
+  (`strideLength`). In the game (`characterView.js`) the walk **phase advances by distance
+  travelled ÷ stride**, so the planted foot moves backward at exactly the ground speed — no sliding
+  at any speed, and game movement stays authoritative (the clip is in place).
+- **Shading**: matte Lambert conversion on load (unchanged), colours authored as sRGB hex. No scene
+  lighting was changed to flatter the character.
+- **Portraits from the model**: `portrait.mjs` renders a bust with the game's look; `portrait_post.py`
+  crops it and makes the private possessed variant (cold wash, vignette, altered eye drawn at the
+  projected eye position). Same filenames as before, so the interface code and the public/private
+  rule are unchanged.
+- **Interface**: one `.hud-bottom` container (flex; a two-row grid in portrait) so the panel, hand
+  opener and buttons can never overlap; guest strip on a charcoal plate; ≥48 px targets; drawn SVG
+  card icons (`ui/cardIcons.js`, a painted image in `CARD_ART` still wins); map labels kept clear of
+  the position arrow, plus a grid and compass. All DOM ids the tests rely on are unchanged.
+- **Evidence tooling** (`tools/char-pipeline/`): `capture.mjs` (real-game screenshots at any viewport,
+  N rotations, hand/map, `--still`), `preview_glb.mjs` (front/¾/back/game-angle/turntable/portrait
+  renders with the game's lighting), `walk_check.mjs` (movement verification from the real game),
+  `record_smooth.mjs` (deterministic 30 fps recording by stepping the page clock), `scene_stats.mjs`
+  (live draw calls / triangles). Headless SwiftShader renders at ~3 fps, so only game-time-stepped
+  recordings represent animation timing; none of it is iPad performance evidence.
+- **Measured**: victor.glb 14,420 tris / 8 materials / 480,412 bytes; whole hall scene with Victor
+  340 draw calls, 41,426 triangles, 13 programs (headless count, same code path as the iPad).

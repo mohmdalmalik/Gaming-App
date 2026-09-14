@@ -17,6 +17,7 @@ behaviour, Three.js + GitHub Pages + relative paths + no build step.
 ## Branch / commits
 - Branch: `main` (project rule: commit directly to main so the Pages preview updates).
 - Last working commit before this phase: `fca6199` — Victor v1 (upright head, matte shading, sRGB colours).
+- Phase commits so far: `77cc0ca` tooling/checkpoint · `673ee96` Victor v2 model · `6f6ba6b` movement + portraits · interface commit (see `git log`). All pushed to `origin/main`.
 - Phase commits are listed under "Completed increments" below as they land.
 
 ## The target, measured (from the reference image)
@@ -135,6 +136,11 @@ hardcoded home directory.
    `victor-possessed.jpg` (cold violet wash, vignette, glowing slit-pupil right eye drawn at the
    projected eye position). Same filenames as before → `PORTRAIT_ART` unchanged; the public strip
    still always requests the normal look. The painted portraits are replaced (owner-authorised).
+5. Interface (`index.html`, `styles.css`, `src/ui/cardIcons.js`, `src/ui/cards.js`, `src/map.js`): one
+   `.hud-bottom` flex container (grid, two rows, in portrait/≤900 px) so the panel, hand opener and
+   buttons never overlap; guest strip on a charcoal plate (names readable over bright walls); ≥48 px
+   targets; drawn SVG card icons; map with labels clear of the arrow, grid and compass. Verified at
+   1194×834, 1024×768, 1180×820, 1366×1024, 834×1194 (`shots/gui-*.png`, captured with `--still`).
 
 ## Failed attempts / lessons (keep — they save the next session time)
 - v1: tilting the head up to "catch" the camera exposed the bald crown → shiny bald egg from above.
@@ -144,15 +150,35 @@ hardcoded home directory.
 - v1: `MeshStandardMaterial` specular blew a hotspot on the round head under the warm overhead light;
   matte Lambert conversion on load (same as the furniture loader) fixed it.
 
-## Unresolved problems
-- (tracked here as they appear)
+## Unresolved problems / honest limitations
+- Hairline shows slight stair-stepping at the temples in the portrait close-up (sphere row density);
+  invisible at game size. Fix if wanted: denser rows near the hairline or a lofted cap.
+- Limb joints are capsule segments with joint spheres — visible segmentation up close; clean at
+  game size. Smooth-weighted continuous limbs would be the upgrade.
+- Walk stance uses a smooth-triangle thigh curve, so there is a tiny within-cycle foot slide at
+  contact/toe-off; the average cadence is exactly matched to distance.
+- Headless renders run ~3 fps; only the clock-stepped recording represents animation timing. iPad
+  frame rate is untested (340 draw calls / 41k tris in the hall).
+- Design-panel workflow: 3 designs completed, judge + synthesis agents hit the session usage limit
+  (results in the workflow transcript). Not incorporated; the shipped approach was validated by
+  renders instead.
 
-## Evidence captured
-- (paths listed as they are produced; all "in-game" shots are headless Chromium/SwiftShader renders
-  of the real game page — automated checks, not iPad testing)
+## Evidence captured (all headless Chromium/SwiftShader renders of the REAL game page or the real GLB —
+automated checks, not iPad testing). Under `tools/char-pipeline/shots/` (gitignored):
+- Baseline: `base-r{0..3}(-crop).png`, `base-{1024,1180,1366,portrait}-r0.png`, `base-still-{hand,map}.png`.
+- Model iterations: `v2…v5-*.png`; final character `final-char-{front,tq,back,turn0..3}.png`.
+- Final in-game, 1194×834 @2, 4 rotations: `final-r{0..3}(-crop).png`; zoomed `g6z-r0-crop.png`.
+- Interface: `gui-r0.png` (hand closed), `gui-hand.png`, `gui-map.png` at 1194×834; `gui-1024-r0.png`,
+  `gui-1180-r0.png`, `gui-1366-r0.png`, `gui-portrait-r0.png` (+ `-hand`/`-map` each). Viewports are
+  CSS px; screenshots are ×2 (see each `*.json`).
+- Movement: `walkframes/f*.png` (real-game mid-walk frames), `victor-walk.webm` (deterministic 30 fps,
+  `record_smooth.mjs`), `recframes/*.jpg` contact sheet.
+- Portraits: `assets/portraits/victor.jpg`, `victor-possessed.jpg` (shipped).
+- Measurements: victor.glb 14,420 tris / 8 materials / 480,412 B; scene with Victor: 340 draw calls,
+  41,426 tris, 13 programs (`scene_stats.mjs`).
 
 ## Next concrete action
-Capture the baseline (4 rotations, normal zoom, 1194×834@2) and fill in the gap analysis.
+Evidence pass: deterministic 30 fps recording (idle → walk → turn → stop → doorway), final screenshot set, asset measurements, docs (DECISIONS/PROGRESS/README), push, owner test list.
 
 ## Owner decisions pending
 - (none yet)

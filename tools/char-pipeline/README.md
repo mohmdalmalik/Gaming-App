@@ -52,3 +52,16 @@ gitignored; recreate it with `ln -sfn ../../tests/node_modules tools/char-pipeli
 **Result**: `assets/characters/victor.glb` — **4,420 triangles, 6 materials, ~217 KB**, two clips
 (`Idle`, `Walk`), loads with no console errors and animates in-game. Wired into the game via the
 `tuxedo` outfit's `model` field; see `docs/DECISIONS.md` → "First real 3D character".
+
+## Tools (phase 12b)
+| Tool | What it does |
+|---|---|
+| `victor_lib.py` | deterministic bmesh helpers: superellipse lofts, capsules, UV spheres, smooth-falloff shapers, tapered tubes, sRGB→linear |
+| `make_victor.py` | builds Victor v2 (model + jointed rig + Idle/Walk) → `assets/characters/victor.glb`; prints tris/materials/bytes and the measured stride |
+| `preview_glb.mjs` / `preview_glb.html` | renders any GLB: front, tq, side, back, game angle, true game scale, 4-yaw turntable, portrait; game-like lighting + Lambert conversion |
+| `capture.mjs` | real-game screenshots at any viewport/dpr, N camera rotations (+ crops on Victor), hand/map open, `--still` freezes CSS animations |
+| `walk_check.mjs` | drives walks/turns/interrupt/doorway from the real game; verifies stride in use, phase-vs-distance, mesh-vs-mover, settle; records a webm + frames |
+| `record_smooth.mjs` | deterministic 30 fps recording: steps the page clock per frame, screenshots, encodes a webm in-browser |
+| `portrait.mjs` + `portrait_post.py` | interface portraits (normal + possessed) rendered from the model |
+| `scene_stats.mjs` | live draw calls / triangles / programs with Victor loaded |
+Outputs (`shots/`, `*.glb`, `*.png`, `*.webm`, `rec/`) are gitignored; `node_modules` is a symlink to `tests/node_modules`.

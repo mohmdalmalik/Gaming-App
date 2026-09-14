@@ -171,14 +171,18 @@ automated checks, not iPad testing). Under `tools/char-pipeline/shots/` (gitigno
 - Interface: `gui-r0.png` (hand closed), `gui-hand.png`, `gui-map.png` at 1194×834; `gui-1024-r0.png`,
   `gui-1180-r0.png`, `gui-1366-r0.png`, `gui-portrait-r0.png` (+ `-hand`/`-map` each). Viewports are
   CSS px; screenshots are ×2 (see each `*.json`).
-- Movement: `walkframes/f*.png` (real-game mid-walk frames), `victor-walk.webm` (deterministic 30 fps,
-  `record_smooth.mjs`), `recframes/*.jpg` contact sheet.
+- Movement: `walkframes/f*.png` (real-game mid-walk frames); `victor-walk.webm` = 183 frames, 6.1 s at
+  30 fps of GAME time (`record_smooth.mjs`; verified 33 ms game time per frame: 10 ticks moved the
+  mover 0.64 m at 2 m/s), route idle → walk → turn → stop → north door → doorway crossing into the
+  East Corridor; `recframes/*.jpg` contact sheet.
 - Portraits: `assets/portraits/victor.jpg`, `victor-possessed.jpg` (shipped).
 - Measurements: victor.glb 14,420 tris / 8 materials / 480,412 B; scene with Victor: 340 draw calls,
   41,426 tris, 13 programs (`scene_stats.mjs`).
 
 ## Next concrete action
-Evidence pass: deterministic 30 fps recording (idle → walk → turn → stop → doorway), final screenshot set, asset measurements, docs (DECISIONS/PROGRESS/README), push, owner test list.
+Phase presented for the owner's visual review (2026-09-14). Do NOT start the other characters or
+rooms until approved. If feedback arrives: adjust `make_victor.py` parameters / `styles.css`, rebuild,
+re-run `capture.mjs` + `walk_check.mjs`, commit.
 
 ## Owner decisions pending
 - (none yet)

@@ -128,6 +128,38 @@ def ellipsoid(name, r, loc, scale=(1, 1, 1), subdiv=3):
         v.co = Vector((v.co.x * scale[0], v.co.y * scale[1], v.co.z * scale[2])) + Vector(loc)
     return new_object(name, bm)
 
+def uvsphere(name, r, loc, scale=(1, 1, 1), u=36, v=24):
+    """A UV sphere (rings aligned with the silhouette, so it stays smooth in close-ups)."""
+    bm = bmesh.new()
+    bmesh.ops.create_uvsphere(bm, u_segments=u, v_segments=v, radius=r)
+    for vt in bm.verts:
+        vt.co = Vector((vt.co.x * scale[0], vt.co.y * scale[1], vt.co.z * scale[2])) + Vector(loc)
+    return new_object(name, bm)
+
+def rotate_verts(ob, euler_xyz, about=(0, 0, 0)):
+    """Rotate the mesh's vertices about a point (no operators, no object transform)."""
+    from mathutils import Euler
+    m = Euler(euler_xyz, 'XYZ').to_matrix()
+    c = Vector(about)
+    for v in ob.data.vertices:
+        v.co = c + m @ (v.co - c)
+    ob.data.update()
+
+def translate_verts(ob, offset):
+    d = Vector(offset)
+    for v in ob.data.vertices: v.co += d
+    ob.data.update()
+
+def radial_scale(ob, centre, fn):
+    """Scale each vertex away from `centre` by fn(vertex) -> float."""
+    c = Vector(centre)
+    for v in ob.data.vertices:
+        v.co = c + (v.co - c) * fn(v.co)
+    ob.data.update()
+
+def smoothstep(t):
+    t = max(0.0, min(1.0, t)); return t * t * (3 - 2 * t)
+
 def capsule(name, r_top, r_bot, z_top, z_bot, loc=(0, 0), n=16, rings=6):
     """A limb segment: a tapered cylinder with hemispherical ends, from z_bot to z_top at (x,y)=loc."""
     profiles = []

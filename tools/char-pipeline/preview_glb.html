@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>glb preview</title>
+<style>html,body{margin:0;height:100%;background:#2a2118;overflow:hidden}</style>
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.186.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.186.0/examples/jsm/"
+} }
+</script></head><body>
+<script type="module">
+// Generic character previewer. Mimics the game: Neutral tone mapping, hemisphere + warm point light,
+// PBR materials converted to matte Lambert (same as src/render/characterView.js).
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+const q = new URLSearchParams(location.search);
+const src = q.get('glb') || '/assets/characters/victor.glb';
+const view = q.get('view') || 'game';       // front | tq | side | back | game | gamescale
+const clipName = q.get('clip') || 'Idle';
+const t = parseFloat(q.get('t') || '0');    // seconds into the clip to freeze at (0 = start; play if 'play')
+const yaw = parseFloat(q.get('yaw') || '0');  // model rotation about Y in degrees (turntable)
+const dist = parseFloat(q.get('dist') || '0');
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.NeutralToneMapping; renderer.toneMappingExposure = 1.0;
+renderer.setPixelRatio(Math.min(2, devicePixelRatio || 1));
+renderer.setSize(innerWidth, innerHeight);
+document.body.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+const isPortrait = view === 'front' || view === 'tq' || view === 'side' || view === 'back';
+scene.background = new THREE.Color(isPortrait ? 0x1a1d27 : 0x8a6a3a);
+const cam = new THREE.PerspectiveCamera(isPortrait ? 28 : 42, innerWidth / innerHeight, 0.1, 100);
+
+// Lighting close to the hall: hemisphere (sky lerped to a warm mood) + a warm point light overhead.
+const hemi = new THREE.HemisphereLight(new THREE.Color('#ffffff').lerp(new THREE.Color('#ffd9a8'), 0.5), new THREE.Color('#3a3438'), 0.6);
+scene.add(hemi);
+const pt = new THREE.PointLight(new THREE.Color('#ffd9a8'), 22, 9, 2); pt.position.set(1.2, 2.6, 1.6); scene.add(pt);
+const pt2 = new THREE.PointLight(new THREE.Color('#ffd9a8'), 10, 9, 2); pt2.position.set(-2.0, 2.4, -1.0); scene.add(pt2);
+if (!isPortrait) {
+  const floor = new THREE.Mesh(new THREE.PlaneGeometry(8, 8), new THREE.MeshLambertMaterial({ color: 0x8a5a2e }));
+  floor.rotation.x = -Math.PI / 2; scene.add(floor);
+  scene.add(new THREE.GridHelper(8, 16, 0x6a4626, 0x5a3c22));
+}
+
+function flatten(src) {
+  const m = new THREE.MeshLambertMaterial({ color: src.color ? src.color.clone() : new THREE.Color('#cccccc') });
+  if (src.map) m.map = src.map;
+  if (src.emissive) m.emissive = src.emissive.clone();
+  if (src.transparent) { m.transparent = true; m.opacity = src.opacity; }
+  if (src.side !== undefined) m.side = src.side;
+  m.name = src.name; return m;
+}
+
+let mixer = null, action = null; const clock = new THREE.Clock();
+new GLTFLoader().load(src, (gltf) => {
+  const root = gltf.scene; root.rotation.y = THREE.MathUtils.degToRad(yaw); scene.add(root);
+  let meshes = 0, tris = 0; const mats = new Map();
+  root.traverse(o => {
+    if (!o.isMesh) return;
+    meshes++; o.frustumCulled = false;
+    const g = o.geometry; tris += (g.index ? g.index.count : g.attributes.position.count) / 3;
+    o.material = Array.isArray(o.material) ? o.material.map(flatten) : flatten(o.material);
+    for (const m of (Array.isArray(o.material) ? o.material : [o.material])) mats.set(m.name, '#' + m.color.getHexString());
+  });
+  const box = new THREE.Box3().setFromObject(root); const size = box.getSize(new THREE.Vector3());
+  const h = Math.max(0.5, size.y), cy = box.min.y + h * 0.5;
+  // Camera placement per view
+  const d = dist || (isPortrait ? h * 2.1 : 6.5);
+  if (view === 'front') { cam.position.set(0, box.min.y + h * 0.78, d * 0.62); cam.lookAt(0, box.min.y + h * 0.74, 0); cam.fov = 26; }
+  else if (view === 'tq') { cam.position.set(d * 0.42, box.min.y + h * 0.82, d * 0.52); cam.lookAt(0, box.min.y + h * 0.72, 0); cam.fov = 26; }
+  else if (view === 'side') { cam.position.set(d * 0.7, box.min.y + h * 0.55, 0.0); cam.lookAt(0, cy, 0); cam.fov = 30; }
+  else if (view === 'back') { cam.position.set(0, box.min.y + h * 0.8, -d * 0.62); cam.lookAt(0, box.min.y + h * 0.74, 0); cam.fov = 26; }
+  else if (view === 'gamescale') {  // true in-game size: pitch 56°, distance 13, fov 42 (config.js)
+    const pitch = THREE.MathUtils.degToRad(56), D = 13;
+    cam.position.set(0, Math.sin(pitch) * D, Math.cos(pitch) * D); cam.lookAt(0, 0, 0); cam.fov = 42;
+  } else {                            // 'game': same pitch, closer, for inspection
+    const pitch = THREE.MathUtils.degToRad(56), D = d;
+    cam.position.set(0, Math.sin(pitch) * D, Math.cos(pitch) * D); cam.lookAt(0, 0.0, 0); cam.fov = 42;
+  }
+  cam.updateProjectionMatrix();
+  mixer = new THREE.AnimationMixer(root);
+  const clip = gltf.animations.find(a => a.name === clipName) || gltf.animations[0];
+  if (clip) { action = mixer.clipAction(clip); action.play(); if (q.get('t') !== 'play') { mixer.setTime(t); } }
+  window.__info = { ok: true, clips: gltf.animations.map(a => ({ name: a.name, duration: +a.duration.toFixed(3) })), meshes, tris: Math.round(tris),
+    height: +size.y.toFixed(3), width: +size.x.toFixed(3), depth: +size.z.toFixed(3), minY: +box.min.y.toFixed(3), materials: Object.fromEntries(mats) };
+}, undefined, (err) => { window.__info = { ok: false, error: String(err && err.message || err) }; });
+
+renderer.setAnimationLoop(() => { if (mixer && q.get('t') === 'play') mixer.update(clock.getDelta()); renderer.render(scene, cam); });
+</script></body></html>

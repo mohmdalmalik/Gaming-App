@@ -63,7 +63,10 @@ authority for proportions.
   Feet on the floor, faces the heading, fits the doorways, no clipping at the neck/elbows/knees.
 - `walk_check.mjs`: phase advances by distance ÷ stride (0.700 m), mesh on the mover, doorway
   crossing OK, no console errors (wall-clock settle times are meaningless at ~3 fps).
-- `record_smooth.mjs` → `tools/char-pipeline/victor-walk.webm` (30 fps game-time stepped).
+- Recording: the 30 fps game-time-stepped `record_smooth.mjs` run timed out twice under the software
+  renderer (once while a second renderer job ran, once alone after ~30 min) and was SKIPPED at the
+  owner's request. `walk_check.mjs` did leave its own real-game webm (`victor-walk.webm`, ~1.4 fps
+  wall-clock, choppy) locally; the owner should judge motion on the iPad instead.
 - `scene_stats.mjs`: 339 draw calls, 48,026 triangles, 13 programs with Victor loaded.
 - Budget: victor.glb **21,020 tris / 7 materials / 684,296 bytes** (v2: 14,420 / 8 / 480 KB). Fine
   for one hero character on an iPad; not measured on a real iPad.

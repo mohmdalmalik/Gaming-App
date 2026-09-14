@@ -5,3 +5,4 @@ node_modules
 *.jpg
 rec
 shots
+__pycache__

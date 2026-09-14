@@ -2,6 +2,7 @@
 // prompt. Each tile has an illustrated "art" panel (a large tinted glyph placeholder now; a real
 // illustration drops in via CARD_ART without touching this code) plus the card's name.
 import { CARDS } from '../game/cards.js';
+import { cardIcon } from './cardIcons.js';
 
 // Drop-in artwork: map a card type to an image path under assets/cards/. Left empty on purpose —
 // the glyph placeholder is used until real illustrations are supplied. Add entries like
@@ -18,6 +19,8 @@ function cardArt(doc, type) {
   if (CARD_ART[type]) {
     const img = doc.createElement('img'); img.alt = meta.name || type; img.src = CARD_ART[type];
     art.appendChild(img);
+  } else if (cardIcon(type)) {
+    art.innerHTML = cardIcon(type);                      // drawn vector icon (src/ui/cardIcons.js)
   } else {
     const g = doc.createElement('span'); g.className = 'glyph'; g.textContent = meta.glyph || '?';
     art.appendChild(g);

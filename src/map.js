@@ -20,7 +20,7 @@ export function createMap(doc, floor, cfg) {
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, cw, ch);
 
-    // A quiet charcoal ground for the plan.
+    // A quiet charcoal ground for the plan, with a faint 1 m drafting grid.
     ctx.fillStyle = '#0e1017'; ctx.fillRect(0, 0, cw, ch);
 
     const rooms = floor.roomList.filter(r => state.discovered.has(r.id));
@@ -36,28 +36,55 @@ export function createMap(doc, floor, cfg) {
     const serif = '"Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif';
     const BRASS = '#c9a24e', BRASS_BRIGHT = '#e8ca80', IVORY = '#efe7d6';
 
-    // Rooms: ivory-washed cards with a brass edge; the active room glows brass, searched rooms
-    // carry a small brass tick, the exit reads in green.
+    ctx.save();
+    ctx.strokeStyle = 'rgba(201,162,78,0.07)'; ctx.lineWidth = 1;
+    for (let gx = Math.floor(minX); gx <= maxX; gx++) { ctx.beginPath(); ctx.moveTo(X(gx), 0); ctx.lineTo(X(gx), ch); ctx.stroke(); }
+    for (let gz = Math.floor(minZ); gz <= maxZ; gz++) { ctx.beginPath(); ctx.moveTo(0, Z(gz)); ctx.lineTo(cw, Z(gz)); ctx.stroke(); }
+    ctx.restore();
+
+    // Compass: north is "up" on the plan (world -z).
+    ctx.save();
+    ctx.translate(cw - 34, 34);
+    ctx.strokeStyle = 'rgba(201,162,78,0.55)'; ctx.lineWidth = 1.2;
+    ctx.beginPath(); ctx.arc(0, 0, 16, 0, Math.PI * 2); ctx.stroke();
+    ctx.fillStyle = BRASS_BRIGHT;
+    ctx.beginPath(); ctx.moveTo(0, -13); ctx.lineTo(5, 4); ctx.lineTo(0, 1); ctx.lineTo(-5, 4); ctx.closePath(); ctx.fill();
+    ctx.font = `bold 10px ${serif}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText('N', 0, -23);
+    ctx.restore();
+
+    // Rooms: wood-toned plates with a brass edge; the active room glows brass, searched rooms
+    // carry a green tick, the exit reads in green. Labels sit in the upper part of the plate so
+    // the position marker (drawn at the true position, often the room centre) never covers them.
     const activeRoom = activePlayer(state).currentRoom;
     for (const r of rooms) {
       const x = X(r.min[0]), z = Z(r.min[1]), w = r.size[0] * scale, h = r.size[1] * scale;
       const here = r.id === activeRoom, searched = state.searchedRooms.has(r.id);
-      ctx.fillStyle = here ? 'rgba(201,162,78,0.20)' : r.isExit ? 'rgba(120,200,150,0.16)' : 'rgba(239,231,214,0.08)';
+      const grad = ctx.createLinearGradient(x, z, x, z + h);
+      if (here) { grad.addColorStop(0, 'rgba(201,162,78,0.30)'); grad.addColorStop(1, 'rgba(201,162,78,0.16)'); }
+      else if (r.isExit) { grad.addColorStop(0, 'rgba(120,200,150,0.22)'); grad.addColorStop(1, 'rgba(120,200,150,0.12)'); }
+      else { grad.addColorStop(0, 'rgba(120,88,52,0.42)'); grad.addColorStop(1, 'rgba(90,64,38,0.34)'); }
+      ctx.fillStyle = grad;
       roundRect(ctx, x + 2, z + 2, w - 4, h - 4, Math.min(8, scale * 0.2)); ctx.fill();
       ctx.lineWidth = here ? 3 : 1.4;
-      ctx.strokeStyle = here ? BRASS_BRIGHT : r.isExit ? 'rgba(120,200,150,0.7)' : 'rgba(201,162,78,0.45)';
+      ctx.strokeStyle = here ? BRASS_BRIGHT : r.isExit ? 'rgba(120,200,150,0.75)' : 'rgba(201,162,78,0.5)';
       ctx.stroke();
+      // inner hairline for the "framed plate" look
+      ctx.lineWidth = 1; ctx.strokeStyle = 'rgba(0,0,0,0.35)';
+      roundRect(ctx, x + 5, z + 5, w - 10, h - 10, Math.min(6, scale * 0.15)); ctx.stroke();
 
-      ctx.fillStyle = here ? IVORY : 'rgba(239,231,214,0.82)';
-      ctx.font = `${here ? 'bold ' : ''}${Math.max(11, Math.min(15, scale * 0.5))}px ${serif}`;
+      ctx.fillStyle = here ? IVORY : 'rgba(239,231,214,0.86)';
+      const fs = Math.max(11, Math.min(15, scale * 0.5));
+      ctx.font = `${here ? 'bold ' : ''}${fs}px ${serif}`;
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
       const label = r.isExit ? `${r.name} · EXIT` : r.name;
-      wrapText(ctx, label, X(r.center[0]), Z(r.center[1]), w - 10, 15);
+      const labelY = h > 70 ? z + 14 + fs : Z(r.center[1]);
+      wrapText(ctx, label, X(r.center[0]), labelY, w - 14, fs + 3);
 
-      if (searched) {                          // a small brass tick in the corner
+      if (searched) {                          // a small green tick in the corner
         ctx.fillStyle = 'rgba(120,200,150,0.9)'; ctx.font = `12px ${serif}`;
         ctx.textAlign = 'right'; ctx.textBaseline = 'top';
-        ctx.fillText('✓', x + w - 6, z + 5);
+        ctx.fillText('✓', x + w - 8, z + 7);
       }
     }
 

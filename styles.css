@@ -113,10 +113,16 @@ html, body {
    The public strip always requests the neutral image, so it is never washed. */
 .portrait-img.possessed { filter: saturate(0.7) brightness(0.86) hue-rotate(-24deg) contrast(1.05); }
 
-/* ---- Top player strip: portrait cards with turn / next indicators ---- */
-.players-strip { display: flex; gap: 8px; justify-content: center; }
+/* ---- Top player strip: portrait cards with turn / next indicators, on a charcoal plate so the
+   names stay readable over bright walls ---- */
+.players-strip {
+  display: flex; gap: 8px; justify-content: center; padding: 5px 12px 7px; border-radius: 16px;
+  background: var(--panel); border: 1px solid var(--line);
+  box-shadow: inset 0 0 0 1px rgba(0,0,0,0.5), 0 8px 22px rgba(0,0,0,0.4);
+  -webkit-backdrop-filter: blur(7px); backdrop-filter: blur(7px);
+}
 .mini-player { display: flex; flex-direction: column; align-items: center; gap: 4px; width: 74px; }
-.mini-flag { height: 13px; font-size: 9px; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; color: transparent; }
+.mini-flag { height: 13px; font-size: 9px; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; color: transparent; white-space: nowrap; }
 .mini-player.active .mini-flag { color: var(--brass-bright); }
 .mini-player.next .mini-flag { color: var(--ivory-dim); }
 .mini-portrait {
@@ -142,11 +148,15 @@ html, body {
 /* legacy hook (kept; tag text set by JS, styled minimally) */
 .turn-tag { display: none; }
 
-/* ---- Bottom-left: active player panel ---- */
-.hud-bottom-left {
-  position: absolute; bottom: calc(var(--safe-bottom) + 14px); left: calc(var(--safe-left) + 14px);
-  max-width: min(360px, 62vw);
+/* ---- Bottom bar: one container shares the width between the player panel (left), the hand
+   opener (centre) and the controls (right). Flex items shrink instead of overlapping. ---- */
+.hud-bottom {
+  position: absolute; left: calc(var(--safe-left) + 12px); right: calc(var(--safe-right) + 12px);
+  bottom: calc(var(--safe-bottom) + 12px);
+  display: flex; align-items: flex-end; gap: 12px; flex-wrap: nowrap;
 }
+.hud-bottom-left { flex: 0 1 auto; min-width: 0; max-width: 360px; }
+.hud-bottom-right { flex: 0 0 auto; margin-left: auto; }
 .player-panel {
   display: flex; align-items: stretch; gap: 14px; padding: 12px 16px 12px 12px; border-radius: 16px;
   background: var(--panel); border: 1px solid var(--line);
@@ -159,7 +169,7 @@ html, body {
   border: 1px solid var(--brass); box-shadow: inset 0 0 0 1px rgba(0,0,0,0.5);
 }
 .player-meta { display: flex; flex-direction: column; gap: 7px; min-width: 132px; justify-content: center; }
-.player-name { font-family: var(--serif); font-size: 20px; font-weight: 700; color: var(--ivory); letter-spacing: 0.01em; }
+.player-name { font-family: var(--serif); font-size: 20px; font-weight: 700; color: var(--ivory); letter-spacing: 0.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .stat { display: flex; align-items: center; gap: 8px; }
 .stat-label { width: 52px; font-size: 11px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: var(--muted); }
 
@@ -175,21 +185,22 @@ html, body {
 .ap-line { font-size: 13px; color: var(--muted); }  /* legacy */
 
 .private-link {
-  align-self: flex-start; margin-top: 1px; padding: 2px 0; background: none; border: none;
+  align-self: flex-start; margin: -10px 0 -10px -6px; padding: 0 6px; min-height: 48px; display: inline-flex; align-items: center;
+  background: none; border: none; touch-action: manipulation;
   color: var(--brass); font-size: 12px; font-weight: 600; letter-spacing: 0.04em; cursor: pointer; font-family: var(--sans);
 }
 .private-link:active { color: var(--brass-bright); }
 
 /* ---- Bottom-centre: hand opener (fanned card backs + label) ---- */
 .hand-strip {
-  position: absolute; bottom: calc(var(--safe-bottom) + 12px); left: 50%; transform: translateX(-50%);
-  display: flex; align-items: center; gap: 12px; cursor: pointer;
+  margin: 0 auto; flex: 0 0 auto; min-height: 60px;
+  display: flex; align-items: center; gap: 12px; cursor: pointer; touch-action: manipulation;
   padding: 8px 18px; border-radius: 14px;
   background: var(--panel); border: 1px solid var(--line);
   box-shadow: inset 0 0 0 1px rgba(0,0,0,0.5), 0 8px 20px rgba(0,0,0,0.4);
   -webkit-backdrop-filter: blur(7px); backdrop-filter: blur(7px);
 }
-.hand-strip:active { transform: translateX(-50%) scale(0.98); }
+.hand-strip:active { transform: scale(0.98); }
 .hand-strip-label { font-family: var(--serif); font-size: 15px; color: var(--ivory); letter-spacing: 0.02em; }
 .hand-backs { display: flex; align-items: flex-end; }
 .card-back {
@@ -209,10 +220,7 @@ html, body {
 }
 
 /* ---- Bottom-right: camera controls (separate) + action buttons ---- */
-.hud-bottom-right {
-  position: absolute; bottom: calc(var(--safe-bottom) + 14px); right: calc(var(--safe-right) + 14px);
-  display: flex; flex-direction: column; align-items: flex-end; gap: 12px;
-}
+.hud-bottom-right { display: flex; flex-direction: column; align-items: flex-end; gap: 12px; }
 .control-row { display: flex; gap: 10px; align-items: center; }
 .action-row { display: flex; gap: 12px; align-items: stretch; }
 
@@ -366,7 +374,10 @@ html, body {
   border: 1px solid rgba(140,114,51,0.55); box-shadow: inset 0 0 0 1px rgba(255,255,255,0.45); overflow: hidden;
 }
 .card-tile .art .glyph { font-size: 58px; line-height: 1; color: #3a2c14; color: color-mix(in srgb, var(--card-tint) 68%, #3a2c14); text-shadow: 0 1px 1px rgba(255,255,255,0.4); }
-.card-tile .art img, .card-tile .art svg { width: 100%; height: 100%; object-fit: cover; }
+.card-tile .art img { width: 100%; height: 100%; object-fit: cover; }
+/* Drawn icons (src/ui/cardIcons.js) sit inside the tinted illustration area, ivory-on-tint. */
+.card-tile .art svg.icon { width: 72%; height: 72%; color: #3a2c14; color: color-mix(in srgb, var(--card-tint) 55%, #2a2016); filter: drop-shadow(0 1px 0 rgba(255,255,255,0.35)); }
+.card-tile.evil .art svg.icon { color: #6a2fa8; }
 .card-tile .cname { font-family: var(--serif); font-weight: 700; font-size: 15px; color: #2a2016; text-align: center; }
 .card-tile .cdesc { font-size: 12px; color: #5c4a2e; line-height: 1.3; text-align: center; }
 .card-tile.count .badge { align-self: center; padding: 1px 9px; border-radius: 999px; font-size: 12px; font-weight: 700; background: rgba(140,114,51,0.2); color: #6a5326; }
@@ -440,16 +451,26 @@ html, body {
   .btn.action { min-width: 92px; padding: 9px 12px; }
   .btn.end { min-width: 128px; padding: 9px 14px; }
   .btn .btn-main { font-size: 16px; }
-  .ctl { height: 46px; min-width: 46px; padding: 0 10px; }
+  .ctl { height: 48px; min-width: 48px; padding: 0 10px; }   /* never below 48 px */
   .ctl.map { font-size: 14px; }
 }
+/* Portrait orientation / narrow: the bottom bar becomes two rows — hand opener + camera controls
+   above, player panel + turn actions below — so nothing is squeezed or overlapped. */
 @media (max-width: 900px) {
+  .hud-bottom { display: grid; grid-template-columns: auto 1fr auto; grid-template-areas: "hand . ctl" "panel panel actions"; align-items: end; column-gap: 10px; row-gap: 10px; }
+  .hud-bottom-left { grid-area: panel; max-width: none; }
+  .hand-strip { grid-area: hand; margin: 0; justify-self: start; }
+  .hud-bottom-right { display: contents; }     /* its two rows become grid items */
+  .control-row { grid-area: ctl; justify-self: end; }
+  .action-row { grid-area: actions; justify-self: end; }
   .hand-detail { width: 200px; padding-left: 14px; }
   .card-tile { width: 144px; }
   .card-tile .art { height: 116px; }
   .card-tile .art .glyph { font-size: 50px; }
   .mini-player { width: 64px; }
   .mini-portrait { width: 54px; height: 54px; }
+  .hud-top-center { max-width: 94vw; }
+  .players-strip { gap: 6px; padding: 4px 8px 6px; }
 }
 @media (max-width: 620px) {
   .hand-detail { width: 168px; }

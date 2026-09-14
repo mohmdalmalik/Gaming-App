@@ -37,37 +37,41 @@
         <div id="round" class="round-label">Round 1</div>
       </div>
 
-      <!-- Bottom-left: the active player — portrait (normal / possessed), name, health, actions. -->
-      <div class="hud-bottom-left">
-        <div id="player-panel" class="player-panel">
-          <div id="portrait-slot" class="portrait-slot"></div>
-          <div class="player-meta">
-            <div id="active-player" class="player-name">—</div>
-            <div class="stat"><span class="stat-label">Health</span><div id="health" class="health" aria-label="Health"></div></div>
-            <div class="stat"><span class="stat-label">Actions</span><div id="ap-pips" class="ap-pips" aria-hidden="true"></div><span id="action-points" class="ap-count">— / —</span></div>
-            <button id="btn-private" class="private-link" type="button">&#x25B8; Private details</button>
+      <!-- Bottom bar: ONE flex/grid container so the player panel, the hand opener and the buttons
+           share the width and can never overlap (they shrink or re-flow instead). -->
+      <div class="hud-bottom">
+        <!-- Left: the active player — portrait (normal / possessed), name, health, actions. -->
+        <div class="hud-bottom-left">
+          <div id="player-panel" class="player-panel">
+            <div id="portrait-slot" class="portrait-slot"></div>
+            <div class="player-meta">
+              <div id="active-player" class="player-name">—</div>
+              <div class="stat"><span class="stat-label">Health</span><div id="health" class="health" aria-label="Health"></div></div>
+              <div class="stat"><span class="stat-label">Actions</span><div id="ap-pips" class="ap-pips" aria-hidden="true"></div><span id="action-points" class="ap-count">— / —</span></div>
+              <button id="btn-private" class="private-link" type="button">&#x25B8; Private details</button>
+            </div>
           </div>
         </div>
-      </div>
 
-      <!-- Bottom-centre: the active player's hand (fanned backs + count). Tap to open. -->
-      <div id="hand-strip" class="hand-strip" role="button" tabindex="0" aria-label="View hand">
-        <div id="hand-backs" class="hand-backs"></div>
-        <span class="hand-strip-label">View hand</span>
-        <span id="hand-count" class="hand-count" aria-label="Cards in hand">0</span>
-      </div>
-
-      <!-- Bottom-right: camera controls (kept separate) above the turn actions. -->
-      <div class="hud-bottom-right">
-        <div class="control-row">
-          <button id="btn-rotate-left" class="ctl round" type="button" aria-label="Rotate view left">&#x21BA;</button>
-          <button id="btn-rotate-right" class="ctl round" type="button" aria-label="Rotate view right">&#x21BB;</button>
-          <button id="btn-map" class="ctl map" type="button" aria-label="Open map"><span class="ico">&#x25A4;</span> Map</button>
+        <!-- Centre: the active player's hand (fanned backs + count). Tap to open. -->
+        <div id="hand-strip" class="hand-strip" role="button" tabindex="0" aria-label="View hand">
+          <div id="hand-backs" class="hand-backs"></div>
+          <span class="hand-strip-label">View hand</span>
+          <span id="hand-count" class="hand-count" aria-label="Cards in hand">0</span>
         </div>
-        <div class="action-row">
-          <button id="btn-search" class="btn action" type="button"><span class="btn-main">Search</span><span id="search-sub" class="btn-sub">1 action</span></button>
-          <button id="btn-trade" class="btn action" type="button" hidden><span class="btn-main">Trade</span><span class="btn-sub">Safe zone</span></button>
-          <button id="btn-end-turn" class="btn primary end" type="button"><span class="btn-main">End turn &#x203A;</span><span id="end-sub" class="btn-sub">Next: —</span></button>
+
+        <!-- Right: camera controls (kept separate) above the turn actions. -->
+        <div class="hud-bottom-right">
+          <div class="control-row">
+            <button id="btn-rotate-left" class="ctl round" type="button" aria-label="Rotate view left">&#x21BA;</button>
+            <button id="btn-rotate-right" class="ctl round" type="button" aria-label="Rotate view right">&#x21BB;</button>
+            <button id="btn-map" class="ctl map" type="button" aria-label="Open map"><span class="ico">&#x25A4;</span> Map</button>
+          </div>
+          <div class="action-row">
+            <button id="btn-search" class="btn action" type="button"><span class="btn-main">Search</span><span id="search-sub" class="btn-sub">1 action</span></button>
+            <button id="btn-trade" class="btn action" type="button" hidden><span class="btn-main">Trade</span><span class="btn-sub">Safe zone</span></button>
+            <button id="btn-end-turn" class="btn primary end" type="button"><span class="btn-main">End turn &#x203A;</span><span id="end-sub" class="btn-sub">Next: —</span></button>
+          </div>
         </div>
       </div>
 

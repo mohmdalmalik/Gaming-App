@@ -258,6 +258,9 @@ The full Hotel Escape rules from `docs/GAME_RULES.md` play on the greybox:
   screen names the winner, reveals who was possessed, and offers a New game.
 - All rule numbers live in `src/data/rules.js`.
 
+- **Victor correction pass 2**: crown diagnosed (hair geometry correct; overexposure of a too-light
+  hair albedo under the hall's overhead lights) and fixed in the asset; moustache, nose bridge, brows,
+  eyes, ears, collar and bow tie reshaped to the sheet. Awaiting the owner's review.
 - **Victor v5 (appearance rebuild to the character sheet)**: measured proportions, hair cap, face
   features, sloping tailoring, bigger splayed shoes, portraits re-rendered; verified in the game at
   four rotations, walk check and recording. Presented for the owner's review — other characters,

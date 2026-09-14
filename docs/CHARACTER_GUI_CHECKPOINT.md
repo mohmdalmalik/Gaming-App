@@ -13,13 +13,52 @@ neutral-proportion authority, the elevated panel is NOT a camera spec). Panels a
 by `make_panels.py` into `ref/panels/` (gitignored, regenerable). No rooms, other characters, GUI or
 gameplay work until the owner approves Victor. Hotel lighting unchanged. Rig/animation reused.
 
-### Status: Victor v5 built, verified in the game, PRESENTED FOR REVIEW — do not proceed further
+### Status: Victor v5 + correction pass 2 (v6 head/collar) — PRESENTED FOR REVIEW, do not proceed further
 - Branch `main`. Base commit `684ffd2`; this increment = **`26bdf8e` "Victor v5"** (pushed). Published version = working version (no separate experiment branch was needed).
 - Changed: `assets/characters/victor.glb` (v5), `assets/portraits/victor{,-possessed}.jpg` (re-rendered
   from v5), `tools/char-pipeline/make_victor.py` (head/hair/body rewrite, CFG in % of height),
   `victor_lib.py` (+ `shell`, `superellipse_pt`, `normal_of`, `lerp_table`), `preview_glb.{html,mjs}`
   (+ `body@yaw` / `face@yaw` views, albedo-faithful neutral light, long lens), `portrait.mjs` (new eye
   coordinates), NEW `compare.py`, `compare_head.py`, `make_panels.py`, `ref/`.
+
+### Correction pass 2 (owner feedback after v5): head, hair, features, collar, bow tie — PRESENTED FOR REVIEW
+Owner's verdict on v5: not approved; differences beyond the four listed. Scope of this pass: head,
+hair, facial features, collar and bow tie only; body, rig, movement, rooms, camera, rules, GUI untouched.
+- **Asset revision**: `assets/characters/victor.glb` 693,544 bytes, sha256 `774b6f81aef5d367…`
+  (v5 was 684,296 bytes, `9535c90a…`). Verified with `diag_materials.mjs` that the real game page
+  requests exactly this file (one 200 response, same byte count) — the previewer loads the same path.
+- **Pale crown — confirmed cause**: NOT missing hair, NOT exposed scalp, NOT a material mix-up.
+  Unlit diagnostic (hair magenta, skin green, real game camera, four rotations,
+  `shots/diag-sheet.png`): the crown is solid hair geometry from every angle. `glb_inspect.py`: hair
+  normals point up on the crown, winding agrees with the normals (0.2 % disagree), no degenerate
+  triangles; the game's loader keeps the exporter's double-sided flag, so nothing is culled. The crown
+  went pale because it is the surface facing the hall's warm overhead point lights and sky most
+  squarely: it receives 2–3× the irradiance of the sides, and the hair albedo I had lightened for the
+  neutral preview (`#382920`) tone-mapped to a desaturated tan that read as scalp; the part/lock
+  grooves rendered as dark cracks on top. Fix in the asset only: hair authored dark espresso
+  `#1e140e` (the sheet's value), grooves half as deep and wider. Hall lighting and the loader are
+  unchanged; the diagnostic tooling touches nothing in the game. Acceptance: dark hair recognisable
+  from above at all four rotations (`shots/v6-game-sheet.png`, zoom 1 and 1.8).
+- **Features** (`shots/v6-head-sheet.png`, front / three-quarter / side, sheet vs neutral vs game
+  light): moustache rebuilt as two compact rounded lobes with a notch under the nose and short
+  upturned tips (0.185 wide, ~2 cm relief); nose bridge raised OUT of the skull mesh as a soft ridge
+  from between the brows into the ball (no stub); brows slimmed to 0.024 with one gentle arch; eyes at
+  the sheet's measured 0.038 × 0.066 at ±0.070; cheek and chin fullness shapers; ears rebuilt as an
+  outer rim (rounded tube on an oval) with a recessed inner dish and a filler to the skull, angled
+  forward-and-out.
+- **Collar / bow tie**: fitted shirt band round the neck with two small folded points flanking the
+  bow (`cylinder_leaf`), one connected bow (two wings pinched into a knot, one loft) resting on the
+  band, satin jacket collar wrapping only the back and sides of the neck into raised lapel peaks.
+- **Surface / material handling inspected**: exported vertex normals present, auto-smooth 62°, no
+  flipped shells, per-fragment Lambert in the game, colours authored sRGB → linear. No emissive, no
+  specular, no lighting change. What remains is the flat-matte look by design.
+- **Remaining mismatch (honest)**: hair is still one cap without the sheet's separate locks; skin
+  under the hall light is darker/oranger than the sheet's peach; the ear reads as a ring at close
+  range; the sheet's soft ambient shading is absent (flat Lambert); the moustache tips are straighter
+  than the sheet's curls. These need either lock-by-lock hair volumes and baked shading (more
+  code-built passes) or an artist-made asset.
+- Tools added: `diag_materials.mjs` (unlit diagnostic in the real game), `glb_inspect.py` (GLB
+  geometry/normal audit), `preview_glb.mjs --light game`.
 
 ### Measured proportions (sheet FRONT panel, % of standing height from the top; H = 1.66 m)
 hair top 0.2 · hairline 8.6 · brows 13.0 · eyes 17.3 · nose ball 20.3 · moustache 22.5–26 (centre

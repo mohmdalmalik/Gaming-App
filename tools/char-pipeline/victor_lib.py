@@ -305,3 +305,34 @@ def lerp_table(z, table):
         if za <= z <= zb:
             t = (z - za) / (zb - za); return a + (b - a) * t
     return table[-1][1]
+
+def planar_ring_tube(name, points, radius, normal, n=8):
+    """A closed tube (a rounded rim) along a CLOSED planar polyline. `normal` is the loop plane's
+    normal; the tube sections stay untwisted because that normal is used for every ring."""
+    P = [Vector(p) for p in points]; Nn = Vector(normal).normalized()
+    bm = bmesh.new(); rings = []
+    for i in range(len(P)):
+        t = (P[(i + 1) % len(P)] - P[i - 1]).normalized()
+        B = t.cross(Nn).normalized()
+        rings.append([bm.verts.new(P[i] + (Nn * math.cos(a) + B * math.sin(a)) * radius) for a in [k / n * 2 * math.pi for k in range(n)]])
+    for i in range(len(P)):
+        a, b = rings[i], rings[(i + 1) % len(P)]
+        for k in range(n):
+            j = (k + 1) % n; bm.faces.new((a[k], a[j], b[j], b[k]))
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+    return new_object(name, bm)
+
+def cylinder_leaf(name, pts_theta_z, R, thick, axis_y, smooth=True):
+    """A thin solid panel wrapped on a vertical cylinder of radius R about the axis (0, axis_y):
+    pts are (theta, z) with theta measured from the FRONT (-Y), positive toward +X. Extruded
+    outward by `thick`."""
+    def at(th, z, r): return Vector((r * math.sin(th), axis_y - r * math.cos(th), z))
+    bm = bmesh.new()
+    inner = [bm.verts.new(at(th, z, R)) for th, z in pts_theta_z]
+    outer = [bm.verts.new(at(th, z, R + thick)) for th, z in pts_theta_z]
+    bm.faces.new(list(reversed(inner))); bm.faces.new(outer)
+    m = len(inner)
+    for i in range(m):
+        j = (i + 1) % m; bm.faces.new((inner[i], inner[j], outer[j], outer[i]))
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+    return new_object(name, bm, smooth)

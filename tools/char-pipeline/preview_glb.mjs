@@ -18,7 +18,7 @@ const GLB = path.resolve(REPO, String(opt('glb', 'assets/characters/victor.glb')
 const OUT = String(opt('out', path.join(HERE, 'shots', 'preview')));
 const VIEWS = String(opt('views', 'front,tq,game,turn')).split(',');
 const CLIP = String(opt('clip', 'Idle')); const T = String(opt('t', '0'));
-const W = +opt('w', 700), H = +opt('h', 760);
+const W = +opt('w', 700), H = +opt('h', 760); const LIGHT = String(opt('light', ''));   // --light game: hall lighting in the body/face views
 fs.mkdirSync(path.dirname(OUT), { recursive: true });
 
 const chrome = [process.env.CHROME_PATH, '/opt/pw-browsers/chromium-1194/chrome-linux/chrome'].filter(Boolean).find(fs.existsSync);
@@ -30,7 +30,7 @@ let printed = false; const errs = [];
 async function shot(name, view, yaw = 0) {
   const page = await context.newPage();
   page.on('console', m => { if (m.type() === 'error') errs.push(m.text()); }); page.on('pageerror', e => errs.push(String(e)));
-  await page.goto(`http://127.0.0.1:8123/tools/char-pipeline/preview_glb.html?glb=/__glb&view=${view}&clip=${CLIP}&t=${T}&yaw=${yaw}`, { waitUntil: 'networkidle' });
+  await page.goto(`http://127.0.0.1:8123/tools/char-pipeline/preview_glb.html?glb=/__glb&view=${view}&clip=${CLIP}&t=${T}&yaw=${yaw}${LIGHT ? '&light=' + LIGHT : ''}`, { waitUntil: 'networkidle' });
   await page.waitForFunction(() => !!window.__info, null, { timeout: 20000 });
   await page.waitForTimeout(250);
   await page.screenshot({ path: `${OUT}-${name}.png` });

@@ -50,11 +50,11 @@ CFG = dict(
     z_hair_top=zp(0.2), z_skull_top=zp(3.8), z_hairline=zp(8.6), z_brow=zp(13.0), z_eye=zp(17.3),
     z_nose=zp(20.3), z_moustache=zp(23.7), z_mouth=zp(27.3), z_chin=zp(31.5), z_ear=zp(21.2),
     skull_half_w=0.196,
-    ear_h=0.115, ear_w=0.078, ear_out=0.050, ear_y=0.030,
-    eye_x=0.071, eye_w=0.040, eye_h=0.068,
-    brow_x0=0.040, brow_x1=0.116, brow_thick=0.034, brow_arch=0.018,
-    nose_w=0.080, nose_h=0.064, nose_out=0.043,
-    mo_w=0.200, mo_thick=0.062, mo_out=0.020,
+    ear_h=0.112, ear_w=0.072, ear_out=0.048, ear_y=0.030, ear_tilt=0.50,
+    eye_x=0.070, eye_w=0.038, eye_h=0.066,
+    brow_x0=0.040, brow_x1=0.116, brow_thick=0.024, brow_arch=0.014,
+    nose_w=0.076, nose_h=0.062, nose_out=0.042, bridge_h=0.012,
+    mo_w=0.185, mo_thick=0.060, mo_out=0.020,
     mouth_w=0.060,
     # ---- neck / shoulders / torso (FRONT: collar top ~32 %, shoulders 36-40 %, jacket 0.326 H wide;
     #      SIDE: collar region <= 0.24 deep, chest 0.30 deep; hem 72.5 %)
@@ -136,7 +136,7 @@ def flatten_to_face(ob, factor):
 # ---- materials -------------------------------------------------------------------------------
 M = {
     'skin':   L.solid_material('Skin',   '#eebe95'),   # warm peach
-    'hair':   L.solid_material('Hair',   '#382920'),   # dark espresso (sculpted forms need a little value)
+    'hair':   L.solid_material('Hair',   '#1e140e'),   # dark espresso — authored dark: under the hall's overhead lights the crown renders 2-3x brighter than the sides
     'jacket': L.solid_material('Jacket', '#1f2c50'),   # midnight navy
     'lapel':  L.solid_material('Lapel',  '#161d36'),   # satin facing: a shade darker than the cloth
     'shirt':  L.solid_material('Shirt',  '#f3eee2'),   # ivory
@@ -151,58 +151,81 @@ def add(ob, mat, bone):
 # HEAD
 # =============================================================================================
 skull = L.shell('Skull', skull_pt, nlon=56, nlat=36, warp_u=0.08)
+# Nose bridge as part of the face: a soft ridge raised out of the skull surface from between the
+# brows down into the nose ball (so the nose grows out of the face instead of sitting on it).
+Z_BR_TOP, Z_BR_BOT = C['z_eye'] + 0.012, C['z_nose'] + 0.020
+for v in skull.data.vertices:
+    if v.co.y >= -0.05 or abs(v.co.x) > 0.045: continue
+    g = math.exp(-(v.co.x ** 2) / (2 * 0.011 ** 2))
+    h = L.smoothstep((Z_BR_TOP - v.co.z) / 0.030) * L.smoothstep((v.co.z - (Z_BR_BOT - 0.025)) / 0.02)
+    v.co.y -= C['bridge_h'] * g * h
+skull.data.update()
+# cheek fullness beside the nose/moustache and a softly forward chin (small, so features placed on
+# the analytic face stay seated)
+L.shape(skull, [
+    dict(c=( 0.15, -0.16, zp(21.5)), r=0.085, d=( 0.004, -0.005, 0)),
+    dict(c=(-0.15, -0.16, zp(21.5)), r=0.085, d=(-0.004, -0.005, 0)),
+    dict(c=(0, -0.19, zp(30.0)), r=0.07, d=(0, -0.006, 0)),
+])
 add(skull, 'skin', 'head')
 # neck: a short thick cylinder, set a little forward so the nape curves in; hidden by chin and collar
 add(L.loft('Neck', [dict(z=C['z_shoulder_top'] - 0.03, w=2*C['neck_r'], d=2*C['neck_r']*0.92, r=1.0, y=C['neck_y']),
                     dict(z=C['z_chin'] + 0.05, w=2*C['neck_r']*0.92, d=2*C['neck_r']*0.86, r=1.0, y=C['neck_y'])], n=18), 'skin', 'neck')
 
-# ---- ears: big rounded discs standing out from the skull at nose level, slightly behind the axis
-for s in (1, -1):
-    ear = L.uvsphere(f'Ear{s}', 1.0, (0, 0, 0), scale=(0.030, C['ear_w'] * 0.5, C['ear_h'] * 0.5), u=18, v=14)
-    L.rotate_verts(ear, (0.0, 0.0, s * 0.22))
+# ---- ears: a shaped outer rim (rounded tube around an oval) with a recessed inner form, angled
+#      to face forward-and-out like the sheet's; a filler behind the rim so the head shows through nowhere
+for s_ in (1, -1):
+    tilt = C['ear_tilt']
+    n_ = Vector((s_ * math.cos(tilt), -math.sin(tilt), 0.0))               # ear plane normal (out + forward)
+    A = Vector((0, 0, 1)).cross(n_).normalized()                            # in-plane, front-back
     sk = T(C['z_ear'], W_TAB)
-    L.translate_verts(ear, (s * (sk + C['ear_out'] - 0.030 + 0.006), C['ear_y'], C['z_ear']))
-    add(ear, 'skin', 'head')
-    # inner bowl: a slightly darker-lit concavity read comes from a smaller disc set into the outer one
-    bowl = L.uvsphere(f'EarBowl{s}', 1.0, (0, 0, 0), scale=(0.012, C['ear_w'] * 0.30, C['ear_h'] * 0.30), u=12, v=10)
-    L.translate_verts(bowl, (s * (sk + C['ear_out'] + 0.006 - 0.004), C['ear_y'] + 0.004, C['z_ear'] - 0.004))
-    add(bowl, 'skin', 'head')
+    Cc = Vector((s_ * (sk + C['ear_out'] - 0.030), C['ear_y'], C['z_ear']))
+    aw, bh = C['ear_w'] * 0.5 - 0.008, C['ear_h'] * 0.5 - 0.008
+    loop = [tuple(Cc + A * (aw * math.cos(t) * (1.0 if math.cos(t) > 0 else 0.9)) + Vector((0, 0, bh * math.sin(t) * (1.0 if math.sin(t) > 0 else 0.92)))) for t in [k / 18 * 2 * math.pi for k in range(18)]]
+    add(L.planar_ring_tube(f'EarRim{s_}', loop, 0.0085, n_, n=8), 'skin', 'head')
+    inner = L.uvsphere(f'EarInner{s_}', 1.0, (0, 0, 0), scale=(1.0, 1.0, 1.0), u=16, v=12)
+    for v in inner.data.vertices:                                           # a shallow dish in the ear frame
+        x, y, z = v.co.x, v.co.y, v.co.z
+        v.co = Cc + A * (x * aw * 0.98) + Vector((0, 0, z * bh * 0.98)) + n_ * (y * 0.005 - 0.0035)
+    add(inner, 'skin', 'head')
+    back = L.uvsphere(f'EarBack{s_}', 1.0, (0, 0, 0), u=14, v=10)             # joins rim to the skull
+    for v in back.data.vertices:
+        x, y, z = v.co.x, v.co.y, v.co.z
+        v.co = Cc + A * (x * aw * 0.85) + Vector((0, 0, z * bh * 0.85)) + n_ * (y * 0.012 - 0.014)
+    add(back, 'skin', 'head')
 
-# ---- eyes: dark vertical ovals set flush into the face, no highlight beads
-for s in (1, -1):
-    p = on_face(s * C['eye_x'], C['z_eye'], 0.006)
-    eye = L.uvsphere(f'Eye{s}', 1.0, (0, 0, 0), scale=(C['eye_w'] * 0.5, 0.014, C['eye_h'] * 0.5), u=18, v=14)
+# ---- eyes: dark vertical ovals set flush into the face (sheet size: 0.038 x 0.066), no highlight beads
+for s_ in (1, -1):
+    p = on_face(s_ * C['eye_x'], C['z_eye'], 0.005)
+    eye = L.uvsphere(f'Eye{s_}', 1.0, (0, 0, 0), scale=(C['eye_w'] * 0.5, 0.012, C['eye_h'] * 0.5), u=18, v=14)
     L.translate_verts(eye, p)
     add(eye, 'dark', 'head')
 
-# ---- brows: bold, curved, rounded inner end, tapered outer end; the arch peaks a third of the way out
-for s in (1, -1):
+# ---- brows: slim, one smooth gentle arch, blunt inner end, tapered outer end, low relief
+for s_ in (1, -1):
     zb = C['z_brow']; x0, x1 = C['brow_x0'], C['brow_x1']; a = C['brow_arch']
-    pts = L.bezier((s * x0, 0, zb - 0.006), (s * (x0 + 0.33 * (x1 - x0)), 0, zb + a), (s * (x0 + 0.67 * (x1 - x0)), 0, zb + a), (s * x1, 0, zb - 0.012), n=14)
-    pts = [tuple(on_face(x, z, 0.006)) for x, _, z in pts]
-    rad = [C['brow_thick'] * 0.5 * (0.80 + 0.20 * math.sin(math.pi * min(1.0, i / 7)) if i < 8 else 0.28 + 0.72 * (1 - ((i - 8) / 6) ** 1.25)) for i in range(15)]
-    br = L.tube(f'Brow{s}', pts, rad, n=10); flatten_to_face(br, 0.50)
+    pts = L.bezier((s_ * x0, 0, zb - 0.004), (s_ * (x0 + 0.34 * (x1 - x0)), 0, zb + a), (s_ * (x0 + 0.66 * (x1 - x0)), 0, zb + a * 0.9), (s_ * x1, 0, zb - 0.012), n=14)
+    pts = [tuple(on_face(x, z, 0.005)) for x, _, z in pts]
+    rad = [C['brow_thick'] * 0.5 * (0.70 + 0.30 * math.sin(math.pi * min(1.0, i / 8)) if i < 9 else 0.35 + 0.65 * (1 - ((i - 9) / 5) ** 1.2)) for i in range(15)]
+    br = L.tube(f'Brow{s_}', pts, rad, n=10); flatten_to_face(br, 0.45)
     add(br, 'dark', 'head')
 
-# ---- nose: a round ball sitting on the moustache, with a short soft bridge up between the eyes
+# ---- nose: the ball at the end of the bridge ridge (the bridge itself is raised from the skull above)
 ball_c = on_face(0, C['z_nose'], C['nose_out'] - 0.030)
 nose = L.uvsphere('NoseBall', 1.0, (0, 0, 0), scale=(C['nose_w'] * 0.5, 0.030, C['nose_h'] * 0.5), u=20, v=14)
 for v in nose.data.vertices:
-    if v.co.z > 0: v.co.z *= 1.15; v.co.x *= 0.92
+    if v.co.z > 0: v.co.z *= 1.25; v.co.x *= 0.88                            # egg: taller above, merging up into the bridge
 L.translate_verts(nose, ball_c); add(nose, 'skin', 'head')
 
-# ---- moustache: two full teardrop lobes meeting under the nose, thick near the centre, tapering to
-#      slightly raised outer tips; flattened so it stands ~2 cm off the face
-for s in (1, -1):
+# ---- moustache: two compact rounded lobes, a small notch under the nose, thickest a third of the
+#      way out, thinning to short restrained upturned tips; low relief (about 2 cm off the face)
+for s_ in (1, -1):
     zm = C['z_moustache']; hw = C['mo_w'] * 0.5
-    pts = L.bezier((s * 0.000, 0, zm + 0.002), (s * hw * 0.38, 0, zm - 0.008), (s * hw * 0.74, 0, zm - 0.004), (s * hw, 0, zm + 0.016), n=16)
-    pts = [tuple(on_face(x, z, 0.006)) for x, _, z in pts]
-    rad = [C['mo_thick'] * 0.5 * (1.0 - 0.76 * L.smoothstep((i / 16 - 0.28) / 0.72) ** 1.15) for i in range(17)]
-    mo = L.tube(f'Moustache{s}', pts, rad, n=12); flatten_to_face(mo, 0.55)
+    pts = L.bezier((s_ * 0.004, 0, zm + 0.004), (s_ * hw * 0.36, 0, zm - 0.006), (s_ * hw * 0.74, 0, zm - 0.008), (s_ * hw, 0, zm + 0.012), n=16)
+    pts = [tuple(on_face(x, z, 0.005)) for x, _, z in pts]
+    prof = [0.40, 0.62, 0.82, 0.95, 1.0, 1.0, 0.97, 0.92, 0.85, 0.76, 0.66, 0.55, 0.45, 0.36, 0.28, 0.22, 0.17]
+    mo = L.tube(f'Moustache{s_}', pts, [C['mo_thick'] * 0.5 * k for k in prof], n=12); flatten_to_face(mo, 0.42)
     add(mo, 'dark', 'head')
-
-mc = L.uvsphere('MoustacheCentre', 1.0, (0, 0, 0), scale=(0.022, 0.012, C['mo_thick'] * 0.40), u=12, v=10)
-L.translate_verts(mc, on_face(0, C['z_moustache'] - 0.004, 0.006)); add(mc, 'dark', 'head')
 
 # ---- mouth: a subtle short smile under the moustache
 pts = L.bezier((-C['mouth_w'] * 0.5, 0, C['z_mouth'] + 0.006), (-0.012, 0, C['z_mouth'] - 0.004), (0.012, 0, C['z_mouth'] - 0.004), (C['mouth_w'] * 0.5, 0, C['z_mouth'] + 0.006), n=8)
@@ -254,7 +277,7 @@ def hair_outer(u, z):
     x *= 1.0 + 0.11 * lobe; y *= 1.0 + 0.06 * lobe
     # part on HIS LEFT (+X): a groove from the front hairline back over the crown, hair combed flat beyond it
     front = L.smoothstep((0.06 - y) / 0.10)                                # 1 in the front half, 0 at the back
-    groove = math.exp(-((x - 0.10) ** 2) / (2 * 0.011 ** 2)) * front * L.smoothstep((z - (C['z_hairline'] + 0.015)) / 0.02)
+    groove = math.exp(-((x - 0.10) ** 2) / (2 * 0.016 ** 2)) * front * L.smoothstep((z - (C['z_hairline'] + 0.015)) / 0.02)
     flat = L.smoothstep((x - 0.115) / 0.035) * front
     # lock grooves: three soft channels slanting across the top toward the lobe
     q = x + 0.45 * y
@@ -262,7 +285,7 @@ def hair_outer(u, z):
     r_h = math.hypot(x, y)
     sk = skull_at(u, z); r_s = math.hypot(sk.x, sk.y)
     r = max(r_h, r_s + HAIR_MIN)
-    r -= 0.010 * groove + 0.007 * locks
+    r -= 0.006 * groove + 0.0025 * locks
     r = r - (r - (r_s + 0.022)) * flat * (1.0 if r > r_s + 0.022 else 0.0)
     r = max(r, r_s + HAIR_MIN)
     f = r / max(1e-6, r_h)
@@ -335,23 +358,36 @@ def flat_panel(name, outline_xz, inset, mat, bone, cuts=6):
 
 # Shirt: a narrow, tidy V from the collar to the single button
 BTN_Z = Z_WAIST + 0.05
-flat_panel('Shirt', [(-0.056, Z_SH_TOP + 0.045), (-0.014, BTN_Z - 0.02), (0.014, BTN_Z - 0.02), (0.056, Z_SH_TOP + 0.045)], 0.004, 'shirt', 'spine')
-# Peaked lapels (dark satin), thin, following the chest
-for s in (1, -1):
-    pts = [(s * 0.042, Z_SH_TOP + 0.040), (s * 0.110, Z_SH_TOP - 0.010), (s * 0.155, Z_SH_TOP - 0.100), (s * 0.118, Z_SH_TOP - 0.140), (s * 0.016, BTN_Z - 0.01)]
-    flat_panel(f'Lapel{s}', pts, 0.009, 'lapel', 'spine')
-# Collar band + wing tips
-NY = C['neck_y']
-add(L.loft('Collar', [dict(z=Z_SH_TOP - 0.005, w=2*C['neck_r']+0.026, d=2*C['neck_r']+0.02, r=1.0, y=NY), dict(z=Z_SH_TOP + 0.060, w=2*C['neck_r']+0.018, d=2*C['neck_r']+0.014, r=1.0, y=NY), dict(z=Z_SH_TOP + 0.066, w=2*C['neck_r']-0.01, d=2*C['neck_r']-0.01, r=1.0, y=NY)], n=22), 'shirt', 'neck')
-add(L.loft('JacketCollar', [dict(z=Z_SH_TOP - 0.01, w=2*C['neck_r']+0.05, d=2*C['neck_r']+0.045, r=1.0, y=NY+0.012), dict(z=Z_SH_TOP + 0.052, w=2*C['neck_r']+0.036, d=2*C['neck_r']+0.032, r=1.0, y=NY+0.012), dict(z=Z_SH_TOP + 0.058, w=2*C['neck_r']+0.016, d=2*C['neck_r']+0.012, r=1.0, y=NY+0.012)], n=22), 'lapel', 'neck')
-# Bow tie: small wings + knot
-BOW_Z = Z_SH_TOP + 0.034
-for s in (1, -1):
-    wing = L.loft(f'Wing{s}', [dict(z=0.0, w=0.024, d=0.030, r=0.8), dict(z=0.034, w=0.056, d=0.038, r=0.7), dict(z=0.062, w=0.052, d=0.038, r=0.8), dict(z=0.076, w=0.022, d=0.030, r=1.0)], n=14)
-    L.rotate_verts(wing, (0, s * math.pi / 2, 0))
-    L.translate_verts(wing, (s * 0.010, chest_y(s * 0.035, BOW_Z) - 0.012, BOW_Z))
-    add(wing, 'black', 'spine')
-add(L.uvsphere('Knot', 0.020, (0, chest_y(0, BOW_Z) - 0.020, BOW_Z), scale=(0.9, 0.8, 1.05), u=12, v=8), 'black', 'spine')
+flat_panel('Shirt', [(-0.052, Z_SH_TOP + 0.050), (-0.014, BTN_Z - 0.02), (0.014, BTN_Z - 0.02), (0.052, Z_SH_TOP + 0.050)], 0.004, 'shirt', 'spine')
+# Peaked lapels (dark satin), thin, following the chest; their peaks meet the jacket collar's ends
+for s_ in (1, -1):
+    pts = [(s_ * 0.040, Z_SH_TOP + 0.044), (s_ * 0.078, Z_SH_TOP + 0.030), (s_ * 0.150, Z_SH_TOP - 0.095), (s_ * 0.116, Z_SH_TOP - 0.140), (s_ * 0.016, BTN_Z - 0.01)]
+    flat_panel(f'Lapel{s_}', pts, 0.009, 'lapel', 'spine')
+# Shirt collar: a fitted band round the neck with two folded points flanking the bow
+NY = C['neck_y']; R_BAND = C['neck_r'] + 0.010; COL_TOP = Z_SH_TOP + 0.050
+add(L.loft('CollarBand', [dict(z=Z_SH_TOP + 0.002, w=2*R_BAND+0.004, d=2*R_BAND-0.004, r=1.0, y=NY), dict(z=COL_TOP - 0.006, w=2*R_BAND, d=2*R_BAND-0.008, r=1.0, y=NY), dict(z=COL_TOP, w=2*R_BAND-0.012, d=2*R_BAND-0.018, r=1.0, y=NY)], n=24), 'shirt', 'neck')
+for s_ in (1, -1):
+    leaf = [(s_ * 0.09, COL_TOP - 0.003), (s_ * 0.40, COL_TOP - 0.006), (s_ * 0.34, COL_TOP - 0.034), (s_ * 0.12, COL_TOP - 0.020)]
+    add(L.cylinder_leaf(f'CollarPoint{s_}', leaf, R_BAND + 0.001, 0.004, NY), 'shirt', 'neck')
+# Jacket collar (satin): wraps the back and sides of the neck only, its ends running into the lapel peaks
+R_JC = C['neck_r'] + 0.024
+jc = L.loft('JacketCollar', [dict(z=Z_SH_TOP - 0.012, w=2*R_JC+0.006, d=2*R_JC+0.002, r=1.0, y=NY+0.008), dict(z=Z_SH_TOP + 0.040, w=2*R_JC, d=2*R_JC-0.004, r=1.0, y=NY+0.008), dict(z=Z_SH_TOP + 0.046, w=2*R_JC-0.018, d=2*R_JC-0.020, r=1.0, y=NY+0.008)], n=36)
+bm = bmesh.new(); bm.from_mesh(jc.data)
+front = [f for f in bm.faces if (lambda c: c.y < NY + 0.008 - 0.03 and abs(c.x) < R_JC * math.sin(0.50))(f.calc_center_median())]
+bmesh.ops.delete(bm, geom=front, context='FACES')
+bmesh.ops.holes_fill(bm, edges=[e for e in bm.edges if e.is_boundary], sides=12)
+bmesh.ops.recalc_face_normals(bm, faces=bm.faces); bm.to_mesh(jc.data); bm.free(); jc.data.update()
+add(jc, 'lapel', 'neck')
+# Bow tie: ONE connected shape — two wings pinched into a central knot — sitting on the collar band
+BOW_Z = Z_SH_TOP + 0.030
+bow = L.loft('BowTie', [
+    dict(z=-0.080, w=0.020, d=0.014, r=0.8), dict(z=-0.062, w=0.046, d=0.024, r=0.7), dict(z=-0.034, w=0.054, d=0.028, r=0.7),
+    dict(z=-0.015, w=0.030, d=0.024, r=0.8), dict(z=-0.009, w=0.036, d=0.034, r=0.9), dict(z=0.009, w=0.036, d=0.034, r=0.9),
+    dict(z=0.015, w=0.030, d=0.024, r=0.8), dict(z=0.034, w=0.054, d=0.028, r=0.7), dict(z=0.062, w=0.046, d=0.024, r=0.7), dict(z=0.080, w=0.020, d=0.014, r=0.8)], n=16)
+L.rotate_verts(bow, (0, math.pi / 2, 0))                                    # loft axis -> X (across the collar)
+for v in bow.data.vertices:                                                 # wings curve back a little round the neck
+    v.co.y += 0.06 * (v.co.x / 0.08) ** 2
+L.translate_verts(bow, (0, NY - R_BAND - 0.012, BOW_Z)); add(bow, 'black', 'spine')
 # shirt studs + jacket button
 for i in range(3):
     zb = BOW_Z - 0.055 - i * 0.045

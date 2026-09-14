@@ -14,8 +14,7 @@ by `make_panels.py` into `ref/panels/` (gitignored, regenerable). No rooms, othe
 gameplay work until the owner approves Victor. Hotel lighting unchanged. Rig/animation reused.
 
 ### Status: Victor v5 built, verified in the game, PRESENTED FOR REVIEW — do not proceed further
-- Branch `main`. Base commit `684ffd2`; this increment is the "Victor v5" commit right after it
-  (`git log -1`). Published version = working version (no separate experiment branch was needed).
+- Branch `main`. Base commit `684ffd2`; this increment = **`26bdf8e` "Victor v5"** (pushed). Published version = working version (no separate experiment branch was needed).
 - Changed: `assets/characters/victor.glb` (v5), `assets/portraits/victor{,-possessed}.jpg` (re-rendered
   from v5), `tools/char-pipeline/make_victor.py` (head/hair/body rewrite, CFG in % of height),
   `victor_lib.py` (+ `shell`, `superellipse_pt`, `normal_of`, `lerp_table`), `preview_glb.{html,mjs}`

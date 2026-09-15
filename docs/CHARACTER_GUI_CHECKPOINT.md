@@ -13,13 +13,39 @@ neutral-proportion authority, the elevated panel is NOT a camera spec). Panels a
 by `make_panels.py` into `ref/panels/` (gitignored, regenerable). No rooms, other characters, GUI or
 gameplay work until the owner approves Victor. Hotel lighting unchanged. Rig/animation reused.
 
-### Status: pass 5 (jacket length/opening, shoe volume) PRESENTED FOR REVIEW — do not proceed further; next = facial-detail pass
+### Status: pass 6 (jacket-to-trouser connection, hip/crotch) PRESENTED FOR REVIEW — do not proceed further; next = facial-detail pass
 - Branch `main`. Base commit `684ffd2`; this increment = **`26bdf8e` "Victor v5"** (pushed). Published version = working version (no separate experiment branch was needed).
 - Changed: `assets/characters/victor.glb` (v5), `assets/portraits/victor{,-possessed}.jpg` (re-rendered
   from v5), `tools/char-pipeline/make_victor.py` (head/hair/body rewrite, CFG in % of height),
   `victor_lib.py` (+ `shell`, `superellipse_pt`, `normal_of`, `lerp_table`), `preview_glb.{html,mjs}`
   (+ `body@yaw` / `face@yaw` views, albedo-faithful neutral light, long lens), `portrait.mjs` (new eye
   coordinates), NEW `compare.py`, `compare_head.py`, `make_panels.py`, `ref/`.
+
+### Pass 6 (owner's brief after 7585829): JACKET-TO-TROUSER CONNECTION, HIP/CROTCH — built, verified, PRESENTED FOR REVIEW
+Baseline for comparison: asset `7585829` / `0ee483d1` (GLB copy in the session scratchpad, renders `shots/base75-*`).
+- **Asset revision**: `assets/characters/victor.glb` 927,012 bytes, sha256 `7e8f729391b3…`; 25,320 tris, 12,806
+  verts, 9 materials (new `Trouser` material shared by pelvis and legs). Hall scene with Victor: 341 draw calls,
+  52,326 triangles, 13 programs (headless numbers, not iPad). Walk check: stride 0.700 in use, phase error 0,
+  mesh-on-mover 0, no console errors; tests pass.
+- **Diagnosis** (`VICTOR_DIAG=1 VICTOR_OUT=… make_victor.py` builds a contrasting-colour copy: jacket grey-blue,
+  pelvis magenta, legs green; `shots/diag-hips-sheet.png`): the pass-5 `TrouserTop` block ran from the waist
+  down to 80 % of standing height — 8 cm BELOW the crotch — as a flat-bottomed slab spanning both legs, so it
+  covered the upper thighs (the "shorts over trousers"), lowered the visible crotch and shortened the legs.
+- **Fix**: `Pelvis` loft from the waist down to the crotch at 71.8 % (sheet: legs part at ~70.5 %), as wide as
+  the two thighs so their outer contours run straight up into the hip, with a rounded underside tucked between
+  the thighs; the thigh lofts overlap it by 6 cm; its lower part is 60 % weighted to the nearer thigh so it
+  follows the leg when walking (walk-pose renders, real-game mid-walk capture). Trousers get their own slightly
+  darker navy (`#1a2342` vs jacket `#1f2c50`) for restrained separation at the opening and hem.
+- **Jacket fronts**: the opening's boundary vertices are pulled exactly onto the cut curve (no more stepped
+  edge); the two rounded lower fronts read against the darker trousers in front and three-quarter views.
+- **Preserved**: shoes, jacket length, limbs, head, hair, shading, rig, movement, rooms, camera, GUI, rules.
+- **Evidence**: `shots/v11-review.png` — reference / baseline 0ee483d1 / updated 7e8f7293 at equal figure height
+  (front, back, three-quarter, walk pose), waist-to-knee close-ups (reference crop, baseline, updated front/back/
+  3/4, walking), the diagnostic colour views, real-game captures at zoom 1.8 (four rotations + mid-walk) and
+  normal zoom.
+- **Still different / caveats**: a small ledge where the thigh tops meet the pelvis shows only in the
+  contrasting-colour diagnostic at full stride (invisible navy-on-navy); the sheet's crotch sits ~1 % higher;
+  seams, pockets, cuff buttons, fingers and facial details remain deferred.
 
 ### Pass 5 (owner's brief after 76bd46f): JACKET LENGTH/SILHOUETTE + SHOE VOLUME — built, verified, PRESENTED FOR REVIEW
 Baseline for comparison: asset `76bd46f` / `c874a120` (GLB copy in the session scratchpad, renders `shots/basec8-*`).

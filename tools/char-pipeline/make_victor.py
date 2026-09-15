@@ -144,6 +144,12 @@ M = {
     'shoe':   L.solid_material('Shoe',   '#34353b'),   # charcoal-black leather: black enough, light enough for the toe/instep/heel to read as form
     'dark':   L.solid_material('Dark',   '#221812'),   # brows, moustache, eyes, mouth (near the hair tone)
 }
+import os, pathlib
+DIAG = os.environ.get('VICTOR_DIAG') == '1'
+if DIAG:   # contrasting unlit-ish colours to see which surface is which (jacket / trouser top / legs / shoes)
+    M['jacket'] = L.solid_material('Jacket', '#6f7fa0'); M['trouser'] = L.solid_material('Trouser', '#d040d0'); M['legs'] = L.solid_material('Legs', '#40c060')
+else:
+    M['trouser'] = L.solid_material('Trouser', '#1a2342'); M['legs'] = M['trouser']
 parts = []
 def add(ob, mat, bone):
     L.assign(ob, M[mat], bone); parts.append(ob); return ob
@@ -425,11 +431,26 @@ def opening_half_width(z):
     return w + 0.05 * corner ** 2
 bm = bmesh.new(); bm.from_mesh(jacket.data)
 cut = [f for f in bm.faces if (lambda c: c.y < -0.04 and abs(c.x) < opening_half_width(c.z))(f.calc_center_median())]
-bmesh.ops.delete(bm, geom=cut, context='FACES'); bm.to_mesh(jacket.data); bm.free(); jacket.data.update()
+bmesh.ops.delete(bm, geom=cut, context='FACES')
+for v in bm.verts:                                                   # boundary vertices exactly on the curve
+    if v.is_boundary and v.co.y < -0.04 and v.co.z < BTN_Z:
+        hw = opening_half_width(v.co.z)
+        if hw > 0 and abs(v.co.x) < hw + 0.03: v.co.x = math.copysign(hw, v.co.x)
+bm.to_mesh(jacket.data); bm.free(); jacket.data.update()
 add(jacket, 'jacket', 'spine')
-# trouser top / pelvis block behind the opening (hidden elsewhere by the jacket)
-add(L.loft('TrouserTop', [dict(z=zp(80.0), w=2*C['leg_x']+C['thigh_w'], d=C['thigh_d'], r=0.75), dict(z=C['z_hip_joint'], w=2*C['leg_x']+C['thigh_w']+0.01, d=C['thigh_d']+0.01, r=0.72),
-                          dict(z=Z_WAIST - 0.02, w=2*C['leg_x']+C['thigh_w']-0.02, d=C['thigh_d']+0.02, r=0.72), dict(z=Z_WAIST + 0.06, w=2*C['leg_x']+C['thigh_w']-0.05, d=C['thigh_d']+0.015, r=0.8)], n=28), 'jacket', 'hips')
+# PELVIS / trouser top: from the waist down to the crotch (sheet: legs part at ~70.5 %), as wide as the two
+# thighs so their outer contours run straight up into the hip, with a rounded underside tucked between the
+# thighs; its lower part is part-weighted to the nearer thigh so it follows the leg when walking.
+PW = 2 * C['leg_x'] + C['thigh_w']
+pelvis = L.loft('Pelvis', [dict(z=zp(71.8), w=0.10, d=0.12, r=1.0), dict(z=zp(70.8), w=0.24, d=0.175, r=0.95), dict(z=zp(69.5), w=PW*0.94, d=C['thigh_d']+0.005, r=0.85),
+                          dict(z=zp(67.0), w=PW, d=C['thigh_d']+0.015, r=0.78), dict(z=zp(63.0), w=PW+0.004, d=C['thigh_d']+0.03, r=0.75),
+                          dict(z=Z_WAIST - 0.02, w=PW-0.02, d=C['thigh_d']+0.03, r=0.75), dict(z=Z_WAIST + 0.06, w=PW-0.05, d=C['thigh_d']+0.015, r=0.8)], n=32)
+pelvis.data.materials.clear(); pelvis.data.materials.append(M['trouser'])
+_h = pelvis.vertex_groups.new(name='hips'); _tl = pelvis.vertex_groups.new(name='thigh.L'); _tr = pelvis.vertex_groups.new(name='thigh.R')
+for v in pelvis.data.vertices:
+    wt = 0.6 * L.smoothstep((zp(65.0) - v.co.z) / 0.06); _h.add([v.index], 1 - wt, 'REPLACE')
+    if wt > 0: (_tl if v.co.x > 0 else _tr).add([v.index], wt, 'REPLACE')
+parts.append(pelvis)
 
 def flat_panel(name, outline_xz, inset, mat, bone, cuts=6):
     area = 0.0
@@ -525,7 +546,7 @@ for s, tag in ((1, 'L'), (-1, 'R')):
                                dict(z=(ZA + ZK) / 2, w=SW, d=SD, r=1.0), dict(z=ZK - 0.03, w=SW*0.99, d=SD*1.02, r=1.0),
                                dict(z=ZK + 0.03, w=TW*0.96, d=TD*0.92, r=1.0), dict(z=(ZK + ZH) / 2, w=TW, d=TD, r=1.0),
                                dict(z=ZH + 0.03, w=TW*0.99, d=TD*0.99, r=1.0), dict(z=ZH + 0.10, w=TW*0.92, d=TD*0.94, r=1.0)], n=20)
-    L.translate_verts(leg, (lx, 0, 0)); addw(leg, 'jacket', f'thigh.{tag}', f'shin.{tag}', ZK, 0.04)
+    L.translate_verts(leg, (lx, 0, 0)); addw(leg, 'legs', f'thigh.{tag}', f'shin.{tag}', ZK, 0.04)
     L0, W0, H0 = C['shoe_len'], C['shoe_w'], C['shoe_h']
     HEEL = 0.062; TOE = L0 - HEEL
     # SOLE: a flat slab following the footprint, thicker at the back as the heel block
@@ -689,7 +710,7 @@ arm['strideLength'] = round(STRIDE, 4); arm['walkClipSeconds'] = round(WALK_N / 
 
 tris = L.tri_count(mesh)
 print(f'REPORT tris={tris} materials={len(mesh.data.materials)} verts={len(mesh.data.vertices)} height={H}')
-out = REPO / 'assets' / 'characters' / 'victor.glb'; out.parent.mkdir(parents=True, exist_ok=True)
+out = pathlib.Path(os.environ['VICTOR_OUT']) if os.environ.get('VICTOR_OUT') else REPO / 'assets' / 'characters' / 'victor.glb'; out.parent.mkdir(parents=True, exist_ok=True)
 bpy.ops.object.select_all(action='DESELECT'); arm.select_set(True); mesh.select_set(True); bpy.context.view_layer.objects.active = arm
 bpy.ops.export_scene.gltf(filepath=str(out), export_format='GLB', use_selection=True, export_apply=False, export_animations=True,
                           export_animation_mode='ACTIONS', export_yup=True, export_morph=False, export_extras=True,

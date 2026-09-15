@@ -28,12 +28,12 @@ renderer.setSize(innerWidth, innerHeight);
 document.body.appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
-const isPortrait = view === 'front' || view === 'tq' || view === 'side' || view === 'back' || view === 'body' || view === 'face' || view === 'elev' || view === 'elev30' || view === 'shoe' || view === 'shoeside';
+const isPortrait = view === 'front' || view === 'tq' || view === 'side' || view === 'back' || view === 'body' || view === 'face' || view === 'elev' || view === 'elev30' || view === 'shoe' || view === 'shoeside' || view === 'hips';
 scene.background = new THREE.Color(isPortrait ? 0x1a1d27 : 0x8a6a3a);
 const cam = new THREE.PerspectiveCamera(isPortrait ? 28 : 42, innerWidth / innerHeight, 0.1, 100);
 
 // Lighting close to the hall: hemisphere (sky lerped to a warm mood) + a warm point light overhead.
-const NEUTRAL = (['body', 'face', 'elev', 'elev30', 'shoe', 'shoeside'].includes(q.get('view'))) && q.get('light') !== 'game';
+const NEUTRAL = (['body', 'face', 'elev', 'elev30', 'shoe', 'shoeside', 'hips'].includes(q.get('view'))) && q.get('light') !== 'game';
 const hemi = new THREE.HemisphereLight(new THREE.Color('#ffffff').lerp(new THREE.Color('#ffd9a8'), 0.5), new THREE.Color('#3a3438'), 0.6);
 scene.add(hemi);
 // Neutral = albedo-faithful: a front-facing Lambert surface renders at about its base colour (Lambert divides by pi)
@@ -100,6 +100,10 @@ new GLTFLoader().load(src, (gltf) => {
   else if (view === 'shoeside') {   // large shoe close-up: level camera at shoe height (use yaw=90 for the profile)
     scene.background = new THREE.Color('#d8d8d8');
     cam.position.set(0, box.min.y + 0.22, 3.0); cam.lookAt(0, box.min.y + 0.10, 0); cam.fov = 11;
+  }
+  else if (view === 'hips') {       // waist-to-knee close-up, level camera (use yaw=)
+    scene.background = new THREE.Color('#d8d8d8');
+    cam.position.set(0, box.min.y + 0.62, 3.6); cam.lookAt(0, box.min.y + 0.58, 0); cam.fov = 10;
   }
   else if (view === 'portrait') {   // tight bust for the interface portrait (charcoal plate)
     scene.background = new THREE.Color('#171b27');

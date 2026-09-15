@@ -13,13 +13,39 @@ neutral-proportion authority, the elevated panel is NOT a camera spec). Panels a
 by `make_panels.py` into `ref/panels/` (gitignored, regenerable). No rooms, other characters, GUI or
 gameplay work until the owner approves Victor. Hotel lighting unchanged. Rig/animation reused.
 
-### Status: pass 4 (body, clothing, shoes) PRESENTED FOR REVIEW — do not proceed further; next = facial-detail pass
+### Status: pass 5 (jacket length/opening, shoe volume) PRESENTED FOR REVIEW — do not proceed further; next = facial-detail pass
 - Branch `main`. Base commit `684ffd2`; this increment = **`26bdf8e` "Victor v5"** (pushed). Published version = working version (no separate experiment branch was needed).
 - Changed: `assets/characters/victor.glb` (v5), `assets/portraits/victor{,-possessed}.jpg` (re-rendered
   from v5), `tools/char-pipeline/make_victor.py` (head/hair/body rewrite, CFG in % of height),
   `victor_lib.py` (+ `shell`, `superellipse_pt`, `normal_of`, `lerp_table`), `preview_glb.{html,mjs}`
   (+ `body@yaw` / `face@yaw` views, albedo-faithful neutral light, long lens), `portrait.mjs` (new eye
   coordinates), NEW `compare.py`, `compare_head.py`, `make_panels.py`, `ref/`.
+
+### Pass 5 (owner's brief after 76bd46f): JACKET LENGTH/SILHOUETTE + SHOE VOLUME — built, verified, PRESENTED FOR REVIEW
+Baseline for comparison: asset `76bd46f` / `c874a120` (GLB copy in the session scratchpad, renders `shots/basec8-*`).
+- **Asset revision**: `assets/characters/victor.glb` 919,824 bytes, sha256 `0ee483d18b54…`; 25,096 tris, 12,694
+  verts, 8 materials. Hall scene with Victor: 340 draw calls, 52,102 triangles, 13 programs (headless numbers, not iPad).
+- **Measured on the sheet's front panel** (% of standing height from the top): jacket hem 66 (front corners
+  65–66, the opening's apex ~62), button 56, waist narrowest ~58, cuffs 61–62, hands 61–72. The model's hem
+  had been at 72.5 — 6.5 % too long — which is what made the trousers look short.
+- **Jacket rebuilt**: hem at 66 % (`z_hem`), waist 0.445 wide at 58.5 %, hem 0.48; the loft now has a
+  profile every 1.2 cm and 48 segments, and the FRONT OPENING below the fastening is a real cut (faces
+  deleted where |x| < `opening_half_width(z)`: a narrow V from 2.5 cm under the button widening to the hem,
+  with the two lower corners rounding away); a `TrouserTop` block (navy, hips bone) fills the pelvis so the
+  trousers show through the opening. Button at `Z_WAIST + 0.04`. Side/back silhouette unchanged in kind.
+- **Shoes rebuilt as two parts**: a black SOLE slab following the footprint (1.4 cm, thickening to a 3 cm
+  heel block at the back) and a charcoal UPPER on top (heel counter → ankle collar → 12 cm instep → full toe
+  box → rounded toe); 0.305 m long, 0.19 wide — about 2.3× as long as tall like the sheet's shoe (the
+  previous one was 4×). Trouser legs now end at 10 cm so the hem breaks on the instep.
+- **Preserved**: arms/legs (continuous lofts), head, hair, baked shading, rig, animations, movement, rooms,
+  lighting, camera, GUI, rules. Floor contact: shoe bottoms clamped at z ≥ 2 mm; walk pose renders and
+  `walk_check.mjs` (stride 0.700 in use, phase error 0, mesh-on-mover 0, no console errors) confirm stride and contact.
+- **Evidence**: `shots/v10-review.png` — reference / baseline c874a120 / updated 0ee483d1 at equal figure
+  height (front, three-quarter, side, back, walk poses), large side shoe close-ups (reference crop, baseline,
+  updated, front-3/4), real-game captures at zoom 1.8 and normal zoom, four rotations.
+- **Still different from the sheet**: the cut edge of the opening is slightly stepped (loft rings); the sheet's
+  shoe has a laced vamp seam and a glossier look; the sheet's arms bend more at the elbow; no seams,
+  pockets, cuff buttons, fingers yet (deferred). Next: facial-detail pass (eyebrows, moustache, ears).
 
 ### Pass 4 (owner's brief, 2026-09-15): BODY, CLOTHING CONTOURS AND SHOES — built, verified, PRESENTED FOR REVIEW
 Baseline for comparison: asset `bbc1c88` / `e452d672` (GLB copy in the session scratchpad, renders `shots/basebb-*`).

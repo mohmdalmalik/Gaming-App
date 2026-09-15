@@ -59,8 +59,8 @@ CFG = dict(
     # ---- neck / shoulders / torso (FRONT: collar top ~32 %, shoulders 36-40 %, jacket 0.326 H wide;
     #      SIDE: collar region <= 0.24 deep, chest 0.30 deep; hem 72.5 %)
     neck_r=0.105, neck_y=-0.03, z_shoulder_top=zp(35.5), z_shoulder_joint=zp(40.0), shoulder_x=0.222,
-    jacket_w_shoulder=0.515, jacket_d_chest=0.300, jacket_w_waist=0.465, z_waist=zp(58.0),
-    jacket_w_hem=0.500, jacket_d_hem=0.240, z_hem=zp(72.5),
+    jacket_w_shoulder=0.515, jacket_d_chest=0.300, jacket_w_waist=0.445, z_waist=zp(58.5),
+    jacket_w_hem=0.480, jacket_d_hem=0.245, z_hem=zp(66.0),
     # ---- arms (FRONT: hands end at 72 %, hand centres +-0.335; elbow ~55 %)
     upperarm_r=0.068, forearm_r=0.058, z_elbow=zp(55.5), z_wrist=zp(66.5), z_hand_end=zp(72.5),
     hand_x=0.335, hand_len=0.115, hand_w=0.092,
@@ -68,7 +68,7 @@ CFG = dict(
     #      shoes 0.05 H tall, 0.185 H long, both together 0.30 H wide with the splay)
     leg_x=0.114, thigh_w=0.160, thigh_d=0.190, shin_w=0.155, shin_d=0.155,
     z_hip_joint=zp(74.0), z_knee=zp(86.5), z_ankle=zp(96.0),
-    shoe_len=0.370, shoe_w=0.190, shoe_h=0.078, shoe_splay=0.26,
+    shoe_len=0.305, shoe_w=0.190, shoe_h=0.120, shoe_splay=0.26,
 )
 C = CFG
 # Skull tables by f (0 = chin bottom, 1 = skull top): half-width, front depth, back depth (from the
@@ -389,9 +389,9 @@ lock('LockW', keys, n_samples=30)
 Z_SH_TOP, Z_HEM, Z_WAIST = C['z_shoulder_top'], C['z_hem'], C['z_waist']
 JACKET_PROFILES = [
     dict(z=Z_HEM,                     w=C['jacket_w_hem'],      d=C['jacket_d_hem'],        r=0.66),
-    dict(z=Z_HEM + 0.08,              w=C['jacket_w_hem']-0.012, d=C['jacket_d_hem']+0.015, r=0.66),
-    dict(z=Z_WAIST,                   w=C['jacket_w_waist']-0.006, d=C['jacket_d_chest']-0.024, r=0.66),
-    dict(z=Z_WAIST + 0.12,            w=C['jacket_w_waist']+0.05, d=C['jacket_d_chest'],    r=0.64),
+    dict(z=Z_HEM + 0.05,              w=C['jacket_w_hem']-0.008, d=C['jacket_d_hem']+0.012, r=0.66),
+    dict(z=Z_WAIST,                   w=C['jacket_w_waist'],    d=C['jacket_d_chest']-0.028, r=0.66),
+    dict(z=Z_WAIST + 0.10,            w=C['jacket_w_waist']+0.045, d=C['jacket_d_chest']-0.006, r=0.64),
     dict(z=C['z_shoulder_joint']+0.02, w=C['jacket_w_shoulder']-0.015, d=C['jacket_d_chest']-0.025, r=0.72),
     dict(z=C['z_shoulder_joint']+0.05, w=0.455,                  d=C['jacket_d_chest']-0.045, r=0.84),
     dict(z=Z_SH_TOP,                  w=0.385,                  d=C['jacket_d_chest']-0.065, r=0.92),
@@ -411,12 +411,25 @@ def chest_y(x, z):
     p = _lerp_profile(z); exp = 2.0 + 6.0 * (1.0 - p['r']); k = 2.0 / exp
     u = min(0.999, abs(x) / (p['w'] / 2)); c = u ** (1 / k); s = math.sqrt(max(0.0, 1 - c * c))
     return -(s ** k) * p['d'] / 2
-jacket = L.loft('Jacket', JACKET_PROFILES, n=36)
-for v in jacket.data.vertices:                                         # front hem: the two fronts' rounded corners meet under the button
-    if v.co.y < -0.02 and v.co.z < Z_HEM + 0.09:
-        lift = 0.030 * math.exp(-(v.co.x ** 2) / (2 * 0.055 ** 2)) * L.smoothstep((Z_HEM + 0.09 - v.co.z) / 0.07)
-        v.co.z += lift
-jacket.data.update(); add(jacket, 'jacket', 'spine')
+# dense profiles (every 1.2 cm) so the front opening's cut edge is smooth
+_zs = [Z_HEM + k * 0.012 for k in range(int((Z_SH_TOP + 0.050 - Z_HEM) / 0.012) + 1)] + [Z_SH_TOP + 0.050]
+jacket = L.loft('Jacket', [_lerp_profile(z) for z in _zs], n=48)
+BTN_Z = Z_WAIST + 0.04
+def opening_half_width(z):
+    """Half-width of the front opening below the fastening: a narrow V widening toward the hem, whose
+    lower corners round away like the sheet's."""
+    if z >= BTN_Z - 0.025: return 0.0
+    t = (BTN_Z - 0.025 - z) / max(1e-6, BTN_Z - 0.025 - Z_HEM)
+    w = 0.012 + 0.045 * t
+    corner = L.smoothstep((Z_HEM + 0.05 - z) / 0.05)
+    return w + 0.05 * corner ** 2
+bm = bmesh.new(); bm.from_mesh(jacket.data)
+cut = [f for f in bm.faces if (lambda c: c.y < -0.04 and abs(c.x) < opening_half_width(c.z))(f.calc_center_median())]
+bmesh.ops.delete(bm, geom=cut, context='FACES'); bm.to_mesh(jacket.data); bm.free(); jacket.data.update()
+add(jacket, 'jacket', 'spine')
+# trouser top / pelvis block behind the opening (hidden elsewhere by the jacket)
+add(L.loft('TrouserTop', [dict(z=zp(80.0), w=2*C['leg_x']+C['thigh_w'], d=C['thigh_d'], r=0.75), dict(z=C['z_hip_joint'], w=2*C['leg_x']+C['thigh_w']+0.01, d=C['thigh_d']+0.01, r=0.72),
+                          dict(z=Z_WAIST - 0.02, w=2*C['leg_x']+C['thigh_w']-0.02, d=C['thigh_d']+0.02, r=0.72), dict(z=Z_WAIST + 0.06, w=2*C['leg_x']+C['thigh_w']-0.05, d=C['thigh_d']+0.015, r=0.8)], n=28), 'jacket', 'hips')
 
 def flat_panel(name, outline_xz, inset, mat, bone, cuts=6):
     area = 0.0
@@ -432,8 +445,7 @@ def flat_panel(name, outline_xz, inset, mat, bone, cuts=6):
     if sum(f.normal.y for f in bm.faces) > 0: bmesh.ops.reverse_faces(bm, faces=bm.faces[:])
     return add(L.new_object(name, bm, smooth=True), mat, bone)
 
-# Shirt: a narrow, tidy V from the collar to the single button
-BTN_Z = Z_WAIST + 0.05
+# Shirt: a narrow, tidy V from the collar to the single button (BTN_Z set with the jacket above)
 flat_panel('Shirt', [(-0.052, Z_SH_TOP + 0.050), (-0.014, BTN_Z - 0.02), (0.014, BTN_Z - 0.02), (0.052, Z_SH_TOP + 0.050)], 0.004, 'shirt', 'spine')
 # Peaked lapels (dark satin), thin, following the chest; their peaks meet the jacket collar's ends
 for s_ in (1, -1):
@@ -509,22 +521,31 @@ LX = C['leg_x']; TW, TD, SW, SD = C['thigh_w'], C['thigh_d'], C['shin_w'], C['sh
 ZH, ZK, ZA = C['z_hip_joint'], C['z_knee'], C['z_ankle']
 for s, tag in ((1, 'L'), (-1, 'R')):
     lx = s * LX
-    leg = L.loft(f'Leg{tag}', [dict(z=ZA - 0.006, w=SW*0.90, d=SD*0.88, r=1.0), dict(z=ZA + 0.06, w=SW*0.95, d=SD*0.94, r=1.0),
+    leg = L.loft(f'Leg{tag}', [dict(z=0.100, w=SW*0.90, d=SD*0.88, r=1.0), dict(z=ZA + 0.06, w=SW*0.95, d=SD*0.94, r=1.0),
                                dict(z=(ZA + ZK) / 2, w=SW, d=SD, r=1.0), dict(z=ZK - 0.03, w=SW*0.99, d=SD*1.02, r=1.0),
                                dict(z=ZK + 0.03, w=TW*0.96, d=TD*0.92, r=1.0), dict(z=(ZK + ZH) / 2, w=TW, d=TD, r=1.0),
                                dict(z=ZH + 0.03, w=TW*0.99, d=TD*0.99, r=1.0), dict(z=ZH + 0.10, w=TW*0.92, d=TD*0.94, r=1.0)], n=20)
     L.translate_verts(leg, (lx, 0, 0)); addw(leg, 'jacket', f'thigh.{tag}', f'shin.{tag}', ZK, 0.04)
     L0, W0, H0 = C['shoe_len'], C['shoe_w'], C['shoe_h']
-    # stations along the foot: (position from the ankle, width, height, centre height, roundness)
-    # heel -> ankle -> instep -> a tall blunt toe box that rounds off only over the last few cm
-    st = [(-0.080, W0*0.52, 0.042, 0.027, 1.0), (-0.062, W0*0.80, 0.064, 0.035, 0.75), (-0.030, W0*0.93, 0.080, 0.043, 0.65),
-          (0.020, W0*0.97, H0 + 0.010, 0.047, 0.62), (0.090, W0, H0 + 0.004, 0.044, 0.60), (0.160, W0, H0 * 0.98, 0.042, 0.58),
-          (0.215, W0*0.98, H0 * 0.90, 0.039, 0.58), (0.255, W0*0.90, H0 * 0.70, 0.031, 0.65), (0.280, W0*0.66, H0 * 0.42, 0.020, 0.85), (L0 - 0.080, W0*0.30, 0.016, 0.010, 1.0)]
-    shoe = L.loft(f'Shoe{tag}', [dict(z=a, w=w, d=d, r=r, y=yc) for a, w, d, yc, r in st], n=22)
-    L.rotate_verts(shoe, (math.pi / 2, 0, 0))                          # loft axis -> -Y (forward); local y -> up
-    for v in shoe.data.vertices:                                        # flat sole with a modest thickness
-        if v.co.z < 0.006: v.co.z = 0.004 if v.co.z < 0.0 else v.co.z * 0.6 + 0.0024
-    L.rotate_verts(shoe, (0, 0, s * C['shoe_splay']), about=(0, 0.05, 0)); L.translate_verts(shoe, (lx, 0, 0)); add(shoe, 'shoe', f'foot.{tag}')
+    HEEL = 0.062; TOE = L0 - HEEL
+    # SOLE: a flat slab following the footprint, thicker at the back as the heel block
+    sole_st = [(-HEEL, W0*0.62, 0.028), (-HEEL + 0.018, W0*0.90, 0.030), (-0.012, W0*0.97, 0.030), (0.000, W0*0.98, 0.020), (0.02, W0*0.99, 0.014),
+               (0.15, W0*1.0, 0.014), (0.195, W0*0.88, 0.013), (TOE - 0.010, W0*0.52, 0.011), (TOE, W0*0.24, 0.009)]
+    sole = L.loft(f'Sole{tag}', [dict(z=a, w=w, d=t, r=0.7, y=t / 2) for a, w, t in sole_st], n=22)
+    # UPPER: heel counter -> ankle collar -> raised instep -> full toe box -> rounded toe, sitting on the sole
+    def st(a, w, h, extra=0.0, r=0.62):
+        base = 0.030 if a < -0.01 else (0.014 if a > 0.02 else 0.014 + 0.016 * (0.02 - a) / 0.03)
+        return dict(z=a, w=w, d=h, r=r, y=base - 0.004 + h / 2 + extra)
+    up_st = [st(-HEEL + 0.004, W0*0.50, 0.060, r=1.0), st(-HEEL + 0.018, W0*0.82, 0.088), st(-0.028, W0*0.95, 0.104), st(0.008, W0*0.98, H0),
+             st(0.050, W0*1.0, H0*0.97), st(0.100, W0, H0*0.90), st(0.145, W0*0.99, H0*0.82), st(0.180, W0*0.95, H0*0.70), st(0.210, W0*0.85, H0*0.50, r=0.75),
+             st(0.230, W0*0.62, H0*0.28, r=0.9), st(TOE - 0.005, W0*0.28, 0.014, r=1.0)]
+    shoe = L.loft(f'Shoe{tag}', up_st, n=22)
+    for ob in (sole, shoe):
+        L.rotate_verts(ob, (math.pi / 2, 0, 0))                          # loft axis -> -Y (forward); local y -> up
+        for v in ob.data.vertices:
+            if v.co.z < 0.002: v.co.z = 0.002
+        L.rotate_verts(ob, (0, 0, s * C['shoe_splay']), about=(0, 0.05, 0)); L.translate_verts(ob, (lx, 0, 0))
+    add(sole, 'black', f'foot.{tag}'); add(shoe, 'shoe', f'foot.{tag}')
 
 # =============================================================================================
 # JOIN + RIG

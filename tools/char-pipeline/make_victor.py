@@ -68,7 +68,7 @@ CFG = dict(
     #      shoes 0.05 H tall, 0.185 H long, both together 0.30 H wide with the splay)
     leg_x=0.114, thigh_w=0.160, thigh_d=0.190, shin_w=0.155, shin_d=0.155,
     z_hip_joint=zp(74.0), z_knee=zp(86.5), z_ankle=zp(96.0),
-    shoe_len=0.420, shoe_w=0.200, shoe_h=0.075, shoe_splay=0.26,
+    shoe_len=0.370, shoe_w=0.190, shoe_h=0.078, shoe_splay=0.26,
 )
 C = CFG
 # Skull tables by f (0 = chin bottom, 1 = skull top): half-width, front depth, back depth (from the
@@ -141,6 +141,7 @@ M = {
     'lapel':  L.solid_material('Lapel',  '#161d36'),   # satin facing: a shade darker than the cloth
     'shirt':  L.solid_material('Shirt',  '#f3eee2'),   # ivory
     'black':  L.solid_material('Black',  '#111116'),   # bow tie, shoes, buttons
+    'shoe':   L.solid_material('Shoe',   '#34353b'),   # charcoal-black leather: black enough, light enough for the toe/instep/heel to read as form
     'dark':   L.solid_material('Dark',   '#221812'),   # brows, moustache, eyes, mouth (near the hair tone)
 }
 parts = []
@@ -387,13 +388,13 @@ lock('LockW', keys, n_samples=30)
 # =============================================================================================
 Z_SH_TOP, Z_HEM, Z_WAIST = C['z_shoulder_top'], C['z_hem'], C['z_waist']
 JACKET_PROFILES = [
-    dict(z=Z_HEM,                     w=C['jacket_w_hem'],      d=C['jacket_d_hem'],        r=0.62),
-    dict(z=Z_HEM + 0.08,              w=C['jacket_w_hem']-0.01, d=C['jacket_d_hem']+0.015,  r=0.62),
-    dict(z=Z_WAIST,                   w=C['jacket_w_waist'],    d=C['jacket_d_chest']-0.02, r=0.62),
+    dict(z=Z_HEM,                     w=C['jacket_w_hem'],      d=C['jacket_d_hem'],        r=0.66),
+    dict(z=Z_HEM + 0.08,              w=C['jacket_w_hem']-0.012, d=C['jacket_d_hem']+0.015, r=0.66),
+    dict(z=Z_WAIST,                   w=C['jacket_w_waist']-0.006, d=C['jacket_d_chest']-0.024, r=0.66),
     dict(z=Z_WAIST + 0.12,            w=C['jacket_w_waist']+0.05, d=C['jacket_d_chest'],    r=0.64),
     dict(z=C['z_shoulder_joint']+0.02, w=C['jacket_w_shoulder']-0.015, d=C['jacket_d_chest']-0.025, r=0.72),
-    dict(z=C['z_shoulder_joint']+0.05, w=0.46,                   d=C['jacket_d_chest']-0.045, r=0.80),
-    dict(z=Z_SH_TOP,                  w=0.39,                   d=C['jacket_d_chest']-0.065, r=0.90),
+    dict(z=C['z_shoulder_joint']+0.05, w=0.455,                  d=C['jacket_d_chest']-0.045, r=0.84),
+    dict(z=Z_SH_TOP,                  w=0.385,                  d=C['jacket_d_chest']-0.065, r=0.92),
     dict(z=Z_SH_TOP + 0.030,          w=0.29,                   d=0.225,                    r=1.0),
     dict(z=Z_SH_TOP + 0.050,          w=0.245,                  d=0.215,                    r=1.0),
 ]
@@ -410,7 +411,12 @@ def chest_y(x, z):
     p = _lerp_profile(z); exp = 2.0 + 6.0 * (1.0 - p['r']); k = 2.0 / exp
     u = min(0.999, abs(x) / (p['w'] / 2)); c = u ** (1 / k); s = math.sqrt(max(0.0, 1 - c * c))
     return -(s ** k) * p['d'] / 2
-add(L.loft('Jacket', JACKET_PROFILES, n=36), 'jacket', 'spine')
+jacket = L.loft('Jacket', JACKET_PROFILES, n=36)
+for v in jacket.data.vertices:                                         # front hem: the two fronts' rounded corners meet under the button
+    if v.co.y < -0.02 and v.co.z < Z_HEM + 0.09:
+        lift = 0.030 * math.exp(-(v.co.x ** 2) / (2 * 0.055 ** 2)) * L.smoothstep((Z_HEM + 0.09 - v.co.z) / 0.07)
+        v.co.z += lift
+jacket.data.update(); add(jacket, 'jacket', 'spine')
 
 def flat_panel(name, outline_xz, inset, mat, bone, cuts=6):
     area = 0.0
@@ -464,49 +470,61 @@ for i in range(3):
     add(L.uvsphere(f'Stud{i}', 0.0065, (0, chest_y(0, zb) - 0.010, zb), u=8, v=6), 'black', 'spine')
 add(L.uvsphere('Button', 0.011, (0, chest_y(0, BTN_Z) - 0.012, BTN_Z), scale=(1, 0.6, 1), u=10, v=8), 'black', 'spine')
 
-# ---- arms: slim capsules with joint spheres; hang with a slight outward angle
+# ---- arms: ONE continuous lofted sleeve per arm (shoulder cap -> upper arm -> elbow -> forearm -> wrist),
+#      round sections, a slight outward lean and a small forward bend at the elbow; skin weights blend
+#      between the upper-arm and forearm bones across the elbow. No joint spheres.
 SX, ZJ = C['shoulder_x'], C['z_shoulder_joint']
+UR, FR = C['upperarm_r'], C['forearm_r']
+def addw(ob, mat, upper, lower, z_split, blend=0.04):
+    L.assign_split(ob, M[mat], upper, lower, z_split, blend); parts.append(ob); return ob
 for s, tag in ((1, 'L'), (-1, 'R')):
     ex = s * (SX + 0.045); ey = -0.010
     hx = s * C['hand_x']; hy = -0.045
-    add(L.uvsphere(f'Shoulder{tag}', C['upperarm_r'] * 0.90, (s * (SX - 0.035), 0.0, ZJ - 0.02), u=14, v=10), 'jacket', f'upperarm.{tag}')
-    ua = L.capsule(f'UpperArm{tag}', C['upperarm_r'], C['upperarm_r'] * 0.9, ZJ, C['z_elbow'] - 0.01, n=16, rings=4)
-    for v in ua.data.vertices:
-        t = (ZJ - v.co.z) / (ZJ - C['z_elbow']); v.co.x += s * SX + (ex - s * SX) * t; v.co.y += ey * t
-    add(ua, 'jacket', f'upperarm.{tag}')
-    add(L.uvsphere(f'Elbow{tag}', C['upperarm_r'] * 0.86, (ex, ey, C['z_elbow']), u=14, v=10), 'jacket', f'upperarm.{tag}')
-    fa = L.capsule(f'Forearm{tag}', C['forearm_r'], C['forearm_r'] * 0.86, C['z_elbow'] + 0.01, C['z_wrist'] - 0.005, n=16, rings=4)
-    for v in fa.data.vertices:
-        t = (C['z_elbow'] + 0.01 - v.co.z) / (C['z_elbow'] - C['z_wrist']); v.co.x += ex + (hx - ex) * t; v.co.y += ey + (hy - ey) * t
-    add(fa, 'jacket', f'forearm.{tag}')
-    cuff = L.loft(f'Cuff{tag}', [dict(z=C['z_wrist'] - 0.006, w=2*C['forearm_r']*0.9, d=2*C['forearm_r']*0.9, r=1.0), dict(z=C['z_wrist'] + 0.018, w=2*C['forearm_r']*0.88, d=2*C['forearm_r']*0.88, r=1.0)], n=14)
+    ZE, ZW = C['z_elbow'], C['z_wrist']
+    def arm_xy(z):                                                   # centre line of the sleeve at height z
+        if z >= ZE:
+            t = (ZJ - z) / (ZJ - ZE); t = max(0.0, min(1.0, t)); return s * SX + (ex - s * SX) * t, ey * t
+        t = (ZE - z) / (ZE - ZW); t = max(0.0, min(1.0, t)); return ex + (hx - ex) * t, ey + (hy - ey) * t
+    stations = [(ZW - 0.004, 2 * FR * 0.84, 2 * FR * 0.80, 1.0), ((ZE + ZW) / 2, 2 * FR * 0.94, 2 * FR * 0.92, 1.0),
+                (ZE - 0.03, 2 * UR * 0.90, 2 * UR * 0.92, 1.0), (ZE + 0.03, 2 * UR * 0.94, 2 * UR * 0.98, 1.0),
+                ((ZJ + ZE) / 2, 2 * UR * 0.97, 2 * UR, 1.0), (ZJ - 0.02, 2 * UR, 2 * UR * 1.02, 1.0),
+                (ZJ + 0.025, 2 * UR * 0.86, 2 * UR * 0.92, 1.0), (ZJ + 0.048, 2 * UR * 0.45, 2 * UR * 0.55, 1.0)]
+    prof = []
+    for z, w, d, r in stations:
+        x, y = arm_xy(min(z, ZJ)); prof.append(dict(z=z, w=w, d=d, r=r, x=x + (0.0 if z <= ZJ else -s * 0.012 * (z - ZJ) / 0.05), y=y))
+    addw(L.loft(f'Sleeve{tag}', prof, n=20), 'jacket', f'upperarm.{tag}', f'forearm.{tag}', ZE, 0.035)
+    cuff = L.loft(f'Cuff{tag}', [dict(z=ZW - 0.006, w=2*FR*0.90, d=2*FR*0.86, r=1.0), dict(z=ZW + 0.018, w=2*FR*0.86, d=2*FR*0.82, r=1.0)], n=14)
     L.translate_verts(cuff, (hx, hy, 0)); add(cuff, 'shirt', f'forearm.{tag}')
     # hand: a rounded mitt (slightly flattened), softly grouped fingers as a bevelled front, a thumb on the inside
     hand = L.loft(f'Hand{tag}', [dict(z=C['z_hand_end'], w=C['hand_w']*0.70, d=0.045, r=0.9), dict(z=C['z_hand_end']+0.03, w=C['hand_w'], d=0.058, r=0.75),
-                                 dict(z=C['z_hand_end']+0.075, w=C['hand_w']*0.98, d=0.060, r=0.7), dict(z=C['z_wrist']+0.01, w=C['hand_w']*0.72, d=0.050, r=0.95)], n=16)
+                                 dict(z=C['z_hand_end']+0.075, w=C['hand_w']*0.98, d=0.060, r=0.7), dict(z=ZW+0.01, w=C['hand_w']*0.72, d=0.050, r=0.95)], n=16)
     L.translate_verts(hand, (hx, hy, 0)); add(hand, 'skin', f'hand.{tag}')
     add(L.uvsphere(f'Thumb{tag}', 1.0, (0, 0, 0), scale=(0.016, 0.018, 0.030), u=10, v=8), 'skin', f'hand.{tag}')
-    parts[-1].data.transform(__import__('mathutils').Matrix.Translation(Vector((hx - s * (C['hand_w']*0.5 + 0.006), hy - 0.012, C['z_wrist'] - 0.035))))
+    parts[-1].data.transform(__import__('mathutils').Matrix.Translation(Vector((hx - s * (C['hand_w']*0.5 + 0.006), hy - 0.012, ZW - 0.035))))
 
-# ---- legs: capsules (slightly deeper than wide, like the sheet), knee spheres, lofted shoes
-LX = C['leg_x']
+# ---- legs: ONE continuous lofted trouser leg per side (hip -> thigh -> knee -> shin -> ankle), slim,
+#      slightly deeper than wide, a soft knee; weights blend between thigh and shin bones at the knee.
+#      Shoes: a loft ALONG THE FOOT (heel -> arch -> instep -> ball -> rounded toe) with a flat sole.
+LX = C['leg_x']; TW, TD, SW, SD = C['thigh_w'], C['thigh_d'], C['shin_w'], C['shin_d']
+ZH, ZK, ZA = C['z_hip_joint'], C['z_knee'], C['z_ankle']
 for s, tag in ((1, 'L'), (-1, 'R')):
     lx = s * LX
-    add(L.uvsphere(f'HipBall{tag}', 1.0, (lx, 0.0, C['z_hip_joint'] + 0.02), scale=(C['thigh_w']*0.5, C['thigh_d']*0.5, 0.075), u=14, v=10), 'jacket', f'thigh.{tag}')
-    th = L.loft(f'Thigh{tag}', [dict(z=C['z_knee'] - 0.01, w=C['thigh_w']*0.92, d=C['thigh_d']*0.86, r=1.0), dict(z=(C['z_knee']+C['z_hip_joint'])/2, w=C['thigh_w'], d=C['thigh_d'], r=1.0), dict(z=C['z_hip_joint'] + 0.05, w=C['thigh_w']*0.98, d=C['thigh_d']*0.98, r=1.0)], n=18)
-    L.translate_verts(th, (lx, 0, 0)); add(th, 'jacket', f'thigh.{tag}')
-    add(L.uvsphere(f'Knee{tag}', 1.0, (lx, 0.0, C['z_knee']), scale=(C['shin_w']*0.5*0.98, C['shin_d']*0.5, 0.075), u=14, v=10), 'jacket', f'thigh.{tag}')
-    sh = L.loft(f'Shin{tag}', [dict(z=C['z_ankle'] - 0.005, w=C['shin_w']*0.98, d=C['shin_d']*0.92, r=1.0), dict(z=(C['z_ankle']+C['z_knee'])/2, w=C['shin_w']*0.96, d=C['shin_d']*0.96, r=1.0), dict(z=C['z_knee'] + 0.01, w=C['shin_w'], d=C['shin_d'], r=1.0)], n=18)
-    L.translate_verts(sh, (lx, 0, 0)); add(sh, 'jacket', f'shin.{tag}')
+    leg = L.loft(f'Leg{tag}', [dict(z=ZA - 0.006, w=SW*0.90, d=SD*0.88, r=1.0), dict(z=ZA + 0.06, w=SW*0.95, d=SD*0.94, r=1.0),
+                               dict(z=(ZA + ZK) / 2, w=SW, d=SD, r=1.0), dict(z=ZK - 0.03, w=SW*0.99, d=SD*1.02, r=1.0),
+                               dict(z=ZK + 0.03, w=TW*0.96, d=TD*0.92, r=1.0), dict(z=(ZK + ZH) / 2, w=TW, d=TD, r=1.0),
+                               dict(z=ZH + 0.03, w=TW*0.99, d=TD*0.99, r=1.0), dict(z=ZH + 0.10, w=TW*0.92, d=TD*0.94, r=1.0)], n=20)
+    L.translate_verts(leg, (lx, 0, 0)); addw(leg, 'jacket', f'thigh.{tag}', f'shin.{tag}', ZK, 0.04)
     L0, W0, H0 = C['shoe_len'], C['shoe_w'], C['shoe_h']
-    # a rounded slip-on: toe well forward of the ankle, a short heel behind it; toes splayed OUTWARD
-    yc = -(L0 * 0.5 - 0.075)
-    shoe = L.loft(f'Shoe{tag}', [
-        dict(z=0.0,        w=W0*0.90, d=L0*0.94, r=0.60, y=yc),
-        dict(z=H0*0.40,    w=W0,      d=L0,      r=0.60, y=yc),
-        dict(z=H0*0.75,    w=W0*0.90, d=L0*0.88, r=0.62, y=yc + 0.012),
-        dict(z=H0,         w=W0*0.68, d=L0*0.50, r=0.75, y=-0.045)], n=22)
-    L.rotate_verts(shoe, (0, 0, s * C['shoe_splay']), about=(0, 0.05, 0)); L.translate_verts(shoe, (lx, 0, 0)); add(shoe, 'black', f'foot.{tag}')
+    # stations along the foot: (position from the ankle, width, height, centre height, roundness)
+    # heel -> ankle -> instep -> a tall blunt toe box that rounds off only over the last few cm
+    st = [(-0.080, W0*0.52, 0.042, 0.027, 1.0), (-0.062, W0*0.80, 0.064, 0.035, 0.75), (-0.030, W0*0.93, 0.080, 0.043, 0.65),
+          (0.020, W0*0.97, H0 + 0.010, 0.047, 0.62), (0.090, W0, H0 + 0.004, 0.044, 0.60), (0.160, W0, H0 * 0.98, 0.042, 0.58),
+          (0.215, W0*0.98, H0 * 0.90, 0.039, 0.58), (0.255, W0*0.90, H0 * 0.70, 0.031, 0.65), (0.280, W0*0.66, H0 * 0.42, 0.020, 0.85), (L0 - 0.080, W0*0.30, 0.016, 0.010, 1.0)]
+    shoe = L.loft(f'Shoe{tag}', [dict(z=a, w=w, d=d, r=r, y=yc) for a, w, d, yc, r in st], n=22)
+    L.rotate_verts(shoe, (math.pi / 2, 0, 0))                          # loft axis -> -Y (forward); local y -> up
+    for v in shoe.data.vertices:                                        # flat sole with a modest thickness
+        if v.co.z < 0.006: v.co.z = 0.004 if v.co.z < 0.0 else v.co.z * 0.6 + 0.0024
+    L.rotate_verts(shoe, (0, 0, s * C['shoe_splay']), about=(0, 0.05, 0)); L.translate_verts(shoe, (lx, 0, 0)); add(shoe, 'shoe', f'foot.{tag}')
 
 # =============================================================================================
 # JOIN + RIG

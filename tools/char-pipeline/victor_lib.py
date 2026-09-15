@@ -160,20 +160,23 @@ def radial_scale(ob, centre, fn):
 def smoothstep(t):
     t = max(0.0, min(1.0, t)); return t * t * (3 - 2 * t)
 
-def capsule(name, r_top, r_bot, z_top, z_bot, loc=(0, 0), n=16, rings=6):
-    """A limb segment: a tapered cylinder with hemispherical ends, from z_bot to z_top at (x,y)=loc."""
+def capsule(name, r_top, r_bot, z_top, z_bot, loc=(0, 0), n=16, rings=6, roundness=1.0):
+    """A limb segment: a tapered cylinder with hemispherical ends, from z_bot to z_top at (x,y)=loc.
+    `roundness` (0..1) is the cross-section roundness; the physical radii are r_top / r_bot. (Before this
+    parameter existed the radii were passed into the profile's `r`, which rounded_rect_ring reads as a
+    0..1 roundness, so a 0.06 m arm became a near-square box: exponent 2 + 6*(1-0.06) = 7.6.)"""
     profiles = []
     # bottom cap
     for i in range(rings):
         a = (i / rings) * math.pi / 2
         rr = r_bot * math.cos(math.pi / 2 - a)
-        profiles.append(dict(z=z_bot + r_bot - r_bot * math.sin(math.pi / 2 - a), w=2 * max(0.01, rr), d=2 * max(0.01, rr), r=max(0.005, rr)))
-    profiles.append(dict(z=z_bot + r_bot, w=2 * r_bot, d=2 * r_bot, r=r_bot))
-    profiles.append(dict(z=z_top - r_top, w=2 * r_top, d=2 * r_top, r=r_top))
+        profiles.append(dict(z=z_bot + r_bot - r_bot * math.sin(math.pi / 2 - a), w=2 * max(0.01, rr), d=2 * max(0.01, rr), r=roundness))
+    profiles.append(dict(z=z_bot + r_bot, w=2 * r_bot, d=2 * r_bot, r=roundness))
+    profiles.append(dict(z=z_top - r_top, w=2 * r_top, d=2 * r_top, r=roundness))
     for i in range(1, rings + 1):
         a = (i / rings) * math.pi / 2
         rr = r_top * math.cos(a)
-        profiles.append(dict(z=z_top - r_top + r_top * math.sin(a), w=2 * max(0.01, rr), d=2 * max(0.01, rr), r=max(0.005, rr)))
+        profiles.append(dict(z=z_top - r_top + r_top * math.sin(a), w=2 * max(0.01, rr), d=2 * max(0.01, rr), r=roundness))
     for p in profiles: p['x'] = loc[0]; p['y'] = loc[1]
     return loft(name, profiles, n=n)
 
@@ -367,3 +370,13 @@ def catmull_rom(keys, n):
         p0 = A[max(0, i - 1)]; p1 = A[i]; p2 = A[i + 1]; p3 = A[min(m - 1, i + 2)]
         out.append(0.5 * ((2 * p1) + (-p0 + p2) * f + (2 * p0 - 5 * p1 + 4 * p2 - p3) * f * f + (-p0 + 3 * p1 - 3 * p2 + p3) * f * f * f))
     return [list(o) for o in out]
+
+def assign_split(ob, material, upper_group, lower_group, z_split, blend=0.04):
+    """One material; skin weights blended between two bones across z_split +- blend (upper above)."""
+    ob.data.materials.clear(); ob.data.materials.append(material)
+    up = ob.vertex_groups.new(name=upper_group); lo = ob.vertex_groups.new(name=lower_group)
+    for v in ob.data.vertices:
+        w = smoothstep((v.co.z - (z_split - blend)) / (2 * blend))
+        if w > 0: up.add([v.index], w, 'REPLACE')
+        if w < 1: lo.add([v.index], 1 - w, 'REPLACE')
+    return ob

@@ -13,13 +13,46 @@ neutral-proportion authority, the elevated panel is NOT a camera spec). Panels a
 by `make_panels.py` into `ref/panels/` (gitignored, regenerable). No rooms, other characters, GUI or
 gameplay work until the owner approves Victor. Hotel lighting unchanged. Rig/animation reused.
 
-### Status: Victor v5 + pass 2 (head/collar) + pass 3 (hair locks, baked shading) — PRESENTED FOR REVIEW, do not proceed further
+### Status: pass 3 (hair locks, baked shading) presented; NEXT PASS = body/clothing/shoes (brief below), scheduled to start after the usage-window reset
 - Branch `main`. Base commit `684ffd2`; this increment = **`26bdf8e` "Victor v5"** (pushed). Published version = working version (no separate experiment branch was needed).
 - Changed: `assets/characters/victor.glb` (v5), `assets/portraits/victor{,-possessed}.jpg` (re-rendered
   from v5), `tools/char-pipeline/make_victor.py` (head/hair/body rewrite, CFG in % of height),
   `victor_lib.py` (+ `shell`, `superellipse_pt`, `normal_of`, `lerp_table`), `preview_glb.{html,mjs}`
   (+ `body@yaw` / `face@yaw` views, albedo-faithful neutral light, long lens), `portrait.mjs` (new eye
   coordinates), NEW `compare.py`, `compare_head.py`, `make_panels.py`, `ref/`.
+
+### NEXT PASS (owner's brief, 2026-09-15): BODY, CLOTHING CONTOURS AND SHOES — NOT STARTED, scheduled
+Continue from commit `bbc1c88`, asset `e452d672`. Keep the hair-and-shading result as the baseline (copy the
+GLB aside first: `cp assets/characters/victor.glb <scratch>/victor-bbc1c88.glb`; re-render its views with
+`preview_glb.mjs --glb <that copy>` as the "current baseline" column). Victor remains under visual review.
+1. **Verify the arm-builder issue.** Inspect `capsule()` and `rounded_rect_ring()` in
+   `tools/char-pipeline/victor_lib.py`: are physical limb radii still passed into a parameter that expects a
+   normalised roundness (0..1)? If so, separate size from roundness, correct the intended capsule
+   cross-sections and audit every caller (arms, legs, neck, cuffs, hands) — do NOT globally make every body
+   shape circular. If already fixed, identify the correction and find out why the sleeves still look
+   segmented (joint spheres + straight capsules: shoulder ball, elbow ball, separate upper/forearm).
+2. **Jacket and sleeves to the reference**: rounded shoulders, restrained waist taper, shaped front hem with
+   the sheet's curved lower corners; sleeves with continuous natural contours through upper arm, elbow and
+   forearm (not inflated tubes); lapels following the chest and readable. Garment shape first; seams, pockets
+   and cuff buttons only after.
+3. **Trousers and shoes**: refine trouser contours through knees and ankles keeping the slim proportions;
+   shoes with a rounded toe, raised instep, defined heel and modest sole thickness; match length/width to
+   the sheet at equal displayed height; check front, side and elevated views — convincing volume everywhere.
+4. **Preserve the integration**: keep head, hair, baked shading, pose and movement; adjust skin weights
+   where geometry changes (check shoulders, elbows, knees, ankles in Idle/Walk: `walk_check.mjs`,
+   `capture.mjs --walk`); keep floor contact, facing, doorway clearance, selection ring; rooms, lighting,
+   camera, GUI, other characters, rules unchanged.
+5. **Comparison**: reference / current baseline (bbc1c88) / updated at MATCHING scale, pose and angle (fix
+   the panels where the reference shows larger than the model: fit both to the same displayed height);
+   front, three-quarter, side, back body views, a shoe close-up, real gameplay captures; one identified
+   asset throughout; no video. Report the confirmed cause of the boxy sleeves, visible improvements,
+   remaining differences, asset size/tris/scene cost (browser numbers, not iPad).
+Eyebrows, moustache and ears stay recorded for the following facial-detail pass. Present this body
+correction for review before expanding further. Keep this checkpoint current; save the exact state before
+context/usage limits.
+Tooling notes for the pass: `preview_glb.mjs` views `body@yaw` (long lens), `elev30@yaw`; add a `shoe`
+close-up view if needed; `compare.py` for silhouettes; `glb_inspect.py` for the export; `portrait.mjs`
+only if the head changes (it does not).
 
 ### Pass 3 (owner feedback after 89ebebf): HAIR LOCKS + BAKED SHADING — built, reviewed, PRESENTED FOR REVIEW
 Baseline for comparison: asset `89ebebf` (its GLB is kept in the session scratchpad; renders `shots/base89-*`

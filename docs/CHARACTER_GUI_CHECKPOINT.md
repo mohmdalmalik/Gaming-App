@@ -13,13 +13,54 @@ neutral-proportion authority, the elevated panel is NOT a camera spec). Panels a
 by `make_panels.py` into `ref/panels/` (gitignored, regenerable). No rooms, other characters, GUI or
 gameplay work until the owner approves Victor. Hotel lighting unchanged. Rig/animation reused.
 
-### Status: pass 6 (jacket-to-trouser connection, hip/crotch) PRESENTED FOR REVIEW — do not proceed further; next = facial-detail pass
-- Branch `main`. Base commit `684ffd2`; this increment = **`26bdf8e` "Victor v5"** (pushed). Published version = working version (no separate experiment branch was needed).
-- Changed: `assets/characters/victor.glb` (v5), `assets/portraits/victor{,-possessed}.jpg` (re-rendered
-  from v5), `tools/char-pipeline/make_victor.py` (head/hair/body rewrite, CFG in % of height),
-  `victor_lib.py` (+ `shell`, `superellipse_pt`, `normal_of`, `lerp_table`), `preview_glb.{html,mjs}`
-  (+ `body@yaw` / `face@yaw` views, albedo-faithful neutral light, long lens), `portrait.mjs` (new eye
-  coordinates), NEW `compare.py`, `compare_head.py`, `make_panels.py`, `ref/`.
+### Status: pass 7 (garment continuity + jacket opening) PRESENTED FOR REVIEW — do not proceed further; next = owner's verdict, then facial-detail pass
+- Branch `main`. Base commit `684ffd2`; last increment = **pass 7** (this commit; asset sha256 `c328c373b8d7…`, 1,088,836 bytes).
+  Published version = working version. Continuation state: everything below under "Pass 7" is built, verified and
+  committed; nothing is half-done. To resume: read Pass 7, then `git log -1`.
+- Earlier increments: `26bdf8e` v5 · `89ebebf` pass 2 · `bf47b95`/`bbc1c88` pass 3 · `76bd46f` pass 4 · `7585829` pass 5 · `9cb6922` pass 6.
+
+### Pass 7 (owner's brief after 9cb6922): TROUSERS AS ONE GARMENT + JACKET OPENING — built, verified, PRESENTED FOR REVIEW
+Baseline for comparison: asset `9cb6922` / `7e8f7293` (GLB copy in the session scratchpad, renders `shots/base76-*`).
+- **Asset revision**: `assets/characters/victor.glb` 1,088,836 bytes, sha256 `c328c373b8d7…`; 30,376 tris, 15,378 verts,
+  9 materials (`Trouser` is now ONE mesh region waist-to-ankles; the `Legs` material is gone). Hall scene with Victor:
+  341 draw calls, 57,382 triangles, 13 programs (headless browser numbers, not iPad). Walk check: stride 0.700 in use,
+  phase error 0, mesh-on-mover 0, no console errors; `rules-check`, `logic-check`, `browser-test` all pass.
+- **Diagnosis 1 — trousers**: the pass-6 `Pelvis` loft and the two `Leg` lofts were three closed objects that merely
+  overlapped: the pelvis's rounded underside dipped below the thigh tops, so its outline crossed each thigh as a
+  curved line, with its own normals on each side (the "separate attached piece"). Joining them could not fix it.
+- **Fix 1 — one trouser surface** (`make_victor.py`, TROUSERS section; helpers `resample_polyline`, `se_implicit`,
+  `union_outline` in `victor_lib.py`): the trousers are ONE mesh built ring by ring. Above the crotch every ring is
+  the smooth union of the two thigh "lobes" (an implicit soft-min, traced and resampled evenly by arc length),
+  blended into the plain rounded hip section 2–10 cm higher; at the crotch (71.8 %, kept) the lobes touch at ONE
+  shared vertex and the single ring splits into the two leg rings, which then narrow to the plain thighs over 9 cm.
+  Surface, normals and skin weights all run through the join: hips above, blending to the thighs through the
+  crotch (split between both thighs across the centre line so the crotch stretches instead of tearing), thigh→shin
+  at the knee. Proportions unchanged (same crotch height, leg stations, hip widths). Checked standing and at both
+  stride extremes (Walk t = 0 and t = 0.5: the previewer's `--t` is seconds, the extremes are 0 and 0.5, NOT 0.25)
+  in diagnostic colours and in navy: no ledge, bulge, gap or shading step; the crotch shows the natural inverted V.
+- **Diagnosis 2 — hem notch**: the pass-6 opening was made by deleting jacket quads whose centre lay inside the
+  opening curve and snapping the remaining boundary vertices onto it. The jacket ring is a superellipse sampled by
+  parameter, which puts the first vertex 8 cm off the front centre (n = 48) — the flat front had almost no
+  vertices, so quads were only deleted where the curve was wider than ~4 cm (the lowest 5 cm), and the top of the
+  cut was one horizontal quad edge: the "small angular notch". The V above it was closed cloth; the bottom cap
+  (a flat n-gon at hem level) added a dark shelf behind the notch. Boundary geometry AND an overlapping surface.
+- **Fix 2 — exact opening**: the jacket is now built ring by ring with the opening cut INTO each ring: below the
+  apex (2.5 cm under the button) a ring is an open strip from the left front edge round the back to the right edge,
+  both ends exactly on the opening curve; rings are resampled evenly by arc length (72 verts), with rings by angle
+  through the 6 cm corner radius. Opening curve: a V from a point under the button widening 4.6 cm each side at
+  hem level, then a quarter circle (R 6 cm) into the hem. No bottom cap. Jacket length unchanged (hem 66 %).
+  Checked in diagnostic and navy materials: two rounded lower fronts opening beneath the button, no notch.
+- **Evidence** (`shots/v12-review.png`): waist-to-knee at the same scale — reference / baseline / updated in front,
+  back and three-quarter; standing and both stride extremes from the exported asset; diagnostic-colour views;
+  hotel-light previews; real game at zoom 1.8 (four rotations) and two unobstructed WALKING frames captured while
+  walking along the clear south wall (`capture.mjs --pre 3,3 --walk 0,3 --midwalk 1400`; new `--pre`, `--prerot`,
+  `--midwalk` options). Pass-6 renders kept as `shots/v11-*`, `diag2-*`.
+- **Preserved**: head, hair, shoes, arm/leg proportions, crotch height, rig, animations, movement, camera, lighting,
+  rooms, GUI, rules. Only the trouser weights were re-authored (required by the rebuilt garment).
+- **Still different / caveats**: the reference's fronts overlap with a lower button and a slightly longer skirt;
+  ours part in a V from the button (owner's earlier choice: keep this length). The crotch is a single shared
+  vertex (a small crease there under raking light, like a real inseam). Seams, pockets, cuff buttons, fingers and
+  facial details remain deferred.
 
 ### Pass 6 (owner's brief after 7585829): JACKET-TO-TROUSER CONNECTION, HIP/CROTCH — built, verified, PRESENTED FOR REVIEW
 Baseline for comparison: asset `7585829` / `0ee483d1` (GLB copy in the session scratchpad, renders `shots/base75-*`).

@@ -147,9 +147,9 @@ M = {
 import os, pathlib
 DIAG = os.environ.get('VICTOR_DIAG') == '1'
 if DIAG:   # contrasting unlit-ish colours to see which surface is which (jacket / trouser top / legs / shoes)
-    M['jacket'] = L.solid_material('Jacket', '#6f7fa0'); M['trouser'] = L.solid_material('Trouser', '#d040d0'); M['legs'] = L.solid_material('Legs', '#40c060')
+    M['jacket'] = L.solid_material('Jacket', '#6f7fa0'); M['trouser'] = L.solid_material('Trouser', '#d040d0')
 else:
-    M['trouser'] = L.solid_material('Trouser', '#1a2342'); M['legs'] = M['trouser']
+    M['trouser'] = L.solid_material('Trouser', '#1a2342')
 parts = []
 def add(ob, mat, bone):
     L.assign(ob, M[mat], bone); parts.append(ob); return ob
@@ -417,40 +417,47 @@ def chest_y(x, z):
     p = _lerp_profile(z); exp = 2.0 + 6.0 * (1.0 - p['r']); k = 2.0 / exp
     u = min(0.999, abs(x) / (p['w'] / 2)); c = u ** (1 / k); s = math.sqrt(max(0.0, 1 - c * c))
     return -(s ** k) * p['d'] / 2
-# dense profiles (every 1.2 cm) so the front opening's cut edge is smooth
-_zs = [Z_HEM + k * 0.012 for k in range(int((Z_SH_TOP + 0.050 - Z_HEM) / 0.012) + 1)] + [Z_SH_TOP + 0.050]
-jacket = L.loft('Jacket', [_lerp_profile(z) for z in _zs], n=48)
+# The jacket is built ring by ring with its front opening CUT INTO EACH RING: below the fastening a ring is an
+# open strip from the left front edge round the back to the right front edge, its two ends sitting exactly on
+# the opening curve, so the edge is smooth at any resolution and there is no deleted-quad notch. Rings are
+# resampled evenly by arc length (a superellipse's parameter crowds the flat front otherwise). No bottom cap.
 BTN_Z = Z_WAIST + 0.04
+Z_APEX = BTN_Z - 0.025                  # the two fronts part just under the button
+R_CORNER = 0.060                        # rounded lower-front corners running into the hem
 def opening_half_width(z):
-    """Half-width of the front opening below the fastening: a narrow V widening toward the hem, whose
-    lower corners round away like the sheet's."""
-    if z >= BTN_Z - 0.025: return 0.0
-    t = (BTN_Z - 0.025 - z) / max(1e-6, BTN_Z - 0.025 - Z_HEM)
-    w = 0.012 + 0.045 * t
-    corner = L.smoothstep((Z_HEM + 0.05 - z) / 0.05)
-    return w + 0.05 * corner ** 2
-bm = bmesh.new(); bm.from_mesh(jacket.data)
-cut = [f for f in bm.faces if (lambda c: c.y < -0.04 and abs(c.x) < opening_half_width(c.z))(f.calc_center_median())]
-bmesh.ops.delete(bm, geom=cut, context='FACES')
-for v in bm.verts:                                                   # boundary vertices exactly on the curve
-    if v.is_boundary and v.co.y < -0.04 and v.co.z < BTN_Z:
-        hw = opening_half_width(v.co.z)
-        if hw > 0 and abs(v.co.x) < hw + 0.03: v.co.x = math.copysign(hw, v.co.x)
-bm.to_mesh(jacket.data); bm.free(); jacket.data.update()
+    """Half-width of the front opening: a V from a point under the button, widening to the hem, whose lower
+    corners round off with radius R_CORNER (like the sheet's two rounded lower fronts)."""
+    if z >= Z_APEX: return 0.0
+    t = (Z_APEX - z) / max(1e-6, Z_APEX - Z_HEM)
+    w = 0.046 * t
+    h = z - Z_HEM
+    if h < R_CORNER: w += R_CORNER - math.sqrt(max(0.0, R_CORNER ** 2 - (R_CORNER - h) ** 2))
+    return w
+def jacket_outline(z):
+    p = _lerp_profile(z); rr = L.rounded_rect_ring(p['w'], p['d'], p['r'], 720)
+    return rr[540:] + rr[:540]          # start at the front centre, counter-clockwise (toward his left)
+NJ = 72
+_zs = [Z_HEM + R_CORNER * (1 - math.cos(math.radians(a))) for a in range(0, 90, 9)]          # corner: by angle
+_zs += [Z_HEM + R_CORNER + k * 0.012 for k in range(int((Z_APEX - Z_HEM - R_CORNER) / 0.012) + 1)] + [Z_APEX]
+_zs += [Z_APEX + k * 0.012 for k in range(1, int((Z_SH_TOP + 0.050 - Z_APEX) / 0.012) + 1)] + [Z_SH_TOP + 0.050]
+_zs = sorted(set(round(z, 5) for z in _zs))
+bm = bmesh.new(); _prev = None
+for z in _zs:
+    outline = jacket_outline(z); hw = opening_half_width(z)
+    if hw > 0:
+        yc = chest_y(hw, z)
+        pts = [Vector((hw, yc, 0))] + [p for p in outline if not (p.y < 0 and abs(p.x) < hw)] + [Vector((-hw, yc, 0))]
+        vs = [bm.verts.new(Vector((q.x, q.y, z))) for q in L.resample_polyline(pts, NJ + 1)]
+    else:
+        vs = [bm.verts.new(Vector((q.x, q.y, z))) for q in L.resample_polyline(outline, NJ, closed=True)]; vs = vs + [vs[0]]
+    if _prev is not None:
+        for i in range(NJ): bm.faces.new((_prev[i], _prev[i + 1], vs[i + 1], vs[i]))
+    _prev = vs
+bm.faces.new(_prev[:NJ])                                            # collar-top cap (the neck sits inside)
+bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+jacket = L.new_object('Jacket', bm, smooth=True)
 add(jacket, 'jacket', 'spine')
-# PELVIS / trouser top: from the waist down to the crotch (sheet: legs part at ~70.5 %), as wide as the two
-# thighs so their outer contours run straight up into the hip, with a rounded underside tucked between the
-# thighs; its lower part is part-weighted to the nearer thigh so it follows the leg when walking.
-PW = 2 * C['leg_x'] + C['thigh_w']
-pelvis = L.loft('Pelvis', [dict(z=zp(71.8), w=0.10, d=0.12, r=1.0), dict(z=zp(70.8), w=0.24, d=0.175, r=0.95), dict(z=zp(69.5), w=PW*0.94, d=C['thigh_d']+0.005, r=0.85),
-                          dict(z=zp(67.0), w=PW, d=C['thigh_d']+0.015, r=0.78), dict(z=zp(63.0), w=PW+0.004, d=C['thigh_d']+0.03, r=0.75),
-                          dict(z=Z_WAIST - 0.02, w=PW-0.02, d=C['thigh_d']+0.03, r=0.75), dict(z=Z_WAIST + 0.06, w=PW-0.05, d=C['thigh_d']+0.015, r=0.8)], n=32)
-pelvis.data.materials.clear(); pelvis.data.materials.append(M['trouser'])
-_h = pelvis.vertex_groups.new(name='hips'); _tl = pelvis.vertex_groups.new(name='thigh.L'); _tr = pelvis.vertex_groups.new(name='thigh.R')
-for v in pelvis.data.vertices:
-    wt = 0.6 * L.smoothstep((zp(65.0) - v.co.z) / 0.06); _h.add([v.index], 1 - wt, 'REPLACE')
-    if wt > 0: (_tl if v.co.x > 0 else _tr).add([v.index], wt, 'REPLACE')
-parts.append(pelvis)
+# (the trousers, waist to ankles, are built as ONE surface in the legs section below)
 
 def flat_panel(name, outline_xz, inset, mat, bone, cuts=6):
     area = 0.0
@@ -535,18 +542,96 @@ for s, tag in ((1, 'L'), (-1, 'R')):
     add(L.uvsphere(f'Thumb{tag}', 1.0, (0, 0, 0), scale=(0.016, 0.018, 0.030), u=10, v=8), 'skin', f'hand.{tag}')
     parts[-1].data.transform(__import__('mathutils').Matrix.Translation(Vector((hx - s * (C['hand_w']*0.5 + 0.006), hy - 0.012, ZW - 0.035))))
 
-# ---- legs: ONE continuous lofted trouser leg per side (hip -> thigh -> knee -> shin -> ankle), slim,
-#      slightly deeper than wide, a soft knee; weights blend between thigh and shin bones at the knee.
-#      Shoes: a loft ALONG THE FOOT (heel -> arch -> instep -> ball -> rounded toe) with a flat sole.
+# ---- TROUSERS: ONE continuous surface from the waistband (hidden under the jacket) through the hips,
+#      seat and front, the crotch, and down both legs to the ankles. Above the crotch each ring is the smooth
+#      union of the two thigh "lobes" (blended into a plain rounded hip section higher up); at the crotch the
+#      lobes touch at one shared vertex and the single ring splits into the two leg rings, so the surface,
+#      its normals and its skin weights run through the join. Weights: hips above, blending into each thigh
+#      through the crotch (split between the thighs across the centre line), thigh -> shin at the knee.
 LX = C['leg_x']; TW, TD, SW, SD = C['thigh_w'], C['thigh_d'], C['shin_w'], C['shin_d']
 ZH, ZK, ZA = C['z_hip_joint'], C['z_knee'], C['z_ankle']
+Z_CROTCH = zp(71.8); Z_TROUSER_TOP = Z_WAIST + 0.06; NL = 24
+PW = 2 * LX + TW
+PELVIS_RECT = [(zp(69.5), PW * 0.94, TD + 0.005, 0.85), (zp(67.0), PW, TD + 0.015, 0.78), (zp(63.0), PW + 0.004, TD + 0.03, 0.75),
+               (Z_WAIST - 0.02, PW - 0.02, TD + 0.03, 0.75), (Z_TROUSER_TOP, PW - 0.05, TD + 0.015, 0.8)]
+LEG_ST = [(0.100, SW * 0.90, SD * 0.88), (ZA + 0.06, SW * 0.95, SD * 0.94), ((ZA + ZK) / 2, SW, SD), (ZK - 0.03, SW * 0.99, SD * 1.02),
+          (ZK + 0.03, TW * 0.96, TD * 0.92), ((ZK + ZH) / 2, TW, TD), (ZH + 0.03, TW * 0.99, TD * 0.99), (Z_CROTCH, TW, TD)]
+def _lerp_st(table, z):
+    if z <= table[0][0]: return table[0][1:]
+    if z >= table[-1][0]: return table[-1][1:]
+    for p, q in zip(table[:-1], table[1:]):
+        if p[0] <= z <= q[0]:
+            t = (z - p[0]) / (q[0] - p[0]); return tuple(pa + (qa - pa) * t for pa, qa in zip(p[1:], q[1:]))
+def widen(z):
+    """How far a thigh's inner side moves toward the centre: 0 on the free leg, meeting its partner at the
+    crotch (a V that closes over the top 9 cm), overlapping above it so the hip section is one shape."""
+    if z <= Z_CROTCH:
+        u = max(0.0, min(1.0, (z - (Z_CROTCH - 0.09)) / 0.09)); return (LX - TW / 2) * u * u
+    return (LX - TW / 2) + 0.9 * (z - Z_CROTCH)
+def lobe(z, s):
+    w, d = _lerp_st(LEG_ST, min(z, Z_CROTCH)); g = widen(z)
+    if z > Z_CROTCH: d += (_lerp_st(PELVIS_RECT, z)[1] - d) * L.smoothstep((z - Z_CROTCH) / 0.06)
+    return (s * (LX - g / 2), 0.0, w + g, d, 1.0)
+def _mirror_ring(left):                       # the right-hand ring, same orientation, first vertex opposite the first of the left
+    m = [Vector((-p.x, p.y, p.z)) for p in left]; return [m[0]] + list(reversed(m[1:]))
+def leg_ring(z):                              # left leg: NL points, the first at the inner side, counter-clockwise from above
+    cx, cy, w, d, r = lobe(z, 1); pts = L.rounded_rect_ring(w, d, r, 360); pts = pts[180:] + pts[:180]
+    return [Vector((p.x + cx, p.y + cy, z)) for p in L.resample_polyline(pts, NL, closed=True)]
+def pelvis_ring(z):                           # 2*NL points: [front centre, left side..., back centre, right side...]
+    if z <= Z_CROTCH + 1e-9:                  # the crotch: two touching lobes, entries 0 and NL are the same point
+        left = leg_ring(z); left[0].x = 0.0; half = left + [left[0].copy()]
+    else:
+        k = 0.15 * L.smoothstep((z - Z_CROTCH) / 0.05); s = L.smoothstep((z - Z_CROTCH - 0.015) / 0.08)
+        un = L.union_outline([lobe(z, 1), lobe(z, -1)], k, n=720)[0:361]
+        w, d, r = _lerp_st(PELVIS_RECT, z); rr = L.rounded_rect_ring(w, d, r, 720); rr = (rr[540:] + rr[:540])[0:361]
+        hu = L.resample_polyline(un, NL + 1); hr = L.resample_polyline(rr, NL + 1)
+        half = [p * (1 - s) + q * s for p, q in zip(hu, hr)]
+        half[0].x = 0.0; half[-1].x = 0.0
+    ring = half[:NL] + [half[NL]] + [Vector((-p.x, p.y, 0.0)) for p in reversed(half[1:NL])]
+    return [Vector((p.x, p.y, z)) for p in ring]
+_zs_p = sorted(set([Z_TROUSER_TOP, Z_WAIST - 0.02, zp(63.0), zp(65.0), zp(67.0), zp(68.5), zp(69.5)] +
+                   [Z_CROTCH + dz for dz in (0.0, 0.004, 0.008, 0.014, 0.020, 0.028, 0.038, 0.050)]), reverse=True)
+_zs_l = [Z_CROTCH - dz for dz in (0.004, 0.008, 0.012, 0.018, 0.024, 0.032, 0.040, 0.050, 0.062, 0.076, 0.092, 0.110)] + \
+        [(ZK + ZH) / 2, ZK + 0.03, ZK - 0.03, (ZA + ZK) / 2, ZA + 0.06, 0.100]
+bm = bmesh.new(); _prev = None
+for z in _zs_p:
+    ring = pelvis_ring(z)
+    if abs(z - Z_CROTCH) < 1e-9:
+        vs = [bm.verts.new(p) for p in ring[:NL]]; vs = vs + [vs[0]] + [bm.verts.new(p) for p in ring[NL + 1:]]
+    else:
+        vs = [bm.verts.new(p) for p in ring]
+    if _prev is None: bm.faces.new(vs)                                   # waistband cap (under the jacket)
+    else:
+        for i in range(2 * NL):
+            j = (i + 1) % (2 * NL); bm.faces.new((_prev[i], _prev[j], vs[j], vs[i]))
+    _prev = vs
+for s, top in ((1, _prev[0:NL]), (-1, [_prev[NL]] + _prev[NL + 1:2 * NL])):
+    prev = top
+    for z in _zs_l:
+        ring = leg_ring(z) if s > 0 else _mirror_ring(leg_ring(z))
+        vs = [bm.verts.new(p) for p in ring]
+        for i in range(NL):
+            j = (i + 1) % NL; bm.faces.new((prev[i], prev[j], vs[j], vs[i]))
+        prev = vs
+    bm.faces.new(list(reversed(prev)))                                   # ankle cap (inside the shoe)
+bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+trousers = L.new_object('Trousers', bm, smooth=True)
+trousers.data.materials.clear(); trousers.data.materials.append(M['trouser'])
+_vg = {n: trousers.vertex_groups.new(name=n) for n in ('hips', 'thigh.L', 'thigh.R', 'shin.L', 'shin.R')}
+for v in trousers.data.vertices:
+    x, z = v.co.x, v.co.z
+    fL = L.smoothstep((x + 0.03) / 0.06)                                 # share of the thigh weight going to the LEFT thigh
+    if z >= Z_CROTCH - 1e-6:
+        wt = 0.6 * L.smoothstep((zp(65.0) - z) / 0.06); hips = 1 - wt; tL, tR = wt * fL, wt * (1 - fL); sh = 0.0
+    else:
+        m = L.smoothstep((Z_CROTCH - z) / 0.05); wt = 0.6 + 0.4 * m; hips = 1 - wt
+        fl = fL * (1 - m) + (1.0 if x > 0 else 0.0) * m; tL, tR = wt * fl, wt * (1 - fl)
+        sh = 1 - L.smoothstep((z - (ZK - 0.04)) / 0.08)
+    for name, wgt in (('hips', hips), ('thigh.L', tL * (1 - sh)), ('thigh.R', tR * (1 - sh)), ('shin.L', tL * sh), ('shin.R', tR * sh)):
+        if wgt > 1e-4: _vg[name].add([v.index], wgt, 'REPLACE')
+parts.append(trousers)
 for s, tag in ((1, 'L'), (-1, 'R')):
     lx = s * LX
-    leg = L.loft(f'Leg{tag}', [dict(z=0.100, w=SW*0.90, d=SD*0.88, r=1.0), dict(z=ZA + 0.06, w=SW*0.95, d=SD*0.94, r=1.0),
-                               dict(z=(ZA + ZK) / 2, w=SW, d=SD, r=1.0), dict(z=ZK - 0.03, w=SW*0.99, d=SD*1.02, r=1.0),
-                               dict(z=ZK + 0.03, w=TW*0.96, d=TD*0.92, r=1.0), dict(z=(ZK + ZH) / 2, w=TW, d=TD, r=1.0),
-                               dict(z=ZH + 0.03, w=TW*0.99, d=TD*0.99, r=1.0), dict(z=ZH + 0.10, w=TW*0.92, d=TD*0.94, r=1.0)], n=20)
-    L.translate_verts(leg, (lx, 0, 0)); addw(leg, 'legs', f'thigh.{tag}', f'shin.{tag}', ZK, 0.04)
     L0, W0, H0 = C['shoe_len'], C['shoe_w'], C['shoe_h']
     HEEL = 0.062; TOE = L0 - HEEL
     # SOLE: a flat slab following the footprint, thicker at the back as the heel block

@@ -223,6 +223,14 @@ Implements `docs/GAME_RULES.md`. Kept pure and separate from rendering so a serv
   counter-swing, slight hip bob) — and exports `assets/characters/victor.glb` (glTF binary,
   `export_animations`, ACTIONS mode so each Action is its own clip, Y-up). Re-run to rebuild:
   `python tools/char-pipeline/make_victor.py`.
+- **Garments are single surfaces, not overlapping parts** (Victor pass 7): a pelvis block plus two leg
+  tubes always shows a curved boundary where the parts intersect, whatever the material. The trousers
+  are therefore generated as one mesh, ring by ring: above the crotch each ring is the smooth union of
+  the two thigh cross-sections, the ring at the crotch touches at one shared vertex, and below it the
+  legs continue as two rings — so the surface, its normals and its skin weights run through the join.
+  The jacket's front opening is likewise cut into each ring (open strips whose ends lie exactly on the
+  opening curve, rings resampled evenly by arc length) instead of deleting quads, which had produced a
+  flat-topped notch because a superellipse's parameter leaves almost no vertices on a flat front.
 - **Facing**: Blender front = −Y; `export_yup` maps it to glTF +Z, which matches the game's heading-0
   forward (+Z), so the model faces its travel direction with no per-model rotation.
 - **Readability from the steep elevated camera** (this took two real fixes, caught by in-game shots,

@@ -380,3 +380,49 @@ def assign_split(ob, material, upper_group, lower_group, z_split, blend=0.04):
         if w > 0: up.add([v.index], w, 'REPLACE')
         if w < 1: lo.add([v.index], 1 - w, 'REPLACE')
     return ob
+
+# ---- outline tools for garments built as ONE surface (trousers with a crotch, a jacket with an exact opening) ----
+def resample_polyline(pts, n, closed=False):
+    """Even arc-length resampling of a polyline of Vectors. Open: n points including both ends.
+    Closed: the loop is closed by a last->first segment; returns n points, the first at pts[0]."""
+    P = list(pts) + ([pts[0]] if closed else [])
+    seg = [(P[i + 1] - P[i]).length for i in range(len(P) - 1)]
+    total = sum(seg)
+    if total <= 1e-12: return [P[0].copy() for _ in range(n)]
+    cum = [0.0]
+    for s in seg: cum.append(cum[-1] + s)
+    m = n if closed else n - 1
+    out = []; j = 0
+    for i in range(n):
+        d = total * i / m
+        while j < len(seg) - 1 and cum[j + 1] < d: j += 1
+        t = 0.0 if seg[j] <= 1e-12 else (d - cum[j]) / seg[j]
+        out.append(P[j] + (P[j + 1] - P[j]) * min(1.0, max(0.0, t)))
+    return out
+
+def se_implicit(x, y, w, d, r):
+    """Superellipse implicit function (1 on the outline, <1 inside), same exponent convention as rounded_rect_ring."""
+    r = max(0.0, min(1.0, r)); e = 2.0 + 6.0 * (1.0 - r)
+    return ((abs(x) / (w * 0.5)) ** e + (abs(y) / (d * 0.5)) ** e) ** (1.0 / e)
+
+def union_outline(lobes, k, n=720, start_angle=-math.pi / 2, rmax=0.6):
+    """Outline (level set f = 1) of the SMOOTH union of superellipse lobes [(cx, cy, w, d, r), ...], blend
+    width k (0 = hard union), traced radially from the origin: n points counter-clockwise (seen from +Z)
+    starting at start_angle. The origin must lie inside the union."""
+    out = []
+    for i in range(n):
+        a = start_angle + 2 * math.pi * i / n; c, s = math.cos(a), math.sin(a)
+        def f(rad):
+            x, y = rad * c, rad * s
+            vals = [se_implicit(x - cx, y - cy, w, d, r) for cx, cy, w, d, r in lobes]
+            m = min(vals)
+            if k <= 1e-6: return m
+            return m - k * math.log(sum(math.exp(-(v - m) / k) for v in vals))
+        if f(0.0) >= 1.0: out.append(Vector((0.0, 0.0, 0.0))); continue
+        lo, hi = 0.0, rmax
+        for _ in range(26):
+            mid = 0.5 * (lo + hi)
+            if f(mid) < 1.0: lo = mid
+            else: hi = mid
+        out.append(Vector((lo * c, lo * s, 0.0)))
+    return out

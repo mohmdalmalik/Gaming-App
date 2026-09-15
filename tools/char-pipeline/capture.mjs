@@ -26,7 +26,8 @@ const opt = (k, d) => {
 const W = +opt('w', 1194), H = +opt('h', 834), DPR = +opt('dpr', 2), ROT = +opt('rot', 1), ZOOM = +opt('zoom', 1);
 const OUT = String(opt('out', path.join(HERE, 'shots', 'shot')));
 const WALK = opt('walk', null); const HAND = !!opt('hand', false); const MAP = !!opt('map', false); const NOUI = !!opt('noui', false);
-const STILL = !!opt('still', false);   // freeze CSS animations/transitions so overlays are captured in their final state
+const STILL = !!opt('still', false);
+const PRE = opt('pre', null); const PREROT = +opt('prerot', 0); const MIDWALK = +opt('midwalk', 0);   // --pre x,z: settled walk first; --prerot n: rotate the camera n times before walking; --midwalk ms: screenshot ms into the walk (a walking frame)   // freeze CSS animations/transitions so overlays are captured in their final state
 const URL = String(opt('url', 'http://127.0.0.1:8123/'));
 fs.mkdirSync(path.dirname(OUT), { recursive: true });
 
@@ -48,10 +49,12 @@ if (NOUI) await page.evaluate(() => { document.getElementById('hud').style.visib
 if (STILL) await page.addStyleTag({ content: '*, *::before, *::after { animation: none !important; transition: none !important; }' });
 
 const settled = () => page.waitForFunction(() => { const m = window.__game.activeMover(); return !m.walking && m.path.length === 0; }, null, { timeout: 12000 }).catch(() => {});
+const walk = async (spec) => { const [dx, dz] = String(spec).split(',').map(Number); await page.evaluate(([x, z]) => { const c = window.__game.roomCenter('hall'); window.__game.walkTo(c[0] + x, c[1] + z); }, [dx, dz]); };
+for (let i = 0; i < PREROT; i++) { await page.evaluate(() => window.__game.rotate(1)); await page.waitForTimeout(700); }
+if (PRE) { await walk(PRE); await settled(); await page.waitForTimeout(300); }
 if (WALK) {
-  const [dx, dz] = String(WALK).split(',').map(Number);
-  await page.evaluate(([x, z]) => { const c = window.__game.roomCenter('hall'); window.__game.walkTo(c[0] + x, c[1] + z); }, [dx, dz]);
-  await settled(); await page.waitForTimeout(300);
+  await walk(WALK);
+  if (MIDWALK > 0) await page.waitForTimeout(MIDWALK); else { await settled(); await page.waitForTimeout(300); }
 }
 
 // Crop box around Victor (the active mover) from his ground position projected to the screen.
@@ -74,7 +77,7 @@ for (let i = 0; i < ROT; i++) {
 if (HAND) { await page.evaluate(() => window.__game.openHand()); await page.waitForTimeout(400); const f = `${OUT}-hand.png`; await page.screenshot({ path: f }); files.push(f); await page.tap('#btn-hand-close'); await page.waitForTimeout(200); }
 if (MAP) { await page.evaluate(() => window.__game.toggleMap()); await page.waitForTimeout(400); const f = `${OUT}-map.png`; await page.screenshot({ path: f }); files.push(f); await page.evaluate(() => window.__game.toggleMap()); }
 
-const meta = { viewportCss: { width: W, height: H }, dpr: DPR, screenshotPx: { width: W * DPR, height: H * DPR }, zoom: ZOOM, rotations: ROT, walk: WALK, files, errors: errs };
+const meta = { viewportCss: { width: W, height: H }, dpr: DPR, screenshotPx: { width: W * DPR, height: H * DPR }, zoom: ZOOM, rotations: ROT, prerot: PREROT, pre: PRE, walk: WALK, midwalk: MIDWALK, files, errors: errs };
 fs.writeFileSync(`${OUT}.json`, JSON.stringify(meta, null, 2));
 console.log(JSON.stringify({ viewportCss: meta.viewportCss, dpr: DPR, files: files.length, errors: errs.length ? errs : 'none' }));
 await browser.close();

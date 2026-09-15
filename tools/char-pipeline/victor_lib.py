@@ -336,3 +336,34 @@ def cylinder_leaf(name, pts_theta_z, R, thick, axis_y, smooth=True):
         j = (i + 1) % m; bm.faces.new((inner[i], inner[j], outer[j], outer[i]))
     bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
     return new_object(name, bm, smooth)
+
+def ribbon_tube(name, pts, normals, widths, thicks, n=12):
+    """A hair lock: a tube along `pts` whose cross-section is an ellipse `widths[i]` wide ACROSS the
+    underlying surface and `thicks[i]` thick ALONG the surface normal `normals[i]`. Capped ends.
+    Widths/thicks should taper to small values at both ends so the lock tucks into what it lies on."""
+    P = [Vector(p) for p in pts]; Nn = [Vector(v).normalized() for v in normals]
+    bm = bmesh.new(); rings = []
+    for i in range(len(P)):
+        a = P[max(0, i - 1)]; b = P[min(len(P) - 1, i + 1)]; t = (b - a)
+        t = t.normalized() if t.length > 1e-9 else Vector((1, 0, 0))
+        nn = (Nn[i] - t * Nn[i].dot(t)); nn = nn.normalized() if nn.length > 1e-9 else Vector((0, 0, 1))
+        bb = t.cross(nn).normalized()
+        rings.append([bm.verts.new(P[i] + bb * (widths[i] * 0.5 * math.cos(k / n * 2 * math.pi)) + nn * (thicks[i] * 0.5 * math.sin(k / n * 2 * math.pi))) for k in range(n)])
+    for a_, b_ in zip(rings[:-1], rings[1:]):
+        for k in range(n):
+            j = (k + 1) % n; bm.faces.new((a_[k], a_[j], b_[j], b_[k]))
+    bm.faces.new(list(reversed(rings[0]))); bm.faces.new(rings[-1])
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+    return new_object(name, bm)
+
+def catmull_rom(keys, n):
+    """Sample n points along a Catmull-Rom spline through `keys` (lists/tuples of equal length)."""
+    K = [Vector(k) if len(k) == 3 else list(k) for k in keys]
+    import numpy as _np
+    A = _np.array([list(k) for k in keys], dtype=float)
+    m = len(A); out = []
+    for s in range(n):
+        t = s / (n - 1) * (m - 1); i = min(int(t), m - 2); f = t - i
+        p0 = A[max(0, i - 1)]; p1 = A[i]; p2 = A[i + 1]; p3 = A[min(m - 1, i + 2)]
+        out.append(0.5 * ((2 * p1) + (-p0 + p2) * f + (2 * p0 - 5 * p1 + 4 * p2 - p3) * f * f + (-p0 + 3 * p1 - 3 * p2 + p3) * f * f * f))
+    return [list(o) for o in out]

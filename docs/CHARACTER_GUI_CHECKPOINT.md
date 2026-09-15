@@ -13,13 +13,45 @@ neutral-proportion authority, the elevated panel is NOT a camera spec). Panels a
 by `make_panels.py` into `ref/panels/` (gitignored, regenerable). No rooms, other characters, GUI or
 gameplay work until the owner approves Victor. Hotel lighting unchanged. Rig/animation reused.
 
-### Status: Victor v5 + correction pass 2 (v6 head/collar) — PRESENTED FOR REVIEW, do not proceed further
+### Status: Victor v5 + pass 2 (head/collar) + pass 3 (hair locks, baked shading) — PRESENTED FOR REVIEW, do not proceed further
 - Branch `main`. Base commit `684ffd2`; this increment = **`26bdf8e` "Victor v5"** (pushed). Published version = working version (no separate experiment branch was needed).
 - Changed: `assets/characters/victor.glb` (v5), `assets/portraits/victor{,-possessed}.jpg` (re-rendered
   from v5), `tools/char-pipeline/make_victor.py` (head/hair/body rewrite, CFG in % of height),
   `victor_lib.py` (+ `shell`, `superellipse_pt`, `normal_of`, `lerp_table`), `preview_glb.{html,mjs}`
   (+ `body@yaw` / `face@yaw` views, albedo-faithful neutral light, long lens), `portrait.mjs` (new eye
   coordinates), NEW `compare.py`, `compare_head.py`, `make_panels.py`, `ref/`.
+
+### Pass 3 (owner feedback after 89ebebf): HAIR LOCKS + BAKED SHADING — built, verified, awaiting review
+Baseline for comparison: asset `89ebebf` (renders kept as `shots/base89-*`; copy of the GLB in the session scratchpad).
+- **Asset revision**: `assets/characters/victor.glb` 881,676 bytes, sha256 `f822c183eece6fbd…`; 23,728 tris,
+  12,029 verts, 7 materials, one skinned mesh. Hall scene with Victor: 339 draw calls, 50,734 triangles,
+  13 programs (headless count; NOT an iPad measurement).
+- **Hair**: the smooth cap now sits 2.2 cm lower (`CAP_DROP`) and carries four shaped lock volumes
+  (`ribbon_tube` in `victor_lib.py`, keys in `make_victor.py` `lock(...)`): A = the raised front wave from
+  the part on his left across the front of the crown, rolling over his right temple (crest ~2.9 cm proud of
+  the cap, overhanging the forehead); B = second sweep behind it down to above his right ear; C = crown
+  lock sweeping down the back to his right; D = his-left side lock combed back over the temple. Lock
+  sections are lenses whose edges meet the cap tangentially (lift ≈ 0, thickness = 2 × protrusion) so
+  there are no steps; ends taper to 6 mm and tuck 1 cm under the cap. Sides and nape unchanged (fitted).
+  All hair is weighted to the head bone; a mid-walk game capture shows it turning with the head.
+- **Shading**: per-vertex ambient occlusion baked in Blender (`bake_vertex_shading`: BVH hemisphere rays,
+  32 rays, 0.26 m reach, strength 0.5, ~1 s) plus a restrained warm tint on cheeks and nose (green/blue
+  reduced, never above 1.0 — the uint16 export wraps values > 1). Exported as glTF COLOR_0
+  (`export_vertex_color='ACTIVE'`, which reads the RENDER colour attribute; UNSIGNED_SHORT normalized,
+  linear). The game loader dropped vertex colours in its Lambert conversion: `characterView.js` now sets
+  `m.vertexColors = true` when the loaded material has them (one line; nothing else in the game changed).
+  Verified: COLOR_0 present in the file (`glb_inspect.py`), visible in the real game captures.
+- **Skin**: sheet's lit skin measured ≈ #f4a877; base set to `#eeb38c` (peach in the neutral preview, a
+  little less saturated so the warm hall light does not push it to orange). Hair `#261b14`.
+- **Colour management checked** (investigation agents): renderer outputs sRGB with NeutralToneMapping,
+  materials shaded in linear; GLTFLoader treats COLOR_0 as linear; the tone mapper crushes linear values
+  below ~0.08, so baked darkening is invisible on the near-black hair but works on skin and cloth.
+- **Evidence**: `shots/v7-review.png` (reference / baseline 89ebebf / updated, neutral and game light,
+  front / three-quarter / side, elevated, game zoom 1 and 1.8 at four rotations); portraits re-rendered.
+- **Deferred to the next review (owner's list)**: angular eyebrows, moustache curvature, jacket and sleeve
+  contours, shoe volume; seams, cuff buttons and finger details after those.
+- Tests pass (rules, logic, browser). Independent reviewer pass on the renders in progress; findings and
+  any tweaks are appended below when done.
 
 ### Correction pass 2 (owner feedback after v5): head, hair, features, collar, bow tie — PRESENTED FOR REVIEW
 Owner's verdict on v5: not approved; differences beyond the four listed. Scope of this pass: head,

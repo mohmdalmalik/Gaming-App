@@ -88,6 +88,7 @@ export function createCharacterView(playerDef, cfg, scene) {
           if (src.emissive) m.emissive = src.emissive.clone();
           if (src.transparent) { m.transparent = true; m.opacity = src.opacity; }
           if (src.side !== undefined) m.side = src.side;
+          if (src.vertexColors) m.vertexColors = true;   // baked shading (glTF COLOR_0) multiplies the base colour
           return m;
         };
         o.material = Array.isArray(o.material) ? o.material.map(flatten) : flatten(o.material);

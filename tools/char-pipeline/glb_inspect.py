@@ -29,7 +29,8 @@ for mesh in gltf['meshes']:
         agree = (fn * vn).sum(axis=1) if vn is not None else None
         centroid = P.mean(axis=0); cen = tri[ok].mean(axis=1); toward_in = ((cen - centroid) * fn).sum(axis=1) < 0
         name = mats[prim['material']]
-        print(f'  {name:7s} tris={len(I):6d} degenerate={int((~ok).sum()):3d} normals={"yes" if N is not None else "NO "} '
+        attrs = sorted(prim['attributes'].keys())
+        print(f'  {name:7s} attrs={",".join(attrs)} tris={len(I):6d} degenerate={int((~ok).sum()):3d} normals={"yes" if N is not None else "NO "} '
               f'winding_vs_normal_disagree={(agree < 0).mean() * 100 if agree is not None else float("nan"):5.1f}%  '
               f'face_normal_inward={toward_in.mean() * 100:5.1f}%  bbox y[{P[:, 1].min():.3f},{P[:, 1].max():.3f}] x[{P[:, 0].min():.3f},{P[:, 0].max():.3f}] z[{P[:, 2].min():.3f},{P[:, 2].max():.3f}]')
         if name == 'Hair':

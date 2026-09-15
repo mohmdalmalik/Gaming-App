@@ -135,8 +135,8 @@ def flatten_to_face(ob, factor):
 
 # ---- materials -------------------------------------------------------------------------------
 M = {
-    'skin':   L.solid_material('Skin',   '#eebe95'),   # warm peach
-    'hair':   L.solid_material('Hair',   '#1e140e'),   # dark espresso — authored dark: under the hall's overhead lights the crown renders 2-3x brighter than the sides
+    'skin':   L.solid_material('Skin',   '#eeb38c'),   # warm peach (sheet's lit skin ~#f4a877; a touch less saturated so the warm hall light does not push it to orange)
+    'hair':   L.solid_material('Hair',   '#261b14'),   # dark espresso — authored dark: under the hall's overhead lights the crown renders 2-3x brighter than the sides
     'jacket': L.solid_material('Jacket', '#1f2c50'),   # midnight navy
     'lapel':  L.solid_material('Lapel',  '#161d36'),   # satin facing: a shade darker than the cloth
     'shirt':  L.solid_material('Shirt',  '#f3eee2'),   # ivory
@@ -236,7 +236,8 @@ add(L.tube('Mouth', pts, [0.0040 * t for t in L.taper(8, 0.5, 1.0, 0.5)], n=6), 
 # HAIR — a cap with its own measured silhouette (front width, side front/back depth by height),
 # never thinner than 14 mm over the skull, swept to HIS RIGHT with a side part on HIS LEFT
 # =============================================================================================
-def _ztab(rows): return sorted([(zp(p), v) for p, v in rows])
+CAP_DROP = 1.3   # % of height: the smooth cap sits this much lower; the lock volumes make up the crown
+def _ztab(rows): return sorted([(zp(p + CAP_DROP), v) for p, v in rows])
 HW_TAB = _ztab([(0.2, 0.09), (0.9, 0.125), (1.6, 0.145), (3.2, 0.165), (4.7, 0.183), (6.3, 0.208), (7.9, 0.224), (9.5, 0.226),
                 (11.0, 0.218), (12.6, 0.209), (14.2, 0.204), (15.8, 0.198), (17.3, 0.193), (19.0, 0.188), (20.5, 0.184),
                 (22.0, 0.176), (23.6, 0.163), (25.2, 0.148), (26.8, 0.130), (28.5, 0.112), (31.5, 0.09)])
@@ -269,7 +270,7 @@ def hair_outer(u, z):
     w = T(z, HW_TAB); df = T(z, HF_TAB); db = T(z, HB_TAB); e = T(z, HE_TAB); k = 2.0 / e
     x = math.copysign(abs(c) ** k, c) * w
     y = -(abs(s) ** k) * df if s >= 0 else (abs(s) ** k) * db
-    top = L.smoothstep((C['z_hair_top'] - z) / 0.02)                       # 0 at the very top -> 1 below
+    top = L.smoothstep((zp(CAP_DROP + 0.2) - z) / 0.02)                    # 0 at the very top -> 1 below
     band = L.smoothstep((zp(1.5) - z) / 0.04) * L.smoothstep((z - zp(16.0)) / 0.05)   # 2..14 %: the sweep's mass
     # sweep: HIS RIGHT (-X) side fuller (about 2.5 cm), with a rounded lobe in the front-right quadrant
     if x < 0: x -= 0.016 * band * (abs(c) ** 0.5)
@@ -296,7 +297,7 @@ def hair_inner(u, z):
     return Vector((sk.x * f, sk.y * f, z))
 
 def hair_pt(u, v):
-    ztop = C['z_hair_top']; zh = hairline_z(u)
+    ztop = zp(CAP_DROP + 0.2); zh = hairline_z(u)
     if v <= 0.0: return Vector((0.0, -0.08, ztop))
     if v >= 1.0: return Vector((0.0, 0.0, zt - 0.02))
     if v <= 0.60:
@@ -311,6 +312,38 @@ def hair_pt(u, v):
     return hair_inner(u, zh + 0.006 + (zt - 0.02 - zh - 0.006) * s)
 hair = L.shell('Hair', hair_pt, nlon=64, nlat=46, warp_u=0.0)
 add(hair, 'hair', 'head')
+
+# ---- LOCKS: 3-4 swept volumes lying on the cap (half embedded), forming the raised front wave and
+#      the sweep to HIS RIGHT. Keys: (u unwrapped: 0 front, +0.25 his right, -0.25 his left; z % from
+#      top; width across the surface; thickness along the normal; lift of the centre line above the cap)
+Z_CAP_TOP = zp(CAP_DROP + 0.2)
+def hair_normal(u, z, e=1e-3):
+    z = min(z, Z_CAP_TOP - 0.003)
+    du = hair_outer((u + e) % 1.0, z) - hair_outer((u - e) % 1.0, z)
+    dz = hair_outer(u, min(z + e, Z_CAP_TOP - 0.002)) - hair_outer(u, z - e)
+    n = du.cross(dz)
+    if n.length < 1e-12: return Vector((0, 0, 1))
+    n.normalize()
+    c = hair_outer(u, z)
+    if n.dot(Vector((c.x, c.y, c.z - zp(15.0)))) < 0: n = -n         # outward: away from the head centre
+    return n
+def lock(name, keys, n_samples=26, n_ring=12):
+    pts, nrm, ws, ts = [], [], [], []
+    for k in L.catmull_rom(keys, n_samples):
+        u = k[0] % 1.0; z = min(zp(k[1]), Z_CAP_TOP - 0.003)
+        base = hair_outer(u, z); n = hair_normal(u, z)
+        pts.append(tuple(base + n * k[4])); nrm.append(tuple(n)); ws.append(max(0.004, k[2])); ts.append(max(0.004, k[3]))
+    return add(L.ribbon_tube(name, pts, nrm, ws, ts, n=n_ring), 'hair', 'head')
+# A: the front wave — from the part (his left, front) up across the front of the crown, rolling over
+#    his right temple; the crest rises above the cap and overhangs the forehead
+lock('LockA', [(-0.12, 9.5, 0.02, 0.006, -0.010), (-0.09, 6.0, 0.080, 0.036, 0.000), (-0.02, 2.6, 0.105, 0.052, 0.002),
+               (0.06, 1.4, 0.110, 0.058, 0.004), (0.13, 3.6, 0.096, 0.050, 0.002), (0.17, 8.0, 0.064, 0.026, -0.002), (0.18, 11.0, 0.020, 0.006, -0.012)])
+lock('LockB', [(-0.14, 6.5, 0.02, 0.006, -0.010), (-0.12, 3.6, 0.075, 0.030, -0.002), (-0.04, 1.4, 0.090, 0.038, 0.000),
+               (0.10, 1.2, 0.090, 0.038, 0.000), (0.21, 4.2, 0.080, 0.032, -0.002), (0.26, 9.0, 0.048, 0.016, -0.004), (0.28, 13.0, 0.02, 0.006, -0.012)])
+lock('LockC', [(0.46, 1.6, 0.02, 0.006, -0.010), (0.47, 2.4, 0.070, 0.030, -0.002), (0.43, 5.5, 0.075, 0.034, 0.000),
+               (0.38, 9.5, 0.062, 0.026, -0.002), (0.34, 13.0, 0.038, 0.014, -0.004), (0.33, 15.5, 0.02, 0.006, -0.012)])
+lock('LockD', [(-0.10, 9.0, 0.02, 0.006, -0.010), (-0.14, 8.0, 0.064, 0.024, -0.002), (-0.19, 9.5, 0.064, 0.024, -0.002),
+               (-0.24, 12.5, 0.048, 0.018, -0.004), (-0.27, 15.5, 0.02, 0.006, -0.012)])
 
 # =============================================================================================
 # BODY
@@ -448,6 +481,48 @@ bpy.ops.object.join()
 mesh = bpy.context.active_object; mesh.name = 'Victor'; mesh.location = (0, 0, 0)
 L.smooth_normals(mesh, 62.0)
 
+# =============================================================================================
+# BAKED SOFT SHADING -> vertex colours (glTF COLOR_0, linear). Ambient occlusion only (no directional
+# light, so it stays right when he turns) plus a restrained warm tint on the cheeks and nose.
+# =============================================================================================
+def bake_vertex_shading(ob, n_rays=32, max_dist=0.26, strength=0.50):
+    from mathutils.bvhtree import BVHTree
+    me = ob.data
+    bm = bmesh.new(); bm.from_mesh(me); bmesh.ops.triangulate(bm, faces=bm.faces[:])
+    tree = BVHTree.FromBMesh(bm); bm.free()
+    dirs = []
+    for i in range(n_rays):                                   # cosine-weighted hemisphere (Fibonacci spiral)
+        t = (i + 0.5) / n_rays; r = math.sqrt(t); phi = i * 2.399963
+        dirs.append((r * math.cos(phi), r * math.sin(phi), math.sqrt(max(0.0, 1.0 - t))))
+    skin_slots = {i for i, m in enumerate(me.materials) if m and m.name == 'Skin'}
+    skin_verts = set()
+    for poly in me.polygons:
+        if poly.material_index in skin_slots: skin_verts.update(poly.vertices)
+    col = me.color_attributes.get('Col') or me.color_attributes.new(name='Col', type='FLOAT_COLOR', domain='POINT')
+    me.color_attributes.active_color = col
+    me.color_attributes.render_color_index = me.color_attributes.find('Col')   # the exporter's 'ACTIVE' means the render colour
+    occ_stats = []
+    for v in me.vertices:
+        n = Vector(me.vertex_normals[v.index].vector).normalized()
+        a = Vector((1, 0, 0)) if abs(n.x) < 0.9 else Vector((0, 1, 0))
+        t1 = a.cross(n).normalized(); t2 = n.cross(t1)
+        o = v.co + n * 0.003; occ = 0.0
+        for dx, dy, dz in dirs:
+            hit = tree.ray_cast(o, t1 * dx + t2 * dy + n * dz, max_dist)
+            if hit[0] is not None: occ += 1.0 - (hit[3] / max_dist) ** 0.6
+        occ /= n_rays; occ_stats.append(occ)
+        k = 1.0 - strength * occ
+        r = g = b = k
+        if v.index in skin_verts:
+            w = math.exp(-((abs(v.co.x) - 0.125) ** 2) / (2 * 0.045 ** 2)) * math.exp(-((v.co.z - zp(22.0)) ** 2) / (2 * 0.05 ** 2)) * L.smoothstep((-v.co.y - 0.10) / 0.06)
+            w += 0.6 * math.exp(-((v.co.x) ** 2) / (2 * 0.03 ** 2)) * math.exp(-((v.co.z - zp(20.5)) ** 2) / (2 * 0.03 ** 2))   # nose ball
+            w = min(1.0, w)
+            g *= 1.0 - 0.05 * w; b *= 1.0 - 0.09 * w                 # warmer by taking green/blue away (values must stay <= 1: uint16 export)
+        col.data[v.index].color = (min(1.0, r), min(1.0, g), min(1.0, b), 1.0)
+    occ_stats.sort(); m = len(occ_stats)
+    print(f'REPORT ao verts={m} rays={n_rays} occ_min={occ_stats[0]:.2f} median={occ_stats[m // 2]:.2f} p90={occ_stats[int(m * 0.9)]:.2f} max={occ_stats[-1]:.2f}')
+import time; _t0 = time.time(); bake_vertex_shading(mesh); print(f'REPORT ao_seconds={time.time() - _t0:.1f}')
+
 arm_data = bpy.data.armatures.new('VictorRig'); arm = bpy.data.objects.new('VictorRig', arm_data)
 scene.collection.objects.link(arm); bpy.context.view_layer.objects.active = arm
 bpy.ops.object.mode_set(mode='EDIT'); eb = arm_data.edit_bones
@@ -536,5 +611,6 @@ print(f'REPORT tris={tris} materials={len(mesh.data.materials)} verts={len(mesh.
 out = REPO / 'assets' / 'characters' / 'victor.glb'; out.parent.mkdir(parents=True, exist_ok=True)
 bpy.ops.object.select_all(action='DESELECT'); arm.select_set(True); mesh.select_set(True); bpy.context.view_layer.objects.active = arm
 bpy.ops.export_scene.gltf(filepath=str(out), export_format='GLB', use_selection=True, export_apply=False, export_animations=True,
-                          export_animation_mode='ACTIONS', export_yup=True, export_morph=False, export_extras=True)
+                          export_animation_mode='ACTIONS', export_yup=True, export_morph=False, export_extras=True,
+                          export_vertex_color='ACTIVE', export_all_vertex_colors=False)
 print(f'REPORT file_bytes={out.stat().st_size} path={out}')

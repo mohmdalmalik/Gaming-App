@@ -13,11 +13,43 @@ neutral-proportion authority, the elevated panel is NOT a camera spec). Panels a
 by `make_panels.py` into `ref/panels/` (gitignored, regenerable). No rooms, other characters, GUI or
 gameplay work until the owner approves Victor. Hotel lighting unchanged. Rig/animation reused.
 
-### Status: pass 7 (garment continuity + jacket opening) PRESENTED FOR REVIEW — do not proceed further; next = owner's verdict, then facial-detail pass
-- Branch `main`. Base commit `684ffd2`; last increment = **`0b3884d` pass 7** (asset sha256 `c328c373b8d7…`, 1,088,836 bytes).
-  Published version = working version. Continuation state: everything below under "Pass 7" is built, verified and
-  committed; nothing is half-done. To resume: read Pass 7, then `git log -1`.
-- Earlier increments: `26bdf8e` v5 · `89ebebf` pass 2 · `bf47b95`/`bbc1c88` pass 3 · `76bd46f` pass 4 · `7585829` pass 5 · `9cb6922` pass 6.
+### Status: pass 8 (facial detail) PRESENTED FOR REVIEW — do not proceed further; next = owner's verdict, then the final tailoring/finishing pass
+- Branch `main`. Base commit `684ffd2`; last increment = **pass 8** (this commit; asset sha256 `0614c7fce15d…`, 1,133,224 bytes).
+  Published version = working version. Continuation state: everything under "Pass 8" is built, verified and committed;
+  nothing is half-done. To resume: read Pass 8, then `git log -1`. Body baseline (accepted by the owner): pass 7, asset `c328c373`.
+- Earlier increments: `26bdf8e` v5 · `89ebebf` pass 2 · `bf47b95`/`bbc1c88` pass 3 · `76bd46f` pass 4 · `7585829` pass 5 · `9cb6922` pass 6 · `0b3884d`/`02f9668` pass 7.
+
+### Pass 8 (owner's brief after pass 7): FACIAL DETAIL — moustache, brows, ears, nose — built, verified, PRESENTED FOR REVIEW
+Owner accepted the pass-7 trousers and jacket opening; the body from asset `c328c373` is the preserved baseline (renders `shots/base77-*`).
+- **Asset revision**: `assets/characters/victor.glb` 1,133,224 bytes, sha256 `0614c7fce15d…`; 31,880 tris, 16,124 verts, 9 materials.
+  Hall scene with Victor: 341 draw calls, 58,886 triangles, 13 programs (headless numbers, not iPad). Walk check: stride 0.700,
+  phase error 0, mesh-on-mover 0, no console errors; `rules-check`, `logic-check`, `browser-test` pass. Portraits
+  (`assets/portraits/victor{,-possessed}.jpg`) re-rendered from the new head (`portrait.mjs`, eye x now ±0.074).
+- **Measured against the sheet's face panel** (`compare_head.py front`, per head height): moustache one blob 0.376 wide
+  (ours was two blobs, 0.33 total) and 0.116 tall; eyes ±0.13 across, 0.074 × 0.128 (ours ±0.12, 0.066 × 0.116); brows
+  span ±0.075–0.225 (same as ours); ears project to ±0.46 (ours ±0.37, i.e. ~4.5 cm less per side).
+- **Moustache**: ONE tube from tip to tip (`smooth_profile` keys for its upper and lower edges in units of its half-thickness):
+  a shallow notch in the upper edge under the nose, full rounded lobes at ~22 % of the half-width, a continuous lower edge
+  that rises past 70 %, and tapered ends hooking up to the lobe-top level. Width 0.210 (was 0.185), thickness 0.060, relief
+  and height unchanged (centre 23.7 %, 2 cm off the face).
+- **Brows**: one smooth crescent each (24-point Bézier, 12-sided tube), thickness 0.019 (was 0.024), profile 0.30 → 1.0 at
+  52 % → 0.12: rounded inner end, fine dropping outer point; arch peak moved out to ~55 %.
+- **Ears**: ONE shell each from a deformed sphere in the ear's frame — broad rounded helix ridge (peak at 70 % radius),
+  recessed bowl, full lobe, convex back, front edge meeting the head surface; ear plane turned 0.75 rad forward (was 0.50),
+  centre 2 cm further out (`ear_out` 0.068), 1 cm lower (21.8 %), 0.116 tall × 0.076 wide. Replaces the ring-tube + disc + sphere.
+- **Nose / face**: the bridge ridge widens (σ 1.1 → 2.3 cm) and rises (+0.8 cm) toward the ball so the ball grows out of a bed
+  instead of sitting on the skin; ball 0.078 × 0.068 (rounder); eyes 0.042 × 0.072 at ±0.074 (sheet); mouth 4 mm higher and a
+  touch fuller. Head scale, hairstyle, skull, skin tone unchanged. `bake_vertex_shading` re-run on the new geometry.
+- **Attachment check**: face views at Idle t = 1.5 s and Walk t = 0 (head bone) — all features move with the head; real-game
+  captures at zoom 1 and 1.8 in four rotations.
+- **Evidence** (`shots/v13-review.png`): reference / baseline c328c373 / updated 0614c7fc at equal head height — front,
+  three-quarter, side (neutral light), updated under hotel light, Idle/Walk frames, real game at normal zoom (4 rotations),
+  zoom 1.8, and the re-rendered portrait. Iterations kept: `shots/p8a-*`, `p8b-*` (first two attempts).
+- **Preserved**: clothing, shoes, rig, animations, movement, camera, lighting, rooms, GUI, rules.
+- **Still different / caveats**: the sheet's front ears are drawn almost fully facing the viewer while its profile shows a full
+  oval — one 3-D ear cannot do both; ours is a compromise (0.75 rad). The ear bowl reads dark at gameplay zoom. Moustache
+  hooks are rounder than the sheet's pen-thin curls (a tube cannot go thinner than ~6 mm and still read). Tailoring details
+  (seams, pockets, cuff buttons, fingers) remain for the final finishing pass.
 
 ### Pass 7 (owner's brief after 9cb6922): TROUSERS AS ONE GARMENT + JACKET OPENING — built, verified, PRESENTED FOR REVIEW
 Baseline for comparison: asset `9cb6922` / `7e8f7293` (GLB copy in the session scratchpad, renders `shots/base76-*`).

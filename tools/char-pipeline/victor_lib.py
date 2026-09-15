@@ -426,3 +426,11 @@ def union_outline(lobes, k, n=720, start_angle=-math.pi / 2, rmax=0.6):
             else: hi = mid
         out.append(Vector((lo * c, lo * s, 0.0)))
     return out
+
+def smooth_profile(keys, ts):
+    """Smooth 1-D interpolation: keys = [(t, value), ...] through a Catmull-Rom curve, evaluated at each t
+    in `ts` (linear lookup on a dense sampling). Used for feature thickness / height profiles."""
+    import numpy as _np
+    dense = _np.array(catmull_rom([(t, v, 0.0) for t, v in keys], 200))
+    order = _np.argsort(dense[:, 0])
+    return list(_np.interp(ts, dense[order, 0], dense[order, 1]))

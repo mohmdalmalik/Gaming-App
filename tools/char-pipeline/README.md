@@ -70,6 +70,7 @@ gitignored; recreate it with `ln -sfn ../../tests/node_modules tools/char-pipeli
 | `diag_materials.mjs` | REAL game with Victor's materials swapped for unlit contrasting colours (hair magenta, skin green), four rotations — coverage/assignment diagnosis |
 | `glb_inspect.py` | per-material audit of an exported GLB: attributes (COLOR_0…), triangle winding vs normals, inward-facing faces, bboxes |
 | `make_victor.py` (pass 3) | hair = fitted cap + part step + lock regions + one rounded roll; `bake_vertex_shading` writes ambient occlusion + skin tint into COLOR_0 |
+| `make_victor.py` (pass 8) | face: one-tube moustache from edge profiles (`smooth_profile`), crescent brows, one-shell ears (ridge/bowl/lobe from a deformed sphere), widened nose-bridge bed; `compare_head.py front` gives the sheet-vs-render feature numbers |
 | `make_victor.py` (pass 7) | trousers = ONE ring-built surface (smooth union of two thigh lobes above the crotch, one shared crotch vertex, two leg rings below; blended weights); jacket rings resampled by arc length with the front opening cut into each ring (no deleted quads, no bottom cap). `VICTOR_DIAG=1 VICTOR_OUT=path` builds a contrasting-colour copy. Walk-pose renders: `--clip Walk --t 0` / `--t 0.5` are the stride extremes |
 Outputs (`shots/`, `*.glb`, `*.png`, `*.webm`, `rec/`) are gitignored; `node_modules` is a symlink to `tests/node_modules`.
 Exceptions: the owner's references `ref/victor-sheet.png` and `ref/hotel-reference.jpg` are committed.

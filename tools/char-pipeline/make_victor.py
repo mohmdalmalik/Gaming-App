@@ -48,13 +48,13 @@ CFG = dict(
     #      hair 0.285 H at the temples. Depth (SIDE close-up): forehead 0.233 in front of the skull axis,
     #      occiput 0.215 behind, nose tip +0.043 from the face plane, moustache +0.020, chin -0.015.
     z_hair_top=zp(0.2), z_skull_top=zp(3.8), z_hairline=zp(8.6), z_brow=zp(13.0), z_eye=zp(17.3),
-    z_nose=zp(20.3), z_moustache=zp(23.7), z_mouth=zp(27.3), z_chin=zp(31.5), z_ear=zp(21.2),
+    z_nose=zp(20.3), z_moustache=zp(23.7), z_mouth=zp(27.1), z_chin=zp(31.5), z_ear=zp(21.8),
     skull_half_w=0.196,
-    ear_h=0.112, ear_w=0.072, ear_out=0.048, ear_y=0.030, ear_tilt=0.50,
-    eye_x=0.070, eye_w=0.038, eye_h=0.066,
-    brow_x0=0.040, brow_x1=0.116, brow_thick=0.024, brow_arch=0.014,
-    nose_w=0.076, nose_h=0.062, nose_out=0.042, bridge_h=0.012,
-    mo_w=0.185, mo_thick=0.060, mo_out=0.020,
+    ear_h=0.116, ear_w=0.076, ear_out=0.068, ear_y=0.030, ear_tilt=0.75,          # tilt: ear plane turned forward (sheet: dish visible from the front)
+    eye_x=0.074, eye_w=0.042, eye_h=0.072,
+    brow_x0=0.040, brow_x1=0.118, brow_thick=0.019, brow_arch=0.014,
+    nose_w=0.078, nose_h=0.068, nose_out=0.042, bridge_h=0.012,
+    mo_w=0.210, mo_thick=0.060, mo_out=0.020,
     mouth_w=0.060,
     # ---- neck / shoulders / torso (FRONT: collar top ~32 %, shoulders 36-40 %, jacket 0.326 H wide;
     #      SIDE: collar region <= 0.24 deep, chest 0.30 deep; hem 72.5 %)
@@ -162,10 +162,12 @@ skull = L.shell('Skull', skull_pt, nlon=56, nlat=36, warp_u=0.08)
 # brows down into the nose ball (so the nose grows out of the face instead of sitting on it).
 Z_BR_TOP, Z_BR_BOT = C['z_eye'] + 0.012, C['z_nose'] + 0.020
 for v in skull.data.vertices:
-    if v.co.y >= -0.05 or abs(v.co.x) > 0.045: continue
-    g = math.exp(-(v.co.x ** 2) / (2 * 0.011 ** 2))
-    h = L.smoothstep((Z_BR_TOP - v.co.z) / 0.030) * L.smoothstep((v.co.z - (Z_BR_BOT - 0.025)) / 0.02)
-    v.co.y -= C['bridge_h'] * g * h
+    if v.co.y >= -0.05 or abs(v.co.x) > 0.06: continue
+    t = L.smoothstep((Z_BR_TOP - v.co.z) / max(1e-6, Z_BR_TOP - Z_BR_BOT))          # 0 between the brows -> 1 at the ball
+    sig = 0.011 + 0.012 * t                                                          # the ridge widens toward the ball
+    g = math.exp(-(v.co.x ** 2) / (2 * sig ** 2))
+    h = L.smoothstep((Z_BR_TOP - v.co.z) / 0.030) * L.smoothstep((v.co.z - (Z_BR_BOT - 0.030)) / 0.025)
+    v.co.y -= (C['bridge_h'] + 0.008 * t) * g * h                                    # and rises into a bed for the ball
 skull.data.update()
 # cheek fullness beside the nose/moustache and a softly forward chin (small, so features placed on
 # the analytic face stay seated)
@@ -179,27 +181,33 @@ add(skull, 'skin', 'head')
 add(L.loft('Neck', [dict(z=C['z_shoulder_top'] - 0.03, w=2*C['neck_r'], d=2*C['neck_r']*0.92, r=1.0, y=C['neck_y']),
                     dict(z=C['z_chin'] + 0.05, w=2*C['neck_r']*0.92, d=2*C['neck_r']*0.86, r=1.0, y=C['neck_y'])], n=18), 'skin', 'neck')
 
-# ---- ears: a shaped outer rim (rounded tube around an oval) with a recessed inner form, angled
-#      to face forward-and-out like the sheet's; a filler behind the rim so the head shows through nowhere
+# ---- ears: ONE shaped shell each, from a deformed sphere in the ear's own frame: a rounded outer rim
+#      (helix) round the top and back, a recessed inner bowl, a soft full lobe at the bottom, a convex back,
+#      and its front edge sunk into the head so it attaches naturally. The ear plane is turned forward so
+#      the dish shows from the front like the sheet's, and it projects ~5 cm beyond the skull.
 for s_ in (1, -1):
     tilt = C['ear_tilt']
     n_ = Vector((s_ * math.cos(tilt), -math.sin(tilt), 0.0))               # ear plane normal (out + forward)
-    A = Vector((0, 0, 1)).cross(n_).normalized()                            # in-plane, front-back
+    A = Vector((0, 0, 1)).cross(n_).normalized()                            # in-plane, toward the back (and out)
     sk = T(C['z_ear'], W_TAB)
     Cc = Vector((s_ * (sk + C['ear_out'] - 0.030), C['ear_y'], C['z_ear']))
-    aw, bh = C['ear_w'] * 0.5 - 0.008, C['ear_h'] * 0.5 - 0.008
-    loop = [tuple(Cc + A * (aw * math.cos(t) * (1.0 if math.cos(t) > 0 else 0.9)) + Vector((0, 0, bh * math.sin(t) * (1.0 if math.sin(t) > 0 else 0.92)))) for t in [k / 18 * 2 * math.pi for k in range(18)]]
-    add(L.planar_ring_tube(f'EarRim{s_}', loop, 0.0085, n_, n=8), 'skin', 'head')
-    inner = L.uvsphere(f'EarInner{s_}', 1.0, (0, 0, 0), scale=(1.0, 1.0, 1.0), u=16, v=12)
-    for v in inner.data.vertices:                                           # a shallow dish in the ear frame
-        x, y, z = v.co.x, v.co.y, v.co.z
-        v.co = Cc + A * (x * aw * 0.98) + Vector((0, 0, z * bh * 0.98)) + n_ * (y * 0.005 - 0.0035)
-    add(inner, 'skin', 'head')
-    back = L.uvsphere(f'EarBack{s_}', 1.0, (0, 0, 0), u=14, v=10)             # joins rim to the skull
-    for v in back.data.vertices:
-        x, y, z = v.co.x, v.co.y, v.co.z
-        v.co = Cc + A * (x * aw * 0.85) + Vector((0, 0, z * bh * 0.85)) + n_ * (y * 0.012 - 0.014)
-    add(back, 'skin', 'head')
+    aw, bh = C['ear_w'] * 0.5, C['ear_h'] * 0.5
+    ear = L.uvsphere(f'Ear{s_}', 1.0, (0, 0, 0), u=28, v=20)
+    for v in ear.data.vertices:
+        px, py, pz = v.co.x, v.co.y, v.co.z                                 # px: front(-)/back(+) in plane, pz: up, py: out of plane
+        rho = min(1.0, math.sqrt(px * px + pz * pz)); sn = pz / rho if rho > 1e-6 else 0.0
+        lobe = L.smoothstep((-sn - 0.45) / 0.45)                            # 1 at the bottom of the ear
+        front = L.smoothstep((-px - 0.35) / 0.5)                            # 1 along the front (attachment) edge
+        wx = aw * (0.97 if px < 0 else 1.0)                                  # outline: an oval, the lobe as full as the top
+        if py >= 0:                                                         # outer face: rim ridge + bowl, or the full lobe
+            ridge = 0.013 * math.exp(-((rho - 0.70) / 0.24) ** 2) * (1.0 - 0.6 * front)   # broad rounded helix
+            bowl = 0.010 * L.smoothstep((0.52 - rho) / 0.30)                                 # the concha
+            d = (1.0 - lobe) * (0.006 + ridge - bowl) + lobe * (0.014 * math.sqrt(max(0.0, 1.0 - rho * rho)))
+            d *= 0.35 + 0.65 * math.sqrt(max(0.0, 1.0 - rho ** 6))          # rounds the outer edge down
+        else:
+            d = -0.011 * math.sqrt(max(0.0, 1.0 - rho * rho))                # convex back
+        v.co = Cc + A * (px * wx) + Vector((0, 0, pz * bh)) + n_ * (d - 0.012 * front)   # front edge meets the head surface
+    add(ear, 'skin', 'head')
 
 # ---- eyes: dark vertical ovals set flush into the face (sheet size: 0.038 x 0.066), no highlight beads
 for s_ in (1, -1):
@@ -208,13 +216,16 @@ for s_ in (1, -1):
     L.translate_verts(eye, p)
     add(eye, 'dark', 'head')
 
-# ---- brows: slim, one smooth gentle arch, blunt inner end, tapered outer end, low relief
+# ---- brows: one smooth crescent each, following the forehead: rounded inner end, fullest just inside
+#      the arch, tapering to a fine outer point that drops a little (the sheet's relaxed expression)
 for s_ in (1, -1):
     zb = C['z_brow']; x0, x1 = C['brow_x0'], C['brow_x1']; a = C['brow_arch']
-    pts = L.bezier((s_ * x0, 0, zb - 0.004), (s_ * (x0 + 0.34 * (x1 - x0)), 0, zb + a), (s_ * (x0 + 0.66 * (x1 - x0)), 0, zb + a * 0.9), (s_ * x1, 0, zb - 0.012), n=14)
+    N_B = 24
+    pts = L.bezier((s_ * x0, 0, zb - 0.006), (s_ * (x0 + 0.34 * (x1 - x0)), 0, zb + a * 1.15), (s_ * (x0 + 0.72 * (x1 - x0)), 0, zb + a * 0.95), (s_ * x1, 0, zb - 0.014), n=N_B)
     pts = [tuple(on_face(x, z, 0.005)) for x, _, z in pts]
-    rad = [C['brow_thick'] * 0.5 * (0.70 + 0.30 * math.sin(math.pi * min(1.0, i / 8)) if i < 9 else 0.35 + 0.65 * (1 - ((i - 9) / 5) ** 1.2)) for i in range(15)]
-    br = L.tube(f'Brow{s_}', pts, rad, n=10); flatten_to_face(br, 0.45)
+    ts = [i / N_B for i in range(N_B + 1)]
+    rad = [C['brow_thick'] * 0.5 * k for k in L.smooth_profile([(0.0, 0.30), (0.20, 0.78), (0.52, 1.0), (0.78, 0.70), (1.0, 0.12)], ts)]
+    br = L.tube(f'Brow{s_}', pts, rad, n=12); flatten_to_face(br, 0.45)
     add(br, 'dark', 'head')
 
 # ---- nose: the ball at the end of the bridge ridge (the bridge itself is raised from the skull above)
@@ -224,20 +235,23 @@ for v in nose.data.vertices:
     if v.co.z > 0: v.co.z *= 1.25; v.co.x *= 0.88                            # egg: taller above, merging up into the bridge
 L.translate_verts(nose, ball_c); add(nose, 'skin', 'head')
 
-# ---- moustache: two compact rounded lobes, a small notch under the nose, thickest a third of the
-#      way out, thinning to short restrained upturned tips; low relief (about 2 cm off the face)
-for s_ in (1, -1):
-    zm = C['z_moustache']; hw = C['mo_w'] * 0.5
-    pts = L.bezier((s_ * 0.004, 0, zm + 0.004), (s_ * hw * 0.36, 0, zm - 0.006), (s_ * hw * 0.74, 0, zm - 0.008), (s_ * hw, 0, zm + 0.012), n=16)
-    pts = [tuple(on_face(x, z, 0.005)) for x, _, z in pts]
-    prof = [0.40, 0.62, 0.82, 0.95, 1.0, 1.0, 0.97, 0.92, 0.85, 0.76, 0.66, 0.55, 0.45, 0.36, 0.28, 0.22, 0.17]
-    mo = L.tube(f'Moustache{s_}', pts, [C['mo_thick'] * 0.5 * k for k in prof], n=12); flatten_to_face(mo, 0.42)
-    add(mo, 'dark', 'head')
+# ---- moustache: ONE connected shape from tip to tip — a shallow notch in its upper edge under the nose,
+#      full rounded lobes either side of the centre, a continuous lower edge, and gently raised tapered ends
+N_M = 48
+zm = C['z_moustache']; hw = C['mo_w'] * 0.5; R = C['mo_thick'] * 0.5
+TOP_KEYS = [(0.0, 0.35), (0.22, 1.00), (0.50, 0.78), (0.72, 0.46), (0.88, 0.64), (1.0, 0.96)]      # upper edge vs |x|/hw (units of R)
+BOT_KEYS = [(0.0, -1.00), (0.22, -1.05), (0.50, -0.85), (0.72, -0.28), (0.88, 0.34), (1.0, 0.84)]     # lower edge: continuous, rising into the hooks
+ts = [-1.0 + 2.0 * i / N_M for i in range(N_M + 1)]
+top = L.smooth_profile(TOP_KEYS, [abs(t) for t in ts]); bot = L.smooth_profile(BOT_KEYS, [abs(t) for t in ts])
+zs = [R * (u + l) * 0.5 for u, l in zip(top, bot)]; rs = [max(0.10, (u - l) * 0.5) for u, l in zip(top, bot)]
+pts = [tuple(on_face(t * hw, zm + z, 0.006)) for t, z in zip(ts, zs)]
+mo = L.tube('Moustache', pts, [R * r for r in rs], n=14); flatten_to_face(mo, 0.42)
+add(mo, 'dark', 'head')
 
 # ---- mouth: a subtle short smile under the moustache
 pts = L.bezier((-C['mouth_w'] * 0.5, 0, C['z_mouth'] + 0.006), (-0.012, 0, C['z_mouth'] - 0.004), (0.012, 0, C['z_mouth'] - 0.004), (C['mouth_w'] * 0.5, 0, C['z_mouth'] + 0.006), n=8)
 pts = [tuple(on_face(x, z, 0.002)) for x, _, z in pts]
-add(L.tube('Mouth', pts, [0.0040 * t for t in L.taper(8, 0.5, 1.0, 0.5)], n=6), 'dark', 'head')
+add(L.tube('Mouth', pts, [0.0048 * t for t in L.taper(8, 0.5, 1.0, 0.5)], n=6), 'dark', 'head')
 
 # =============================================================================================
 # HAIR — a cap with its own measured silhouette (front width, side front/back depth by height),

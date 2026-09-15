@@ -16,8 +16,8 @@ const GLB = path.join(REPO, 'assets/characters/victor.glb');
 const OUT = path.join(HERE, 'shots'); fs.mkdirSync(OUT, { recursive: true });
 
 // Eye centres in glTF space (Y up, face toward +Z). From make_victor.py CFG: eye_x = ±0.071,
-// z_eye = zp(17.3) = 1.373, face plane 0.233 in front of the skull axis (+0.004 lift).
-const EYE_X = 0.071, EYE_Y = 1.373, EYE_Z = 0.237;
+// z_eye = zp(17.3) = 1.373, face plane 0.233 in front of the skull axis (+0.004 lift). eye_x = ±0.074 since pass 8.
+const EYE_X = 0.074, EYE_Y = 1.373, EYE_Z = 0.237;
 const YAW = 14;   // a touch of 3/4 turn (degrees) — the target HUD portrait is not dead-on
 const points = [[-EYE_X, EYE_Y, EYE_Z], [EYE_X, EYE_Y, EYE_Z]].map(p => p.join(',')).join(';');
 

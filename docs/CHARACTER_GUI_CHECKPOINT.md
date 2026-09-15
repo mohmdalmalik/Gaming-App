@@ -14,7 +14,7 @@ by `make_panels.py` into `ref/panels/` (gitignored, regenerable). No rooms, othe
 gameplay work until the owner approves Victor. Hotel lighting unchanged. Rig/animation reused.
 
 ### Status: pass 7 (garment continuity + jacket opening) PRESENTED FOR REVIEW — do not proceed further; next = owner's verdict, then facial-detail pass
-- Branch `main`. Base commit `684ffd2`; last increment = **pass 7** (this commit; asset sha256 `c328c373b8d7…`, 1,088,836 bytes).
+- Branch `main`. Base commit `684ffd2`; last increment = **`0b3884d` pass 7** (asset sha256 `c328c373b8d7…`, 1,088,836 bytes).
   Published version = working version. Continuation state: everything below under "Pass 7" is built, verified and
   committed; nothing is half-done. To resume: read Pass 7, then `git log -1`.
 - Earlier increments: `26bdf8e` v5 · `89ebebf` pass 2 · `bf47b95`/`bbc1c88` pass 3 · `76bd46f` pass 4 · `7585829` pass 5 · `9cb6922` pass 6.

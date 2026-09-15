@@ -21,37 +21,60 @@ gameplay work until the owner approves Victor. Hotel lighting unchanged. Rig/ani
   (+ `body@yaw` / `face@yaw` views, albedo-faithful neutral light, long lens), `portrait.mjs` (new eye
   coordinates), NEW `compare.py`, `compare_head.py`, `make_panels.py`, `ref/`.
 
-### Pass 3 (owner feedback after 89ebebf): HAIR LOCKS + BAKED SHADING — built, verified, awaiting review
-Baseline for comparison: asset `89ebebf` (renders kept as `shots/base89-*`; copy of the GLB in the session scratchpad).
-- **Asset revision**: `assets/characters/victor.glb` 881,676 bytes, sha256 `f822c183eece6fbd…`; 23,728 tris,
-  12,029 verts, 7 materials, one skinned mesh. Hall scene with Victor: 339 draw calls, 50,734 triangles,
-  13 programs (headless count; NOT an iPad measurement).
-- **Hair**: the smooth cap now sits 2.2 cm lower (`CAP_DROP`) and carries four shaped lock volumes
-  (`ribbon_tube` in `victor_lib.py`, keys in `make_victor.py` `lock(...)`): A = the raised front wave from
-  the part on his left across the front of the crown, rolling over his right temple (crest ~2.9 cm proud of
-  the cap, overhanging the forehead); B = second sweep behind it down to above his right ear; C = crown
-  lock sweeping down the back to his right; D = his-left side lock combed back over the temple. Lock
-  sections are lenses whose edges meet the cap tangentially (lift ≈ 0, thickness = 2 × protrusion) so
-  there are no steps; ends taper to 6 mm and tuck 1 cm under the cap. Sides and nape unchanged (fitted).
-  All hair is weighted to the head bone; a mid-walk game capture shows it turning with the head.
+### Pass 3 (owner feedback after 89ebebf): HAIR LOCKS + BAKED SHADING — built, reviewed, PRESENTED FOR REVIEW
+Baseline for comparison: asset `89ebebf` (its GLB is kept in the session scratchpad; renders `shots/base89-*`
+were re-made with the corrected previewer so both columns are like-for-like).
+- **Asset revision**: `assets/characters/victor.glb` 816,340 bytes, sha256 `e452d6728a31…`; 21,964 tris,
+  11,141 verts, 7 materials, one skinned mesh, COLOR_0 on every primitive. Hall scene with Victor: 339 draw
+  calls, 48,970 triangles, 13 programs (headless Chromium count — NOT an iPad measurement; nothing here is
+  iPad performance evidence).
+- **How the hairstyle is built now** (from a pixel-measured analysis of the sheet, `tools/char-pipeline/
+  ref/` panels): the sheet's hair is one big comma-shaped SWEEP (W) — from the part on his left-front,
+  across the front-top, curling round his right temple, then back along his right side above the ear to a
+  point at the right-rear — with a CROWN LEAF (T) on top of it ending in the same right-rear point, an
+  abrupt PART STEP on his left (x ≈ +0.14 m, the top drops ~5 cm), and a smooth nape with no back lock or
+  whorl. In `make_victor.py`: the fitted cap (`hair_outer`) carries the part step (crown hair combed flat
+  beyond x = +0.134), the two raised lock REGIONS (T +1.0 cm, W +0.6 cm, bounded by the sheet's crease
+  lines converted with `uz_from_sheet` / `periodic_table` into `z_T(u)`, `z_W(u)`), the crown's highest
+  point a little on HIS LEFT with the top descending gently to his right, a rounder top-front corner, and
+  ONE rounded roll (`lock('LockW')`, `ribbon_tube` lens sections meeting the cap tangentially, ends tucked)
+  for W's shoulder and the forward-overhanging front wave. Sides, nape (27.4 %) and sideburns are the cap
+  itself; no piece floats and nothing crosses another lock. Everything hair is weighted to the head bone.
+  (A first attempt with four free tubes — front wave, second sweep, crown-back lock, side lock — was
+  reviewed and rejected: a stuck-on back strip, crown creases meeting in a Y, tiers at lock edges.)
 - **Shading**: per-vertex ambient occlusion baked in Blender (`bake_vertex_shading`: BVH hemisphere rays,
-  32 rays, 0.26 m reach, strength 0.5, ~1 s) plus a restrained warm tint on cheeks and nose (green/blue
-  reduced, never above 1.0 — the uint16 export wraps values > 1). Exported as glTF COLOR_0
-  (`export_vertex_color='ACTIVE'`, which reads the RENDER colour attribute; UNSIGNED_SHORT normalized,
-  linear). The game loader dropped vertex colours in its Lambert conversion: `characterView.js` now sets
-  `m.vertexColors = true` when the loaded material has them (one line; nothing else in the game changed).
-  Verified: COLOR_0 present in the file (`glb_inspect.py`), visible in the real game captures.
-- **Skin**: sheet's lit skin measured ≈ #f4a877; base set to `#eeb38c` (peach in the neutral preview, a
-  little less saturated so the warm hall light does not push it to orange). Hair `#261b14`.
+  32 rays, 0.26 m reach, strength 0.50 on skin/cloth and 0.35 on hair, ~1 s), a warm cheek/nose tint (−8 %
+  green, −14 % blue) and a 12 % darkening of the ear cups and ear–head junction. Exported as glTF COLOR_0
+  (`export_vertex_color='ACTIVE'` = the RENDER colour attribute; UNSIGNED_SHORT normalized, linear; values
+  kept ≤ 1.0 because the uint16 export wraps). The game loader dropped vertex colours in its Lambert
+  conversion: `src/render/characterView.js` now sets `m.vertexColors = true` when the loaded material has
+  them (one line; nothing else in the game changed). The previewer had the same gap — fixed in
+  `preview_glb.html`, which is why the first review round saw no shading in the neutral close-ups.
 - **Colour management checked** (investigation agents): renderer outputs sRGB with NeutralToneMapping,
-  materials shaded in linear; GLTFLoader treats COLOR_0 as linear; the tone mapper crushes linear values
-  below ~0.08, so baked darkening is invisible on the near-black hair but works on skin and cloth.
-- **Evidence**: `shots/v7-review.png` (reference / baseline 89ebebf / updated, neutral and game light,
-  front / three-quarter / side, elevated, game zoom 1 and 1.8 at four rotations); portraits re-rendered.
+  materials shaded in linear, GLTFLoader treats COLOR_0 as linear and multiplies the diffuse in linear
+  space; the tone mapper crushes linear values below ~0.08, so baked darkening is nearly invisible on the
+  near-black hair and works on skin and cloth. Skin: the sheet's lit skin measures ≈ #f4a877; base authored
+  `#f0b992` (one step lighter / less saturated), checked under the unchanged hall light (warm tan, not
+  orange). Hair `#26201b` (desaturated cocoa: the warm point lights turned the earlier espresso caramel).
+- **Independent review round** (three reviewer agents on the first build): hair-structure FAIL (back strip,
+  crown cracks, tiers, symmetric peak, side thickness), surface PASS-WITH-NOTES (previewer dropped vertex
+  colours; hair caramel in game; cheek tint too faint; bright ear rim), completeness FAIL (close-ups clipped
+  the hair top; elevated row not like-for-like; skin not established against the sheet). All addressed in
+  the second build except the disputed ones below.
+- **Evidence**: `shots/v8-review.png` — reference / baseline 89ebebf / updated e452d672: front, three-quarter
+  and side close-ups (full hair + headroom) under neutral light and the updated one under the game light;
+  the sheet's ~30° elevated view like-for-like (`elev30` view) plus steep 56° crown checks front / ¾ /
+  back for both assets; back view; real-game captures at zoom 1.8 and normal zoom, four rotations,
+  baseline beside updated. Portraits re-rendered from the new model.
 - **Deferred to the next review (owner's list)**: angular eyebrows, moustache curvature, jacket and sleeve
   contours, shoe volume; seams, cuff buttons and finger details after those.
-- Tests pass (rules, logic, browser). Independent reviewer pass on the renders in progress; findings and
-  any tweaks are appended below when done.
+- **Still different from the sheet (honest)**: the front wave's tip does not curl down as far as the sheet's
+  rolled lobe (overhang ~2.5 cm vs the sheet's ~2.7 cm, but flatter-fronted); lock relief is subtler than the
+  sheet's soft-lit render; the reviewers also wanted the nape cut to ear-lobe level and the head shallower
+  behind the ear — the sheet's own side and back panels measure the nape 6 % of head height below the
+  lobe and the depth as modelled, so those were kept. Skin in the hall light is a warm tan; the sheet's
+  studio peach is not reachable without changing the lights.
+- Tests pass (rules, logic, browser). Not measured: real iPad frame rate.
 
 ### Correction pass 2 (owner feedback after v5): head, hair, features, collar, bow tie — PRESENTED FOR REVIEW
 Owner's verdict on v5: not approved; differences beyond the four listed. Scope of this pass: head,

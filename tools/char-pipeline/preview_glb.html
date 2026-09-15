@@ -28,12 +28,12 @@ renderer.setSize(innerWidth, innerHeight);
 document.body.appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
-const isPortrait = view === 'front' || view === 'tq' || view === 'side' || view === 'back' || view === 'body' || view === 'face' || view === 'elev';
+const isPortrait = view === 'front' || view === 'tq' || view === 'side' || view === 'back' || view === 'body' || view === 'face' || view === 'elev' || view === 'elev30';
 scene.background = new THREE.Color(isPortrait ? 0x1a1d27 : 0x8a6a3a);
 const cam = new THREE.PerspectiveCamera(isPortrait ? 28 : 42, innerWidth / innerHeight, 0.1, 100);
 
 // Lighting close to the hall: hemisphere (sky lerped to a warm mood) + a warm point light overhead.
-const NEUTRAL = (q.get('view') === 'body' || q.get('view') === 'face' || q.get('view') === 'elev') && q.get('light') !== 'game';
+const NEUTRAL = (['body', 'face', 'elev', 'elev30'].includes(q.get('view'))) && q.get('light') !== 'game';
 const hemi = new THREE.HemisphereLight(new THREE.Color('#ffffff').lerp(new THREE.Color('#ffd9a8'), 0.5), new THREE.Color('#3a3438'), 0.6);
 scene.add(hemi);
 // Neutral = albedo-faithful: a front-facing Lambert surface renders at about its base colour (Lambert divides by pi)
@@ -52,6 +52,7 @@ function flatten(src) {
   if (src.emissive) m.emissive = src.emissive.clone();
   if (src.transparent) { m.transparent = true; m.opacity = src.opacity; }
   if (src.side !== undefined) m.side = src.side;
+  if (src.vertexColors) m.vertexColors = true;   // baked shading (glTF COLOR_0), same as the game loader
   m.name = src.name; return m;
 }
 
@@ -80,12 +81,17 @@ new GLTFLoader().load(src, (gltf) => {
   }
   else if (view === 'face') {       // level face close-up like the sheet's face panels (use yaw=)
     scene.background = new THREE.Color('#d8d8d8');
-    cam.position.set(0, box.min.y + h * 0.84, 4.0); cam.lookAt(0, box.min.y + h * 0.82, 0); cam.fov = 9;
+    cam.position.set(0, box.min.y + h * 0.83, 4.4); cam.lookAt(0, box.min.y + h * 0.81, 0); cam.fov = 10.5;   // whole hair + headroom
   }
   else if (view === 'elev') {       // elevated head close-up: the game's pitch (56 deg), close, on the crown (use yaw=)
     scene.background = new THREE.Color('#d8d8d8');
     const pitch = THREE.MathUtils.degToRad(56), D = 3.2, ty = box.min.y + h * 0.90;
     cam.position.set(0, ty + Math.sin(pitch) * D, Math.cos(pitch) * D); cam.lookAt(0, ty, 0); cam.fov = 12;
+  }
+  else if (view === 'elev30') {     // the sheet's elevated panel: gentle ~30 deg view of the whole figure (use yaw=)
+    scene.background = new THREE.Color('#d8d8d8');
+    const pitch = THREE.MathUtils.degToRad(30), D = 9.0, ty = box.min.y + h * 0.50;
+    cam.position.set(0, ty + Math.sin(pitch) * D, Math.cos(pitch) * D); cam.lookAt(0, ty, 0); cam.fov = 13;
   }
   else if (view === 'portrait') {   // tight bust for the interface portrait (charcoal plate)
     scene.background = new THREE.Color('#171b27');

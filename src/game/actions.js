@@ -2,8 +2,12 @@
 // forced encounter resolves — trade and attack. Pure logic; the interface calls these and
 // renders whatever they return. See docs/GAME_RULES.md §4, §7.
 import { rules } from '../data/rules.js';
-import { CARDS, takeCard, isWeapon, countableCount } from './cards.js';
-import { checkWin } from './state.js';
+import { CARDS, takeCard, isWeapon, countableCount, countableCards } from './cards.js';
+import { checkWin, isRoomOpen, exitUnlocked, objectivesRequired } from './state.js';
+
+// What a room yields when searched, from its role in the floor data.
+export const roomYield = room =>
+  room?.role === 'objective' ? 'objective' : room?.role === 'utility' ? 'nothing' : 'card';
 
 // Whether the current room can still be searched by `player` right now.
 export function canSearch(state, floor, player) {
@@ -12,21 +16,79 @@ export function canSearch(state, floor, player) {
   if (!room?.searchable) return { ok: false, reason: 'notSearchable' };
   if (state.searchedRooms.has(player.currentRoom)) return { ok: false, reason: 'searched' };
   if (player.actionPoints < rules.actionCost.search) return { ok: false, reason: 'ap' };
-  if (room.dark && !player.hand.some(c => c.type === 'flashlight')) return { ok: false, reason: 'dark' };
-  if (!state.drawPile.length) return { ok: false, reason: 'empty' };
+  // Dark rooms need a Flashlight in Phase 1. Practice mode has no Flashlight card, so the
+  // gate would make three rooms unsearchable — it is off there.
+  if (room.dark && !state.practice && !player.hand.some(c => c.type === 'flashlight')) return { ok: false, reason: 'dark' };
+  // Only rooms that actually hand out a card need cards left in the pile.
+  if (roomYield(room) === 'card' && !state.drawPile.length) return { ok: false, reason: 'empty' };
   return { ok: true };
 }
 
-// Search the current room for a card (1 AP). Only searchable rooms, once each; dark rooms
-// need a Flashlight in hand.
+// Search the current room (1 AP). Only searchable rooms, once each. What comes out depends on
+// the room's role: an item room gives one card, an objective room gives one objective (never a
+// card as well), a utility room gives nothing but still says so.
+//
+// `full` is true when an item room produced a card the player has no room for — the caller must
+// then ask them to take it (and discard something), use it, or leave it. The room counts as
+// searched either way, so a full hand can never be used to farm the same room twice.
 export function search(state, floor, player) {
   const gate = canSearch(state, floor, player);
   if (!gate.ok) return gate;
+  const room = floor.rooms.get(player.currentRoom);
+  const kind = roomYield(room);
   player.actionPoints -= rules.actionCost.search;
   state.searchedRooms.add(player.currentRoom);
+
+  if (kind === 'objective') {
+    state.objectivesFound.add(player.currentRoom);
+    return {
+      ok: true, kind, room: room.id,
+      found: state.objectivesFound.size,
+      required: objectivesRequired(),
+      exitJustUnlocked: exitUnlocked(state) && state.objectivesFound.size === objectivesRequired(),
+    };
+  }
+  if (kind === 'nothing') return { ok: true, kind, room: room.id };
+
   const card = state.drawPile.shift();
-  player.hand.push(card);
-  return { ok: true, card };
+  const full = countableCards(player.hand).length >= rules.handLimit;
+  if (!full) player.hand.push(card);
+  return { ok: true, kind, card, full, room: room.id };
+}
+
+// Resolve a card the player could not hold when they found it.
+//   'take'  — keep it and discard `dropId` from the hand to stay within the limit
+//   'leave' — put it back at the bottom of the draw pile; the room stays searched
+export function resolveFullHand(state, player, card, choice, dropId = null) {
+  if (choice === 'take') {
+    if (!dropId) return { ok: false, reason: 'noChoice' };
+    const dropped = takeCard(player.hand, dropId);
+    if (!dropped) return { ok: false, reason: 'noCard' };
+    player.hand.push(card);
+    return { ok: true, kept: card, dropped };
+  }
+  state.drawPile.push(card);
+  return { ok: true, left: card };
+}
+
+// Play a Hint (1 AP): reveals ONE undiscovered room next door to where the player is standing.
+// It never moves the player and never reaches past the adjacent rooms. The sealed exit is not
+// a valid target — it stays hidden until every objective is found.
+export function useHint(state, floor, player, cardId) {
+  if (state.finished) return { ok: false, reason: 'finished' };
+  if (player.actionPoints < rules.actionCost.useCard) return { ok: false, reason: 'ap' };
+  const card = player.hand.find(c => c.id === cardId && c.type === 'hint');
+  if (!card) return { ok: false, reason: 'noCard' };
+  const room = floor.rooms.get(player.currentRoom);
+  const candidates = (room?.doorways || [])
+    .map(d => d.otherRoom(player.currentRoom))
+    .filter(id => !state.discovered.has(id) && isRoomOpen(state, floor, id));
+  if (!candidates.length) return { ok: false, reason: 'nothingAdjacent' };
+  const revealed = candidates[0];
+  player.actionPoints -= rules.actionCost.useCard;
+  state.discovered.add(revealed);
+  takeCard(player.hand, cardId);
+  return { ok: true, revealed, name: floor.rooms.get(revealed)?.name };
 }
 
 // Discard a card from a player's hand (used to obey the hand limit at end of turn). Free.

@@ -1,3 +1,59 @@
+# PROGRESS
+
+## Phase 0 — single-player practice mode (2026-09-17)
+
+The build is now a **practice mode**: one guest, 18 rooms, 4 action points a turn, searching,
+three card types, three objectives and a sealed Fire Exit. The multiplayer rules engine is
+untouched and still tested — it is switched off by flags in `src/data/rules.js`, not deleted.
+
+**Changed**
+- `src/data/rules.js` — rewritten as the single rules configuration (phase flags, action points
+  and costs, hand sizes, room/objective counts, practice seed, card catalogue, two decks).
+- `src/data/floor1.js` — 14 → 18 rooms with explicit `role`s; added Ballroom (objective),
+  Cloakroom (item), Suite 414 (item), Housekeeping Store (utility); deepened Suite 412 and
+  nudged Storage so the new connections fit; moved furniture that blocked new doorways.
+- `src/game/floor.js` — carries a room's `role` through to the built floor.
+- `src/game/state.js` — practice option, objective tracking, `isRoomOpen` / `exitUnlocked`
+  sealing the exit, practice win check.
+- `src/game/actions.js` — role-aware `search`, `resolveFullHand`, `useHint`.
+- `src/game/cards.js` — `buildDrawDeck(spec)` so practice deals its own three-card deck.
+- `src/main.js`, `src/hud.js`, `src/map.js`, `src/overlays.js`, `src/ui/hand.js`,
+  `src/ui/fullHand.js` (new), `index.html`, `styles.css` — practice interface.
+- `tests/browser-practice.mjs` (new), `tests/rules-check.mjs`, `tests/logic-check.mjs`,
+  `tests/browser-test.mjs` (skips while practice mode is on).
+
+**Manual QA checklist — all covered by `tests/browser-practice.mjs` and run green**
+
+| # | Check | Result |
+| --- | --- | --- |
+| 1 | Lobby → practice transition (Tap to begin) | pass |
+| 2 | Movement into discovered rooms (1 AP) | pass |
+| 3 | Entering new rooms costs 2 AP, shown before confirming | pass |
+| 4 | Insufficient AP: doors stop blinking, Search disabled | pass |
+| 5 | Room discovery and map updates | pass |
+| 6 | A room can only be searched once | pass |
+| 7 | Item-card collection | pass |
+| 8 | Six-card hand limit | pass |
+| 9 | Full-hand decision (take / use / leave), no silent discard | pass |
+| 10 | Hint reveals one adjacent room, costs 1 AP, is consumed | pass |
+| 11 | Objective discovery, header reads n / 3 | pass |
+| 12 | Exit unlocks after 3 objectives, with a notice | pass |
+| 13 | Entering the exit completes the run | pass |
+| 14 | End turn refills AP, round advances | pass |
+| 15 | Restart practice resets the hotel | pass |
+| 16 | Touch interaction at iPad sizes (1180×820, 1024×768) | pass |
+| 17 | Desktop layout (1600×900) | pass |
+| 18 | GitHub Pages sub-path deployment (`/Gaming-App/`) | pass |
+
+Assertion counts: 102 rules, 53 floor/pathfinding, 70 browser. Console clean.
+
+**Known gaps / for the owner to decide**
+- The lobby and the service corridor have four connections each; every other room has two or
+  three. The lobby needs four so guests can spread out in Phase 1.
+- Three rooms are still flagged `dark`. Phase 0 ignores the flag (there is no Flashlight card),
+  so they can be searched normally; the flag returns with Phase 1.
+- Objectives are not carried, traded or stolen in this phase, as specified.
+
 # Progress
 
 _Last updated after pass 12b: Victor v2 (designed model), grounded movement, model portraits and the interface pass — presented for the owner's visual review._

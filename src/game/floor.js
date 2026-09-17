@@ -25,6 +25,9 @@ export function buildFloor(data, cfg) {
     const room = {
       id: r.id,
       name: r.name,
+      // What the room is for: 'lobby' | 'item' | 'objective' | 'utility' | 'exit'.
+      // The rules read this (searching yields a card, an objective, or nothing).
+      role: r.role || (r.isExit ? 'exit' : r.searchable ? 'item' : 'transit'),
       isExit: !!r.isExit,
       dark: !!r.dark,          // enterable, but cannot be searched without a Flashlight
       safe: !!r.safe,          // safe zone: never forces an encounter; no attacks; voluntary trades only

@@ -1,4 +1,12 @@
-// Test floor for the greybox prototype: 14 rooms around a central landing.
+// The hotel floor: 18 logical rooms around a central landing, laid out for the six-player
+// balance baseline (3 rooms per player — see src/data/rules.js).
+//
+// Every room carries a ROLE, which is what the rules read:
+//   lobby     — the safe starting landing (never searchable)
+//   item      — searching it once yields one item card (12 of them)
+//   objective — searching it once yields one objective (3 of them)
+//   utility   — searchable but holds nothing; searching says so plainly (1)
+//   exit      — the way out; hidden and sealed until every objective is found (1)
 //
 // Coordinates: x runs east (right), z runs south (down on the map), y is up.
 // A room is placed by its centre and size (width along x, depth along z).
@@ -17,13 +25,17 @@
 //
 // Layout (north is up):
 //
-//              lounge ── library
-//                |          |
-//            corridorN   backCorridor
-//                |          |
-//   suite ─ corridorW ─ HALL ─ corridorE ─ serviceCorridor ─ stairs ─ EXIT
-//                        |        kitchen ──┘      |
-//                      dining                   storage
+//                      LOUNGE* ── LIBRARY*
+//                         |            |
+//                     corridorN   backCorridor
+//                         |            |
+//   suite412 ─ corridorW ─ HALL ─ corridorE ─ serviceCorridor ─ stairs ─ EXIT
+//       |         |          |        kitchen ──┘        |          |
+//   suite414 ─────┘        dining                     storage   housekeeping†
+//                            |  \__ cloakroom ──────────┘
+//                         BALLROOM*
+//
+//   * objective room   † utility room (searchable, empty)   EXIT is sealed until 3/3
 
 export const floor1 = {
   id: 'floor1',
@@ -42,6 +54,7 @@ export const floor1 = {
     {
       id: 'hall',
       name: 'Fourth Floor Landing',
+      role: 'lobby',
       safe: true,             // safe zone: no forced encounters, no attacks; voluntary trades only
       center: [0, 0],
       size: [8, 8],
@@ -88,6 +101,8 @@ export const floor1 = {
     {
       id: 'corridorW',
       name: 'West Corridor',
+      role: 'item',
+      searchable: true,
       center: [-8, 0],
       size: [8, 2.4],
       mood: { color: '#ffd0a0', intensity: 0.9, ambient: 0.8 },
@@ -100,15 +115,19 @@ export const floor1 = {
     {
       id: 'suite412',
       name: 'Guest Suite 412',
+      role: 'item',
       searchable: true,
+      // Deepened (5 -> 7) so it shares enough wall with Suite 414 for a connecting door.
       center: [-15, 0],
-      size: [6, 5],
+      size: [6, 7],
       mood: { color: '#ffd2a0', intensity: 1.2, ambient: 0.9 },
       doorways: [],
       furniture: [
+        // The east wall carries TWO doorways now (corridorW at z 0, Suite 414 at z -2.35),
+        // so furniture is kept off it.
         { kind: 'bed', pos: [-1.7, -0.9], size: [2.0, 0.6, 1.8] },
-        { kind: 'wardrobe', pos: [2.4, -1.6], size: [0.6, 2.2, 1.4] },
-        { kind: 'desk', pos: [1.4, 2.0], size: [1.4, 0.75, 0.6] },
+        { kind: 'wardrobe', pos: [2.4, 1.6], size: [0.6, 2.2, 1.4] },
+        { kind: 'desk', pos: [0.6, 2.4], size: [1.4, 0.75, 0.6] },
         { kind: 'armchair', pos: [-2.2, 1.6], size: [0.8, 0.9, 0.8] },
       ],
     },
@@ -117,6 +136,8 @@ export const floor1 = {
     {
       id: 'corridorN',
       name: 'North Corridor',
+      role: 'item',
+      searchable: true,
       center: [0, -8],
       size: [2.4, 8],
       mood: { color: '#ffd8b0', intensity: 0.9, ambient: 0.75 },
@@ -129,6 +150,7 @@ export const floor1 = {
     {
       id: 'lounge',
       name: 'Lounge',
+      role: 'objective',
       searchable: true,
       center: [0, -15.5],
       size: [8, 7],
@@ -148,6 +170,7 @@ export const floor1 = {
     {
       id: 'library',
       name: 'Library',
+      role: 'objective',
       searchable: true,
       center: [7, -15.5],
       size: [6, 5],
@@ -168,6 +191,8 @@ export const floor1 = {
     {
       id: 'backCorridor',
       name: 'Back Stairs Passage',
+      role: 'item',
+      searchable: true,
       center: [7, -10.5],
       size: [2.4, 5],
       dark: true,
@@ -181,6 +206,7 @@ export const floor1 = {
     {
       id: 'kitchen',
       name: 'Kitchen',
+      role: 'item',
       searchable: true,
       center: [8, -5.5],
       size: [6, 5],
@@ -197,6 +223,8 @@ export const floor1 = {
     {
       id: 'corridorE',
       name: 'East Corridor',
+      role: 'item',
+      searchable: true,
       center: [7.5, 0],
       size: [7, 2.4],
       mood: { color: '#f0dcc0', intensity: 0.8, ambient: 0.65 },
@@ -209,6 +237,8 @@ export const floor1 = {
     {
       id: 'serviceCorridor',
       name: 'Service Corridor',
+      role: 'item',
+      searchable: true,
       center: [13, -2.5],
       size: [4, 11],
       dark: true,
@@ -225,8 +255,10 @@ export const floor1 = {
     {
       id: 'storage',
       name: 'Storage Room',
+      role: 'item',
       searchable: true,
-      center: [13, 5],
+      // Nudged 0.5 m west so it shares a wall with the new Cloakroom (creates a loop).
+      center: [12.5, 5],
       size: [5, 4],
       dark: true,
       mood: { color: '#a9b9d2', intensity: 0.45, ambient: 0.3 },
@@ -240,19 +272,24 @@ export const floor1 = {
     {
       id: 'stairs',
       name: 'Service Stairs',
+      role: 'item',
+      searchable: true,
       center: [17, 0],
       size: [4, 4],
       mood: { color: '#a7b6d6', intensity: 0.55, ambient: 0.38 },
       doorways: [{ wall: 'east', at: 0, width: 1.2, to: 'exit' }],
+      // The steps hug the east side and the bench the west, leaving the north wall clear for
+      // the Housekeeping doorway and the west wall clear for the service corridor.
       furniture: [
-        { kind: 'stairStep', pos: [0, -1.0], size: [2.0, 0.25, 0.5] },
-        { kind: 'stairStep', pos: [0, -1.5], size: [2.0, 0.5, 0.5] },
-        { kind: 'bench', pos: [0, 1.5], size: [1.6, 0.5, 0.5] },
+        { kind: 'stairStep', pos: [1.2, -1.2], size: [1.4, 0.25, 0.5] },
+        { kind: 'stairStep', pos: [1.2, -1.7], size: [1.4, 0.5, 0.5] },
+        { kind: 'bench', pos: [-1.0, 1.4], size: [1.4, 0.5, 0.5] },
       ],
     },
     {
       id: 'exit',
       name: 'Fire Exit',
+      role: 'exit',
       isExit: true,
       center: [21, 0],
       size: [4, 4],
@@ -267,6 +304,7 @@ export const floor1 = {
     {
       id: 'dining',
       name: 'Dining Room',
+      role: 'item',
       searchable: true,
       center: [0, 7],
       size: [8, 6],
@@ -280,8 +318,100 @@ export const floor1 = {
         { kind: 'chair', model: 'furniture/chairCushion.glb', yaw: 180, scale: 2.6, pos: [0, 2.0], size: [0.52, 1.2, 0.52] },
         { kind: 'chair', model: 'furniture/chairCushion.glb', yaw: -90, scale: 2.6, pos: [1.5, 0.6], size: [0.52, 1.2, 0.52] },
         { kind: 'chair', model: 'furniture/chairCushion.glb', yaw: 90, scale: 2.6, pos: [-1.5, 0.6], size: [0.52, 1.2, 0.52] },
-        { kind: 'sideboard', model: 'furniture/bookcaseClosedWide.glb', yaw: -90, scale: 2.3, pos: [3.4, 0], size: [0.57, 1.82, 1.84] },
+        // Moved to the south wall: the east wall now carries the Cloakroom doorway.
+        { kind: 'sideboard', model: 'furniture/bookcaseClosedWide.glb', yaw: 180, scale: 2.3, pos: [2.2, 2.6], size: [1.84, 1.82, 0.57] },
         { kind: 'plant', model: 'furniture/pottedPlant.glb', scale: 2.4, pos: [-3.4, 2.4], size: [0.61, 1.29, 0.7] },
+      ],
+    },
+
+    // ---- Rooms added for the 18-room six-player layout ------------------------------------
+
+    // The ballroom: an OBJECTIVE room off the dining room, and one of the two dead ends.
+    {
+      id: 'ballroom',
+      name: 'Ballroom',
+      role: 'objective',
+      searchable: true,
+      center: [-9, 7],
+      size: [10, 6],
+      mood: { color: '#ffd9a8', intensity: 1.15, ambient: 0.8, lights: [[-3, 0], [3, 0]] },
+      doorways: [{ wall: 'east', at: 0, width: 1.2, to: 'dining' }],
+      // Cleared for dancing: seating and plants round the edges, the middle left open. The east
+      // doorway lane (z 6.4..7.6 in world space) is kept clear.
+      furniture: [
+        { kind: 'table', model: 'furniture/tableRound.glb', yaw: 0, scale: 2.2, pos: [-2.8, -1.6], size: [1.52, 0.81, 1.76] },
+        { kind: 'chair', model: 'furniture/chairCushion.glb', yaw: 0, scale: 2.4, pos: [-2.8, -2.7], size: [0.48, 1.11, 0.48] },
+        { kind: 'chair', model: 'furniture/chairCushion.glb', yaw: 180, scale: 2.4, pos: [-2.8, -0.5], size: [0.48, 1.11, 0.48] },
+        { kind: 'sofa', model: 'furniture/loungeSofa.glb', yaw: 180, scale: 2.5, pos: [-0.5, 2.3], size: [2.45, 1.15, 1.02] },
+        { kind: 'floorLamp', model: 'furniture/lampRoundFloor.glb', scale: 2.4, pos: [-4.2, 2.0], size: [0.36, 2.06, 0.42] },
+        { kind: 'floorLamp', model: 'furniture/lampRoundFloor.glb', scale: 2.4, pos: [-4.2, -2.1], size: [0.36, 2.06, 0.42] },
+        { kind: 'plant', model: 'furniture/pottedPlant.glb', scale: 2.5, pos: [4.2, -2.2], size: [0.64, 1.34, 0.73] },
+        { kind: 'plant', model: 'furniture/pottedPlant.glb', scale: 2.5, pos: [4.2, 2.2], size: [0.64, 1.34, 0.73] },
+      ],
+    },
+
+    // The cloakroom: an ITEM room that also closes a loop between the dining room and storage.
+    {
+      id: 'cloakroom',
+      name: 'Cloakroom',
+      role: 'item',
+      searchable: true,
+      center: [7, 6.5],
+      size: [6, 5],
+      mood: { color: '#e8cfa8', intensity: 0.8, ambient: 0.6 },
+      doorways: [
+        { wall: 'west', at: 0, width: 1.2, to: 'dining' },
+        { wall: 'east', at: -1.0, width: 1.2, to: 'storage' },
+      ],
+      furniture: [
+        { kind: 'wardrobe', model: 'furniture/bookcaseClosedWide.glb', yaw: 180, scale: 2.3, pos: [0, -1.9], size: [1.84, 1.82, 0.57] },
+        { kind: 'bench', pos: [0, 1.75], size: [1.6, 0.5, 0.5] },
+        { kind: 'sideTable', model: 'furniture/sideTable.glb', yaw: 0, scale: 2.2, pos: [-2.0, 1.8], size: [1.18, 0.84, 0.49] },
+        { kind: 'plant', model: 'furniture/pottedPlant.glb', scale: 2.2, pos: [2.2, 1.8], size: [0.56, 1.18, 0.64] },
+      ],
+    },
+
+    // Guest Suite 414: an ITEM room that links the west corridor back to Suite 412 (a loop, so
+    // the west wing is not a single dead-end chain).
+    {
+      id: 'suite414',
+      name: 'Guest Suite 414',
+      role: 'item',
+      searchable: true,
+      center: [-8.5, -3.7],
+      size: [7, 5],
+      mood: { color: '#ffd2a0', intensity: 1.1, ambient: 0.85 },
+      doorways: [
+        { wall: 'south', at: 0, width: 1.2, to: 'corridorW' },
+        { wall: 'west', at: 1.35, width: 1.2, to: 'suite412' },
+      ],
+      furniture: [
+        { kind: 'bed', pos: [-1.6, -1.4], size: [2.0, 0.6, 1.8] },
+        { kind: 'wardrobe', pos: [2.2, -1.6], size: [0.6, 2.2, 1.4] },
+        { kind: 'desk', pos: [2.2, 1.4], size: [1.4, 0.75, 0.6] },
+        { kind: 'armchair', pos: [0.5, -1.8], size: [0.8, 0.9, 0.8] },
+      ],
+    },
+
+    // Housekeeping: the UTILITY room. Searchable, but there is nothing in it — searching says so.
+    // The second dead end.
+    {
+      id: 'housekeeping',
+      name: 'Housekeeping Store',
+      role: 'utility',
+      searchable: true,
+      dark: true,
+      center: [17.5, -4.5],
+      size: [5, 5],
+      mood: { color: '#b8c2d0', intensity: 0.45, ambient: 0.32 },
+      doorways: [{ wall: 'south', at: -1.7, width: 1.2, to: 'stairs' }],
+      // Everything hugs the north and east walls so the doorway on the south-west has a clear
+      // run into the room.
+      furniture: [
+        { kind: 'shelves', pos: [0, -2.1], size: [3.0, 2.2, 0.5] },
+        { kind: 'crates', pos: [1.7, -0.2], size: [0.8, 0.8, 0.8] },
+        { kind: 'laundryCart', pos: [1.6, 1.3], size: [0.7, 1.0, 1.1] },
+        { kind: 'bucket', pos: [-1.9, -1.8], size: [0.3, 0.4, 0.3] },
       ],
     },
   ],

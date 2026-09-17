@@ -12,12 +12,20 @@ const floor = buildFloor(floor1, config);
 const grid = buildGrid(floor, config);
 console.log('rooms:', floor.roomList.length, 'doorways:', floor.doorways.length, 'walls:', floor.walls.length, 'grid:', grid.cols, 'x', grid.rows);
 check(floor.problems.length === 0, `floor data problems: ${JSON.stringify(floor.problems)}`);
-check(floor.roomList.length >= 12 && floor.roomList.length <= 14, `${floor.roomList.length} rooms (12-14 wanted)`);
+check(floor.roomList.length === 18, `${floor.roomList.length} rooms (18 wanted for the six-player layout)`);
 const startRoom = floor.rooms.get(floor.start.room);
 check(startRoom.doorways.length >= 4, `start room "${startRoom.name}" has ${startRoom.doorways.length} doorways`);
 check(floor.start.positions.length === 5, `${floor.start.positions.length} start positions`);
-check(floor.roomList.filter(r => r.dark).length === 3, `${floor.roomList.filter(r => r.dark).length} dark rooms`);
-check(floor.roomList.filter(r => r.doorways.length === 1 && !r.isExit).length >= 2, 'at least two dead ends');
+check(floor.roomList.filter(r => r.dark).length === 4, `${floor.roomList.filter(r => r.dark).length} dark rooms`);
+check(floor.roomList.filter(r => r.doorways.length === 1 && !r.isExit).length === 2, 'exactly two dead-end branches');
+// Room roles for the six-player balance layout (see src/data/rules.js).
+const byRole = id => floor.roomList.filter(r => r.role === id).length;
+check(byRole('lobby') === 1, `${byRole('lobby')} lobby`);
+check(byRole('item') === 12, `${byRole('item')} item-search rooms (12 wanted)`);
+check(byRole('objective') === 3, `${byRole('objective')} objective rooms (3 wanted)`);
+check(byRole('utility') === 1, `${byRole('utility')} utility room`);
+check(byRole('exit') === 1, `${byRole('exit')} exit`);
+check(floor.roomList.every(r => r.doorways.length <= 4), 'no room has more than four connections');
 check(floor.roomList.filter(r => r.isExit).length === 1, 'exactly one exit');
 for (const d of floor.doorways) {
   const l = grid.landings.get(d.id);

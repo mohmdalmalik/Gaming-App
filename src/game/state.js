@@ -6,24 +6,29 @@
 import { rules } from '../data/rules.js';
 import { makeRng, buildDrawDeck, buildPossessionSupply, deal, shuffle, lanternCount } from './cards.js';
 
-export function createState(floor, roster, seed = 1) {
-  const state = { roster };
+// `opts.practice` builds a Phase 0 practice game: one guest, no possession, the three Phase 0
+// card types only, and objectives to find. Everything else (the multiplayer path) is unchanged.
+export function createState(floor, roster, seed = 1, opts = {}) {
+  const state = { roster, practice: !!opts.practice };
   resetState(state, floor, seed);
   return state;
 }
 
 export function resetState(state, floor, seed) {
   const rng = makeRng(seed ?? ((Math.floor(performance.now?.() ?? 0) || 1)));
+  const practice = !!state.practice;
   state.seed = seed;
   state.discovered = new Set([floor.start.room]);
 
-  // Deal hands from a shuffled draw pile, one guaranteed Lantern each.
-  const drawPile = shuffle(buildDrawDeck(), rng);
+  // Deal hands from a shuffled draw pile, one guaranteed Lantern each. Practice uses the
+  // three-card Phase 0 deck.
+  const drawPile = shuffle(buildDrawDeck(practice ? rules.practiceDeck : rules.deck), rng);
   const { hands, deck } = deal(drawPile, state.roster.length);
   state.drawPile = deck;
 
-  // Exactly one player is secretly possessed and holds the Possession supply.
-  const possessedIndex = Math.floor(rng() * state.roster.length);
+  // Exactly one player is secretly possessed and holds the Possession supply. Practice mode
+  // has no hidden role at all, so nobody is possessed.
+  const possessedIndex = practice ? -1 : Math.floor(rng() * state.roster.length);
 
   state.players = state.roster.map((p, index) => ({
     id: p.id,
@@ -39,16 +44,32 @@ export function resetState(state, floor, seed) {
     hand: hands[index],
     knows: new Set(),   // ids of players this player has learned are possessed
   }));
-  state.players[possessedIndex].hand.push(...buildPossessionSupply());
+  if (possessedIndex >= 0) state.players[possessedIndex].hand.push(...buildPossessionSupply());
 
   state.activeIndex = 0;
   state.round = 1;      // one round = every living player has taken a turn
   state.turn = 1;       // counts individual turns
   state.encounterLocks = new Set();
   state.searchedRooms = new Set(); // a room can only be searched once
+  state.objectivesFound = new Set(); // ids of objective rooms already searched
   state.finished = false;
-  state.won = null;     // 'humans' | 'possessed'
+  state.won = null;     // 'humans' | 'possessed' | 'practice'
   return state;
+}
+
+// --- Objectives and the sealed exit ------------------------------------------------------
+// The exit exists in the map from the start but stays hidden and unreachable until every
+// objective has been found. This is the one rule that gives the hotel a real late game: it
+// stops the way out being stumbled on in the first few turns.
+export const objectivesRequired = () => rules.objectiveCount;
+export const objectivesFound = state => state.objectivesFound?.size ?? 0;
+export const exitUnlocked = state => objectivesFound(state) >= objectivesRequired();
+
+// Can this room be entered / seen at all yet? Only the exit is ever sealed.
+export function isRoomOpen(state, floor, roomId) {
+  const room = floor.rooms.get(roomId);
+  if (!room?.isExit) return true;
+  return exitUnlocked(state);
 }
 
 // What it costs to step into `roomId`: a known room is just the move; an undiscovered room
@@ -119,6 +140,12 @@ export function endTurn(state, floor) {
 // the exit room this instant, if any.
 export function checkWin(state, floor, enteredExitBy = null) {
   if (state.finished) return state.won;
+  // Practice mode: reaching the exit once every objective is found completes the run. There is
+  // no losing side and no timer, so nothing else can end it.
+  if (state.practice) {
+    if (enteredExitBy && exitUnlocked(state)) { state.won = 'practice'; state.finished = true; return 'practice'; }
+    return null;
+  }
   if (enteredExitBy && enteredExitBy.alive && !enteredExitBy.possessed
       && lanternCount(enteredExitBy.hand) >= rules.lanternsToEscape) {
     state.won = 'humans'; state.finished = true; return 'humans';
@@ -139,12 +166,19 @@ export function checkWin(state, floor, enteredExitBy = null) {
 export function usableDoorways(state, floor, player) {
   if (state.finished || !player.alive) return [];
   return (floor.rooms.get(player.currentRoom)?.doorways || [])
-    .filter(d => player.actionPoints >= moveCostInto(state, d.otherRoom(player.currentRoom)));
+    .filter(d => {
+      const dest = d.otherRoom(player.currentRoom);
+      if (!isRoomOpen(state, floor, dest)) return false;   // the exit is sealed until 3/3
+      return player.actionPoints >= moveCostInto(state, dest);
+    });
 }
 
-// Doorways with exactly one side discovered: the places still to be explored.
+// Doorways with exactly one side discovered: the places still to be explored. A doorway into
+// the sealed exit is not shown as somewhere left to explore.
 export function frontierDoorways(state, floor) {
-  return floor.doorways.filter(d => state.discovered.has(d.a) !== state.discovered.has(d.b));
+  return floor.doorways.filter(d =>
+    state.discovered.has(d.a) !== state.discovered.has(d.b)
+    && isRoomOpen(state, floor, d.a) && isRoomOpen(state, floor, d.b));
 }
 
 export function isDiscovered(state, roomId) {

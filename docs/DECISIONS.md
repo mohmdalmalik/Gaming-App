@@ -215,6 +215,34 @@ Implements `docs/GAME_RULES.md`. Kept pure and separate from rendering so a serv
   rules, movement, collision, camera, selection ring/marker, colours, or death behaviour changed —
   `characterView.js` simply loads the model when an outfit has one and builds the box figure
   otherwise. This is deliberately one guest for review before extending the style to the other four.
+- **Phase 0 is a mode, not a fork** (practice mode). The multiplayer rules engine — possession,
+  forced encounters, trade, attack, health — is complete and still covered by its tests. Rather
+  than deleting or branching it, Phase 0 runs the same engine with a one-guest roster and a set
+  of flags in `src/data/rules.js` (`practiceMode`, `healthEnabled`, `lockedDoorsEnabled`,
+  `roundLimitEnforced`, `onlineMode`). Turning practice off restores the full game with no code
+  changes, so the two phases can never drift apart.
+- **One rules file.** `src/data/rules.js` holds every tunable number and the card catalogue; the
+  nested `actionCost` shape the engine reads is derived from the flat values at the bottom of the
+  file, so a cost can only be changed in one place.
+- **Rooms carry a `role`** (`lobby` / `item` / `objective` / `utility` / `exit`) rather than a
+  pile of booleans. Searching reads the role: an item room gives a card, an objective room gives
+  an objective, a utility room gives nothing but says so. Adding a room type is a data change.
+- **The exit is sealed, not absent.** The Fire Exit exists in the map from the start but
+  `isRoomOpen()` hides it from the usable doorways, the frontier markers, the 3D doorway view and
+  the 2D map until every objective is found. This is the Panic Station "Hive at the bottom of the
+  deck" idea: it guarantees a real exploration phase before the endgame instead of hoping the
+  exit is found late.
+- **A found card is never discarded silently.** Searching on a full hand opens a choice (take it
+  and drop one / use it now / leave it). The room is marked searched either way, so a full hand
+  cannot be used to farm the same room twice.
+- **Health is hidden, not faked.** With no damage, no combat and no action-point penalty, health
+  cannot change, so showing three bars would imply a rule that does not exist. `healthEnabled`
+  hides the row; the value and the Bandage logic stay for Phase 1.
+- **`[hidden]` is forced globally in CSS.** Several panels set `display: flex`, which silently
+  beats the browser's default `[hidden]` rule — that is how a Health row and a Trade button
+  stayed on screen while `el.hidden` was `true`. The browser tests now assert what is painted
+  (`offsetParent` / computed display), not just the attribute.
+
 - **Pipeline** (`tools/char-pipeline/`, not part of the running game): `make_victor.py` builds Victor
   headless with **Blender 4.2 as a pip module** (`bpy`) from primitives (boxes/spheres/cylinders with
   bevel + subsurf for rounded, cartoon shapes), assigns a material and a single-bone vertex group per

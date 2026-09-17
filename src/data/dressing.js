@@ -44,4 +44,44 @@ export const roomDressings = {
         overrides: { carpet: '#6d4636', carpetDarker: '#4a2f24' } },
     ],
   },
+
+  // The rooms added for the 18-room layout use the same floor/wall template, so the west and
+  // south wings read as finished hotel rather than greybox. Only the rug tone differs.
+  ballroom: {
+    floor: { model: 'building/floor.glb', tile: 2.0, top: 0.1 },
+    wall: { model: 'building/wall.glb', natHeight: 2.4 },
+    decor: [
+      { model: 'furniture/rugRounded.glb', pos: [1.2, 0], yaw: 0, scale: 3.4,
+        overrides: { carpet: '#7a4230', carpetDarker: '#532b20' } },
+    ],
+  },
+  cloakroom: {
+    floor: { model: 'building/floor.glb', tile: 2.0, top: 0.1 },
+    wall: { model: 'building/wall.glb', natHeight: 2.4 },
+    decor: [
+      { model: 'furniture/rugRounded.glb', pos: [0, 0.4], yaw: 0, scale: 2.2,
+        overrides: { carpet: '#5f4433', carpetDarker: '#412e23' } },
+    ],
+  },
+  suite414: {
+    floor: { model: 'building/floor.glb', tile: 2.0, top: 0.1 },
+    wall: { model: 'building/wall.glb', natHeight: 2.4 },
+    decor: [
+      { model: 'furniture/rugRounded.glb', pos: [0.4, 0.6], yaw: 0, scale: 2.5,
+        overrides: { carpet: '#6d4636', carpetDarker: '#4a2f24' } },
+    ],
+  },
+  suite412: {
+    floor: { model: 'building/floor.glb', tile: 2.0, top: 0.1 },
+    wall: { model: 'building/wall.glb', natHeight: 2.4 },
+    decor: [
+      { model: 'furniture/rugRounded.glb', pos: [0, 0.8], yaw: 0, scale: 2.5,
+        overrides: { carpet: '#6d4636', carpetDarker: '#4a2f24' } },
+    ],
+  },
+  // The housekeeping store is a back-of-house cupboard: bare boards, no rug.
+  housekeeping: {
+    floor: { model: 'building/floor.glb', tile: 2.0, top: 0.1 },
+    wall: { model: 'building/wall.glb', natHeight: 2.4 },
+  },
 };

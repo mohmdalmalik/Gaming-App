@@ -71,6 +71,22 @@ const openEncounter = async room => { await page.evaluate(id => window.__game.mo
 const clickBtn = async label => page.evaluate(l => { const b = [...document.querySelectorAll('#encounter-actions button, .modal-actions button')].find(x => x.textContent.trim().startsWith(l)); b?.click(); }, label);
 const clickCard = async id => page.evaluate(cid => document.querySelector(`#encounter-body [data-card-id="${cid}"]`)?.click(), id);
 
+// This suite covers the PHASE 1 multiplayer build: five guests hot-seat, possession,
+// forced encounters, trade, attack and health. The shipped build is Phase 0 practice mode
+// (one guest, none of those systems), so the suite skips rather than reporting false
+// failures. Phase 0 has its own suite: tests/browser-practice.mjs.
+// To run this one: set practiceMode: false in src/data/rules.js, then re-run.
+{
+  const { rules } = await import('../src/data/rules.js');
+  if (rules.practiceMode) {
+    console.log('SKIPPED — the build is in Phase 0 practice mode (rules.practiceMode = true).');
+    console.log('This suite tests the Phase 1 multiplayer rules. Run tests/browser-practice.mjs instead,');
+    console.log('or set practiceMode: false in src/data/rules.js to exercise the multiplayer path.');
+    await browser.close();
+    process.exit(0);
+  }
+}
+
 // --- 1. Load -----------------------------------------------------------------------------
 console.log('1. load');
 await page.goto(url, { waitUntil: 'networkidle' });
@@ -78,7 +94,7 @@ await page.waitForFunction(() => !!window.__game, null, { timeout: 15000 });
 await page.waitForFunction(() => !document.getElementById('btn-begin').disabled, null, { timeout: 10000 });
 const info = await game(() => ({ problems: window.__game.floor.problems, rooms: window.__game.floor.roomList.length, programs: window.__game.programCount() }));
 check(info.problems.length === 0, `no floor problems (${JSON.stringify(info.problems)})`);
-check(info.rooms === 14, `${info.rooms} rooms`);
+check(info.rooms === 18, `${info.rooms} rooms`);
 
 console.log('2. begin & HUD');
 await page.tap('#btn-begin');

@@ -1,6 +1,50 @@
 # GAME_RULES.md — Hotel Escape (working title)
 
-## 1. Overview
+## 0. What this build is — PHASE 0: PRACTICE MODE
+The shipped build is a **single-player practice mode** for validating movement, the map, action
+points, searching, cards, objectives and the exit. It is not the multiplayer game.
+
+What is ON in Phase 0:
+- One guest (Victor). 4 action points a turn. 18 logical rooms laid out for a six-player game.
+- Room discovery, searching, three card types (Lantern, Hint, Distraction), a 6-card hand limit.
+- Three objectives to find; the exit stays hidden and sealed until all three are in.
+- End turn, Restart practice, the 2D map, iPad touch controls.
+
+What is OFF in Phase 0 (the rules and code are still here, behind flags in `src/data/rules.js`):
+- Other players, the hidden Possessor, possession, forced meetings, trading, challenge/combat.
+- Health and damage (`healthEnabled: false`) — nothing can change health, so nothing is shown.
+- Locked doors (`lockedDoorsEnabled: false`) and the round limit (`roundLimitEnforced: false`).
+- Online multiplayer (`onlineMode: false`).
+
+Every number lives in **`src/data/rules.js`**. Nothing else hard-codes a cost or a count.
+
+### Phase 0 map (18 rooms, six-player balance layout)
+| Role | Count | Rooms |
+| --- | --- | --- |
+| Lobby (safe start) | 1 | Fourth Floor Landing |
+| Item search | 12 | West/North/East corridors, Suites 412 and 414, Back Stairs Passage, Kitchen, Service Corridor, Storage, Service Stairs, Dining Room, Cloakroom |
+| Objective | 3 | Lounge, Library, Ballroom |
+| Utility (searchable, empty) | 1 | Housekeeping Store |
+| Exit (sealed until 3/3) | 1 | Fire Exit |
+
+Two dead-end branches (Ballroom, Housekeeping Store). Two or three connections per room, except
+the lobby and the service corridor, which are hubs with four. No locked doors. The layout is fixed
+and the deal is seeded (`rules.practiceSeed`), so the same hotel comes back every time.
+
+### Phase 0 cards
+| Card | In practice | Later |
+| --- | --- | --- |
+| Lantern | Carried only; explained in the hand sheet | Blocks a possession attempt in a trade |
+| Hint | 1 action: reveals one undiscovered room next door. Never moves you, never reaches further, never reveals a sealed exit | unchanged |
+| Distraction | Carried only; explained in the hand sheet | Slips you out of a meeting |
+
+Searching a room with a full hand never discards silently: the player takes it (dropping one),
+uses it on the spot if it can be used, or leaves it. The room counts as searched either way, so a
+full hand cannot be used to search the same room twice.
+
+---
+
+## 1. Overview (Phase 1 — the multiplayer target, not this build)
 A hidden-role social game set in a trapped hotel. Players explore room by room, collect items, and must trade when they meet. One player secretly starts Possessed and spreads possession through trades. Clean players win by assembling an exit key from three lanterns and escaping. The possessed side wins by possessing everyone before that happens. Inspired by Panic Station, deliberately simplified.
 
 ## 2. Players

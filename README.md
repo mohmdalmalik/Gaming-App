@@ -12,13 +12,15 @@ technical choices are in **[docs/DECISIONS.md](docs/DECISIONS.md)**; status and 
 
 ## Status
 
-**Greybox prototype with the rules playing.** The gameplay view is built from placeholder
-shapes (boxes for rooms and furniture, simple articulated figures for characters), and the
-full rules loop now runs on top of it: five players take turns on one device (hot-seat),
-move room by room, search for cards, meet in forced trade/attack encounters, spread and
-block possession, and win or lose. No real art, sound, or menu yet. Because it is hot-seat,
-all hidden information is visible to the one player — this build is for verifying the
-mechanics, not the social bluffing.
+**Phase 0 — single-player practice mode.** One guest explores an 18-room hotel laid out for
+the six-player balance baseline: move room by room on 4 action points a turn, search rooms for
+cards, find 3 objectives, unlock the Fire Exit and reach it. This phase exists to test movement,
+room layout, the interface and the basic rules flow on an iPad.
+
+The multiplayer systems (hidden Possessor, forced meetings, trading, challenge, health) are
+**written and tested but switched off** behind flags in `src/data/rules.js` — see
+`docs/GAME_RULES.md` §0. Nothing has been deleted; set `practiceMode: false` to bring the
+Phase 1 hot-seat game back. No real art, sound, or menu yet.
 
 ## Open the preview
 
@@ -28,19 +30,19 @@ Published with GitHub Pages from `main`: **https://mohmdalmalik.github.io/Gaming
 
 ## How to play (each turn, 4 action points)
 
-- **Move** — usable doors glow and blink. Tap one, then **Move** on the confirm bar, to walk
-  into that room (1 AP). Tapping empty floor in your current room repositions for free.
-- **Search** (1 AP) — draw a card from the room. Dark rooms need a Flashlight in hand.
-- **Hand** — see your cards; use a Bandage (1 AP) to heal; the possessed player sees their
-  own tell and their Possession cards here.
-- **Encounters** — walk into a room holding another player and, the first time you meet them
-  there that round, a **Trade or Attack** is forced. In a trade both pick a card in secret:
-  the possessed side can pass a Possession card to convert someone, but a Lantern from the
-  other player blocks it (and unmasks the possessed). Attack (needs a weapon) uses a Knife
-  (1 damage) or Revolver (2 damage, 2 shots).
-- **End turn** — refills action points to 4 and passes to the next living player.
-- **Win** — a clean player carrying three Lanterns who steps into the Fire Exit wins for the
-  humans; the possessed side wins once no clean player is left alive.
+- **Move** — usable doors glow and blink. Tap one, then **Move** on the confirm bar. A room you
+  already know costs 1 action point; revealing and entering a new one costs 2. The cost is always
+  shown before you confirm. Tapping empty floor in your current room repositions for free.
+- **Search** (1 AP) — once per room. An item room gives one card, an objective room gives one
+  objective, the Housekeeping Store is empty and says so.
+- **Hand** — see your cards. **Hint** (1 AP) reveals one undiscovered room next door. Lantern and
+  Distraction are carried for the multiplayer phase and explain themselves in the hand sheet.
+- **Full hand** — find a card while holding six and you choose: take it and drop one, use it now,
+  or leave it. Nothing is ever discarded silently, and the room still counts as searched.
+- **Objectives** — 3 of them, shown in the header. The Fire Exit stays hidden and sealed until
+  all three are found, then it appears on the map.
+- **End turn** — refills action points to 4. **Restart practice** starts the hotel over.
+- **Finish** — step into the Fire Exit. You can then keep exploring or restart.
 
 Controls (camera): pinch / wheel to zoom, two-finger or right-drag to pan, ↺ ↻ to rotate,
 the map button (bottom-right) for the 2D map.
@@ -96,6 +98,21 @@ working checkpoint for the character + interface phase.)
 
 ## Changing the rules or the floor
 
-Every rule number — action points, action costs, health, hand size, deck composition, card
-behaviour — is in `src/data/rules.js`. The floor (rooms, doorways, furniture, which rooms are
-dark, moods) is in `src/data/floor1.js`. Change those files, not the game code.
+Every rule number — the phase flags, action points, action costs, hand size, room counts,
+objective count, deck composition, card behaviour — is in `src/data/rules.js`. The floor (rooms,
+their `role`, doorways, furniture, which rooms are dark, moods) is in `src/data/floor1.js`.
+Change those files, not the game code.
+
+To bring the multiplayer rules back for testing, set `practiceMode: false` (and `healthEnabled:
+true` once combat is approved) in `src/data/rules.js`. The full roster, possession, encounters,
+trade and attack all return, and `tests/browser-test.mjs` starts running instead of skipping.
+
+### Tests
+
+```
+python3 -m http.server 8123 --bind 127.0.0.1 &
+node tests/rules-check.mjs        # rules engine: Phase 1 multiplayer + Phase 0 practice
+node tests/logic-check.mjs        # floor, room roles, grid, pathfinding
+node tests/browser-practice.mjs   # the Phase 0 practice loop in a real browser [--screens]
+node tests/browser-test.mjs       # Phase 1 multiplayer walkthrough (skips while practiceMode)
+```

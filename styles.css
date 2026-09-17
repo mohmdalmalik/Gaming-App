@@ -73,6 +73,9 @@ html, body {
   position: absolute; top: calc(var(--safe-top) + 12px); right: calc(var(--safe-right) + 14px);
   display: flex; flex-direction: column; gap: 7px; align-items: flex-end;
 }
+/* Components below set display:flex/grid, which overrides the browser's default
+   [hidden] rule. This makes `el.hidden = true` reliable everywhere. */
+[hidden] { display: none !important; }
 .hud-top-center {
   position: absolute; top: calc(var(--safe-top) + 8px); left: 50%; transform: translateX(-50%);
   max-width: min(760px, 66vw);
@@ -97,6 +100,35 @@ html, body {
 }
 .safe-badge[hidden] { display: none; }
 .safe-badge .shield { font-size: 12px; }
+
+/* Objective progress: public information, so it sits in the header beside the round counter.
+   Pips fill with brass as objectives are recovered and turn green when the exit opens. */
+.objectives {
+  display: inline-flex; align-items: center; gap: 9px; padding: 6px 14px; border-radius: 11px;
+  background: var(--panel); border: 1px solid var(--line); color: var(--ivory-dim);
+  box-shadow: inset 0 0 0 1px rgba(0,0,0,0.5); -webkit-backdrop-filter: blur(7px); backdrop-filter: blur(7px);
+}
+.objectives .obj-label {
+  font-size: 10px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: var(--brass);
+}
+.obj-pips { display: inline-flex; gap: 5px; }
+.obj-pip {
+  width: 11px; height: 11px; border-radius: 50%; border: 1px solid var(--line);
+  background: rgba(0,0,0,0.35); transition: background 0.25s ease, box-shadow 0.25s ease;
+}
+.obj-pip.on { background: var(--brass); border-color: var(--brass-bright); box-shadow: 0 0 7px rgba(201,162,78,0.55); }
+.objectives .obj-count { font-family: var(--serif); font-size: 15px; font-variant-numeric: tabular-nums; }
+.objectives.complete { border-color: rgba(120,200,150,0.55); color: #bfe8c8; }
+.objectives.complete .obj-label { color: #9fe3b8; }
+.objectives.complete .obj-pip.on { background: #6fc492; border-color: #9fe3b8; box-shadow: 0 0 7px rgba(120,200,150,0.6); }
+
+/* Restart practice: deliberately quieter than the turn actions so it is never hit by accident. */
+.ctl.restart {
+  height: 38px; min-width: 0; padding: 0 13px; font-family: var(--serif); font-size: 13px;
+  font-weight: 600; letter-spacing: 0.02em; color: var(--muted); border-radius: 10px;
+}
+.ctl.restart:active { color: var(--ivory-dim); }
+.ctl.restart[hidden] { display: none; }
 
 /* Possessed screen tint */
 .possess-tint {
@@ -171,7 +203,7 @@ html, body {
 .player-meta { display: flex; flex-direction: column; gap: 7px; min-width: 132px; justify-content: center; }
 .player-name { font-family: var(--serif); font-size: 20px; font-weight: 700; color: var(--ivory); letter-spacing: 0.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .stat { display: flex; align-items: center; gap: 8px; }
-.stat-label { width: 52px; font-size: 11px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: var(--muted); }
+.stat-label { min-width: 52px; font-size: 11px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: var(--muted); }
 
 .health { display: flex; gap: 5px; }
 .health .bar { width: 26px; height: 10px; border-radius: 2px; background: rgba(255,255,255,0.08); border: 1px solid var(--line-soft); }
@@ -436,6 +468,21 @@ html, body {
 .map-legend .sw.here { background: rgba(201,162,78,0.3); border-color: var(--brass); }
 .map-legend .sw.searched { background: rgba(120,200,150,0.18); border-color: rgba(120,200,150,0.5); }
 .map-legend .sw.frontier { background: none; border-color: var(--brass); border-style: dashed; }
+.map-legend .sw.objective { background: rgba(201,162,78,0.35); border-color: var(--brass-bright); border-radius: 50%; }
+
+/* The one-off announcement when the exit opens, and the end-screen button pair. */
+.card.notice { max-width: 440px; }
+.notice-rule {
+  width: 54px; height: 2px; margin: 0 auto 18px; border-radius: 2px;
+  background: linear-gradient(90deg, transparent, var(--brass-bright), transparent);
+}
+.end-actions { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+
+/* The "hands are full" prompt reuses the modal/card styles; it only needs its found card
+   centred and a little breathing room above the choice buttons. */
+#fullhand-found { justify-content: center; margin-bottom: 4px; }
+#fullhand-step:empty { display: none; }
+#fullhand-hand { justify-content: center; }
 
 /* Smaller landscape iPads (≈1024–1080 wide): tighten the bottom row so the player panel, the hand
    button and the action buttons never overlap. Camera settings and gestures are untouched. */

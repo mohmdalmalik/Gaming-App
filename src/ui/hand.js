@@ -2,15 +2,17 @@
 // shows the selected card's description and any valid action. It docks to the bottom so the room
 // stays in view. In hot-seat everything is visible to the one person; the sheet still shows this
 // player's private information (their possession tell, who they've unmasked).
-import { activePlayer } from '../game/state.js';
+import { activePlayer, objectivesFound, objectivesRequired, exitUnlocked } from '../game/state.js';
 import { rules } from '../data/rules.js';
-import { CARDS, lanternCount } from '../game/cards.js';
+import { CARDS, lanternCount, countableCount } from '../game/cards.js';
 import { cardTile } from './cards.js';
 
 // How each card is actually used — so the detail pane can explain it instead of implying every
 // card has a "Use" button. Only Bandage is a standalone play; the rest are used in context.
 const USAGE = {
-  // Lantern is explained in full by renderDetail (two functions), so it is not listed here.
+  // Lantern is explained in full by renderDetail, so it is not listed here.
+  hint: 'Play it on your turn to reveal one undiscovered room next door.',
+  distraction: 'Kept for later: in multiplayer it slips you out of a meeting with another guest. It does nothing on your own.',
   flashlight: 'Used automatically when you search a dark room.',
   knife: 'Chosen when you attack during a forced encounter.',
   revolver: 'Chosen when you attack during a forced encounter.',
@@ -22,7 +24,7 @@ const USAGE = {
   trinket: 'A worthless keepsake — no effect.',
 };
 
-export function createHand(doc, cfg, { onUseBandage }) {
+export function createHand(doc, cfg, { onUseBandage, onUseHint }) {
   const overlay = doc.getElementById('hand-overlay');
   const title = doc.getElementById('hand-title');
   const banner = doc.getElementById('hand-banner');
@@ -68,13 +70,19 @@ export function createHand(doc, cfg, { onUseBandage }) {
 
     // Footer summary. The Exit-Key / escape hint is for clean players only — a possessed player is
     // never shown an unconditional "reach the exit to win" message.
-    const lc = lanternCount(p.hand);
-    let summary = `Health ${p.health}/${rules.maxHealth} · Actions ${p.actionPoints}/${rules.actionPointsPerTurn}`;
-    if (!p.possessed) {
-      summary += ` · Exit Key ${lc}/${rules.lanternsToEscape} Lanterns`;
-      if (lc >= rules.lanternsToEscape) summary += ' — reach the Fire Exit while unpossessed to escape!';
+    const parts = [];
+    if (rules.healthEnabled) parts.push(`Health ${p.health}/${rules.maxHealth}`);
+    parts.push(`Actions ${p.actionPoints}/${rules.actionPointsPerTurn}`);
+    parts.push(`Cards ${countableCount(p.hand)}/${rules.handLimit}`);
+    if (rules.practiceMode) {
+      const found = objectivesFound(state), need = objectivesRequired();
+      parts.push(`Objectives ${found}/${need}`);
+      if (exitUnlocked(state)) parts.push('the fire exit is open');
+    } else if (!p.possessed) {
+      const lc = lanternCount(p.hand);
+      parts.push(`Exit Key ${lc}/${rules.lanternsToEscape} Lanterns`);
     }
-    note.textContent = summary;
+    note.textContent = parts.join(' · ');
   }
 
   function renderDetail(p, card) {
@@ -89,6 +97,13 @@ export function createHand(doc, cfg, { onUseBandage }) {
     if (meta.evil) name.style.color = 'var(--evil)';
     detail.appendChild(name);
 
+    if (card.type === 'lantern' && rules.practiceMode) {
+      // Phase 0 has no other guests, so the Lantern has nothing to defend against yet. Say so
+      // plainly rather than inventing a single-player effect for it.
+      line('<b>Kept for later.</b> When other guests join, giving a Lantern in a trade blocks a possession attempt and reveals who tried it.');
+      line('It has no use on your own — carry it and keep exploring.', 'd-tag');
+      return;
+    }
     if (card.type === 'lantern') {
       // Two distinct functions, explained once each — no repeated line. The escape function is
       // shown only to a player who could actually use it (never an unconditional win hint to the
@@ -111,6 +126,19 @@ export function createHand(doc, cfg, { onUseBandage }) {
 
     line(meta.desc, 'd-desc');
     if (USAGE[card.type]) line(USAGE[card.type], 'd-tag');
+
+    // Hint is the one card played directly from the hand in Phase 0.
+    if (card.type === 'hint') {
+      const noAp = p.actionPoints < rules.actionCost.useCard;
+      if (noAp) line('No actions left this turn.', 'd-tag');
+      const btn = doc.createElement('button');
+      btn.type = 'button'; btn.className = 'btn primary';
+      btn.textContent = `Use · ${rules.actionCost.useCard} action`;
+      btn.disabled = noAp;
+      btn.addEventListener('click', e => { e.preventDefault(); onUseHint?.(card.id); });
+      detail.appendChild(btn);
+      return;
+    }
 
     // Bandage is the one card played directly from the hand.
     if (card.type === 'bandage') {

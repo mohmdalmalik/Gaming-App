@@ -24,9 +24,11 @@ export function makeCard(type) {
 }
 
 // The searchable draw pile (Possession cards are excluded — they are the possessed supply).
-export function buildDrawDeck() {
+// `spec` is a { cardType: count } map; it defaults to the Phase 1 deck. Practice mode passes
+// rules.practiceDeck so only the three Phase 0 card types are ever dealt.
+export function buildDrawDeck(spec = rules.deck) {
   const deck = [];
-  for (const [type, count] of Object.entries(rules.deck)) {
+  for (const [type, count] of Object.entries(spec)) {
     for (let i = 0; i < count; i++) deck.push(makeCard(type));
   }
   return deck;

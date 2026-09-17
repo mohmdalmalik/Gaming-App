@@ -1,6 +1,6 @@
 // 2D map overlay: discovered rooms, their doorways/connections and the player's position.
 
-import { activePlayer } from './game/state.js';
+import { activePlayer, isRoomOpen, exitUnlocked, objectivesFound, objectivesRequired } from './game/state.js';
 
 export function createMap(doc, floor, cfg) {
   const overlay = doc.getElementById('map-overlay');
@@ -23,7 +23,8 @@ export function createMap(doc, floor, cfg) {
     // A quiet charcoal ground for the plan, with a faint 1 m drafting grid.
     ctx.fillStyle = '#0e1017'; ctx.fillRect(0, 0, cw, ch);
 
-    const rooms = floor.roomList.filter(r => state.discovered.has(r.id));
+    // A sealed exit is not on the plan at all — it must not be findable by studying the map.
+    const rooms = floor.roomList.filter(r => state.discovered.has(r.id) && isRoomOpen(state, floor, r.id));
     if (!rooms.length) return;
     const margin = 1.5;
     const minX = Math.min(...rooms.map(r => r.min[0])) - margin, maxX = Math.max(...rooms.map(r => r.max[0])) + margin;
@@ -40,6 +41,18 @@ export function createMap(doc, floor, cfg) {
     ctx.strokeStyle = 'rgba(201,162,78,0.07)'; ctx.lineWidth = 1;
     for (let gx = Math.floor(minX); gx <= maxX; gx++) { ctx.beginPath(); ctx.moveTo(X(gx), 0); ctx.lineTo(X(gx), ch); ctx.stroke(); }
     for (let gz = Math.floor(minZ); gz <= maxZ; gz++) { ctx.beginPath(); ctx.moveTo(0, Z(gz)); ctx.lineTo(cw, Z(gz)); ctx.stroke(); }
+    ctx.restore();
+
+    // Objective progress, top-left of the plan: public information, always visible.
+    ctx.save();
+    const found = objectivesFound(state), need = objectivesRequired();
+    ctx.font = `bold 13px ${serif}`; ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+    ctx.fillStyle = found >= need ? '#9fe3b8' : BRASS_BRIGHT;
+    ctx.fillText(`Objectives ${found} / ${need}`, 14, 12);
+    if (found >= need) {
+      ctx.font = `12px ${serif}`; ctx.fillStyle = '#9fe3b8';
+      ctx.fillText('The fire exit is open', 14, 30);
+    }
     ctx.restore();
 
     // Compass: north is "up" on the plan (world -z).
@@ -86,10 +99,18 @@ export function createMap(doc, floor, cfg) {
         ctx.textAlign = 'right'; ctx.textBaseline = 'top';
         ctx.fillText('✓', x + w - 8, z + 7);
       }
+      // An objective already recovered here gets a brass star in the opposite corner.
+      if (state.objectivesFound?.has(r.id)) {
+        ctx.fillStyle = BRASS_BRIGHT; ctx.font = `bold 14px ${serif}`;
+        ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+        ctx.fillText('★', x + 8, z + 6);
+      }
     }
 
     // Doorways: a gap between known rooms; a dashed brass mark with a "?" toward the unknown.
     for (const d of floor.doorways) {
+      // Never hint at a sealed exit, even as an unexplored door.
+      if (!isRoomOpen(state, floor, d.a) || !isRoomOpen(state, floor, d.b)) continue;
       const aKnown = state.discovered.has(d.a), bKnown = state.discovered.has(d.b);
       if (!aKnown && !bKnown) continue;
       const frontier = aKnown !== bKnown;

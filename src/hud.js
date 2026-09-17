@@ -3,7 +3,7 @@
 // hand opener with a live count, the turn-action buttons (with costs / reasons), a move-confirm
 // bar and toasts. Portraits are illustrated placeholders (see ui/portrait.js) so real art can
 // drop in later without changing this logic. Possession is never revealed on the public strip.
-import { activePlayer, nextPlayer, playersInRoom } from './game/state.js';
+import { activePlayer, nextPlayer, playersInRoom, objectivesFound, objectivesRequired, exitUnlocked } from './game/state.js';
 import { canSearch } from './game/actions.js';
 import { rules } from './data/rules.js';
 import { lanternCount, countableCount } from './game/cards.js';
@@ -28,6 +28,12 @@ export function createHud(doc, cfg) {
     room: doc.getElementById('room-name'),
     safeBadge: doc.getElementById('safe-badge'),
     round: doc.getElementById('round'),
+    objectives: doc.getElementById('objectives'),
+    objPips: doc.getElementById('obj-pips'),
+    objCount: doc.getElementById('obj-count'),
+    restartPractice: doc.getElementById('btn-restart-practice'),
+    healthRow: doc.getElementById('health-row'),
+    topCenter: doc.querySelector('.hud-top-center'),
     panel: doc.getElementById('player-panel'),
     portrait: doc.getElementById('portrait-slot'),
     name: doc.getElementById('active-player'),
@@ -73,6 +79,19 @@ export function createHud(doc, cfg) {
       el.strip.appendChild(cell);
       return { cell, flag };
     });
+  }
+
+  function renderObjectives(state) {
+    const found = objectivesFound(state), need = objectivesRequired();
+    if (el.objPips.childElementCount !== need) {
+      el.objPips.innerHTML = '';
+      for (let i = 0; i < need; i++) {
+        const pip = doc.createElement('span'); pip.className = 'obj-pip'; el.objPips.appendChild(pip);
+      }
+    }
+    [...el.objPips.children].forEach((pip, i) => pip.classList.toggle('on', i < found));
+    el.objCount.textContent = `${found} / ${need}`;
+    el.objectives.classList.toggle('complete', exitUnlocked(state));
   }
 
   function renderHealth(n) {
@@ -123,7 +142,10 @@ export function createHud(doc, cfg) {
         el.portrait.appendChild(makePortrait(doc, p, { possessed: p.possessed }));
       }
       el.name.textContent = p.name;
-      renderHealth(p.health);
+      // Health is a Phase 1 system. While it is off nothing can change it, so showing three
+      // bars would imply a rule that does not exist yet.
+      el.healthRow.hidden = !rules.healthEnabled;
+      if (rules.healthEnabled) renderHealth(p.health);
       renderAp(p.actionPoints);
       el.tint.hidden = !p.possessed;               // subtle possessed screen wash
 
@@ -131,16 +153,22 @@ export function createHud(doc, cfg) {
       const room = floor.rooms.get(p.currentRoom);
       el.room.textContent = room?.name ?? '—';
       el.safeBadge.hidden = !room?.safe;
-      el.round.textContent = `Round ${state.round}`;
+      el.round.textContent = rules.roundLimitEnforced
+        ? `Round ${state.round} / ${rules.roundLimit}`
+        : `Round ${state.round} · Turn ${state.turn}`;
+      renderObjectives(state);
+      // Practice is a single guest: the top strip of other players has nothing to show.
+      el.topCenter.hidden = state.players.length < 2;
+      el.restartPractice.hidden = !rules.practiceMode;
 
       // End turn (prominent; names the next guest).
       if (state.finished) { el.endMain.textContent = 'Game over'; el.endSub.textContent = ''; el.endTurn.disabled = true; }
-      else { el.endMain.textContent = 'End turn ›'; el.endSub.textContent = next && next !== p ? `Next: ${next.name}` : 'Refill actions'; el.endTurn.disabled = false; }
+      else { el.endMain.textContent = 'End turn ›'; el.endSub.textContent = next && next !== p ? `Next: ${next.name}` : `Refill to ${rules.actionPointsPerTurn}`; el.endTurn.disabled = false; }
 
       // Search: cost when available, plain-language reason when not.
       const gate = canSearch(state, floor, p);
       el.search.disabled = !gate.ok;
-      el.searchSub.textContent = gate.ok ? '1 action' : (SEARCH_REASON[gate.reason] || 'Unavailable');
+      el.searchSub.textContent = gate.ok ? `${rules.searchCost} action` : (SEARCH_REASON[gate.reason] || 'Unavailable');
 
       // Voluntary trade: only in a SAFE room when someone else is present to trade with.
       const safeRoom = !!room?.safe;

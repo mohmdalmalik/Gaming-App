@@ -8,8 +8,12 @@ import { lanternCount, countType } from '../src/game/cards.js';
 import {
   createState, resetState, activePlayer, nextPlayer, endTurn, enterRoom, checkWin,
   usableDoorways, pendingEncounters, lockEncounter, hasEncounterLock, playersInRoom,
+  frontierDoorways, isRoomOpen, exitUnlocked, objectivesFound, objectivesRequired,
 } from '../src/game/state.js';
-import { search, canSearch, useBandage, resolveTrade, resolveAttack, tradeableCards, overHandLimit } from '../src/game/actions.js';
+import {
+  search, canSearch, useBandage, useHint, resolveFullHand, roomYield,
+  resolveTrade, resolveAttack, tradeableCards, overHandLimit,
+} from '../src/game/actions.js';
 import { countableCount } from '../src/game/cards.js';
 
 let failures = 0;
@@ -183,6 +187,133 @@ check(checkWin(state, floor) === 'possessed', 'everyone possessed → possessed 
 state = createState(floor, roster, 35);
 for (const p of clean(state)) p.alive = false;
 check(checkWin(state, floor) === 'possessed', 'all clean players dead → possessed win');
+
+
+
+// =========================================================================================
+// PHASE 0 — PRACTICE MODE
+// =========================================================================================
+console.log('practice: setup');
+const solo = roster.slice(0, 1);
+const P0 = (seed = 20260917) => createState(floor, solo, seed, { practice: true });
+let ps = P0();
+let pp = activePlayer(ps);
+check(ps.players.length === 1 && ps.practice === true, 'practice runs a single guest');
+check(!pp.possessed && !ps.players.some(p => p.possessed), 'nobody is possessed in practice');
+check(pp.hand.length === rules.startingHandSize, `the starting hand is ${rules.startingHandSize} cards`);
+check(lanternCount(pp.hand) >= 1, 'the starting hand contains a Lantern');
+const PHASE0 = new Set(Object.keys(rules.practiceDeck));
+check(pp.hand.every(c => PHASE0.has(c.type)) && ps.drawPile.every(c => PHASE0.has(c.type)),
+  'only Lantern / Hint / Distraction are dealt in practice');
+check(!ps.drawPile.some(c => c.type === 'possession'), 'no Possession cards in the practice pile');
+check(pp.actionPoints === rules.actionPointsPerTurn, `${rules.actionPointsPerTurn} action points to start`);
+// A deterministic seed means the same practice hotel every time.
+const s1 = P0(4242), s2 = P0(4242);
+check(s1.players[0].hand.map(c => c.type).join() === s2.players[0].hand.map(c => c.type).join(),
+  'the same seed deals the same practice hand');
+
+console.log('practice: map roles');
+const roleCount = id => floor.roomList.filter(r => r.role === id).length;
+check(floor.roomList.length === rules.totalRooms, `${floor.roomList.length} rooms matches rules.totalRooms`);
+check(roleCount('item') === rules.itemSearchRooms, `${roleCount('item')} item rooms matches rules.itemSearchRooms`);
+check(roleCount('objective') === rules.objectiveCount, `${roleCount('objective')} objective rooms matches rules.objectiveCount`);
+check(roleCount('utility') === 1 && roleCount('lobby') === 1 && roleCount('exit') === 1, 'one lobby, one utility room, one exit');
+check(ps.drawPile.length >= rules.itemSearchRooms,
+  `the practice pile (${ps.drawPile.length}) covers all ${rules.itemSearchRooms} item rooms`);
+
+console.log('practice: action points');
+ps = P0(); pp = activePlayer(ps);
+let pr = enterRoom(ps, floor, pp, 'corridorE');
+check(pr.cost === rules.newRoomEntryCost && pp.actionPoints === rules.actionPointsPerTurn - rules.newRoomEntryCost,
+  `entering an undiscovered room costs ${rules.newRoomEntryCost}`);
+pr = enterRoom(ps, floor, pp, 'hall');
+check(pr.cost === rules.knownRoomMoveCost, `stepping back into a known room costs ${rules.knownRoomMoveCost}`);
+pp.actionPoints = 1;
+check(!usableDoorways(ps, floor, pp).some(d => !ps.discovered.has(d.otherRoom('hall'))),
+  'with 1 action point no undiscovered room is offered');
+pp.actionPoints = 0;
+check(usableDoorways(ps, floor, pp).length === 0, 'no doorways are usable with 0 action points');
+// AP never carries over.
+pp.actionPoints = 3;
+const t0 = endTurn(ps, floor);
+check(t0.to === pp && pp.actionPoints === rules.actionPointsPerTurn, 'end turn refills action points for the solo guest');
+check(ps.round === 2, 'a solo turn advances the round');
+
+console.log('practice: searching');
+ps = P0(); pp = activePlayer(ps);
+const searchIn = (room) => { pp.currentRoom = room; pp.actionPoints = rules.actionPointsPerTurn; return search(ps, floor, pp); };
+check(roomYield(floor.rooms.get('dining')) === 'card'
+  && roomYield(floor.rooms.get('lounge')) === 'objective'
+  && roomYield(floor.rooms.get('housekeeping')) === 'nothing', 'room roles decide what a search yields');
+let sr = searchIn('dining');
+check(sr.ok && sr.kind === 'card' && sr.card && pp.actionPoints === rules.actionPointsPerTurn - rules.searchCost,
+  `an item room gives one card for ${rules.searchCost} action`);
+check(!search(ps, floor, pp).ok && search(ps, floor, pp).reason === 'searched', 'a room can only be searched once');
+sr = searchIn('housekeeping');
+check(sr.ok && sr.kind === 'nothing', 'the utility room reports that it is empty rather than failing silently');
+pp.currentRoom = 'hall';
+check(!canSearch(ps, floor, pp).ok && canSearch(ps, floor, pp).reason === 'notSearchable', 'the lobby cannot be searched');
+pp.currentRoom = 'storage'; pp.actionPoints = 4;
+check(search(ps, floor, pp).ok, 'a dark room is searchable in practice (there is no Flashlight card)');
+
+console.log('practice: objectives and the sealed exit');
+ps = P0(); pp = activePlayer(ps);
+check(!exitUnlocked(ps) && !isRoomOpen(ps, floor, 'exit'), 'the exit starts sealed');
+pp.currentRoom = 'stairs'; ps.discovered.add('stairs'); pp.actionPoints = 4;
+check(!usableDoorways(ps, floor, pp).some(d => d.otherRoom('stairs') === 'exit'), 'the sealed exit is not a usable doorway');
+check(!frontierDoorways(ps, floor).some(d => d.a === 'exit' || d.b === 'exit'), 'the sealed exit is not shown as somewhere left to explore');
+check(checkWin(ps, floor, pp) === null, 'reaching the exit early does not finish practice');
+const objectiveRooms = floor.roomList.filter(r => r.role === 'objective').map(r => r.id);
+objectiveRooms.forEach((id, i) => {
+  const r = searchIn(id);
+  check(r.ok && r.kind === 'objective' && r.found === i + 1, `objective ${i + 1} of ${r.required} found in ${id}`);
+  check(r.exitJustUnlocked === (i === objectiveRooms.length - 1), `the exit opens only on objective ${objectiveRooms.length}`);
+});
+check(objectivesFound(ps) === objectivesRequired() && exitUnlocked(ps), 'all objectives found unlocks the exit');
+check(isRoomOpen(ps, floor, 'exit'), 'the exit is now open');
+pp.currentRoom = 'stairs'; pp.actionPoints = 4;
+check(usableDoorways(ps, floor, pp).some(d => d.otherRoom('stairs') === 'exit'), 'the exit doorway becomes usable');
+check(checkWin(ps, floor, pp) === 'practice' && ps.finished, 'reaching the exit with every objective completes practice');
+
+console.log('practice: Hint');
+ps = P0(); pp = activePlayer(ps);
+pp.hand.push({ id: 'hint1', type: 'hint' });
+const before0 = ps.discovered.size, ap1 = pp.actionPoints;
+let hr = useHint(ps, floor, pp, 'hint1');
+check(hr.ok && ps.discovered.size === before0 + 1, 'a Hint reveals one adjacent room');
+check(pp.currentRoom === 'hall', 'a Hint never moves the player');
+check(pp.actionPoints === ap1 - rules.playCardCost, `a Hint costs ${rules.playCardCost} action`);
+check(!pp.hand.some(c => c.id === 'hint1'), 'the Hint is used up');
+// Reveal the rest of the hall's neighbours, then the Hint has nothing left to show.
+for (const d of floor.rooms.get('hall').doorways) ps.discovered.add(d.otherRoom('hall'));
+pp.hand.push({ id: 'hint2', type: 'hint' }); pp.actionPoints = 4;
+check(useHint(ps, floor, pp, 'hint2').reason === 'nothingAdjacent', 'a Hint fails plainly when every room next door is known');
+// It must never point at the sealed exit.
+ps = P0(); pp = activePlayer(ps);
+pp.currentRoom = 'stairs'; ps.discovered.add('stairs'); ps.discovered.add('serviceCorridor'); ps.discovered.add('housekeeping');
+pp.hand.push({ id: 'hint3', type: 'hint' }); pp.actionPoints = 4;
+check(useHint(ps, floor, pp, 'hint3').reason === 'nothingAdjacent', 'a Hint will not reveal the sealed exit');
+
+console.log('practice: the six-card hand limit');
+ps = P0(); pp = activePlayer(ps);
+pp.hand = Array.from({ length: rules.handLimit }, (_, i) => ({ id: `f${i}`, type: 'lantern' }));
+pp.currentRoom = 'dining'; pp.actionPoints = 4;
+sr = search(ps, floor, pp);
+check(sr.ok && sr.full === true, 'searching on a full hand reports it');
+check(pp.hand.length === rules.handLimit, 'the found card is NOT added silently');
+check(ps.searchedRooms.has('dining'), 'the room still counts as searched, so it cannot be farmed');
+let fr = resolveFullHand(ps, pp, sr.card, 'take', 'f0');
+check(fr.ok && pp.hand.some(c => c.id === sr.card.id) && !pp.hand.some(c => c.id === 'f0')
+  && pp.hand.length === rules.handLimit, 'taking the card drops one and stays at the limit');
+// Leaving it instead puts it back in the pile.
+ps = P0(); pp = activePlayer(ps);
+pp.hand = Array.from({ length: rules.handLimit }, (_, i) => ({ id: `g${i}`, type: 'lantern' }));
+pp.currentRoom = 'cloakroom'; pp.actionPoints = 4;
+sr = search(ps, floor, pp);
+const pile0 = ps.drawPile.length;
+fr = resolveFullHand(ps, pp, sr.card, 'leave');
+check(fr.ok && pp.hand.length === rules.handLimit && ps.drawPile.length === pile0 + 1, 'leaving the card returns it to the pile');
+check(overHandLimit(pp) === 0, 'the player is never left over the limit');
 
 console.log(failures ? `\n${failures} FAILED` : '\nALL RULES CHECKS PASSED');
 process.exit(failures ? 1 : 0);

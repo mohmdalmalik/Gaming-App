@@ -10,8 +10,11 @@ import { buildGrid } from './game/grid.js';
 import {
   createState, resetState, endTurn, activePlayer, nextPlayer, checkWin,
   usableDoorways, pendingEncounters, lockEncounter, playersInRoom,
+  isRoomOpen, exitUnlocked, objectivesFound, objectivesRequired,
 } from './game/state.js';
-import { search, useBandage, resolveTrade, resolveAttack, discardCard, overHandLimit } from './game/actions.js';
+import {
+  search, useBandage, useHint, resolveFullHand, resolveTrade, resolveAttack, discardCard, overHandLimit,
+} from './game/actions.js';
 import { CARDS } from './game/cards.js';
 import { createScene } from './render/scene.js';
 import { createRoomViews, createDoorwayViews } from './render/roomView.js';
@@ -29,22 +32,30 @@ import { createOverlays } from './overlays.js';
 import { createHand } from './ui/hand.js';
 import { createEncounter } from './ui/encounter.js';
 import { createDiscard } from './ui/discard.js';
+import { createFullHand } from './ui/fullHand.js';
 
 // --- World (pure data + rules) ---------------------------------------------------------
 const floor = buildFloor(floor1, cfg);
 const grid = buildGrid(floor, cfg);
 if (floor.problems.length) throw new Error(`Problems in the floor data:\n• ${floor.problems.join('\n• ')}`);
-let seed = (Date.now() & 0x7fffffff) || 1;
-const state = createState(floor, roster, seed);
+
+// PHASE 0 — practice mode: one guest exploring the hotel. The multiplayer roster and its
+// rules are untouched; practice simply plays the first guest on their own. Flip
+// rules.practiceMode in src/data/rules.js to bring the full table back.
+const PRACTICE = rules.practiceMode;
+const cast = PRACTICE ? roster.slice(0, 1) : roster;
+const newSeed = () => (PRACTICE && rules.practiceSeed != null ? rules.practiceSeed : (Date.now() & 0x7fffffff) || 1);
+let seed = newSeed();
+const state = createState(floor, cast, seed, { practice: PRACTICE });
 const startSpot = i => floor.start.positions[i % floor.start.positions.length];
-const movers = roster.map((_, i) => createPlayer(cfg, startSpot(i)));
+const movers = cast.map((_, i) => createPlayer(cfg, startSpot(i)));
 
 // --- Rendering -------------------------------------------------------------------------
 const container = document.getElementById('view');
 const view = createScene(container, cfg);
 const roomViews = createRoomViews(floor, cfg, view.scene);
 const doorways = createDoorwayViews(floor, cfg, view.scene);
-const characters = roster.map(def => createCharacterView(def, cfg, view.scene));
+const characters = cast.map(def => createCharacterView(def, cfg, view.scene));
 const mood = createMood(roomViews, view.hemi, cfg);
 const rig = createCameraRig(view.camera, cfg);
 
@@ -52,17 +63,18 @@ const rig = createCameraRig(view.camera, cfg);
 const hud = createHud(document, cfg);
 const map = createMap(document, floor, cfg);
 const overlays = createOverlays(document);
-const hand = createHand(document, cfg, { onUseBandage });
+const hand = createHand(document, cfg, { onUseBandage, onUseHint });
 const encounter = createEncounter(document, cfg);
 const discard = createDiscard(document, cfg, {
   onDiscard: cardId => { discardCard(state, activePlayer(state), cardId); refresh(); },
 });
+const fullHand = createFullHand(document);
 
 let running = false;
 let pendingArrival = null;   // enterRoom result waiting for the walk to finish
 let selectedMove = null;     // a door move awaiting confirmation
 
-const uiBusy = () => map.isOpen || hand.isOpen || encounter.isOpen || discard.isOpen || overlays.endOpen;
+const uiBusy = () => map.isOpen || hand.isOpen || encounter.isOpen || discard.isOpen || fullHand.isOpen || overlays.endOpen;
 
 const discovery = createDiscovery({
   floor, grid, state, movers, cfg,
@@ -82,8 +94,10 @@ function syncViews(animate) {
     if (known !== rv.revealed) rv.setRevealed(known, animate);
   }
   for (const dv of doorways.views.values()) {
+    // A doorway into the sealed exit reads as plain wall until every objective is found.
+    const sealed = !isRoomOpen(state, floor, dv.doorway.a) || !isRoomOpen(state, floor, dv.doorway.b);
     const a = state.discovered.has(dv.doorway.a), b = state.discovered.has(dv.doorway.b);
-    dv.setState({ known: a || b, frontier: a !== b });
+    dv.setState(sealed ? { known: false, frontier: false } : { known: a || b, frontier: a !== b });
   }
   characters.forEach((cv, i) => { cv.setDead(!state.players[i].alive); cv.setActive(i === state.activeIndex && !state.finished); });
 }
@@ -182,8 +196,58 @@ function onSearch() {
       : r.reason === 'empty' ? 'Nothing left to find here.' : 'Cannot search now.');
     return;
   }
+
+  if (r.kind === 'objective') {
+    syncViews(false);
+    hud.toast(`Objective found — ${r.found} of ${r.required}.`);
+    if (r.exitJustUnlocked) onExitUnlocked();
+    refresh();
+    return;
+  }
+  if (r.kind === 'nothing') {
+    hud.toast('Nothing but linen and dust in here.');
+    refresh();
+    return;
+  }
+  if (r.full) { askFullHand(player, r.card); return; }
   hud.toast(`${player.name} found a ${CARDS[r.card.type].name}.`);
   refresh();
+}
+
+// A card was found with no room for it: never dropped silently — the player decides.
+function askFullHand(player, card) {
+  const canUse = card.type === 'hint' && player.actionPoints >= rules.actionCost.useCard;
+  fullHand.open(state, player, card, {
+    onTake: dropId => {
+      const res = resolveFullHand(state, player, card, 'take', dropId);
+      if (res.ok) hud.toast(`Kept the ${CARDS[card.type].name}, left the ${CARDS[res.dropped.type].name} behind.`);
+      refresh();
+    },
+    onUse: () => {
+      // Use it straight away without ever holding it: put it in hand, play it, done.
+      player.hand.push(card);
+      const res = useHint(state, floor, player, card.id);
+      if (!res.ok) { resolveFullHand(state, player, card, 'leave'); player.hand.pop(); hud.toast(hintReason(res.reason)); }
+      else { syncViews(true); hud.toast(`Hint: ${res.name} lies through the next door.`); }
+      refresh();
+    },
+    onLeave: () => {
+      resolveFullHand(state, player, card, 'leave');
+      hud.toast(`Left the ${CARDS[card.type].name} where it was.`);
+      refresh();
+    },
+  });
+}
+
+const hintReason = reason => reason === 'nothingAdjacent'
+  ? 'Every room next door is already on your map.'
+  : reason === 'ap' ? 'No action points left to use a card.' : 'Cannot use that now.';
+
+// Every objective is in: reveal the way out.
+function onExitUnlocked() {
+  syncViews(true);
+  const exitName = floor.rooms.get(floor.exitRoom)?.name ?? 'the exit';
+  overlays.showNotice('The way out is open', `All ${objectivesRequired()} objectives are accounted for. ${exitName} is now on your map.`);
 }
 
 function onUseBandage(cardId) {
@@ -195,7 +259,26 @@ function onUseBandage(cardId) {
   refresh();
 }
 
+function onUseHint(cardId) {
+  const player = activePlayer(state);
+  const r = useHint(state, floor, player, cardId);
+  if (!r.ok) { hud.toast(hintReason(r.reason)); return; }
+  syncViews(true);
+  hud.toast(`Hint: ${r.name} lies through the next door.`);
+  refresh();
+}
+
 function showEnd() {
+  if (state.practice) {
+    const searched = state.searchedRooms.size, total = floor.roomList.filter(r => r.searchable).length;
+    overlays.showEnd('You reached the fire exit',
+      `Practice complete — ${objectivesFound(state)} of ${objectivesRequired()} objectives, `
+      + `${state.discovered.size} of ${floor.roomList.length} rooms discovered, `
+      + `${searched} of ${total} rooms searched, on round ${state.round}.`,
+      { keepExploring: true });
+    refreshUsable();
+    return;
+  }
   const possessedNames = state.players.filter(p => p.possessed).map(p => p.name).join(', ');
   const dead = state.players.filter(p => !p.alive).map(p => p.name);
   const parts = [`Possessed: ${possessedNames || 'nobody'}`];
@@ -207,7 +290,7 @@ function showEnd() {
 }
 
 function restart() {
-  seed = (Date.now() & 0x7fffffff) || 1;
+  seed = newSeed();
   resetState(state, floor, seed);
   movers.forEach((m, i) => m.reset(startSpot(i)[0], startSpot(i)[1]));
   pendingArrival = null; selectedMove = null;
@@ -216,8 +299,18 @@ function restart() {
   rig.setFocus(activeMover().x, activeMover().z, true);
   rig.reset();
   mood.snap(activePlayer(state).currentRoom);
-  overlays.hideEnd(); hand.close(); map.close(); hud.hideConfirm();
+  overlays.hideEnd(); overlays.hideNotice(); hand.close(); map.close();
+  fullHand.close(); discard.close(); hud.hideConfirm();
   refresh();
+  if (running) hud.toast('Practice restarted.');
+}
+
+// Finish the practice run but stay in the hotel, so the rest of the map can still be explored.
+function keepExploring() {
+  state.finished = false; state.won = null;
+  overlays.hideEnd();
+  refresh();
+  hud.toast('Still exploring — the exit stays open.');
 }
 
 // --- Screen ↔ ground plane ----------------------------------------------------------------
@@ -334,6 +427,8 @@ hud.onConfirm(
 );
 overlays.onBegin(begin);
 overlays.onRestart(restart);
+overlays.onKeepExploring(keepExploring);
+hud.on('restartPractice', () => { if (!uiBusy() || overlays.endOpen) restart(); });
 
 // --- Initial state -----------------------------------------------------------------------
 syncViews(false);
@@ -384,6 +479,11 @@ window.__game = {
   walkTo: (x, z) => discovery.walkTo(x, z),
   moveToRoom,             // scripted move through a door (used by tests)
   search: () => onSearch(),
+  useHint: cardId => onUseHint(cardId),
+  objectives: () => ({ found: objectivesFound(state), required: objectivesRequired(), unlocked: exitUnlocked(state) }),
+  exitUnlocked: () => exitUnlocked(state),
+  fullHandOpen: () => fullHand.isOpen,
+  keepExploring,
   openHand: () => hand.open(state, floor),
   rotate: steps => rig.rotate(steps),
   toggleMap: () => map.toggle(state, movers),

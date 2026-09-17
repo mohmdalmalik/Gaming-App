@@ -79,6 +79,12 @@ export const roomDressings = {
         overrides: { carpet: '#6d4636', carpetDarker: '#4a2f24' } },
     ],
   },
+  // The storage room now runs the width of the service wing, so it gets the same shell as the
+  // rest rather than staying greybox at that size. No rug: it is back-of-house.
+  storage: {
+    floor: { model: 'building/floor.glb', tile: 2.0, top: 0.1 },
+    wall: { model: 'building/wall.glb', natHeight: 2.4 },
+  },
   // The housekeeping store is a back-of-house cupboard: bare boards, no rug.
   housekeeping: {
     floor: { model: 'building/floor.glb', tile: 2.0, top: 0.1 },

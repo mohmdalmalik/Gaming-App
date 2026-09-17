@@ -27,9 +27,54 @@ Every number lives in **`src/data/rules.js`**. Nothing else hard-codes a cost or
 | Utility (searchable, empty) | 1 | Housekeeping Store |
 | Exit (sealed until 3/3) | 1 | Fire Exit |
 
-Two dead-end branches (Ballroom, Housekeeping Store). Two or three connections per room, except
-the lobby and the service corridor, which are hubs with four. No locked doors. The layout is fixed
-and the deal is seeded (`rules.practiceSeed`), so the same hotel comes back every time.
+Two dead-end branches (Guest Suite 414, Housekeeping Store). Two or three connections per room,
+except the lobby and the service corridor, which are hubs with four. No locked doors. The layout is
+fixed and the deal is seeded (`rules.practiceSeed`), so the same hotel comes back every time.
+
+**Topology guarantees** (enforced by `tests/logic-check.mjs`, which fails if any of these breaks):
+- Every room is reachable from the lobby.
+- **No non-lobby room controls all access to the exit.** The Service Corridor and the Service
+  Stairs are named explicitly in the test, because they used to.
+- Two routes from the lobby to the exit that share no doorway: through the Storage Room, and
+  through the Service Stairs.
+- Every objective room has more than one route to it. The Ballroom is reachable through the
+  Dining Room *and* through Guest Suite 412.
+- The lobby has four ways in; the exit has two.
+- The two dead ends are an item room and the utility cupboard, so nothing needed depends on them.
+
+### Objectives — permanent public team progress
+An objective is recorded against the **room**, never against a player. It is not a card, is never
+dealt, never enters a hand, cannot be chosen as an Offer, cannot be taken by a Challenge, and no
+player can ever be forced to give one up. `rules.legacyCarriedExitKey` is `false`; the old
+"three Lanterns in one hand are the Exit Key" model belongs to the inactive Phase 1 engine only.
+
+### The exit — a safe end-zone, resolved first
+- Hidden and sealed until every objective is found, then revealed to everyone at once.
+- Flagged `safe`, so arriving there can never trigger a meeting or a Challenge.
+- **Arrival is resolved before anything else in the room.** A clean guest escapes on entry and
+  that is permanent. A possessed guest may stand in the exit and nothing happens.
+- `rules.requiredEscapees` is 1 in practice (there is one guest). `rules.escapeesAtBalanceCount`
+  is 2, the six-player target, and is used the moment more guests exist.
+
+### Meetings — pre-committed Offers, no off-turn prompts
+Each player chooses what they are willing to hand over **on their own turn** (`setOffer`), and the
+possessed side commits its hidden trade-or-possess intent at the same moment. Walking into an
+occupied non-lobby room then resolves the meeting from the two stored Offers with no further
+input: `resolveMeeting(state, floor, mover, other)` takes no callback, so there is nothing it
+could ask the off-turn player. Both Offers are cleared the instant a meeting resolves, and an
+Offer never survives the turn that set it. Nobody is ever made to spend time, or another
+player's clock, responding out of turn.
+
+### Dark rooms — atmosphere only (deliberate v0.1 decision)
+Four rooms keep a `dark` flag. In v0.1 it drives lighting and mood and nothing else: dark rooms
+are entered and searched exactly like any other, `rules.darkRoomsRequireLight` is `false`, and
+there is no Flashlight card. Turning the flag on restores the Phase 1 gate, and the rules tests
+exercise both settings.
+
+### Searching names the search point
+Every searchable room declares a `searchPoint` — the console table, the laundry cart, the
+sideboard. All player-facing wording names that object, never the whole room, so searching a
+corridor reads as going through the console table rather than ransacking a corridor.
 
 ### Phase 0 cards
 | Card | In practice | Later |

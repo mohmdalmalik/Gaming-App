@@ -215,6 +215,32 @@ Implements `docs/GAME_RULES.md`. Kept pure and separate from rendering so a serv
   rules, movement, collision, camera, selection ring/marker, colours, or death behaviour changed —
   `characterView.js` simply loads the model when an outfit has one and builds the box figure
   otherwise. This is deliberately one guest for review before extending the style to the other four.
+- **No non-lobby room may control the exit** (Phase 0 correction). The first 18-room layout had
+  the Service Corridor and then the Service Stairs on every route to the exit, and the Ballroom
+  behind the Dining Room. Harmless in single-player practice, fatal in Phase 1: one possessed
+  guest standing in a service room would have controlled the whole endgame. The Storage Room now
+  runs the width of the service wing and opens onto the exit, and Suite 412 reaches the Ballroom,
+  giving two doorway-disjoint routes to the exit and an alternative into every objective room.
+  `tests/logic-check.mjs` fails if either named room ever becomes a single point of failure again.
+- **Two dead ends are kept deliberately, and chosen so nothing depends on them.** Guest Suite 414
+  (an item room) and the Housekeeping Store (the utility cupboard). Backtracking is a design goal
+  in GAME_CONCEPT.md; the rule is that a dead end may never sit on the only route to an objective
+  or the exit.
+- **Objectives are recorded against the room, not the player.** They are not cards, so "cannot be
+  offered / stolen / forced out of you" is true by construction rather than by a rule someone has
+  to remember. Two predicates (`objectivesAreCarried`, `canOfferObjective`) state it explicitly so
+  the tests can assert the rule rather than the accident.
+- **The exit is resolved before anything else in the room**, and is guaranteed twice over: the
+  arrival branch in `onArrive` returns before any meeting can be generated, AND the exit room is
+  flagged `safe` so `pendingEncounters` yields nothing there. This is the one ordering the rules
+  must not get wrong, so it does not depend on a single line staying in the right order.
+- **Offers are pre-committed on your own turn.** A meeting resolves from two stored choices with
+  no callback and no prompt, which is what makes it playable on one shared iPad and, later,
+  online: nobody is interrupted, and nobody can burn another player's clock by deliberating.
+- **Dark rooms are atmosphere, gated by a flag.** With no Flashlight card in v0.1, a darkness gate
+  would simply make four rooms unsearchable. `darkRoomsRequireLight` keeps the Phase 1 rule alive
+  and tested without imposing it now.
+
 - **Phase 0 is a mode, not a fork** (practice mode). The multiplayer rules engine — possession,
   forced encounters, trade, attack, health — is complete and still covered by its tests. Rather
   than deleting or branching it, Phase 0 runs the same engine with a one-guest roster and a set

@@ -166,9 +166,12 @@ export function createHud(doc, cfg) {
       else { el.endMain.textContent = 'End turn ›'; el.endSub.textContent = next && next !== p ? `Next: ${next.name}` : `Refill to ${rules.actionPointsPerTurn}`; el.endTurn.disabled = false; }
 
       // Search: cost when available, plain-language reason when not.
+      // Name the search point (the console table, the laundry cart) rather than the whole room.
       const gate = canSearch(state, floor, p);
       el.search.disabled = !gate.ok;
-      el.searchSub.textContent = gate.ok ? `${rules.searchCost} action` : (SEARCH_REASON[gate.reason] || 'Unavailable');
+      el.searchSub.textContent = gate.ok
+        ? (room?.searchPoint ? `${room.searchPoint} · ${rules.searchCost} action` : `${rules.searchCost} action`)
+        : (SEARCH_REASON[gate.reason] || 'Unavailable');
 
       // Voluntary trade: only in a SAFE room when someone else is present to trade with.
       const safeRoom = !!room?.safe;

@@ -31,7 +31,10 @@ export function buildFloor(data, cfg) {
       isExit: !!r.isExit,
       dark: !!r.dark,          // enterable, but cannot be searched without a Flashlight
       safe: !!r.safe,          // safe zone: never forces an encounter; no attacks; voluntary trades only
-      searchable: !!r.searchable, // only certain rooms can be searched at all (not corridors)
+      searchable: !!r.searchable, // whether this room can be searched at all
+      // The object you actually go through when you search — "the console table", "the laundry
+      // cart". Player-facing wording names this, never the whole room.
+      searchPoint: r.searchPoint || null,
       center: [cx, cz],
       size: [w, d],
       min: [cx - w / 2, cz - d / 2],

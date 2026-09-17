@@ -43,6 +43,9 @@ export function resetState(state, floor, seed) {
     possessed: index === possessedIndex,
     hand: hands[index],
     knows: new Set(),   // ids of players this player has learned are possessed
+    // Pre-committed meeting state, set on this player's OWN turn (see setOffer below).
+    offer: null,        // card id they are willing to hand over, or null for nothing
+    intent: 'trade',    // 'trade' | 'possess' — only the possessed side may set 'possess'
   }));
   if (possessedIndex >= 0) state.players[possessedIndex].hand.push(...buildPossessionSupply());
 
@@ -51,7 +54,9 @@ export function resetState(state, floor, seed) {
   state.turn = 1;       // counts individual turns
   state.encounterLocks = new Set();
   state.searchedRooms = new Set(); // a room can only be searched once
-  state.objectivesFound = new Set(); // ids of objective rooms already searched
+  state.objectivesFound = new Set(); // ids of objective rooms already searched — PUBLIC TEAM
+                                     // progress, never held by a player and never transferable
+  state.escaped = new Set();         // ids of players who have reached the exit; permanent
   state.finished = false;
   state.won = null;     // 'humans' | 'possessed' | 'practice'
   return state;
@@ -64,6 +69,49 @@ export function resetState(state, floor, seed) {
 export const objectivesRequired = () => rules.objectiveCount;
 export const objectivesFound = state => state.objectivesFound?.size ?? 0;
 export const exitUnlocked = state => objectivesFound(state) >= objectivesRequired();
+
+// Objectives are public team progress, full stop. These two predicates exist so the rest of the
+// code (and the tests) can state the rule rather than rely on objectives happening not to be
+// cards. Nothing may make them carryable while `legacyCarriedExitKey` is false.
+export const objectivesAreCarried = () => !!rules.legacyCarriedExitKey;
+export const canOfferObjective = () => false;
+
+// How many clean guests must reach the exit to finish. One in practice (there is one guest);
+// the six-player target is configurable and used the moment more guests exist.
+export const escapeesRequired = state =>
+  state?.practice ? rules.requiredEscapees : rules.escapeesAtBalanceCount;
+export const escapedCount = state => state.escaped?.size ?? 0;
+
+// Record a permanent escape. Only a clean, living player who is standing in the exit while it is
+// unlocked can escape; a possessed player may stand there and nothing happens.
+export function escape(state, floor, player) {
+  if (!floor.rooms.get(player.currentRoom)?.isExit) return { ok: false, reason: 'notAtExit' };
+  if (!exitUnlocked(state)) return { ok: false, reason: 'sealed' };
+  if (player.possessed) return { ok: false, reason: 'possessed' };
+  if (!player.alive) return { ok: false, reason: 'dead' };
+  if (state.escaped.has(player.id)) return { ok: true, already: true, escaped: escapedCount(state) };
+  state.escaped.add(player.id);
+  return { ok: true, escaped: escapedCount(state), required: escapeesRequired(state) };
+}
+
+// --- Pre-committed offers ------------------------------------------------------------------
+// A player decides what they are willing to hand over ON THEIR OWN TURN. When another player
+// walks into their room the meeting resolves from the two stored offers with no further input,
+// so nobody is ever interrupted while someone else is taking a turn. An objective can never be
+// an offer: objectives are not cards and `canOfferObjective()` is false.
+export function setOffer(state, player, cardId, intent = 'trade') {
+  if (state.finished) return { ok: false, reason: 'finished' };
+  if (state.activeIndex !== player.index) return { ok: false, reason: 'notYourTurn' };
+  if (cardId == null) { player.offer = null; player.intent = 'trade'; return { ok: true, offer: null }; }
+  if (state.objectivesFound?.has(cardId)) return { ok: false, reason: 'objectiveNotOfferable' };
+  const card = player.hand.find(c => c.id === cardId);
+  if (!card) return { ok: false, reason: 'noCard' };
+  player.offer = cardId;
+  player.intent = player.possessed && intent === 'possess' ? 'possess' : 'trade';
+  return { ok: true, offer: player.offer, intent: player.intent };
+}
+
+export function clearOffer(player) { player.offer = null; player.intent = 'trade'; }
 
 // Can this room be entered / seen at all yet? Only the exit is ever sealed.
 export function isRoomOpen(state, floor, roomId) {
@@ -143,7 +191,11 @@ export function checkWin(state, floor, enteredExitBy = null) {
   // Practice mode: reaching the exit once every objective is found completes the run. There is
   // no losing side and no timer, so nothing else can end it.
   if (state.practice) {
-    if (enteredExitBy && exitUnlocked(state)) { state.won = 'practice'; state.finished = true; return 'practice'; }
+    // The exit is a safe end-zone: entering it resolves BEFORE anything else can happen there.
+    if (enteredExitBy && exitUnlocked(state) && !enteredExitBy.possessed) {
+      escape(state, floor, enteredExitBy);
+      if (escapedCount(state) >= escapeesRequired(state)) { state.won = 'practice'; state.finished = true; return 'practice'; }
+    }
     return null;
   }
   if (enteredExitBy && enteredExitBy.alive && !enteredExitBy.possessed

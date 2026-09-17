@@ -9,9 +9,11 @@ import {
   createState, resetState, activePlayer, nextPlayer, endTurn, enterRoom, checkWin,
   usableDoorways, pendingEncounters, lockEncounter, hasEncounterLock, playersInRoom,
   frontierDoorways, isRoomOpen, exitUnlocked, objectivesFound, objectivesRequired,
+  objectivesAreCarried, canOfferObjective, escape, escapedCount, escapeesRequired,
+  setOffer, clearOffer,
 } from '../src/game/state.js';
 import {
-  search, canSearch, useBandage, useHint, resolveFullHand, roomYield,
+  search, canSearch, useBandage, useHint, resolveFullHand, roomYield, resolveMeeting,
   resolveTrade, resolveAttack, tradeableCards, overHandLimit,
 } from '../src/game/actions.js';
 import { countableCount } from '../src/game/cards.js';
@@ -79,14 +81,21 @@ r = search(state, floor, s0);
 check(r.ok && s0.hand.length === before + 1 && s0.actionPoints === ap0 - 1, 'a searchable room draws a card for 1 AP');
 r = search(state, floor, s0);
 check(!r.ok && r.reason === 'searched', 'a room can only be searched once');
-// dark searchable room needs a flashlight
+// Dark rooms are gated by `rules.darkRoomsRequireLight`, which is OFF for v0.1. Exercise both
+// settings so the Phase 1 behaviour stays covered and the v0.1 decision is explicit.
 s0.currentRoom = 'storage';
 s0.hand = s0.hand.filter(c => c.type !== 'flashlight');
+s0.actionPoints = 4;
+check(search(state, floor, s0).ok, 'v0.1: a dark room is searchable with no Flashlight (gate off)');
+rules.darkRoomsRequireLight = true;                       // temporarily behave like Phase 1
+state.searchedRooms.delete('storage');
+s0.actionPoints = 4;
 r = search(state, floor, s0);
-check(!r.ok && r.reason === 'dark', 'cannot search a dark room without a Flashlight');
+check(!r.ok && r.reason === 'dark', 'with the gate ON, a dark room needs a Flashlight');
 s0.hand.push({ id: 'fl', type: 'flashlight' });
-r = search(state, floor, s0);
-check(r.ok, 'with a Flashlight a dark searchable room can be searched');
+s0.actionPoints = 4;
+check(search(state, floor, s0).ok, 'with the gate ON and a Flashlight, a dark room can be searched');
+rules.darkRoomsRequireLight = false;                      // restore the v0.1 setting
 
 // --- Trade: possession spreads unless a Lantern blocks -----------------------------------
 console.log('trade & possession');
@@ -273,6 +282,8 @@ check(objectivesFound(ps) === objectivesRequired() && exitUnlocked(ps), 'all obj
 check(isRoomOpen(ps, floor, 'exit'), 'the exit is now open');
 pp.currentRoom = 'stairs'; pp.actionPoints = 4;
 check(usableDoorways(ps, floor, pp).some(d => d.otherRoom('stairs') === 'exit'), 'the exit doorway becomes usable');
+check(checkWin(ps, floor, pp) === null, 'standing next to the exit is not escaping');
+pp.currentRoom = floor.exitRoom;
 check(checkWin(ps, floor, pp) === 'practice' && ps.finished, 'reaching the exit with every objective completes practice');
 
 console.log('practice: Hint');
@@ -314,6 +325,160 @@ const pile0 = ps.drawPile.length;
 fr = resolveFullHand(ps, pp, sr.card, 'leave');
 check(fr.ok && pp.hand.length === rules.handLimit && ps.drawPile.length === pile0 + 1, 'leaving the card returns it to the pile');
 check(overHandLimit(pp) === 0, 'the player is never left over the limit');
+
+
+
+// =========================================================================================
+// PHASE 0 CORRECTION PASS
+// =========================================================================================
+console.log('correction: objectives are public team progress');
+let cs = createState(floor, solo, 4242, { practice: true });
+let cp = activePlayer(cs);
+const objRoomIds = floor.roomList.filter(r => r.role === 'objective').map(r => r.id);
+check(objectivesAreCarried() === false, 'objectives are never carried (legacyCarriedExitKey is off)');
+check(canOfferObjective() === false, 'an objective can never be offered');
+check(rules.legacyCarriedExitKey === false, 'the old three-Lanterns Exit Key model is disabled for v0.1');
+
+const handBefore = cp.hand.map(c => c.id).join();
+cp.currentRoom = objRoomIds[0]; cp.actionPoints = 4;
+let cr = search(cs, floor, cp);
+check(cr.ok && cr.kind === 'objective', 'searching an objective room yields an objective');
+check(cp.hand.map(c => c.id).join() === handBefore, 'the objective is NOT added to the hand');
+check(cs.objectivesFound.has(objRoomIds[0]), 'the objective is recorded against the ROOM');
+check(!Object.keys(cp).some(k => /objective/i.test(k)), 'no objective field is attached to the player');
+check(cs.players.every(p => p.hand.every(c => !objRoomIds.includes(c.id) && !objRoomIds.includes(c.type))),
+  'no objective ever appears as a card in any hand');
+check(!cs.drawPile.some(c => objRoomIds.includes(c.type)), 'no objective is ever in the draw pile');
+// It cannot be offered, even by id.
+check(setOffer(cs, cp, objRoomIds[0]).reason === 'objectiveNotOfferable', 'an objective cannot be set as an Offer');
+// A Challenge cannot take one: after an attack the found set is untouched.
+{
+  const ms = createState(floor, roster, 77);
+  const A = ms.players[0], B = ms.players[1];
+  ms.objectivesFound.add(objRoomIds[0]);
+  A.currentRoom = B.currentRoom = 'corridorE';
+  A.hand.push({ id: 'kn2', type: 'knife' }); A.actionPoints = 4;
+  const before = [...ms.objectivesFound];
+  resolveAttack(ms, floor, A, B, 'kn2');
+  check(JSON.stringify([...ms.objectivesFound]) === JSON.stringify(before), 'a Challenge cannot take an objective');
+  check(![...A.hand, ...B.hand].some(c => objRoomIds.includes(c.type)), 'a Challenge never moves an objective into a hand');
+}
+
+console.log('correction: the exit is a safe end-zone resolved first');
+cs = createState(floor, solo, 4242, { practice: true });
+cp = activePlayer(cs);
+const exitRoom = floor.rooms.get(floor.exitRoom);
+check(exitRoom.safe === true, 'the exit room is flagged safe');
+check(escapeesRequired(cs) === rules.requiredEscapees, `practice needs ${rules.requiredEscapees} clean escapee`);
+check(escapeesRequired({ practice: false }) === rules.escapeesAtBalanceCount,
+  `the six-player target is ${rules.escapeesAtBalanceCount} clean escapees`);
+// Sealed: entering does nothing.
+cp.currentRoom = floor.exitRoom;
+check(escape(cs, floor, cp).reason === 'sealed', 'you cannot escape while the exit is sealed');
+check(checkWin(cs, floor, cp) === null && !cs.finished, 'entering a sealed exit does not finish the run');
+// Unlock and escape.
+objRoomIds.forEach(id => cs.objectivesFound.add(id));
+check(exitUnlocked(cs), 'the exit unlocks with every objective found');
+check(checkWin(cs, floor, cp) === 'practice' && cs.finished, 'a clean guest at the open exit completes the run');
+check(escapedCount(cs) === 1 && cs.escaped.has(cp.id), 'the escape is recorded');
+// Permanent.
+cp.possessed = true;
+check(cs.escaped.has(cp.id), 'an escape stays recorded even if the player is later possessed');
+// A possessed guest may stand in the exit and nothing happens.
+{
+  const es = createState(floor, solo, 5, { practice: true });
+  const ep = activePlayer(es);
+  objRoomIds.forEach(id => es.objectivesFound.add(id));
+  ep.possessed = true; ep.currentRoom = floor.exitRoom;
+  check(escape(es, floor, ep).reason === 'possessed', 'a possessed guest cannot escape');
+  check(checkWin(es, floor, ep) === null && !es.finished, 'a possessed guest standing in the exit does not finish the run');
+  check(escapedCount(es) === 0, 'no escape is recorded for a possessed guest');
+}
+// ORDER: the exit never generates a meeting, even with someone already standing in it.
+{
+  const os = createState(floor, roster, 9);
+  os.objectivesFound = new Set(objRoomIds);
+  const A = os.players[0], B = os.players[1];
+  A.currentRoom = B.currentRoom = floor.exitRoom;
+  check(pendingEncounters(os, floor, A).length === 0, 'arriving in the exit generates NO forced meeting');
+  check(resolveMeeting(os, floor, A, B).reason === 'safeRoom', 'a meeting cannot be resolved inside the exit');
+  A.hand.push({ id: 'kn3', type: 'knife' }); A.actionPoints = 4;
+  check(resolveAttack(os, floor, A, B, 'kn3').reason === 'safe', 'a Challenge cannot be made inside the exit');
+}
+
+console.log('correction: meetings resolve from pre-committed offers');
+{
+  const ms = createState(floor, roster, 31);
+  const A = ms.players[0], B = ms.players[1];
+  ms.activeIndex = 0;
+  A.hand = [{ id: 'a1', type: 'lantern' }, { id: 'a2', type: 'hint' }];
+  B.hand = [{ id: 'b1', type: 'distraction' }];
+  // An offer can only be set on your OWN turn.
+  check(setOffer(ms, B, 'b1').reason === 'notYourTurn', 'a player cannot set an Offer on someone else\'s turn');
+  check(setOffer(ms, A, 'a2').ok, 'the active player sets their own Offer');
+  check(A.offer === 'a2' && A.intent === 'trade', 'the Offer and intent are stored on the player');
+  // B commits on B's own turn.
+  ms.activeIndex = 1;
+  check(setOffer(ms, B, 'b1').ok, 'the other player committed their Offer on their own turn');
+  ms.activeIndex = 0;
+  // Now the meeting resolves with NO further input from B.
+  A.currentRoom = B.currentRoom = 'corridorE';
+  const r = resolveMeeting(ms, floor, A, B);
+  check(r.ok, 'the meeting resolves from the two stored offers alone');
+  check(A.hand.some(c => c.id === 'b1') && B.hand.some(c => c.id === 'a2'), 'the pre-committed cards changed hands');
+  check(A.offer === null && B.offer === null, 'both Offers are cleared after the meeting');
+  check(A.intent === 'trade' && B.intent === 'trade', 'both intents reset after the meeting');
+  // resolveMeeting takes exactly four arguments: state, floor, mover, other. No callback, no
+  // prompt, nothing that could ask the off-turn player anything.
+  check(resolveMeeting.length === 4, 'resolveMeeting takes no decision callback (arity 4)');
+}
+// An Offer never survives the turn that set it.
+{
+  const ts = createState(floor, roster, 32);
+  const A = activePlayer(ts);
+  A.hand = [{ id: 'z1', type: 'lantern' }];
+  setOffer(ts, A, 'z1');
+  check(A.offer === 'z1', 'an Offer is set');
+  clearOffer(A);
+  check(A.offer === null && A.intent === 'trade', 'clearOffer resets both fields');
+}
+// Only the possessed side can commit a possess intent.
+{
+  const ps2 = createState(floor, roster, 33);
+  const clean0 = ps2.players.find(p => !p.possessed);
+  ps2.activeIndex = clean0.index;
+  clean0.hand = [{ id: 'c1', type: 'lantern' }];
+  setOffer(ps2, clean0, 'c1', 'possess');
+  check(clean0.intent === 'trade', 'a clean player cannot commit a possess intent');
+}
+
+console.log('correction: dark rooms are atmosphere only');
+check(rules.darkRoomsRequireLight === false, 'darkRoomsRequireLight is off for v0.1');
+{
+  const ds = createState(floor, solo, 8, { practice: true });
+  const dp = activePlayer(ds);
+  const darkRooms = floor.roomList.filter(r => r.dark && r.searchable);
+  check(darkRooms.length > 0, `${darkRooms.length} dark rooms still carry the flag for lighting`);
+  for (const r of darkRooms) {
+    dp.currentRoom = r.id; dp.actionPoints = 4; dp.hand = [];
+    check(canSearch(ds, floor, dp).ok, `${r.id} is searchable with no Flashlight`);
+  }
+  check(!Object.keys(rules.practiceDeck).includes('flashlight'), 'no Flashlight card is dealt in v0.1');
+}
+
+console.log('correction: search points');
+{
+  const ss2 = createState(floor, solo, 11, { practice: true });
+  const sp = activePlayer(ss2);
+  const searchable = floor.roomList.filter(r => r.searchable);
+  check(searchable.every(r => !!r.searchPoint), 'every searchable room names the thing you actually search');
+  check(searchable.length === rules.itemSearchRooms + rules.objectiveCount + 1,
+    `${searchable.length} searchable rooms = ${rules.itemSearchRooms} item + ${rules.objectiveCount} objective + 1 utility`);
+  sp.currentRoom = 'corridorW'; sp.actionPoints = 4;
+  const sr2 = search(ss2, floor, sp);
+  check(sr2.ok && sr2.searchPoint === floor.rooms.get('corridorW').searchPoint,
+    `the result names the search point ("${sr2.searchPoint}"), not the corridor`);
+}
 
 console.log(failures ? `\n${failures} FAILED` : '\nALL RULES CHECKS PASSED');
 process.exit(failures ? 1 : 0);

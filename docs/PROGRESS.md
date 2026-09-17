@@ -1,5 +1,68 @@
 # PROGRESS
 
+## Phase 0 correction pass (2026-09-17, later)
+
+A small correction pass on the Phase 0 build. No Phase 1 work, no new multiplayer features, no
+online code. Architecture, visuals, tests and the inactive multiplayer engine all preserved.
+
+**1. Objectives — permanent public team progress.** Recorded against the room, never against a
+player. Not a card, never dealt, never in a hand, not offerable, not stealable, never compellable.
+`legacyCarriedExitKey: false` isolates the old carried Exit-Key model to the inactive engine.
+
+**2. Exit — a safe end-zone resolved first.** Revealed globally at 3/3, flagged `safe`, arrival
+resolved before any meeting or challenge, escape permanent, possessed guests may stand there with
+no effect. `requiredEscapees: 1` in practice, `escapeesAtBalanceCount: 2` for six players.
+
+**3. Meetings — pre-committed Offers.** `setOffer` only on your own turn; `resolveMeeting` takes
+no callback, so no off-turn player is ever prompted; both Offers cleared on resolution and on
+turn end.
+
+**4. Map topology — corrected.**
+
+| | Before | After |
+| --- | --- | --- |
+| Rooms / doorways | 18 / 21 | 18 / 21 |
+| Rooms on every route to the exit | Service Corridor, Service Stairs | none |
+| Articulation rooms | hall, corridorW, serviceCorridor, stairs, dining | corridorW, stairs (each cuts off only a dead end) |
+| Routes to the Ballroom | Dining Room only | Dining Room or Suite 412 |
+| Exit doorways | 1 | 2 |
+| Doorway-disjoint routes to the exit | 1 | 2 |
+| Dead ends | Ballroom, Housekeeping | Suite 414, Housekeeping |
+
+Changes: the Storage Room was widened east to run beneath the Service Stairs and open onto the
+Fire Exit; Suite 412 was deepened south to reach the Ballroom; the Service Stairs and Fire Exit
+were deepened so Storage meets them; Suite 414 and Housekeeping became the two dead ends.
+
+**5. Searchable corridors.** Every searchable room declares a `searchPoint` and all wording names
+it. A console table was added to the North Corridor so each corridor search point is a real object.
+
+**6. Dark rooms.** Atmosphere only. `darkRoomsRequireLight: false`, no Flashlight card, no gate.
+The rules tests exercise the flag both ways so the Phase 1 rule stays covered.
+
+**Tests run — all green**
+
+| Suite | Assertions | Result |
+| --- | --- | --- |
+| `tests/rules-check.mjs` | 153 | pass |
+| `tests/logic-check.mjs` | 67 | pass |
+| `tests/browser-practice.mjs` (root) | 84 | pass |
+| `tests/browser-practice.mjs` (`/Gaming-App/` sub-path) | 84 | pass |
+| `tests/browser-test.mjs` (Phase 1) | — | skips, practice mode on |
+
+Browser suite covers iPad landscape (1180x820), small iPad (1024x768) and desktop (1600x900):
+no overlap, nothing off-screen, every control a comfortable touch size, console clean.
+
+**Remaining ambiguity for the owner**
+- The Service Corridor still has four doorways and the lobby four. Every other room has two or
+  three. Both are deliberate hubs.
+- Two rooms remain articulation points (West Corridor, Service Stairs) but each cuts off only a
+  dead end, never an objective or the exit. That is what makes the dead ends possible.
+- The turn timer itself is not implemented. The rule that a meeting costs the off-turn player no
+  time is satisfied structurally (there is nothing to respond to); the timer lands with Phase 1.
+
+**Phase 1 was not started.**
+
+
 ## Phase 0 — single-player practice mode (2026-09-17)
 
 The build is now a **practice mode**: one guest, 18 rooms, 4 action points a turn, searching,

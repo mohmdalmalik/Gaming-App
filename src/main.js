@@ -11,6 +11,7 @@ import {
   createState, resetState, endTurn, activePlayer, nextPlayer, checkWin,
   usableDoorways, pendingEncounters, lockEncounter, playersInRoom,
   isRoomOpen, exitUnlocked, objectivesFound, objectivesRequired,
+  escapedCount, escapeesRequired, clearOffer,
 } from './game/state.js';
 import {
   search, useBandage, useHint, resolveFullHand, resolveTrade, resolveAttack, discardCard, overHandLimit,
@@ -124,6 +125,7 @@ function passTurn() {
   hud.hideConfirm(); selectedMove = null;
   hand.close();            // private panels never carry across a turn change
   const result = endTurn(state, floor);
+  clearOffer(result.from);       // an offer never carries past the turn that set it
   movers[result.from.index]?.halt();
   syncViews(false);
   if (result.finished) { refresh(); return; }
@@ -146,7 +148,16 @@ function onArrive() {
   const player = activePlayer(state);
   const room = floor.rooms.get(player.currentRoom);
   pendingArrival = null;
-  if (room?.isExit && checkWin(state, floor, player)) { showEnd(); return; }
+  // ORDER MATTERS. The exit is a safe end-zone: arriving there is resolved FIRST, before any
+  // meeting or challenge can be generated for the room. A clean guest escapes on entry and that
+  // is permanent; a possessed guest may stand there and simply nothing happens. The exit room is
+  // also flagged `safe` in the floor data, so pendingEncounters() returns nothing there either —
+  // two independent guarantees, because this is the one ordering the rules must not get wrong.
+  if (room?.isExit) {
+    if (checkWin(state, floor, player)) { showEnd(); return; }
+    refresh();
+    return;
+  }
   const candidates = pendingEncounters(state, floor, player);
   if (candidates.length) openEncounter(player, candidates);
   else refresh();
@@ -197,30 +208,34 @@ function onSearch() {
     return;
   }
 
+  // Wording always names the thing that was searched, never the whole room — you go through the
+  // console table in a corridor, you do not ransack the corridor.
+  const where = r.searchPoint || 'the room';
   if (r.kind === 'objective') {
     syncViews(false);
-    hud.toast(`Objective found — ${r.found} of ${r.required}.`);
+    hud.toast(`You search ${where} and recover an objective — ${r.found} of ${r.required}.`);
     if (r.exitJustUnlocked) onExitUnlocked();
     refresh();
     return;
   }
   if (r.kind === 'nothing') {
-    hud.toast('Nothing but linen and dust in here.');
+    hud.toast(`You search ${where}. Nothing but linen and dust.`);
     refresh();
     return;
   }
-  if (r.full) { askFullHand(player, r.card); return; }
-  hud.toast(`${player.name} found a ${CARDS[r.card.type].name}.`);
+  if (r.full) { askFullHand(player, r.card, where); return; }
+  hud.toast(`You search ${where} and find a ${CARDS[r.card.type].name}.`);
   refresh();
 }
 
 // A card was found with no room for it: never dropped silently — the player decides.
-function askFullHand(player, card) {
+function askFullHand(player, card, where = 'the room') {
   const canUse = card.type === 'hint' && player.actionPoints >= rules.actionCost.useCard;
   fullHand.open(state, player, card, {
     onTake: dropId => {
       const res = resolveFullHand(state, player, card, 'take', dropId);
       if (res.ok) hud.toast(`Kept the ${CARDS[card.type].name}, left the ${CARDS[res.dropped.type].name} behind.`);
+      void where;
       refresh();
     },
     onUse: () => {
@@ -233,7 +248,7 @@ function askFullHand(player, card) {
     },
     onLeave: () => {
       resolveFullHand(state, player, card, 'leave');
-      hud.toast(`Left the ${CARDS[card.type].name} where it was.`);
+      hud.toast(`Left the ${CARDS[card.type].name} in ${where}.`);
       refresh();
     },
   });
@@ -271,6 +286,7 @@ function onUseHint(cardId) {
 function showEnd() {
   if (state.practice) {
     const searched = state.searchedRooms.size, total = floor.roomList.filter(r => r.searchable).length;
+    void escapedCount(state); void escapeesRequired(state);
     overlays.showEnd('You reached the fire exit',
       `Practice complete — ${objectivesFound(state)} of ${objectivesRequired()} objectives, `
       + `${state.discovered.size} of ${floor.roomList.length} rooms discovered, `
@@ -481,6 +497,7 @@ window.__game = {
   search: () => onSearch(),
   useHint: cardId => onUseHint(cardId),
   objectives: () => ({ found: objectivesFound(state), required: objectivesRequired(), unlocked: exitUnlocked(state) }),
+  escapes: () => ({ escaped: escapedCount(state), required: escapeesRequired(state), who: [...state.escaped] }),
   exitUnlocked: () => exitUnlocked(state),
   fullHandOpen: () => fullHand.isOpen,
   keepExploring,

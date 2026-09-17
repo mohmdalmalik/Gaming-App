@@ -112,6 +112,29 @@ check(/landing/i.test(hud.room), `the current room is named (${hud.room})`);
 check(hud.tradeHidden && hud.tint, 'no trade button and no possession tint in practice');
 check(hud.blink === 4, `4 usable doors blink from the lobby (${hud.blink})`);
 
+// --- 2b. The correction pass: objectives, the exit end-zone, and no off-turn prompts --------
+console.log('2b. corrected rules');
+const corrected = await game(() => ({
+  legacyKey: window.__game.rules.legacyCarriedExitKey,
+  darkGate: window.__game.rules.darkRoomsRequireLight,
+  preCommitted: window.__game.rules.offersArePreCommitted,
+  escapees: window.__game.rules.requiredEscapees,
+  balanceEscapees: window.__game.rules.escapeesAtBalanceCount,
+  exitSafe: window.__game.floor.rooms.get(window.__game.floor.exitRoom).safe,
+  exitDoors: window.__game.floor.rooms.get(window.__game.floor.exitRoom).doorways.length,
+  objectivesInHand: window.__game.activePlayer().hand.filter(c => c.type === 'objective').length,
+  searchPoints: window.__game.floor.roomList.filter(r => r.searchable && !r.searchPoint).length,
+}));
+check(corrected.legacyKey === false, 'the carried Exit-Key model is off');
+check(corrected.darkGate === false, 'dark rooms are atmosphere only, with no Flashlight gate');
+check(corrected.preCommitted === true, 'offers are pre-committed');
+check(corrected.escapees === 1 && corrected.balanceEscapees === 2,
+  `practice needs 1 escapee, the six-player target is ${corrected.balanceEscapees}`);
+check(corrected.exitSafe === true && corrected.exitDoors >= 2,
+  `the exit is a safe end-zone with ${corrected.exitDoors} doorways`);
+check(corrected.objectivesInHand === 0, 'no objective is ever dealt into the hand');
+check(corrected.searchPoints === 0, 'every searchable room names its search point');
+
 // --- 3. Movement: new room costs 2, known room costs 1, inside is free ---------------------
 console.log('3. movement and action points');
 const doorPt = await game(() => {
@@ -172,6 +195,8 @@ await page.tap('#btn-search');
 await page.waitForTimeout(250);
 a = await active();
 check(a.hand.length === handBefore + 1 && a.ap === 3, `an item room gave one card for 1 AP (${a.hand.length} cards, ${a.ap} AP)`);
+check(await game(() => /sideboard/i.test(document.getElementById('toast').textContent)),
+  'the message names the search point (the sideboard), not the whole room');
 check(await game(() => document.getElementById('hand-count').textContent === String(window.__game.activePlayer().hand.length)),
   'the hand count on the bar updates');
 check(await game(() => document.getElementById('btn-search').disabled), 'Search is disabled once the room has been searched');
@@ -243,6 +268,10 @@ check(afterFull.searched, 'the room still counts as searched, so it cannot be fa
 
 // --- 9. Objectives and unlocking the exit ---------------------------------------------------
 console.log('9. objectives and the exit');
+// A corridor names its search point on the button, so "Search" never implies ransacking a corridor.
+await put('corridorW');
+check(await game(() => /console table/i.test(document.getElementById('search-sub').textContent)),
+  'the Search button names the corridor search point');
 await game(() => window.__game.restart());
 await page.waitForTimeout(250);
 check(await game(() => window.__game.objectives().found === 0), 'restart clears objective progress');
@@ -289,6 +318,11 @@ const ended = await game(() => ({
 check(ended.finished && ended.open, 'entering the exit completes the practice run');
 check(/exit/i.test(ended.title), `the end screen names it (${ended.title})`);
 check(ended.keep, 'the player may keep exploring instead of restarting');
+// The exit is an end-zone: arriving there resolves first and opens no meeting prompt at all.
+check(await game(() => document.getElementById('encounter-overlay').hidden),
+  'entering the exit never opened a meeting prompt');
+check(await game(() => window.__game.escapes().escaped === 1 && window.__game.escapes().required === 1),
+  'the escape is recorded and permanent');
 await shot('p0-05-complete');
 await page.tap('#btn-keep-exploring');
 await page.waitForTimeout(200);
@@ -353,6 +387,25 @@ for (const [label, w, h] of [['ipad-landscape', 1180, 820], ['ipad-small', 1024,
   await shot(`p0-07-${label}`);
 }
 await page.setViewportSize({ width: 1180, height: 820 });
+
+// --- 13b. No off-turn decision is ever requested ------------------------------------------------
+// The whole point of pre-committed offers: a meeting resolves from what each player already
+// chose on their own turn, so no prompt is raised for anyone who is not the active player.
+console.log('13b. off-turn prompts');
+const offTurn = await game(() => {
+  const g = window.__game;
+  // resolveMeeting is (state, floor, mover, other) — there is no callback it could use to ask
+  // the off-turn player anything.
+  return {
+    encounterEverOpened: g.encounterOpen(),
+    encounterHidden: document.getElementById('encounter-overlay').hidden,
+    offerField: 'offer' in g.activePlayer() && 'intent' in g.activePlayer(),
+    offerCleared: g.activePlayer().offer === null,
+  };
+});
+check(!offTurn.encounterEverOpened && offTurn.encounterHidden, 'no meeting prompt is open at any point in a practice run');
+check(offTurn.offerField, 'every player carries a pre-committed Offer and intent');
+check(offTurn.offerCleared, 'the Offer starts and ends cleared, never left active');
 
 // --- 14. Console cleanliness -------------------------------------------------------------------
 console.log('14. console');

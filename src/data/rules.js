@@ -16,6 +16,22 @@ export const rules = {
   lockedDoorsEnabled: false,// no locked doors in this phase
   roundLimitEnforced: false,// the round counter is shown for testing but never ends practice
 
+  // --- Corrected v0.1 rules ------------------------------------------------------------------
+  // Objectives are PERMANENT PUBLIC TEAM PROGRESS. They are never dealt, held, offered, stolen
+  // or carried. `legacyCarriedExitKey` is the old "three Lanterns in one hand are the Exit Key"
+  // model: it belongs to the inactive Phase 1 engine and must stay false for the active path.
+  legacyCarriedExitKey: false,
+  // Dark rooms are ATMOSPHERE ONLY in v0.1: they stay enterable and searchable, and there is no
+  // Flashlight card to gate them with. Deliberate — see docs/GAME_RULES.md §0.
+  darkRoomsRequireLight: false,
+  // Meetings resolve from offers each player commits ON THEIR OWN TURN, so a player is never
+  // asked to make a decision while someone else is taking a turn.
+  offersArePreCommitted: true,
+  // How many clean guests must reach the exit. Practice has one guest, so one escape completes
+  // the run; the six-player target is two (floor(players / 3), minimum 1).
+  requiredEscapees: 1,
+  escapeesAtBalanceCount: 2,
+
   // --- Table size --------------------------------------------------------------------------
   balancePlayerCount: 6,    // the hotel is laid out for a six-player game even while practising
   roomsPerPlayer: 3,        // map size scales with the table: 6 players -> 18 rooms

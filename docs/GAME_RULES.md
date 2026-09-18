@@ -1,6 +1,23 @@
 # GAME_RULES.md — Hotel Escape (working title)
 
-## 0. What this build is — PHASE 0: PRACTICE MODE
+## 0. What this build is — TWO PLAYABLE MODES
+
+The shipped build has two modes, chosen on the start screen (and by the address, so a mode can be
+bookmarked). Every number in both lives in **`src/data/rules.js`**; `applyMode()` at the bottom of
+that file is the only thing that switches between them.
+
+| Mode | Address | What it is |
+| --- | --- | --- |
+| **Practice** (default) | `/` | PHASE 0. One guest exploring the hotel. Unchanged by Phase 1. |
+| **Hot-seat** | `/?mode=hotseat&players=6` | PHASE 1. The approved rules, 4-6 people passing one device. |
+
+**Online multiplayer is not implemented.** There is no server, no networking, no matchmaking, no
+accounts and no database anywhere in this project. Hot-seat is entirely local.
+
+Section 0 below describes practice mode; **section 0b describes the hot-seat rules**, which are
+the approved v1 ruleset.
+
+## 0a. PHASE 0: PRACTICE MODE
 The shipped build is a **single-player practice mode** for validating movement, the map, action
 points, searching, cards, objectives and the exit. It is not the multiplayer game.
 
@@ -87,9 +104,119 @@ Searching a room with a full hand never discards silently: the player takes it (
 uses it on the spot if it can be used, or leaves it. The room counts as searched either way, so a
 full hand cannot be used to search the same room twice.
 
+
 ---
 
-## 1. Overview (Phase 1 — the multiplayer target, not this build)
+## 0b. PHASE 1 — THE HOT-SEAT RULES SANDBOX (`gameMode: "hotseatRulesV1"`)
+
+Four to six people, **one device**, passed round the table. Start it from the start screen or go
+straight to `?mode=hotseat&players=6`. `?seed=123` fixes the deal and the hidden role for
+testing; `?timer=off` plays without the clock.
+
+### The configuration, as approved
+| Key | Value | |
+| --- | --- | --- |
+| `playerCount` | 6 | 4-6 supported |
+| `rooms` | 18 | the corrected Phase 0 map, unchanged |
+| `actionPointsPerTurn` | 4 | never carried over |
+| `knownRoomMoveCost` | 1 | |
+| `newRoomEntryCost` | 2 | reveal + step in |
+| `searchCost` | 1 | |
+| `startingHandSize` | 4 | at least one Lantern each |
+| `handLimit` | 6 | enforced at end of turn |
+| `itemSearchRooms` | 12 | one card each, once each |
+| `objectiveCount` | 3 | `ceiling(players / 2)` |
+| `requiredCleanEscapees` | 2 | `maximum(1, floor(players / 3))` |
+| `roundLimit` | 8 | enforced |
+| `turnTimerEnabled` | true | |
+| `turnTimerSeconds` | 45 | |
+| `healthEnabled` | false | |
+| `combatEnabled` | false | |
+| `lockedDoorsEnabled` | false | |
+| `legacyCarriedExitKey` | false | |
+
+Four players: 2 objectives, 1 clean escape. Five players: 3 objectives, 1 clean escape.
+
+### Roles
+Exactly **one** guest starts possessed. There is no second Possessor and no charge pool:
+possession is an **intent** committed with an Offer, not a card, so it can neither be traded away
+nor run out. Every player sees their role once, alone, on a private screen they must acknowledge.
+A guest who is converted later is told **privately, at the start of their own next turn** — never
+out loud, never on the public interface.
+
+### What is public and what is not
+The always-on interface may show, and does show: each guest's name, the room they are in, their
+action points, how many cards they hold, objective progress, escape progress, the round and the
+turn clock. It **never** shows a hidden role, an intent, another player's hand or another
+player's Offer — and in this mode the possessed screen tint and the possessed portrait are
+switched off entirely, because the device sits between six people.
+
+### A turn
+1. **Pass screen** — neutral: "Pass the device to Eleanor". Nothing private. The clock is stopped.
+2. **Private screen** — that player alone: their role, anything that happened to them since, their
+   hand, and the Offer they commit for this turn. The clock is still stopped.
+3. **Action phase** — 4 action points, the 45-second clock running. Move, search, play a Hint, end
+   the turn early. Every cost is shown before it is confirmed, and an action that cannot be
+   afforded is never offered.
+
+The clock counts **only** the action phase. It never runs during a role reveal, a hand-over, a
+meeting result or a prompt, so passing the iPad round costs nobody their turn. When it runs out
+the Offer locks as **Nothing** with intent **Trade** and the turn ends; nothing else happens.
+
+A **round** is one turn for every guest still in the hotel. After eight rounds the match ends.
+
+### Offers and meetings
+Each player sets their Offer **at the beginning of their own turn**: one card from their hand, or
+Nothing. The possessed side also privately picks **Trade** or **Possess**. The Offer is locked the
+moment the turn's first action begins and stands until that player's next turn or until a meeting
+consumes it. To use a card you committed, clear the Offer first — and if you play it anyway the
+game says plainly that you are now offering Nothing.
+
+Walking into a room that already holds other guests forces **one** meeting: the arriving player
+chooses which single guest they meet. Only the arriving player triggers one, at most one happens
+per turn, and the lobby and the exit never trigger one at all. It then resolves with **no input
+from the other player** — `resolveMeeting(state, floor, mover, other)` takes no callback, so there
+is nothing it could ask them:
+
+1. A **Distraction** from either side cancels the meeting. It is spent, nothing is traded, nobody
+   is possessed, and it reveals nothing about anybody.
+2. A committed **possession attempt**:
+   - target already possessed → an ordinary exchange;
+   - target's Offer is a **Lantern** → **blocked**. The Lantern is spent (not handed over), no card
+     changes hands, and the target alone learns who attacked them. The table is told only that an
+     attempt was blocked;
+   - otherwise → the target is possessed, with no normal exchange. Publicly it reads exactly like
+     a meeting where neither side gave anything.
+3. Otherwise both Offers change hands at the same moment. Nothing transfers nothing.
+
+Both Offers reset afterwards either way.
+
+### Objectives and the exit
+Unchanged from the correction pass: objectives are permanent public team progress recorded
+against the **room**, never held, offered, taken or lost. When all of them are in, the exit is
+revealed to everyone at once with a notice.
+
+The exit is a **safe end-zone and is resolved first**. A clean guest who steps in escapes
+immediately and permanently: no meeting, no possession, no challenge. They take no further turns,
+leave the map and the 3D floor, and cannot be met. A possessed guest may stand in the exit and
+nothing happens.
+
+### Winning
+- **Guests** win the moment `requiredCleanEscapees` clean guests are out (2 at six players).
+- **The possessed side** wins when too few clean guests remain to make up that number, or when the
+  eighth round has been played.
+- There is no elimination, no health, no combat, no weapons and no locked doors in this mode. The
+  legacy combat code is still present and tested, and `resolveAttack` refuses outright here.
+
+### The hot-seat deck
+The same three card types, in a pile sized for six hands plus every item room: 16 Lanterns,
+14 Hints, 12 Distractions (42). Six 4-card hands take 24, the 12 item rooms need 12, and the rest
+is slack. The Lantern share is the difficulty dial for the possessed side — see the comment on
+`rules.hotseatDeck` for how to measure and adjust it.
+
+---
+
+## 1. Overview (the LEGACY multiplayer engine — still present, not the approved rules)
 A hidden-role social game set in a trapped hotel. Players explore room by room, collect items, and must trade when they meet. One player secretly starts Possessed and spreads possession through trades. Clean players win by assembling an exit key from three lanterns and escaping. The possessed side wins by possessing everyone before that happens. Inspired by Panic Station, deliberately simplified.
 
 ## 2. Players

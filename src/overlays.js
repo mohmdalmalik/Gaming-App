@@ -16,6 +16,7 @@ export function createOverlays(doc) {
   const errorMessage = doc.getElementById('error-message');
   const beginBtn = doc.getElementById('btn-begin');
 
+  let noticeNext = null;
   const apiTail = {
     // The 3D view has rendered: the begin button becomes usable.
     setReady() { beginBtn.disabled = false; beginBtn.textContent = 'Tap to begin'; },
@@ -30,15 +31,25 @@ export function createOverlays(doc) {
       endTitle.textContent = title;
       endSummary.textContent = summary || '';
       keepBtn.hidden = !opts.keepExploring;
+      restartBtn.textContent = opts.restartLabel || 'Restart practice';
       end.hidden = false;
     },
     hideEnd() { end.hidden = true; },
     get endOpen() { return !end.hidden; },
-    showNotice(title, body) { noticeTitle.textContent = title; noticeBody.textContent = body || ''; notice.hidden = false; },
-    hideNotice() { notice.hidden = true; },
+    // `onOk` fires when the player dismisses it, so a notice can sit in the middle of a turn
+    // sequence (a guest escaping, the exit opening) without the flow losing its place.
+    showNotice(title, body, onOk = null) {
+      noticeTitle.textContent = title; noticeBody.textContent = body || '';
+      noticeNext = onOk; notice.hidden = false;
+    },
+    hideNotice() { notice.hidden = true; noticeNext = null; },
     get noticeOpen() { return !notice.hidden; },
     showError(message) { errorMessage.textContent = message; error.hidden = false; start.hidden = true; },
   };
-  noticeOk.addEventListener('click', e => { e.preventDefault(); notice.hidden = true; });
+  noticeOk.addEventListener('click', e => {
+    e.preventDefault();
+    notice.hidden = true;
+    const fn = noticeNext; noticeNext = null; fn?.();
+  });
   return apiTail;
 }

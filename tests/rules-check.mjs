@@ -1,6 +1,6 @@
 // Pure-rules checks for Hotel Escape (no browser): node tests/rules-check.mjs
 import { config } from '../src/config.js';
-import { rules } from '../src/data/rules.js';
+import { rules, applyMode, objectivesForPlayers, cleanEscapeesForPlayers } from '../src/data/rules.js';
 import { floor1 } from '../src/data/floor1.js';
 import { roster } from '../src/data/characters.js';
 import { buildFloor } from '../src/game/floor.js';
@@ -10,7 +10,8 @@ import {
   usableDoorways, pendingEncounters, lockEncounter, hasEncounterLock, playersInRoom,
   frontierDoorways, isRoomOpen, exitUnlocked, objectivesFound, objectivesRequired,
   objectivesAreCarried, canOfferObjective, escape, escapedCount, escapeesRequired,
-  setOffer, clearOffer,
+  setOffer, clearOffer, lockOffer, convertToPossessed, guestsCannotWin, cleanGuestsRemaining,
+  possessedPlayers, moveCostInto,
 } from '../src/game/state.js';
 import {
   search, canSearch, useBandage, useHint, resolveFullHand, roomYield, resolveMeeting,
@@ -27,7 +28,7 @@ const clean = s => s.players.filter(p => !p.possessed);
 // --- Deal, hands, possession -------------------------------------------------------------
 console.log('deck & deal');
 let state = createState(floor, roster, 12345);
-check(state.players.length === 5, 'five players');
+check(state.players.length === roster.length, `${state.players.length} players (the whole roster)`);
 check(state.players.every(p => p.hand.length >= rules.handSize), 'everyone has at least a full hand');
 check(state.players.every(p => lanternCount(p.hand) >= 1), 'every hand has at least one Lantern');
 check(state.players.filter(p => p.possessed).length === 1, 'exactly one player possessed at setup');
@@ -48,7 +49,7 @@ check(activePlayer(state).index === 0 && state.round === 1, 'starts on player 0,
 activePlayer(state).actionPoints = 1;
 let t = endTurn(state, floor);
 check(t.to.index === 1 && activePlayer(state).actionPoints === rules.actionPointsPerTurn, 'End turn → next player with AP refilled');
-for (let i = 0; i < 4; i++) endTurn(state, floor);
+for (let i = 0; i < roster.length - 1; i++) endTurn(state, floor);
 check(activePlayer(state).index === 0 && state.round === 2, 'after a lap, back to player 0, round 2');
 // dead players are skipped
 state.players[1].alive = false;
@@ -159,7 +160,7 @@ check(r.ok && hurt.health === 2 && hurt.actionPoints === 3 && !hurt.hand.some(c 
 console.log('safe room');
 state = createState(floor, roster, 4);
 check(floor.rooms.get('hall').safe && !floor.rooms.get('corridorE').safe, 'the hall is flagged safe, corridors are not');
-// All five players are together in the hall — a safe room forces no encounter.
+// Every player is together in the hall — a safe room forces no encounter.
 check(pendingEncounters(state, floor, state.players[0]).length === 0, 'no forced encounter in the safe starting room even with others present');
 
 // --- Encounter locks (in a normal room) --------------------------------------------------
@@ -172,7 +173,7 @@ lockEncounter(state, 'corridorE', 0, 1);
 check(hasEncounterLock(state, 'corridorE', 1, 0), 'the lock is symmetric for the pair');
 const after = pendingEncounters(state, floor, state.players[0]);
 check(!after.some(q => q.index === 1) && after.some(q => q.index === 2), 'a locked pair is not forced again this round, but the third player still is');
-endTurn(state, floor); for (let i = 0; i < 4; i++) endTurn(state, floor); // new round clears locks
+endTurn(state, floor); for (let i = 0; i < roster.length - 1; i++) endTurn(state, floor); // new round clears locks
 check(!hasEncounterLock(state, 'corridorE', 0, 1), 'encounter locks clear at the start of a new round');
 
 // --- Possession cards & the hand limit ---------------------------------------------------
@@ -479,6 +480,357 @@ console.log('correction: search points');
   check(sr2.ok && sr2.searchPoint === floor.rooms.get('corridorW').searchPoint,
     `the result names the search point ("${sr2.searchPoint}"), not the corridor`);
 }
+
+// =============================================================================================
+// PHASE 1 — the hot-seat rules sandbox. Everything above tests practice and the legacy engine
+// and is unaffected: applyMode() is called here, at the end, and practice is restored after.
+// =============================================================================================
+console.log('\nphase 1: hot-seat configuration');
+applyMode('hotseat', 6);
+const HS = roster.slice(0, 6);
+const hs = (seed = 101) => createState(floor, HS, seed, { mode: 'hotseat' });
+
+check(rules.gameMode === 'hotseatRulesV1', 'gameMode is hotseatRulesV1');
+check(rules.playerCount === 6, 'playerCount 6');
+check(rules.actionPointsPerTurn === 4, 'actionPointsPerTurn 4');
+check(rules.knownRoomMoveCost === 1, 'knownRoomMoveCost 1');
+check(rules.newRoomEntryCost === 2, 'newRoomEntryCost 2');
+check(rules.searchCost === 1, 'searchCost 1');
+check(rules.startingHandSize === 4, 'startingHandSize 4');
+check(rules.handLimit === 6, 'handLimit 6');
+check(rules.itemSearchRooms === 12, 'itemSearchRooms 12');
+check(rules.objectiveCount === 3, 'objectiveCount 3');
+check(rules.requiredCleanEscapees === 2, 'requiredCleanEscapees 2');
+check(rules.roundLimit === 8, 'roundLimit 8');
+check(rules.turnTimerEnabled === true, 'turnTimerEnabled true');
+check(rules.turnTimerSeconds === 45, 'turnTimerSeconds 45');
+check(rules.healthEnabled === false, 'healthEnabled false');
+check(rules.combatEnabled === false, 'combatEnabled false');
+check(rules.lockedDoorsEnabled === false, 'lockedDoorsEnabled false');
+check(rules.legacyCarriedExitKey === false, 'legacyCarriedExitKey false');
+check(rules.onlineMode === false, 'onlineMode false — no server, no networking');
+check(rules.totalRooms === 18 && floor.roomList.length === 18, '18 rooms, the corrected map');
+check(rules.actionCost.move === 1 && rules.actionCost.discover === 1 && rules.actionCost.search === 1,
+  'the derived action costs follow the flat values');
+
+// Table scaling for four and five players.
+check(objectivesForPlayers(4) === 2 && objectivesForPlayers(5) === 3 && objectivesForPlayers(6) === 3,
+  'objectives = ceiling(players / 2)');
+check(cleanEscapeesForPlayers(4) === 1 && cleanEscapeesForPlayers(5) === 1 && cleanEscapeesForPlayers(6) === 2,
+  'clean escapees = maximum(1, floor(players / 3))');
+applyMode('hotseat', 4);
+check(rules.objectiveCount === 2 && rules.requiredCleanEscapees === 1, 'a four-player table needs 2 objectives and 1 clean escape');
+applyMode('hotseat', 5);
+check(rules.objectiveCount === 3 && rules.requiredCleanEscapees === 1, 'a five-player table needs 3 objectives and 1 clean escape');
+applyMode('hotseat', 6);
+
+console.log('phase 1: setup and roles');
+{
+  const s1 = hs(2001);
+  check(s1.players.length === 6, 'six guests at the table');
+  check(s1.mode === 'hotseat' && s1.hotseat === true && s1.practice === false, 'the state knows it is a hot-seat game');
+  check(s1.players.filter(p => p.possessed).length === 1, 'exactly ONE hidden Possessor');
+  check(s1.players.every(p => p.hand.length === rules.startingHandSize), 'four cards each');
+  check(s1.players.every(p => lanternCount(p.hand) >= 1), 'every starting hand holds at least one Lantern');
+  check(s1.players.every(p => countType(p.hand, 'possession') === 0), 'NO Possession cards are dealt — possession is an intent, not a card');
+  check(s1.players.every(p => p.hand.every(c => ['lantern', 'hint', 'distraction'].includes(c.type))),
+    'only the three approved card types are dealt');
+  check(s1.players.every(p => p.roleSeen === false && p.roleChangePending === false), 'nobody has acknowledged a role yet');
+  const dealt = 6 * rules.startingHandSize;
+  const total = Object.values(rules.hotseatDeck).reduce((a, b) => a + b, 0);
+  check(total - dealt >= rules.itemSearchRooms,
+    `the draw pile covers every item room after dealing (${total} - ${dealt} = ${total - dealt} >= ${rules.itemSearchRooms})`);
+  check(s1.drawPile.length === total - dealt, `${s1.drawPile.length} cards left in the pile`);
+  check(s1.log.length === 0, 'the public log starts empty');
+}
+
+console.log('phase 1: turn structure and Offers');
+{
+  const s = hs(2002);
+  const a = s.players[0];
+  check(a.actionPoints === 4, 'the turn starts with 4 action points');
+  check(a.offerLocked === false, 'the Offer is open at the start of a turn');
+  check(setOffer(s, a, a.hand[0].id).ok, 'the active player commits an Offer');
+  check(setOffer(s, s.players[1], s.players[1].hand[0].id).reason === 'notYourTurn',
+    'nobody can set an Offer while it is not their turn');
+  // The first action locks it.
+  a.currentRoom = 'hall';
+  enterRoom(s, floor, a, 'corridorE');
+  check(a.offerLocked === true, 'the first action of the turn locks the Offer');
+  check(setOffer(s, a, a.hand[1].id).reason === 'locked', 'a locked Offer cannot be changed');
+  // It stands past the end of the turn — that is the whole point of a pre-committed Offer.
+  const kept = a.offer;
+  endTurn(s, floor);
+  check(a.offer === kept, 'the Offer stands after the turn ends, waiting for someone to walk in');
+  check(s.players[1].offerLocked === false, 'the next player may set their own Offer');
+  check(s.meetingThisTurn === false, 'the one-meeting-per-turn flag resets each turn');
+}
+{
+  // Searching and playing a Hint also lock it, so no interface can forget to.
+  const s = hs(2003);
+  const a = s.players[0];
+  setOffer(s, a, a.hand[0].id);
+  a.currentRoom = 'corridorW'; a.actionPoints = 4;
+  search(s, floor, a);
+  check(a.offerLocked === true, 'searching locks the Offer');
+}
+{
+  const s = hs(2004);
+  const a = s.players[0];
+  const hint = a.hand.find(c => c.type === 'hint') || { id: 'h9', type: 'hint' };
+  if (!a.hand.includes(hint)) a.hand.push(hint);
+  setOffer(s, a, a.hand[0].id);
+  a.currentRoom = 'hall'; a.actionPoints = 4;
+  useHint(s, floor, a, hint.id);
+  check(a.offerLocked === true, 'playing a Hint locks the Offer');
+}
+{
+  // Not enough action points: the move is simply not affordable.
+  const s = hs(2005);
+  const a = s.players[0];
+  a.actionPoints = 1;
+  check(moveCostInto(s, 'corridorE') === 2, 'entering an undiscovered room costs 2');
+  check(!usableDoorways(s, floor, a).some(d => d.otherRoom('hall') === 'corridorE') || false
+    || usableDoorways(s, floor, a).every(d => moveCostInto(s, d.otherRoom('hall')) <= 1),
+    'a doorway that cannot be afforded is not offered');
+}
+
+console.log('phase 1: meetings resolve from the two Offers alone');
+// 1. Distraction cancels the meeting from either side.
+{
+  const s = hs(2101);
+  const A = s.players[0], B = s.players[1];
+  A.hand = [{ id: 'a1', type: 'hint' }]; B.hand = [{ id: 'b1', type: 'distraction' }];
+  s.activeIndex = 1; setOffer(s, B, 'b1');
+  s.activeIndex = 0; setOffer(s, A, 'a1');
+  A.currentRoom = B.currentRoom = 'corridorE';
+  const r = resolveMeeting(s, floor, A, B);
+  check(r.ok && r.outcome === 'cancelled', 'a Distraction cancels the meeting');
+  check(!B.hand.some(c => c.id === 'b1'), 'the Distraction is spent');
+  check(A.hand.some(c => c.id === 'a1'), 'the other card is NOT exchanged');
+  check(A.offer === null && B.offer === null && A.intent === 'trade' && B.intent === 'trade',
+    'both Offers and intents reset after the meeting');
+  check(!/possess/i.test(r.publicText), 'the public line gives nothing away about roles');
+}
+// 2. A Distraction beats a possession attempt too, and reveals nothing.
+{
+  const s = hs(2102);
+  const A = s.players[0], B = s.players[1];
+  A.possessed = true; B.possessed = false;
+  A.hand = [{ id: 'a1', type: 'hint' }]; B.hand = [{ id: 'b1', type: 'distraction' }];
+  s.activeIndex = 1; setOffer(s, B, 'b1');
+  s.activeIndex = 0; setOffer(s, A, 'a1', 'possess');
+  check(A.intent === 'possess', 'the possessed side may commit a possess intent');
+  A.currentRoom = B.currentRoom = 'corridorE';
+  const r = resolveMeeting(s, floor, A, B);
+  check(r.outcome === 'cancelled' && !B.possessed, 'a Distraction stops a possession attempt');
+  check(B.knows.size === 0, 'and tells the defender nothing about who tried');
+}
+// 3. A Lantern in the Offer BLOCKS possession: spent, not traded, and privately revealing.
+{
+  const s = hs(2103);
+  const A = s.players[0], B = s.players[1];
+  A.possessed = true; B.possessed = false; B.knows = new Set();
+  A.hand = [{ id: 'a1', type: 'hint' }]; B.hand = [{ id: 'b1', type: 'lantern' }, { id: 'b2', type: 'hint' }];
+  s.activeIndex = 1; setOffer(s, B, 'b1');
+  s.activeIndex = 0; setOffer(s, A, 'a1', 'possess');
+  A.currentRoom = B.currentRoom = 'corridorE';
+  const r = resolveMeeting(s, floor, A, B);
+  check(r.outcome === 'blocked', 'the possession attempt is blocked');
+  check(!B.possessed, 'the target is NOT possessed');
+  check(!B.hand.some(c => c.id === 'b1'), 'the Lantern is consumed');
+  check(!A.hand.some(c => c.id === 'b1'), 'the Lantern is NOT handed to the attacker');
+  check(A.hand.some(c => c.id === 'a1'), 'no card changes hands at all');
+  check(B.knows.has(A.id), 'the target privately learns who attacked them');
+  check(!r.publicText.includes('POSSESSED') && /blocked/i.test(r.publicText),
+    `the public line says only that an attempt was blocked ("${r.publicText}")`);
+  check(s.log.at(-1).text === r.publicText, 'the public log records exactly that line');
+  check(B.notes.length === 1 && B.notes[0].includes(A.name), "the attacker's name goes to the target's PRIVATE notes");
+  check(!s.log.some(l => l.text.includes('POSSESSED')), 'nothing in the public log names a role');
+}
+// 4. An unguarded target is possessed, with no normal exchange and no public tell.
+{
+  const s = hs(2104);
+  const A = s.players[0], B = s.players[1];
+  A.possessed = true; B.possessed = false;
+  A.hand = [{ id: 'a1', type: 'hint' }]; B.hand = [{ id: 'b1', type: 'hint' }];
+  s.activeIndex = 1; setOffer(s, B, 'b1');
+  s.activeIndex = 0; setOffer(s, A, 'a1', 'possess');
+  A.currentRoom = B.currentRoom = 'corridorE';
+  const r = resolveMeeting(s, floor, A, B);
+  check(r.outcome === 'possessed' && B.possessed, 'an unguarded guest is possessed');
+  check(B.roleChangePending === true, 'the role change waits for that player’s own private screen');
+  check(A.hand.some(c => c.id === 'a1') && B.hand.some(c => c.id === 'b1'), 'no normal exchange happens');
+  check(/No cards changed hands/.test(r.publicText), 'publicly it looks like an ordinary empty meeting');
+  check(B.notes.length === 1, 'the new Possessor has a private note waiting');
+}
+// 5. Possess against someone already possessed is an ordinary trade.
+{
+  const s = hs(2105);
+  const A = s.players[0], B = s.players[1];
+  A.possessed = true; B.possessed = true;
+  A.hand = [{ id: 'a1', type: 'hint' }]; B.hand = [{ id: 'b1', type: 'lantern' }];
+  s.activeIndex = 1; setOffer(s, B, 'b1');
+  s.activeIndex = 0; setOffer(s, A, 'a1', 'possess');
+  A.currentRoom = B.currentRoom = 'corridorE';
+  const r = resolveMeeting(s, floor, A, B);
+  check(r.outcome === 'trade' && r.swap === true, 'it resolves as a normal Trade');
+  check(A.hand.some(c => c.id === 'b1') && B.hand.some(c => c.id === 'a1'), 'the two cards swapped');
+}
+// 6. An ordinary meeting exchanges both Offers at once; Nothing transfers nothing.
+{
+  const s = hs(2106);
+  const A = s.players[0], B = s.players[1];
+  A.possessed = false; B.possessed = false;
+  A.hand = [{ id: 'a1', type: 'hint' }]; B.hand = [{ id: 'b1', type: 'lantern' }];
+  s.activeIndex = 1; setOffer(s, B, 'b1');
+  s.activeIndex = 0; setOffer(s, A, 'a1');
+  A.currentRoom = B.currentRoom = 'corridorE';
+  const r = resolveMeeting(s, floor, A, B);
+  check(r.outcome === 'trade' && A.hand.some(c => c.id === 'b1') && B.hand.some(c => c.id === 'a1'),
+    'both Offers change hands simultaneously');
+}
+{
+  const s = hs(2107);
+  const A = s.players[0], B = s.players[1];
+  A.possessed = false; B.possessed = false;
+  A.hand = [{ id: 'a1', type: 'hint' }]; B.hand = [{ id: 'b1', type: 'lantern' }];
+  s.activeIndex = 1; setOffer(s, B, null);
+  s.activeIndex = 0; setOffer(s, A, null);
+  A.currentRoom = B.currentRoom = 'corridorE';
+  const r = resolveMeeting(s, floor, A, B);
+  check(r.outcome === 'nothing' && A.hand.length === 1 && B.hand.length === 1, 'an Offer of Nothing transfers nothing');
+}
+// 7. One forced meeting per turn, and never in the lobby or the exit.
+{
+  const s = hs(2108);
+  const A = s.players[0], B = s.players[1], C = s.players[2];
+  A.currentRoom = B.currentRoom = C.currentRoom = 'corridorE';
+  check(pendingEncounters(s, floor, A).length === 2, 'two guests are here to choose between');
+  const r = resolveMeeting(s, floor, A, B);
+  check(r.ok && s.meetingThisTurn === true, 'the meeting is recorded for this turn');
+  check(pendingEncounters(s, floor, A).length === 0, 'no SECOND forced meeting can happen this turn');
+  endTurn(s, floor);
+  check(s.meetingThisTurn === false, 'the next turn may force a meeting again');
+}
+{
+  const s = hs(2109);
+  const A = s.players[0], B = s.players[1];
+  A.currentRoom = B.currentRoom = floor.start.room;
+  check(floor.rooms.get(floor.start.room).safe, 'the lobby is a safe room');
+  check(pendingEncounters(s, floor, A).length === 0, 'the lobby never forces a meeting');
+  check(resolveMeeting(s, floor, A, B).reason === 'safeRoom', 'a meeting cannot be resolved in the lobby');
+}
+
+console.log('phase 1: the exit is resolved before any meeting');
+{
+  const s = hs(2201);
+  const objRooms = floor.roomList.filter(r => r.role === 'objective').map(r => r.id);
+  objRooms.slice(0, rules.objectiveCount).forEach(id => s.objectivesFound.add(id));
+  check(exitUnlocked(s), 'the exit opens once every objective is in');
+  const A = s.players[0], B = s.players[1];
+  A.possessed = false; B.possessed = true;
+  B.currentRoom = floor.exitRoom;
+  A.currentRoom = floor.exitRoom;
+  // ORDER: the arriving guest escapes; standing in the exit with someone else forces nothing.
+  check(pendingEncounters(s, floor, A).length === 0, 'arriving in the exit forces NO meeting, even with someone there');
+  check(resolveMeeting(s, floor, A, B).reason === 'safeRoom', 'a meeting can never be resolved in the exit');
+  check(resolveAttack(s, floor, A, B, 'x').reason === 'combatDisabled', 'there is no Challenge in this mode at all');
+  const won = checkWin(s, floor, A);
+  check(s.escaped.has(A.id), 'the clean guest escaped on entry');
+  check(won === null, 'one escape of two does not finish a six-player match');
+  check(escapedCount(s) === 1 && escapeesRequired(s) === 2, '1 of 2 clean guests are out');
+}
+{
+  // A possessed guest may stand in the exit and nothing happens.
+  const s = hs(2202);
+  floor.roomList.filter(r => r.role === 'objective').slice(0, rules.objectiveCount).forEach(r => s.objectivesFound.add(r.id));
+  const P = s.players[0]; P.possessed = true; P.currentRoom = floor.exitRoom;
+  check(checkWin(s, floor, P) !== 'guests', 'a possessed guest in the exit does not win it for the guests');
+  check(escapedCount(s) === 0, 'and no escape is recorded');
+}
+{
+  // Escaping is permanent: no more turns, not on the map, not available to meet.
+  const s = hs(2203);
+  floor.roomList.filter(r => r.role === 'objective').slice(0, rules.objectiveCount).forEach(r => s.objectivesFound.add(r.id));
+  const A = s.players[1];
+  A.possessed = false; A.currentRoom = floor.exitRoom;
+  escape(s, floor, A);
+  s.activeIndex = 0;
+  check(nextPlayer(s).index === 2, 'the escaped guest is skipped in the turn order');
+  check(!playersInRoom(s, floor.exitRoom).some(p => p.id === A.id), 'an escaped guest is no longer in the room');
+  // Even if something moved them into an ordinary room, they are out and cannot be met.
+  const B = s.players[2]; B.currentRoom = 'corridorE'; A.currentRoom = 'corridorE';
+  check(resolveMeeting(s, floor, B, A).reason === 'escaped', 'an escaped guest cannot be met');
+}
+
+console.log('phase 1: win conditions');
+{
+  const s = hs(2301);
+  floor.roomList.filter(r => r.role === 'objective').slice(0, rules.objectiveCount).forEach(r => s.objectivesFound.add(r.id));
+  const [A, B] = [s.players[0], s.players[1]];
+  A.possessed = B.possessed = false;
+  A.currentRoom = B.currentRoom = floor.exitRoom;
+  escape(s, floor, A);
+  check(checkWin(s, floor, B) === 'guests', 'two clean escapes win it for the guests');
+  check(s.finished === true && s.won === 'guests', 'the match is over');
+}
+{
+  const s = hs(2302);
+  // Everyone possessed: the guests can no longer make up the number.
+  s.players.forEach(p => { p.possessed = true; });
+  check(cleanGuestsRemaining(s).length === 0 && guestsCannotWin(s), 'no clean guests are left');
+  check(checkWin(s, floor) === 'possessed', 'the possessed side wins when the guests cannot reach the number');
+}
+{
+  const s = hs(2303);
+  s.round = rules.roundLimit + 1;
+  check(checkWin(s, floor) === 'possessed', `running past round ${rules.roundLimit} hands it to the possessed side`);
+}
+{
+  // Five players, one escape needed: the maths scales.
+  applyMode('hotseat', 5);
+  const s = createState(floor, roster.slice(0, 5), 2304, { mode: 'hotseat' });
+  floor.roomList.filter(r => r.role === 'objective').slice(0, rules.objectiveCount).forEach(r => s.objectivesFound.add(r.id));
+  const A = s.players.find(p => !p.possessed);
+  A.currentRoom = floor.exitRoom;
+  check(escapeesRequired(s) === 1, 'a five-player table needs one clean escape');
+  check(checkWin(s, floor, A) === 'guests', 'and one escape ends it');
+  applyMode('hotseat', 6);
+}
+
+console.log('phase 1: no health, no combat, no locked doors, no carried objectives');
+{
+  const s = hs(2401);
+  const A = s.players[0], B = s.players[1];
+  A.currentRoom = B.currentRoom = 'corridorE';
+  A.hand.push({ id: 'k1', type: 'knife' });
+  check(resolveAttack(s, floor, A, B, 'k1').reason === 'combatDisabled', 'attacking is refused outright');
+  check(B.health === rules.maxHealth, 'nothing can change health');
+  check(rules.healthEnabled === false, 'health is off, so the interface does not show it');
+  check(!floor.doorways.some(d => d.locked), 'no locked doors');
+  check(objectivesAreCarried() === false && canOfferObjective() === false,
+    'objectives are never carried and never offerable');
+  const objId = floor.roomList.find(r => r.role === 'objective').id;
+  s.objectivesFound.add(objId);
+  check(setOffer(s, A, objId).reason === 'objectiveNotOfferable', 'an objective cannot be made an Offer');
+}
+
+console.log('phase 1: conversions are private');
+{
+  const s = hs(2501);
+  const victim = s.players.find(p => !p.possessed);
+  const r = convertToPossessed(s, victim, 'p1');
+  check(r.ok && victim.possessed && victim.roleChangePending,
+    'a conversion flags a private role-change screen rather than announcing it');
+  check(convertToPossessed(s, victim, 'p1').reason === 'alreadyPossessed', 'converting twice does nothing');
+  check(possessedPlayers(s).length >= 2, 'the possessed side has grown');
+}
+
+// Put the rulebook back to the practice defaults so nothing else is affected by these checks.
+applyMode('practice');
+check(rules.practiceMode === true && rules.gameMode === 'practice' && rules.turnTimerEnabled === false,
+  'practice mode is restored unchanged after the hot-seat checks');
 
 console.log(failures ? `\n${failures} FAILED` : '\nALL RULES CHECKS PASSED');
 process.exit(failures ? 1 : 0);

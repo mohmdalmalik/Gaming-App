@@ -12,7 +12,6 @@ import { cardTile } from './cards.js';
 const USAGE = {
   // Lantern is explained in full by renderDetail, so it is not listed here.
   hint: 'Play it on your turn to reveal one undiscovered room next door.',
-  distraction: 'Kept for later: in multiplayer it slips you out of a meeting with another guest. It does nothing on your own.',
   flashlight: 'Used automatically when you search a dark room.',
   knife: 'Chosen when you attack during a forced encounter.',
   revolver: 'Chosen when you attack during a forced encounter.',
@@ -43,7 +42,9 @@ export function createHand(doc, cfg, { onUseBandage, onUseHint }) {
 
     if (p.possessed) {
       banner.hidden = false; banner.className = 'banner';
-      banner.textContent = 'You are POSSESSED. In a trade you may give a Possession card to convert someone — unless they hand you a Lantern.';
+      banner.textContent = rules.legacyCarriedExitKey
+        ? 'You are POSSESSED. In a trade you may give a Possession card to convert someone — unless they hand you a Lantern.'
+        : 'You are POSSESSED. On your turn you may commit to POSSESS instead of trading — unless they offer a Lantern, which blocks you and tells them what you are.';
     } else if (p.knows.size) {
       const names = [...p.knows].map(id => state.players.find(q => q.id === id)?.name).filter(Boolean);
       banner.hidden = false; banner.className = 'banner info';
@@ -74,7 +75,7 @@ export function createHand(doc, cfg, { onUseBandage, onUseHint }) {
     if (rules.healthEnabled) parts.push(`Health ${p.health}/${rules.maxHealth}`);
     parts.push(`Actions ${p.actionPoints}/${rules.actionPointsPerTurn}`);
     parts.push(`Cards ${countableCount(p.hand)}/${rules.handLimit}`);
-    if (rules.practiceMode) {
+    if (!rules.legacyCarriedExitKey) {
       const found = objectivesFound(state), need = objectivesRequired();
       parts.push(`Objectives ${found}/${need}`);
       if (exitUnlocked(state)) parts.push('the fire exit is open');
@@ -97,11 +98,28 @@ export function createHand(doc, cfg, { onUseBandage, onUseHint }) {
     if (meta.evil) name.style.color = 'var(--evil)';
     detail.appendChild(name);
 
+    // The Distraction reads differently depending on whether there is anyone to meet.
+    if (card.type === 'distraction') {
+      if (rules.practiceMode) {
+        line('<b>Kept for later.</b> With other guests in the hotel, offering it cancels a meeting outright.');
+        line('It does nothing on your own.', 'd-tag');
+      } else {
+        line('<b>Offer it.</b> If a meeting happens while this is your Offer, the meeting is cancelled: no trade, no possession, and it tells nobody anything about you.');
+        line('It is spent when it works. You cannot play it as an action.', 'd-tag');
+      }
+      return;
+    }
     if (card.type === 'lantern' && rules.practiceMode) {
       // Phase 0 has no other guests, so the Lantern has nothing to defend against yet. Say so
       // plainly rather than inventing a single-player effect for it.
       line('<b>Kept for later.</b> When other guests join, giving a Lantern in a trade blocks a possession attempt and reveals who tried it.');
       line('It has no use on your own — carry it and keep exploring.', 'd-tag');
+      return;
+    }
+    // Hot-seat: the Lantern is a defensive Offer, not an Exit Key. Objectives open the way out.
+    if (card.type === 'lantern' && !rules.legacyCarriedExitKey) {
+      line('<b>Offer it.</b> If someone tries to possess you while this is your Offer, it stops them. The Lantern is spent, no card changes hands, and you alone learn who tried.');
+      line('The table is only told that an attempt was blocked. You cannot play it as an action.', 'd-tag');
       return;
     }
     if (card.type === 'lantern') {

@@ -47,8 +47,9 @@ export const floor1 = {
     enterRoomCost: 1,        // passing through a doorway, also back into a known room
   },
 
-  // Where the five players stand at the start (relative to the start room's centre).
-  start: { room: 'hall', positions: [[0, 0], [-1.6, -1.2], [1.6, -1.2], [-1.6, 1.4], [1.6, 1.4]] },
+  // Where the guests stand at the start (relative to the start room's centre). Six spots, so a
+  // full hot-seat table has one each; practice uses the first.
+  start: { room: 'hall', positions: [[0, 0], [-1.6, -1.2], [1.6, -1.2], [-1.6, 1.4], [1.6, 1.4], [0, 2.2]] },
 
   rooms: [
     {

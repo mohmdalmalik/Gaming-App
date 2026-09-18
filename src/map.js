@@ -138,6 +138,7 @@ export function createMap(doc, floor, cfg) {
     // Players: a dot per player in their colour; the active one gets a heading arrow.
     const active = activePlayer(state);
     for (const p of state.players) {
+      if (state.escaped?.has(p.id)) continue;   // out of the hotel, off the plan
       const mover = movers[p.index];
       const px = X(mover.x), pz = Z(mover.z);
       const isActive = p === active;

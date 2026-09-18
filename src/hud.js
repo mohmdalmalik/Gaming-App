@@ -3,10 +3,13 @@
 // hand opener with a live count, the turn-action buttons (with costs / reasons), a move-confirm
 // bar and toasts. Portraits are illustrated placeholders (see ui/portrait.js) so real art can
 // drop in later without changing this logic. Possession is never revealed on the public strip.
-import { activePlayer, nextPlayer, playersInRoom, objectivesFound, objectivesRequired, exitUnlocked } from './game/state.js';
+import {
+  activePlayer, nextPlayer, playersInRoom, objectivesFound, objectivesRequired, exitUnlocked,
+  escapedCount, escapeesRequired,
+} from './game/state.js';
 import { canSearch } from './game/actions.js';
 import { rules } from './data/rules.js';
-import { lanternCount, countableCount } from './game/cards.js';
+import { CARDS, lanternCount, countableCount } from './game/cards.js';
 import { makePortrait } from './ui/portrait.js';
 
 const MAX_BACKS = 8; // fanned face-down cards drawn before we rely on the count badge alone
@@ -31,6 +34,12 @@ export function createHud(doc, cfg) {
     objectives: doc.getElementById('objectives'),
     objPips: doc.getElementById('obj-pips'),
     objCount: doc.getElementById('obj-count'),
+    escapes: doc.getElementById('escapes'),
+    escPips: doc.getElementById('esc-pips'),
+    escCount: doc.getElementById('esc-count'),
+    timer: doc.getElementById('turn-timer'),
+    timerFill: doc.getElementById('tt-fill'),
+    timerSeconds: doc.getElementById('tt-seconds'),
     restartPractice: doc.getElementById('btn-restart-practice'),
     healthRow: doc.getElementById('health-row'),
     topCenter: doc.querySelector('.hud-top-center'),
@@ -44,6 +53,8 @@ export function createHud(doc, cfg) {
     search: doc.getElementById('btn-search'),
     searchSub: doc.getElementById('search-sub'),
     trade: doc.getElementById('btn-trade'),
+    offer: doc.getElementById('btn-offer'),
+    offerSub: doc.getElementById('offer-sub'),
     endTurn: doc.getElementById('btn-end-turn'),
     endMain: doc.querySelector('#btn-end-turn .btn-main'),
     endSub: doc.getElementById('end-sub'),
@@ -75,10 +86,30 @@ export function createHud(doc, cfg) {
       const port = doc.createElement('div'); port.className = 'mini-portrait';
       port.appendChild(makePortrait(doc, p, { possessed: false })); // never reveal roles here
       const name = doc.createElement('div'); name.className = 'mini-name'; name.textContent = p.name;
-      cell.append(flag, port, name);
+      // PUBLIC information only: where they are and how many cards they hold. A hidden role is
+      // never shown here, and neither is anyone's Offer.
+      const where = doc.createElement('div'); where.className = 'mini-where';
+      cell.append(flag, port, name, where);
       el.strip.appendChild(cell);
-      return { cell, flag };
+      return { cell, flag, where };
     });
+  }
+
+  function renderPips(host, on, total) {
+    if (host.childElementCount !== total) {
+      host.innerHTML = '';
+      for (let i = 0; i < total; i++) {
+        const pip = doc.createElement('span'); pip.className = 'obj-pip'; host.appendChild(pip);
+      }
+    }
+    [...host.children].forEach((pip, i) => pip.classList.toggle('on', i < on));
+  }
+
+  function renderEscapes(state) {
+    const out = escapedCount(state), need = escapeesRequired(state);
+    renderPips(el.escPips, out, need);
+    el.escCount.textContent = `${out} / ${need}`;
+    el.escapes.classList.toggle('complete', out >= need);
   }
 
   function renderObjectives(state) {
@@ -134,29 +165,36 @@ export function createHud(doc, cfg) {
 
       // Active-player panel (this is the current guest's own private view).
       el.panel.style.setProperty('--player-color', p.color);
-      el.panel.classList.toggle('possessed', p.possessed);
-      const key = `${p.index}:${p.possessed}:${p.outfit}`;
+      const showPossessed = p.possessed && !state.hotseat;
+      el.panel.classList.toggle('possessed', showPossessed);
+      const key = `${p.index}:${showPossessed}:${p.outfit}`;
       if (key !== portraitKey) {
         portraitKey = key;
         el.portrait.innerHTML = '';
-        el.portrait.appendChild(makePortrait(doc, p, { possessed: p.possessed }));
+        el.portrait.appendChild(makePortrait(doc, p, { possessed: showPossessed }));
       }
       el.name.textContent = p.name;
+      // In hot-seat the device sits on a table between six people, so the always-on HUD must
+      // never carry a hidden role: no possessed portrait and no possessed screen wash. That
+      // information lives on the private hand-over screens only.
+      const publicOnly = !!state.hotseat;
       // Health is a Phase 1 system. While it is off nothing can change it, so showing three
       // bars would imply a rule that does not exist yet.
       el.healthRow.hidden = !rules.healthEnabled;
       if (rules.healthEnabled) renderHealth(p.health);
       renderAp(p.actionPoints);
-      el.tint.hidden = !p.possessed;               // subtle possessed screen wash
+      el.tint.hidden = !showPossessed;             // subtle possessed screen wash (never in hot-seat)
 
       // Header.
       const room = floor.rooms.get(p.currentRoom);
       el.room.textContent = room?.name ?? '—';
       el.safeBadge.hidden = !room?.safe;
       el.round.textContent = rules.roundLimitEnforced
-        ? `Round ${state.round} / ${rules.roundLimit}`
+        ? `Round ${Math.min(state.round, rules.roundLimit)} / ${rules.roundLimit}`
         : `Round ${state.round} · Turn ${state.turn}`;
       renderObjectives(state);
+      el.escapes.hidden = !state.hotseat;
+      if (state.hotseat) renderEscapes(state);
       // Practice is a single guest: the top strip of other players has nothing to show.
       el.topCenter.hidden = state.players.length < 2;
       el.restartPractice.hidden = !rules.practiceMode;
@@ -173,9 +211,22 @@ export function createHud(doc, cfg) {
         ? (room?.searchPoint ? `${room.searchPoint} · ${rules.searchCost} action` : `${rules.searchCost} action`)
         : (SEARCH_REASON[gate.reason] || 'Unavailable');
 
-      // Voluntary trade: only in a SAFE room when someone else is present to trade with.
+      // Voluntary trade: only in a SAFE room when someone else is present to trade with. It is
+      // switched off entirely in hot-seat — see docs/DECISIONS.md.
       const safeRoom = !!room?.safe;
-      el.trade.hidden = !(safeRoom && !state.finished && playersInRoom(state, p.currentRoom, p.id).length > 0);
+      el.trade.hidden = publicOnly
+        || !(safeRoom && !state.finished && playersInRoom(state, p.currentRoom, p.id).length > 0);
+
+      // The Offer button: what this player has committed for the next meeting. Shown on their own
+      // device during their own turn only, and it names a card only until the turn's first action.
+      el.offer.hidden = !state.hotseat || state.finished;
+      if (state.hotseat) {
+        const card = p.offer ? p.hand.find(c => c.id === p.offer) : null;
+        const label = card ? CARDS[card.type].name : 'Nothing';
+        el.offerSub.textContent = p.offerLocked ? `${label} · locked` : label;
+        el.offer.classList.toggle('locked', !!p.offerLocked);
+        el.offer.classList.toggle('evil', p.intent === 'possess');
+      }
 
       // Public card count excludes Possession cards, so it can never reveal a possessed role.
       renderHand(countableCount(p.hand));
@@ -185,12 +236,31 @@ export function createHud(doc, cfg) {
       const nextIdx = !state.finished && next ? next.index : -1;
       state.players.forEach((q, i) => {
         const active = i === state.activeIndex && !state.finished;
+        const out = !!state.escaped?.has(q.id);
         mini[i].cell.classList.toggle('active', active);
         mini[i].cell.classList.toggle('next', i === nextIdx && !active);
         mini[i].cell.classList.toggle('dead', !q.alive);
-        mini[i].flag.textContent = active ? 'Your turn' : (i === nextIdx ? 'Next' : '');
+        mini[i].cell.classList.toggle('escaped', out);
+        mini[i].flag.textContent = out ? 'Out' : active ? 'Your turn' : (i === nextIdx ? 'Next' : '');
+        if (mini[i].where) {
+          const seen = state.discovered.has(q.currentRoom);
+          mini[i].where.textContent = out
+            ? 'Escaped'
+            : `${seen ? floor.rooms.get(q.currentRoom)?.name ?? '—' : 'Somewhere else'} · ${countableCount(q.hand)} cards`;
+        }
       });
     },
+    // --- Turn timer ---------------------------------------------------------------------------
+    // Shown only while the active player's action phase is running. It is hidden (and not
+    // counting) during every hand-over and role screen, so passing the device costs nobody time.
+    showTimer(left, total) {
+      el.timer.hidden = false;
+      const frac = Math.max(0, Math.min(1, total ? left / total : 0));
+      el.timerFill.style.width = `${(frac * 100).toFixed(1)}%`;
+      el.timerSeconds.textContent = `${Math.ceil(Math.max(0, left))}s`;
+      el.timer.classList.toggle('low', left <= 10);
+    },
+    hideTimer() { el.timer.hidden = true; el.timer.classList.remove('low'); },
     lanternHint(player) { return `${lanternCount(player.hand)} / ${rules.lanternsToEscape} Lanterns`; },
     toast(message) {
       el.toast.textContent = message;

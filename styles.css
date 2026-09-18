@@ -527,3 +527,110 @@ html, body {
   .mini-portrait { width: 48px; height: 48px; }
   .player-meta { min-width: 88px; }
 }
+
+/* ============================================================================================
+   PHASE 1 — hot-seat: the pass-the-device flow, the turn timer and the public escape readout.
+   ============================================================================================ */
+
+/* Escape progress sits beside the objectives in the header. Public information. */
+.objectives.escapes { border-color: rgba(140,200,170,0.35); }
+
+/* The turn clock. Shown only while the active player's action phase is running. */
+.turn-timer {
+  display: flex; align-items: center; gap: 8px;
+  padding: 5px 10px; border-radius: 999px;
+  background: var(--panel); border: 1px solid var(--line-soft);
+}
+.turn-timer[hidden] { display: none; }
+.tt-track { width: 104px; height: 6px; border-radius: 999px; background: rgba(0,0,0,0.45); overflow: hidden; }
+.tt-fill { height: 100%; width: 100%; background: linear-gradient(90deg, var(--brass), var(--brass-bright)); transition: width 0.2s linear; }
+.tt-seconds { font-family: var(--serif); font-size: 14px; font-variant-numeric: tabular-nums; color: var(--ivory-dim); min-width: 3.2ch; text-align: right; }
+.turn-timer.low { border-color: rgba(207,74,64,0.6); }
+.turn-timer.low .tt-fill { background: linear-gradient(90deg, #8c3a34, var(--crimson)); }
+.turn-timer.low .tt-seconds { color: #f0b4ae; }
+
+/* Public per-guest line in the top strip: where they are and how many cards. Never a role. */
+.mini-where { font-size: 10px; line-height: 1.2; color: var(--muted); text-align: center; max-width: 74px; }
+.mini-player.escaped { opacity: 0.55; }
+.mini-player.escaped .mini-name { color: #9fe3b8; }
+
+/* The Offer button in the action row. */
+.btn.action.locked { opacity: 0.75; }
+.btn.action.evil .btn-sub { color: var(--evil); }
+
+/* --- The hand-over overlay ------------------------------------------------------------------
+   Deliberately plain and opaque: it has to hide the 3D view completely so the previous player's
+   position and the room they were in are not still readable behind it. */
+.overlay.handoff { background: rgba(8, 9, 14, 0.97); }
+.handoff-card {
+  max-width: min(760px, 94vw); max-height: 92vh; overflow-y: auto;
+  text-align: center; padding: 26px 30px;
+}
+.handoff-card h1 { font-size: clamp(22px, 4vw, 34px); margin-bottom: 4px; }
+.handoff-card p { margin-bottom: 14px; }
+.handoff-kicker {
+  font-family: var(--serif); font-size: 12px; letter-spacing: 0.16em; text-transform: uppercase;
+  color: var(--brass); margin-bottom: 8px;
+}
+.handoff-card .modal-actions {
+  margin-top: 18px; position: sticky; bottom: -26px; padding: 12px 0 2px;
+  background: linear-gradient(to bottom, rgba(20,24,36,0), var(--panel-solid) 35%);
+}
+/* The pass screen carries nothing private, so it stays large and calm. */
+.handoff-card.pass h1 { color: var(--brass-bright); }
+
+.role-badge {
+  display: flex; flex-direction: column; gap: 4px; align-items: center;
+  margin: 4px auto 12px; padding: 10px 16px; border-radius: 14px; max-width: 620px;
+  border: 1px solid var(--line); background: rgba(0,0,0,0.3);
+}
+.role-badge[hidden] { display: none; }
+.role-badge .role-word { font-family: var(--serif); font-weight: 700; letter-spacing: 0.18em; font-size: clamp(20px, 3.4vw, 30px); }
+.role-badge .role-line { font-size: 13px; line-height: 1.45; color: var(--ivory-dim); }
+.role-badge.good { border-color: rgba(120,200,150,0.5); }
+.role-badge.good .role-word { color: #9fe3b8; }
+.role-badge.evil { border-color: rgba(180,107,255,0.6); background: rgba(60,26,92,0.35); }
+.role-badge.evil .role-word { color: var(--evil); }
+
+.handoff-notes { display: flex; flex-direction: column; gap: 8px; margin: 0 auto 14px; max-width: 620px; }
+.handoff-notes[hidden] { display: none; }
+.handoff-note {
+  padding: 10px 14px; border-radius: 10px; font-size: 14px; line-height: 1.45; text-align: left;
+  background: rgba(180,107,255,0.12); border: 1px solid rgba(180,107,255,0.4); color: #e6d6ff;
+}
+
+.handoff-hand { justify-content: center; margin-bottom: 14px; }
+.handoff-hand[hidden] { display: none; }
+.handoff-hand .card-tile { width: 118px; }
+.handoff-hand .card-tile .art { min-height: 70px; }
+
+/* --- The Offer chooser ----------------------------------------------------------------------- */
+.offer-block {
+  margin: 4px auto 0; padding: 14px; border-radius: 14px; max-width: 700px;
+  border: 1px solid var(--line); background: rgba(0,0,0,0.25);
+}
+.offer-block[hidden] { display: none; }
+.offer-label {
+  font-family: var(--serif); font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase;
+  color: var(--brass); margin-bottom: 10px;
+}
+.offer-block .cards { justify-content: center; }
+.offer-block .card-tile { width: 112px; }
+.offer-block .card-tile .art { min-height: 62px; }
+.card-tile.nothing { background: linear-gradient(180deg, #2a2e3a, #1e222c); border-color: var(--line-soft); color: var(--ivory-dim); }
+.card-tile.nothing .cname { color: var(--ivory-dim); }
+.card-tile.nothing .art { background: rgba(0,0,0,0.3); border-color: var(--line-soft); }
+.card-tile.nothing .art .glyph { color: var(--muted); text-shadow: none; }
+.offer-intent { display: flex; gap: 10px; justify-content: center; margin-top: 12px; }
+.offer-intent[hidden] { display: none; }
+.btn.intent { min-height: 48px; }
+.btn.intent.on { border-color: var(--brass-bright); box-shadow: 0 0 0 2px var(--brass-bright); }
+.btn.intent.evil.on { border-color: var(--evil); box-shadow: 0 0 0 2px var(--evil); color: #e6d6ff; }
+.offer-summary { margin-top: 12px; font-size: 14px; color: var(--ivory-dim); font-family: var(--serif); }
+.offer-summary.locked { color: var(--brass); }
+
+/* --- Start screen: choose practice or a hot-seat table ---------------------------------------- */
+.mode-switch { margin-top: 22px; padding-top: 18px; border-top: 1px solid var(--line-soft); }
+.mode-label { display: block; font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); margin-bottom: 10px; }
+.mode-buttons { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+.btn.mode { text-decoration: none; min-height: 46px; display: inline-flex; align-items: center; font-family: var(--serif); }

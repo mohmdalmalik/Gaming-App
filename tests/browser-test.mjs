@@ -80,8 +80,8 @@ const clickCard = async id => page.evaluate(cid => document.querySelector(`#enco
   const { rules } = await import('../src/data/rules.js');
   if (rules.practiceMode) {
     console.log('SKIPPED — the build is in Phase 0 practice mode (rules.practiceMode = true).');
-    console.log('This suite tests the Phase 1 multiplayer rules. Run tests/browser-practice.mjs instead,');
-    console.log('or set practiceMode: false in src/data/rules.js to exercise the multiplayer path.');
+    console.log('This suite tests the LEGACY multiplayer engine (health, weapons, the three-Lantern Exit Key).');
+    console.log('For the approved hot-seat rules run tests/browser-hotseat.mjs; for practice, tests/browser-practice.mjs.');
     await browser.close();
     process.exit(0);
   }

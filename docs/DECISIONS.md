@@ -378,3 +378,50 @@ the lessons). Key decisions:
 - **Measured**: victor.glb 21,020 tris / 7 materials / 684,296 bytes; hall scene with Victor 339
   draw calls, 48,026 triangles, 13 programs (headless count). Silhouette IoU vs the sheet: front
   0.855, back 0.880, three-quarter 0.799.
+
+
+## Phase 1 — the hot-seat rules sandbox (local only)
+- **One rulebook, three modes.** `src/data/rules.js` holds the practice defaults and an
+  `applyMode(mode, playerCount)` that overwrites what a mode changes: `'practice'` (Phase 0),
+  `'hotseat'` (the approved v1 rules) and `'legacy'` (the older engine, kept working and tested).
+  It mutates the one shared `rules` object on purpose — every module reads values off it at call
+  time, so there is still exactly one place a number lives and no module has to know which mode is
+  running. `main.js` calls it once, before any state is built.
+- **The mode lives in the address, not in a file.** `?mode=hotseat&players=6` (plus `?seed=` and
+  `?timer=off` for testing). The start screen writes it, so the owner never edits code to change
+  game; the page reloads because the table size has to be known before the world is built, which
+  keeps the practice path byte-for-byte what it was.
+- **Possession is an intent, not a card.** There is no Possession card in hot-seat and therefore no
+  charge pool. The simulations behind the rules audit showed the pool was constant (every
+  conversion granted exactly as many charges as it spent), so it capped nothing; removing it gave
+  the best measured balance. A possessed player commits Trade or Possess alongside their Offer.
+- **Private information has exactly one home: the hand-over screens.** `src/ui/handoff.js` is the
+  only module that ever shows a role, a hand or an Offer. Everything else — the HUD, the meeting
+  panel, the public log, the map — is written so it *cannot* print a role. In hot-seat the
+  possessed screen tint and the possessed portrait are switched off, because the device is sitting
+  between six people.
+- **Private consequences are queued, not announced.** A meeting can produce something only one
+  player may know (who attacked them, that they have been converted). Those lines go into that
+  player's `notes` queue and are shown on their own screen — at the start of their next turn for
+  the off-turn player, immediately on a private card for the player holding the device.
+- **The turn timer counts the action phase only.** It is paused by every hand-over screen, role
+  reveal, meeting result and blocking prompt, so passing the iPad round can never cost a turn.
+  `rules.turnTimerEnabled` (or `?timer=off`) switches it off for play-testing.
+- **Two meeting engines, not one rewritten one.** `resolveMeeting` branches on `state.hotseat` for
+  the approved card semantics (Distraction cancels, Lantern blocks, Possess converts) and leaves
+  the Phase 0 / legacy path exactly as it was, so the tests written for that path keep proving what
+  they proved. Neither takes a callback: arity 4, so an off-turn prompt is structurally impossible.
+- **The voluntary lobby trade is off in hot-seat.** The Phase 0 panel shows both players' hands,
+  which would hand the whole table another player's cards, and it can move a Possession card. The
+  brief allowed keeping it only if it already worked correctly; it does not, for hidden roles. It
+  still works in practice and legacy modes. A future Offer-based lobby trade could bring it back
+  safely — it would exchange the two standing Offers with possession disallowed.
+- **A sixth guest and a sixth start spot.** The roster had five; a six-player table needs six, so
+  Clara was added with an existing outfit and `floor1.start.positions` gained a sixth (verified
+  walkable). Nothing else about the map changed.
+- **A searched room now shows a small brass tick in 3D** (`src/render/searchMarks.js`): one sprite
+  per searched room, built lazily, at most 16 in a match. Cheaper than re-dressing the room and it
+  reads at a glance from the table.
+- **The map is fixed; the deal is not.** The 18-room hotel is static data, so it is the same every
+  match. The hot-seat seed is random per match (otherwise the same guest would always be the
+  Possessor); `?seed=` forces it for testing. Practice keeps its fixed `practiceSeed`.

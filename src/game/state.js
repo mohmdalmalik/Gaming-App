@@ -6,10 +6,15 @@
 import { rules } from '../data/rules.js';
 import { makeRng, buildDrawDeck, buildPossessionSupply, deal, shuffle, lanternCount } from './cards.js';
 
-// `opts.practice` builds a Phase 0 practice game: one guest, no possession, the three Phase 0
-// card types only, and objectives to find. Everything else (the multiplayer path) is unchanged.
+// `opts.mode` picks the rules path:
+//   'practice' (or opts.practice) — Phase 0: one guest, no hidden role, the three Phase 0 card
+//                                   types, objectives to find.
+//   'hotseat'                     — Phase 1: 4-6 guests on one device, exactly one hidden
+//                                   Possessor, pre-committed Offers, no health and no combat.
+//   anything else                 — the older multiplayer engine, unchanged.
 export function createState(floor, roster, seed = 1, opts = {}) {
-  const state = { roster, practice: !!opts.practice };
+  const mode = opts.mode || (opts.practice ? 'practice' : 'legacy');
+  const state = { roster, mode, practice: mode === 'practice', hotseat: mode === 'hotseat' };
   resetState(state, floor, seed);
   return state;
 }
@@ -17,17 +22,19 @@ export function createState(floor, roster, seed = 1, opts = {}) {
 export function resetState(state, floor, seed) {
   const rng = makeRng(seed ?? ((Math.floor(performance.now?.() ?? 0) || 1)));
   const practice = !!state.practice;
+  const hotseat = !!state.hotseat;
   state.seed = seed;
   state.discovered = new Set([floor.start.room]);
 
-  // Deal hands from a shuffled draw pile, one guaranteed Lantern each. Practice uses the
-  // three-card Phase 0 deck.
-  const drawPile = shuffle(buildDrawDeck(practice ? rules.practiceDeck : rules.deck), rng);
+  // Deal hands from a shuffled draw pile, one guaranteed Lantern each. Practice uses the small
+  // three-card Phase 0 deck; hot-seat uses the same three types in a pile big enough for six
+  // starting hands plus every item room.
+  const drawPile = shuffle(buildDrawDeck(practice ? rules.practiceDeck : hotseat ? rules.hotseatDeck : rules.deck), rng);
   const { hands, deck } = deal(drawPile, state.roster.length);
   state.drawPile = deck;
 
-  // Exactly one player is secretly possessed and holds the Possession supply. Practice mode
-  // has no hidden role at all, so nobody is possessed.
+  // Exactly ONE player starts secretly possessed. Practice mode has no hidden role at all, so
+  // nobody is possessed there.
   const possessedIndex = practice ? -1 : Math.floor(rng() * state.roster.length);
 
   state.players = state.roster.map((p, index) => ({
@@ -46,20 +53,37 @@ export function resetState(state, floor, seed) {
     // Pre-committed meeting state, set on this player's OWN turn (see setOffer below).
     offer: null,        // card id they are willing to hand over, or null for nothing
     intent: 'trade',    // 'trade' | 'possess' — only the possessed side may set 'possess'
+    offerLocked: false, // true once this player's first action of the turn has begun
+    roleSeen: false,    // has this player acknowledged their private role screen?
+    roleChangePending: false, // they were converted and have not been told privately yet
+    notes: [],          // private messages waiting for this player's own screen
   }));
-  if (possessedIndex >= 0) state.players[possessedIndex].hand.push(...buildPossessionSupply());
+  // Hot-seat possession is an INTENT, not a card: there is no Possession supply and therefore no
+  // charge pool to run out. The legacy engine still deals its supply.
+  if (possessedIndex >= 0 && !hotseat) state.players[possessedIndex].hand.push(...buildPossessionSupply());
 
   state.activeIndex = 0;
   state.round = 1;      // one round = every living player has taken a turn
   state.turn = 1;       // counts individual turns
   state.encounterLocks = new Set();
+  state.meetingThisTurn = false;     // at most one forced meeting per turn
+  state.log = [];                    // PUBLIC event log — never contains a hidden role
   state.searchedRooms = new Set(); // a room can only be searched once
   state.objectivesFound = new Set(); // ids of objective rooms already searched — PUBLIC TEAM
                                      // progress, never held by a player and never transferable
   state.escaped = new Set();         // ids of players who have reached the exit; permanent
   state.finished = false;
-  state.won = null;     // 'humans' | 'possessed' | 'practice'
+  state.won = null;     // 'humans' | 'guests' | 'possessed' | 'practice' | 'timeout'
   return state;
+}
+
+// Append a line to the PUBLIC log. Everything here is safe for the whole table to read: it never
+// names a hidden role and never names who attempted a possession.
+export function logPublic(state, text) {
+  if (!state.log) state.log = [];
+  state.log.push({ round: state.round, turn: state.turn, text });
+  if (state.log.length > 60) state.log.shift();
+  return text;
 }
 
 // --- Objectives and the sealed exit ------------------------------------------------------
@@ -79,7 +103,9 @@ export const canOfferObjective = () => false;
 // How many clean guests must reach the exit to finish. One in practice (there is one guest);
 // the six-player target is configurable and used the moment more guests exist.
 export const escapeesRequired = state =>
-  state?.practice ? rules.requiredEscapees : rules.escapeesAtBalanceCount;
+  state?.practice ? rules.requiredEscapees
+    : state?.hotseat ? rules.requiredCleanEscapees
+      : rules.escapeesAtBalanceCount;
 export const escapedCount = state => state.escaped?.size ?? 0;
 
 // Record a permanent escape. Only a clean, living player who is standing in the exit while it is
@@ -102,8 +128,17 @@ export function escape(state, floor, player) {
 export function setOffer(state, player, cardId, intent = 'trade') {
   if (state.finished) return { ok: false, reason: 'finished' };
   if (state.activeIndex !== player.index) return { ok: false, reason: 'notYourTurn' };
-  if (cardId == null) { player.offer = null; player.intent = 'trade'; return { ok: true, offer: null }; }
-  if (state.objectivesFound?.has(cardId)) return { ok: false, reason: 'objectiveNotOfferable' };
+  // Checked before anything else: an objective is not a card and can never be an Offer, whatever
+  // else is true about the turn.
+  if (cardId != null && state.objectivesFound?.has(cardId)) return { ok: false, reason: 'objectiveNotOfferable' };
+  // Once the turn's first action has begun the Offer is committed and cannot be edited: that is
+  // what makes it a real commitment rather than something changed after seeing what happens.
+  if (player.offerLocked) return { ok: false, reason: 'locked' };
+  if (cardId == null) {
+    player.offer = null;
+    player.intent = player.possessed && intent === 'possess' ? 'possess' : 'trade';
+    return { ok: true, offer: null, intent: player.intent };
+  }
   const card = player.hand.find(c => c.id === cardId);
   if (!card) return { ok: false, reason: 'noCard' };
   player.offer = cardId;
@@ -112,6 +147,20 @@ export function setOffer(state, player, cardId, intent = 'trade') {
 }
 
 export function clearOffer(player) { player.offer = null; player.intent = 'trade'; }
+
+// The turn's first action has begun: the Offer is now committed. Called by every action that
+// costs an action point, so no interface can forget to do it.
+export function lockOffer(player) { if (player) player.offerLocked = true; }
+
+// A guest has been converted. The role change is PRIVATE: it is flagged here and shown to that
+// player alone, on their own device screen, at the start of their next turn.
+export function convertToPossessed(state, player, byId = null) {
+  if (player.possessed) return { ok: false, reason: 'alreadyPossessed' };
+  player.possessed = true;
+  player.roleChangePending = true;
+  player.convertedBy = byId;
+  return { ok: true, newly: player.id, by: byId };
+}
 
 // Can this room be entered / seen at all yet? Only the exit is ever sealed.
 export function isRoomOpen(state, floor, roomId) {
@@ -133,7 +182,8 @@ export function nextPlayer(state) {
   const n = state.players.length;
   for (let k = 1; k <= n; k++) {
     const p = state.players[(state.activeIndex + k) % n];
-    if (p.alive) return p;
+    // A guest who has escaped is out of the hotel: they take no further turns.
+    if (p.alive && !state.escaped?.has(p.id)) return p;
   }
   return null;
 }
@@ -168,6 +218,7 @@ export function enterRoom(state, floor, player, roomId) {
   player.currentRoom = roomId;
   if (revealing) { state.discovered.add(roomId); result.revealed = true; }
   result.enteredExit = !!floor.rooms.get(roomId)?.isExit;
+  lockOffer(player);
   return result;
 }
 
@@ -176,13 +227,28 @@ export function enterRoom(state, floor, player, roomId) {
 export function endTurn(state, floor) {
   const from = activePlayer(state);
   const to = nextPlayer(state);
+  // Whatever they committed to stands until their next turn, so nobody can edit an Offer while
+  // someone else is moving around the hotel.
+  from.offerLocked = true;
+  state.meetingThisTurn = false;    // at most one forced meeting per turn
   if (!to) { state.finished = true; return { from, to: null, finished: true }; }
   if (to.index <= from.index) { state.round += 1; state.encounterLocks.clear(); }
   state.activeIndex = to.index;
   to.actionPoints = rules.actionPointsPerTurn;
+  to.offerLocked = false;           // the new active player may set their Offer
   state.turn += 1;
   return { from, to, finished: false, round: state.round };
 }
+
+// --- Hot-seat sides ------------------------------------------------------------------------
+// Clean guests still in the hotel (not escaped). Possession is never revealed by anything that
+// reads these — they exist for the rules engine and the end screen only.
+export const cleanGuestsRemaining = state =>
+  state.players.filter(p => p.alive && !p.possessed && !state.escaped?.has(p.id));
+export const possessedPlayers = state => state.players.filter(p => p.possessed);
+// True once the guests can no longer reach the number of clean escapes they need.
+export const guestsCannotWin = state =>
+  escapedCount(state) + cleanGuestsRemaining(state).length < escapeesRequired(state);
 
 // Decide the game if a condition is met. `enteredExitBy` is the player who just stepped into
 // the exit room this instant, if any.
@@ -195,6 +261,20 @@ export function checkWin(state, floor, enteredExitBy = null) {
     if (enteredExitBy && exitUnlocked(state) && !enteredExitBy.possessed) {
       escape(state, floor, enteredExitBy);
       if (escapedCount(state) >= escapeesRequired(state)) { state.won = 'practice'; state.finished = true; return 'practice'; }
+    }
+    return null;
+  }
+  // --- Hot-seat (Phase 1) -------------------------------------------------------------------
+  // The exit is a safe end-zone and is resolved FIRST: a clean guest who steps in escapes
+  // immediately and permanently, before anything else in that room can happen.
+  if (state.hotseat) {
+    if (enteredExitBy && exitUnlocked(state) && !enteredExitBy.possessed) escape(state, floor, enteredExitBy);
+    if (escapedCount(state) >= escapeesRequired(state)) { state.won = 'guests'; state.finished = true; return 'guests'; }
+    // The guests are mathematically out of it: too few clean guests left to make up the number.
+    if (guestsCannotWin(state)) { state.won = 'possessed'; state.finished = true; return 'possessed'; }
+    // The deadline. There is no elimination in this mode, so the round limit is the only clock.
+    if (rules.roundLimitEnforced && state.round > rules.roundLimit) {
+      state.won = 'possessed'; state.finished = true; return 'possessed';
     }
     return null;
   }
@@ -239,8 +319,11 @@ export function isDiscovered(state, roomId) {
 
 // --- Encounters --------------------------------------------------------------------------
 
+// Everyone still IN the hotel in this room. A guest who has escaped has left the building and is
+// not there to be met, traded with or challenged.
 export function playersInRoom(state, roomId, exceptId = null) {
-  return state.players.filter(p => p.alive && p.currentRoom === roomId && p.id !== exceptId);
+  return state.players.filter(p =>
+    p.alive && p.currentRoom === roomId && p.id !== exceptId && !state.escaped?.has(p.id));
 }
 
 export function encounterKey(roomId, i, j) {
@@ -255,6 +338,9 @@ export const lockEncounter = (state, roomId, i, j) => state.encounterLocks.add(e
 // never forces an encounter, so none are pending there.
 export function pendingEncounters(state, floor, player) {
   if (floor.rooms.get(player.currentRoom)?.safe) return [];
+  // At most ONE forced meeting per turn, no matter how much walking about is done.
+  if (state.meetingThisTurn) return [];
+  if (state.escaped?.has(player.id)) return [];
   return playersInRoom(state, player.currentRoom, player.id)
     .filter(q => !hasEncounterLock(state, player.currentRoom, player.index, q.index));
 }

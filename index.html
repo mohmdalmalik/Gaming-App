@@ -41,6 +41,16 @@
           <span id="obj-pips" class="obj-pips" aria-hidden="true"></span>
           <span id="obj-count" class="obj-count">0 / 3</span>
         </div>
+        <!-- Hot-seat only: how many clean guests are out, and the turn clock. -->
+        <div id="escapes" class="objectives escapes" hidden>
+          <span class="obj-label">Escaped</span>
+          <span id="esc-pips" class="obj-pips" aria-hidden="true"></span>
+          <span id="esc-count" class="obj-count">0 / 2</span>
+        </div>
+        <div id="turn-timer" class="turn-timer" hidden>
+          <div class="tt-track"><div id="tt-fill" class="tt-fill"></div></div>
+          <span id="tt-seconds" class="tt-seconds">45s</span>
+        </div>
         <button id="btn-restart-practice" class="ctl restart" type="button">&#x21BB; Restart practice</button>
       </div>
 
@@ -77,6 +87,7 @@
           <div class="action-row">
             <button id="btn-search" class="btn action" type="button"><span class="btn-main">Search</span><span id="search-sub" class="btn-sub">1 action</span></button>
             <button id="btn-trade" class="btn action" type="button" hidden><span class="btn-main">Trade</span><span class="btn-sub">Safe zone</span></button>
+            <button id="btn-offer" class="btn action" type="button" hidden><span class="btn-main">Offer</span><span id="offer-sub" class="btn-sub">Nothing</span></button>
             <button id="btn-end-turn" class="btn primary end" type="button"><span class="btn-main">End turn &#x203A;</span><span id="end-sub" class="btn-sub">Next: —</span></button>
           </div>
         </div>
@@ -164,12 +175,37 @@
       </div>
     </div>
 
+    <!-- Hot-seat: the pass-the-device flow. The ONLY place private information appears. -->
+    <div id="handoff-overlay" class="overlay center handoff" hidden>
+      <div id="handoff-card" class="card handoff-card">
+        <div id="handoff-kicker" class="handoff-kicker"></div>
+        <h1 id="handoff-title">&nbsp;</h1>
+        <p id="handoff-sub" class="muted"></p>
+        <div id="handoff-role" class="role-badge" hidden></div>
+        <div id="handoff-notes" class="handoff-notes" hidden></div>
+        <div id="handoff-hand" class="cards handoff-hand" hidden></div>
+        <div id="handoff-offer" class="offer-block" hidden>
+          <div class="offer-label">Your Offer &#8212; what you hand over if someone walks in on you</div>
+          <div id="offer-cards" class="cards"></div>
+          <div id="offer-intent" class="offer-intent" hidden></div>
+          <div id="offer-summary" class="offer-summary"></div>
+        </div>
+        <div class="modal-actions">
+          <button id="btn-handoff-next" class="btn primary big" type="button">Continue</button>
+        </div>
+      </div>
+    </div>
+
     <!-- Overlays -->
     <div id="start-overlay" class="overlay center">
       <div class="card">
         <h1>Hotel Escape</h1>
-        <p class="muted">Practice mode · explore the hotel, find 3 objectives, reach the exit</p>
-        <button id="btn-begin" class="btn primary big" type="button" disabled>Loading…</button>
+        <p id="start-sub" class="muted">Practice mode &#183; explore the hotel, find the objectives, reach the exit</p>
+        <button id="btn-begin" class="btn primary big" type="button" disabled>Loading&#8230;</button>
+        <div class="mode-switch">
+          <span class="mode-label">Or start a different game:</span>
+          <div id="mode-buttons" class="mode-buttons"></div>
+        </div>
       </div>
     </div>
 

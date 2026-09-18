@@ -5,7 +5,7 @@ import { rules } from '../data/rules.js';
 import { CARDS, takeCard, isWeapon, countableCount, countableCards } from './cards.js';
 import {
   checkWin, isRoomOpen, exitUnlocked, objectivesRequired, objectivesAreCarried,
-  clearOffer, escape,
+  clearOffer, escape, lockOffer, logPublic, convertToPossessed,
 } from './state.js';
 
 // What a room yields when searched, from its role in the floor data.
@@ -40,6 +40,7 @@ export function search(state, floor, player) {
   const room = floor.rooms.get(player.currentRoom);
   const kind = roomYield(room);
   player.actionPoints -= rules.actionCost.search;
+  lockOffer(player);
   state.searchedRooms.add(player.currentRoom);
 
   if (kind === 'objective') {
@@ -73,6 +74,7 @@ export function resolveMeeting(state, floor, mover, other) {
   if (floor.rooms.get(mover.currentRoom)?.safe) return { ok: false, reason: 'safeRoom' };
   if (mover.currentRoom !== other.currentRoom) return { ok: false, reason: 'notTogether' };
   if (state.escaped?.has(other.id) || state.escaped?.has(mover.id)) return { ok: false, reason: 'escaped' };
+  if (state.hotseat) return hotseatMeeting(state, floor, mover, other);
 
   const result = { ok: true, mover: mover.id, other: other.id, offers: { [mover.id]: mover.offer, [other.id]: other.offer } };
   if (mover.offer && other.offer) {
@@ -83,6 +85,102 @@ export function resolveMeeting(state, floor, mover, other) {
   // Offers never survive the meeting that consumed them.
   clearOffer(mover); clearOffer(other);
   return result;
+}
+
+// --- Hot-seat meeting resolution (the approved v1 rules) ---------------------------------------
+// Order, and it matters:
+//   1. A Distraction from EITHER side cancels the meeting. Nothing is traded, nobody is
+//      possessed, and it reveals nothing about who is what.
+//   2. A committed possession attempt:
+//        target already possessed  -> an ordinary exchange (nothing is given away publicly)
+//        target offered a Lantern  -> BLOCKED. The Lantern is spent, no card changes hands, and
+//                                     the target alone learns who attacked them.
+//        otherwise                 -> the target is possessed. No normal exchange.
+//   3. Otherwise both Offers change hands at the same moment. An Offer of Nothing transfers
+//      nothing; the meeting still happened.
+// Both Offers are reset afterwards either way, and nothing here ever asks the off-turn player
+// a question: everything it uses was committed by each player on their own turn.
+
+// The card a player actually committed. If it has since left their hand the Offer is Nothing.
+const offeredCard = player => (player.offer ? player.hand.find(c => c.id === player.offer) || null : null);
+
+const addNote = (res, playerId, text) => { (res.notes[playerId] ||= []).push(text); };
+
+function exchangeOffers(res, A, B, ca, cb) {
+  if (ca) { takeCard(A.hand, ca.id); B.hand.push(ca); }
+  if (cb) { takeCard(B.hand, cb.id); A.hand.push(cb); }
+  res.outcome = ca || cb ? 'trade' : 'nothing';
+  res.swap = !!(ca && cb);
+  const bits = [];
+  if (ca) bits.push(`${A.name} handed over a ${CARDS[ca.type].name}`);
+  if (cb) bits.push(`${B.name} handed over a ${CARDS[cb.type].name}`);
+  res.publicText = bits.length
+    ? `${A.name} and ${B.name} met. ${bits.join('; ')}.`
+    : `${A.name} and ${B.name} met. No cards changed hands.`;
+  return res;
+}
+
+function finishMeeting(state, floor, mover, other, res) {
+  clearOffer(mover); clearOffer(other);
+  state.meetingThisTurn = true;
+  logPublic(state, res.publicText);
+  // Private consequences are queued on the player they belong to and shown on that player's own
+  // screen — never on the public result card, which the whole table can see.
+  for (const [pid, lines] of Object.entries(res.notes)) {
+    const p = state.players.find(q => q.id === pid);
+    if (p) { p.notes ||= []; p.notes.push(...lines); }
+  }
+  res.win = checkWin(state, floor);
+  return res;
+}
+
+function hotseatMeeting(state, floor, mover, other) {
+  const mc = offeredCard(mover), oc = offeredCard(other);
+  const res = {
+    ok: true, mover: mover.id, other: other.id, room: mover.currentRoom,
+    offered: { [mover.id]: mc?.type ?? null, [other.id]: oc?.type ?? null },
+    notes: {}, outcome: null, publicText: '',
+  };
+
+  // 1. Distraction — cancels the meeting outright, and gives nothing away.
+  if (mc?.type === 'distraction' || oc?.type === 'distraction') {
+    if (mc?.type === 'distraction') takeCard(mover.hand, mc.id);
+    if (oc?.type === 'distraction') takeCard(other.hand, oc.id);
+    res.outcome = 'cancelled';
+    res.publicText = `${mover.name} and ${other.name} met — a Distraction broke it up before anything could happen.`;
+    return finishMeeting(state, floor, mover, other, res);
+  }
+
+  // 2. A possession attempt (only the possessed side can have committed one).
+  const attacker = mover.possessed && mover.intent === 'possess' ? mover
+    : other.possessed && other.intent === 'possess' ? other : null;
+  if (attacker) {
+    const target = attacker === mover ? other : mover;
+    const targetCard = attacker === mover ? oc : mc;
+    if (target.possessed) {
+      // Already one of them: it resolves as a perfectly ordinary trade.
+      return finishMeeting(state, floor, mover, other, exchangeOffers(res, mover, other, mc, oc));
+    }
+    if (targetCard?.type === 'lantern') {
+      takeCard(target.hand, targetCard.id);      // spent in defence, NOT handed to the attacker
+      target.knows.add(attacker.id);
+      res.outcome = 'blocked';
+      res.publicText = `${mover.name} and ${other.name} met. A possession attempt was blocked by a Lantern.`;
+      addNote(res, target.id, `You burned a Lantern to fight it off. ${attacker.name} is POSSESSED — only you know.`);
+      addNote(res, attacker.id, `${target.name} blocked you with a Lantern and now knows what you are.`);
+      return finishMeeting(state, floor, mover, other, res);
+    }
+    convertToPossessed(state, target, attacker.id);
+    res.outcome = 'possessed';
+    // Publicly identical to a meeting where neither side gave anything: that is the cover.
+    res.publicText = `${mover.name} and ${other.name} met. No cards changed hands.`;
+    addNote(res, target.id, 'Something came back with you from that room. You are now POSSESSED.');
+    addNote(res, attacker.id, `${target.name} is now possessed.`);
+    return finishMeeting(state, floor, mover, other, res);
+  }
+
+  // 3. An ordinary meeting.
+  return finishMeeting(state, floor, mover, other, exchangeOffers(res, mover, other, mc, oc));
 }
 
 // Resolve a card the player could not hold when they found it.
@@ -115,6 +213,7 @@ export function useHint(state, floor, player, cardId) {
   if (!candidates.length) return { ok: false, reason: 'nothingAdjacent' };
   const revealed = candidates[0];
   player.actionPoints -= rules.actionCost.useCard;
+  lockOffer(player);
   state.discovered.add(revealed);
   takeCard(player.hand, cardId);
   return { ok: true, revealed, name: floor.rooms.get(revealed)?.name };
@@ -201,6 +300,9 @@ export function resolveTrade(state, floor, P, Q, cardIdP, cardIdQ) {
 // the Revolver spends a shot and is discarded when empty.
 export function resolveAttack(state, floor, attacker, target, weaponId) {
   if (state.finished) return { ok: false, reason: 'finished' };
+  // The hot-seat rules have no health, no weapons and no Challenge. The legacy combat code below
+  // stays working and tested, but this mode can never reach it.
+  if (state.hotseat) return { ok: false, reason: 'combatDisabled' };
   // Safe rooms include the lobby AND the exit end-zone, so a challenge can never be made at the
   // moment someone escapes. Objectives are not held by players, so nothing here can take one.
   if (floor.rooms.get(attacker.currentRoom)?.safe) return { ok: false, reason: 'safe' };

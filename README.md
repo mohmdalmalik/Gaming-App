@@ -12,21 +12,39 @@ technical choices are in **[docs/DECISIONS.md](docs/DECISIONS.md)**; status and 
 
 ## Status
 
-**Phase 0 — single-player practice mode.** One guest explores an 18-room hotel laid out for
-the six-player balance baseline: move room by room on 4 action points a turn, search rooms for
-cards, find 3 objectives, unlock the Fire Exit and reach it. This phase exists to test movement,
-room layout, the interface and the basic rules flow on an iPad.
+Two modes ship, and the start screen chooses between them.
 
-The multiplayer systems (hidden Possessor, forced meetings, trading, challenge, health) are
-**written and tested but switched off** behind flags in `src/data/rules.js` — see
-`docs/GAME_RULES.md` §0. Nothing has been deleted; set `practiceMode: false` to bring the
-Phase 1 hot-seat game back. No real art, sound, or menu yet.
+**Practice (default).** One guest explores an 18-room hotel laid out for the six-player balance
+baseline: move room by room on 4 action points a turn, search rooms for cards, find 3 objectives,
+unlock the Fire Exit and reach it. Unchanged by Phase 1.
+
+**Hot-seat (Phase 1) — `?mode=hotseat&players=6`.** Four to six people play the approved rules on
+**one device**, passing it round: one hidden Possessor, private role screens, pre-committed
+Offers, a 45-second turn clock, an eight-round deadline, and two clean guests to get out. No
+health, no combat, no weapons, no locked doors. Full rules in `docs/GAME_RULES.md` §0b.
+
+**Online multiplayer is not implemented.** There is no server, no networking, no accounts and no
+database in this project, and none has been started. The older multiplayer engine (health,
+weapons, the three-Lantern Exit Key) is still present and tested behind `applyMode('legacy')`;
+nothing has been deleted. No real art, sound, or menu yet.
 
 ## Open the preview
 
 Published with GitHub Pages from `main`: **https://mohmdalmalik.github.io/Gaming-App/**
 (if it 404s, enable Pages once: repository → Settings → Pages → Deploy from a branch, `main`
 `/ (root)`).
+
+## Start a six-player hot-seat match
+
+1. Open the preview and tap **Hot-seat · 6 players** on the start screen, or go straight to
+   `https://mohmdalmalik.github.io/Gaming-App/?mode=hotseat&players=6`.
+2. Tap **Tap to begin**. Each guest in turn takes the device, reads their secret role alone and
+   taps **I understand**.
+3. Every turn runs: a neutral *pass the device* screen → that player's private screen (role, news,
+   hand, and the Offer they commit) → their 45-second action phase.
+
+`?players=4` / `?players=5` for a smaller table, `?timer=off` to play without the clock,
+`?seed=123` to deal the same hands and the same Possessor every time.
 
 ## How to play (each turn, 4 action points)
 
@@ -68,18 +86,22 @@ src/
   data/
     rules.js          THE RULE NUMBERS: AP, health, hand size, deck, card behaviour
     floor1.js         THE FLOOR: rooms, doorways, furniture, moods, dark rooms
-    characters.js     body types, outfits and the five players
+    characters.js     body types, outfits and the guests (up to six)
   game/               pure rules, no rendering (a server could reuse these)
     floor.js  grid.js   world geometry, walkable grid + A* pathfinding
     cards.js            deck build, seeded shuffle, deal, hand helpers
-    state.js            players, turns, health, possession, encounter locks, win checks
-    actions.js          search, bandage, trade resolution, attacks
+    state.js            players, turns, Offers, escapes, possession, win checks
+    actions.js          search, hints, meeting resolution, legacy trade/attack
     moves.js            plan a walk from a tap
-  render/             Three.js placeholder visuals (rooms, doorways, characters, cutaway, mood)
+  render/             Three.js placeholder visuals (rooms, doorways, characters, cutaway, mood,
+                      searched-room ticks)
   camera.js input.js player.js discovery.js   camera rig, gestures, movement, tap→plan glue
   hud.js  map.js  overlays.js   HUD + action bar, 2D map, start/end/error overlays
   ui/
-    cards.js  hand.js  encounter.js   card tiles, the hand panel, the encounter modal
+    cards.js  hand.js  encounter.js   card tiles, the hand panel, the legacy encounter modal
+    handoff.js                        hot-seat pass-the-device + private role/Offer screens
+    meeting.js                        hot-seat meeting: who to meet, then the PUBLIC result
+    fullHand.js  discard.js           hand-limit prompts
 docs/                 GAME_RULES (spec), GAME_CONCEPT, DECISIONS, PROGRESS
 tests/                Node checks (rules-check, logic-check) + a headless browser walkthrough
 ```
@@ -103,16 +125,23 @@ objective count, deck composition, card behaviour — is in `src/data/rules.js`.
 their `role`, doorways, furniture, which rooms are dark, moods) is in `src/data/floor1.js`.
 Change those files, not the game code.
 
-To bring the multiplayer rules back for testing, set `practiceMode: false` (and `healthEnabled:
-true` once combat is approved) in `src/data/rules.js`. The full roster, possession, encounters,
-trade and attack all return, and `tests/browser-test.mjs` starts running instead of skipping.
+Which mode runs is decided by the address, not by editing a file: `applyMode()` at the bottom of
+`src/data/rules.js` applies the practice defaults and then whatever that mode changes. The
+hot-seat block (`hotseatRules`) and the table-scaling helpers (`objectivesForPlayers`,
+`cleanEscapeesForPlayers`) are there too.
+
+To exercise the older multiplayer engine (health, weapons, the three-Lantern Exit Key), set
+`practiceMode: false` in `src/data/rules.js`; `tests/browser-test.mjs` then runs instead of
+skipping.
 
 ### Tests
 
 ```
 python3 -m http.server 8123 --bind 127.0.0.1 &
-node tests/rules-check.mjs        # rules engine: Phase 1 multiplayer + Phase 0 practice
-node tests/logic-check.mjs        # floor, room roles, grid, pathfinding
-node tests/browser-practice.mjs   # the Phase 0 practice loop in a real browser [--screens]
-node tests/browser-test.mjs       # Phase 1 multiplayer walkthrough (skips while practiceMode)
+node tests/rules-check.mjs        # rules engine: practice, hot-seat and the legacy engine
+node tests/logic-check.mjs        # floor, room roles, map topology, grid, pathfinding
+node tests/browser-practice.mjs   # the practice loop in a real browser [--screens]
+node tests/browser-hotseat.mjs    # the hot-seat loop in a real browser [--screens]
+node tests/browser-test.mjs       # the legacy multiplayer walkthrough (skips while practiceMode)
+node tools/balance/hotseat-sim.mjs   # 400 simulated hot-seat matches through the pure rules
 ```

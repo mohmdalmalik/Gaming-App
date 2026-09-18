@@ -34,11 +34,13 @@ export const outfits = {
   dressMidnight: { name: 'Midnight blue ballgown', body: 'female', bodice: '#1d2a5e', skirt: '#24357a', skirtStyle: 'full', sleeves: 'cap', sash: '#d9c27a' },
 };
 
-// The five players in turn order. `color` is the marker ring / interface colour.
+// The guests in turn order. `color` is the marker ring / interface colour. A hot-seat match uses
+// the first 4-6 of them; practice uses the first one only. Names are still placeholders.
 export const roster = [
   { id: 'p1', name: 'Victor', outfit: 'tuxedo', color: '#e6b45a' },
   { id: 'p2', name: 'Eleanor', outfit: 'dressMidnight', color: '#5ac8e6' },
   { id: 'p3', name: 'Marcus', outfit: 'suit', color: '#a8e05a' },
   { id: 'p4', name: 'Beatrice', outfit: 'dressEmerald', color: '#e67ab8' },
   { id: 'p5', name: 'Henry', outfit: 'dinnerJacket', color: '#f0743c' },
+  { id: 'p6', name: 'Clara', outfit: 'dressBurgundy', color: '#b8a2f0' },
 ];

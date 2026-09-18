@@ -443,3 +443,87 @@ The full Hotel Escape rules from `docs/GAME_RULES.md` play on the greybox:
 3. Later passes: main menu with the 3D lobby, character selection (outfits already in data),
    receptionist intro; then real art, sound, and true multiplayer (where hidden roles finally
    become hidden).
+
+
+---
+
+# Phase 1 — hot-seat rules sandbox (local, this pass)
+
+**What it is:** four to six people play the approved rules on one iPad, passing it round. There is
+no server and no networking; online multiplayer is not implemented.
+
+## How to start a six-player match
+1. Open the preview: https://mohmdalmalik.github.io/Gaming-App/
+2. On the start screen tap **Hot-seat · 6 players** (or open
+   `https://mohmdalmalik.github.io/Gaming-App/?mode=hotseat&players=6` directly).
+3. Tap **Tap to begin**. Each guest in turn is handed the device, reads their secret role alone and
+   taps **I understand**.
+4. Play. Every turn: a neutral pass screen → that player's private screen (role, news, hand, Offer)
+   → their 45-second action phase.
+
+`?players=4` and `?players=5` work too. `?timer=off` plays without the clock. `?seed=123` deals the
+same hands and the same Possessor every time, for testing.
+
+## What to test on the iPad
+1. **Roles are private.** At the start, six pass-and-reveal screens. Check nothing private shows on
+   the neutral pass screen, and that the role screen only appears after Continue.
+2. **The public interface.** During a turn, check the top strip shows names, rooms and card counts
+   and nothing else; there is no health row, no Trade button, no purple possessed wash.
+3. **Offers.** On your private screen tap a card to offer it (or Nothing). Start the turn, then tap
+   **Offer** in the bottom bar — it should still be changeable until your first action, and read
+   "locked" afterwards.
+4. **A meeting.** Walk onto another guest in a corridor. The result card should name both guests and
+   say only what the table is allowed to know. If you were the one affected, the private card that
+   follows is for you alone.
+5. **Being possessed.** If someone converts you, you are told on **your** next private screen, not
+   out loud. From then on your private screen offers **Try to POSSESS**.
+6. **A Lantern block.** Offer a Lantern, let the Possessor come to you. The table should be told
+   only that an attempt was blocked; your own private card names who tried.
+7. **The clock.** Watch the bar in the top right. It should stop dead on every pass screen and every
+   result card. Let it run out once: your Offer becomes Nothing and the turn ends.
+8. **Objectives and the exit.** Find all three, watch the notice, walk a clean guest into the Fire
+   Exit. They leave the hotel — check they vanish from the map, the 3D floor and the turn order.
+9. **The end.** Either two clean guests get out, or the eighth round passes. The end screen is the
+   only place roles are revealed.
+10. **Practice is untouched.** Go back to the plain address: one guest, no clock, no pass screens,
+    Restart practice still there.
+
+## Balance finding worth your attention (a rules decision, not a bug)
+
+`node tools/balance/hotseat-sim.mjs` plays 400 matches per row through the real rules engine with
+simple bots. With the approved numbers it reports:
+
+| Guests keep a Lantern in their Offer | Guests win | Conversions per match | Rounds |
+| --- | --- | --- | --- |
+| 100% | 100% | 0.51 | 3.0 |
+| 50% | 99% | 0.66 | 3.1 |
+| 0% | 96% | 0.86 | 3.2 |
+
+**Six guests search the whole hotel in about three of the eight rounds and walk out.** Six players
+× 4 action points × 3 rounds is 72 action points; the 16 searchable rooms cost 16 to search plus
+the walking. The Lantern barely matters, and the round limit never comes into play.
+
+The reason the possessed side loses is not the Lantern — it is that **they have no way to make a
+meeting happen**. A meeting only occurs when a player walks into a room that already holds
+someone, and six guests heading for six different unsearched rooms almost never collide. Half a
+conversion per match is not a hidden-role game.
+
+These are bots: they never talk, never suspect anybody, never waste a turn and never regroup, so
+this is the *fastest* a table could possibly finish rather than a prediction. But the gap is large
+enough that it will not be closed by real players being slower.
+
+This is a rules decision and therefore yours. The levers, roughly in order of how little they
+change: shorten the round limit (does not help — they win in 3); make the hotel bigger or the
+action points fewer; require more clean escapees; give the possessed side something that draws
+guests together or lets them follow one. Nothing in this pass has been changed on my own
+initiative — the implemented rules are exactly the ones approved.
+
+## Known limitations of this phase
+- Online multiplayer is not implemented and no work towards it has been started.
+- The voluntary lobby trade is switched off in hot-seat (it would show both hands). Practice and
+  the legacy engine still have it.
+- Everyone can still see the 3D hotel behind the hand-over screens; only cards, roles and Offers
+  are hidden. That is deliberate — where each guest is standing is public information.
+- Guest names (Victor, Eleanor, Marcus, Beatrice, Henry, Clara) and all art are still placeholders.
+- Receiving a card in a meeting can take a player to seven cards; they are asked to discard at the
+  end of their own next turn, not immediately.

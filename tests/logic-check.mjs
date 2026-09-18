@@ -15,7 +15,7 @@ check(floor.problems.length === 0, `floor data problems: ${JSON.stringify(floor.
 check(floor.roomList.length === 18, `${floor.roomList.length} rooms (18 wanted for the six-player layout)`);
 const startRoom = floor.rooms.get(floor.start.room);
 check(startRoom.doorways.length >= 4, `start room "${startRoom.name}" has ${startRoom.doorways.length} doorways`);
-check(floor.start.positions.length === 5, `${floor.start.positions.length} start positions`);
+check(floor.start.positions.length === 6, `${floor.start.positions.length} start positions (one per guest at a full six-player table)`);
 check(floor.roomList.filter(r => r.dark).length === 4, `${floor.roomList.filter(r => r.dark).length} dark rooms`);
 check(floor.roomList.filter(r => r.doorways.length === 1 && !r.isExit).length === 2, 'exactly two dead-end branches');
 // Room roles for the six-player balance layout (see src/data/rules.js).

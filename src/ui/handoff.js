@@ -135,6 +135,8 @@ export function createHandoff(doc) {
       el.kicker.textContent = kicker || `Private — ${player.name} only`;
       el.title.textContent = title;
       el.sub.textContent = sub || '';
+      el.pick.hidden = false;
+      el.pick.querySelector('.offer-label').textContent = '';
       el.pickIntent.hidden = false;
       for (const o of options) {
         const b = doc.createElement('button');

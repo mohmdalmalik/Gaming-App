@@ -12,21 +12,19 @@ technical choices are in **[docs/DECISIONS.md](docs/DECISIONS.md)**; status and 
 
 ## Status
 
-Two modes ship, and the start screen chooses between them.
+**The owner's restored ruleset is implemented and playable** (see `docs/GAME_RULES.md`, the product
+design; `CLAUDE.md` says no rule or number changes without the owner's approval of a before/after
+list). Two ways to play the same rules, chosen on the start screen:
 
-**Practice (default).** One guest explores an 18-room hotel laid out for the six-player balance
-baseline: move room by room on 4 action points a turn, search rooms for cards, find 3 objectives,
-unlock the Fire Exit and reach it. Unchanged by Phase 1.
-
-**Hot-seat (Phase 1) — `?mode=hotseat&players=6`.** Four to six people play the approved rules on
-**one device**, passing it round: one hidden Possessor, private role screens, pre-committed
-Offers, a 45-second turn clock, an eight-round deadline, and two clean guests to get out. No
-health, no combat, no weapons, no locked doors. Full rules in `docs/GAME_RULES.md` §0b.
+- **Practice (default).** One guest alone: explore the 18-room hotel, find the three pieces of the
+  fire-exit key (dark rooms need a Flashlight, two rooms are locked), reach the fire exit.
+- **Hot-seat — `?mode=hotseat&players=6`.** Four to six people passing **one device**: one hidden
+  Possessor with three Possession cards, private role screens, forced meetings with Trade or
+  Attack, trades chosen in private on the passed device, health and weapons, Lanterns that block
+  possession, a 45-second turn clock. A testing tool for the real online game.
 
 **Online multiplayer is not implemented.** There is no server, no networking, no accounts and no
-database in this project, and none has been started. The older multiplayer engine (health,
-weapons, the three-Lantern Exit Key) is still present and tested behind `applyMode('legacy')`;
-nothing has been deleted. No real art, sound, or menu yet.
+database in this project. No real art beyond the hall and Victor, no sound, no menu yet.
 
 ## Open the preview
 
@@ -36,31 +34,32 @@ Published with GitHub Pages from `main`: **https://mohmdalmalik.github.io/Gaming
 
 ## Start a six-player hot-seat match
 
-1. Open the preview and tap **Hot-seat · 6 players** on the start screen, or go straight to
+1. Open the preview and tap **Hot-seat · 6 players**, or go straight to
    `https://mohmdalmalik.github.io/Gaming-App/?mode=hotseat&players=6`.
 2. Tap **Tap to begin**. Each guest in turn takes the device, reads their secret role alone and
    taps **I understand**.
-3. Every turn runs: a neutral *pass the device* screen → that player's private screen (role, news,
-   hand, and the Offer they commit) → their 45-second action phase.
+3. Every turn: a neutral *pass the device* screen → that guest's private screen (role, news,
+   health, hand, key pieces) → their 45-second action phase.
 
 `?players=4` / `?players=5` for a smaller table, `?timer=off` to play without the clock,
-`?seed=123` to deal the same hands and the same Possessor every time.
+`?seed=123` to deal the same hands, hide the pieces in the same rooms and pick the same Possessor.
 
 ## How to play (each turn, 4 action points)
 
-- **Move** — usable doors glow and blink. Tap one, then **Move** on the confirm bar. A room you
-  already know costs 1 action point; revealing and entering a new one costs 2. The cost is always
-  shown before you confirm. Tapping empty floor in your current room repositions for free.
-- **Search** (1 AP) — once per room. An item room gives one card, an objective room gives one
-  objective, the Housekeeping Store is empty and says so.
-- **Hand** — see your cards. **Hint** (1 AP) reveals one undiscovered room next door. Lantern and
-  Distraction are carried for the multiplayer phase and explain themselves in the hand sheet.
-- **Full hand** — find a card while holding six and you choose: take it and drop one, use it now,
-  or leave it. Nothing is ever discarded silently, and the room still counts as searched.
-- **Objectives** — 3 of them, shown in the header. The Fire Exit stays hidden and sealed until
-  all three are found, then it appears on the map.
-- **End turn** — refills action points to 4. **Restart practice** starts the hotel over.
-- **Finish** — step into the Fire Exit. You can then keep exploring or restart.
+- **Move** — usable doors glow and blink. Tap one, then **Move**. Any adjacent room costs 1,
+  new or known. Tapping empty floor in your room repositions for free. A locked door says so;
+  a Master Key or Lock Pick (from the hand sheet) opens it from next door.
+- **Search** (1 AP) — takes anything lying in the room (a key piece, a dead guest's cards);
+  otherwise draws one card, once per room. Dark rooms need a Flashlight in hand.
+- **Hand** — Bandage (heal 1), Master Key / Lock Pick (open a locked room next door), Barricade
+  (seal a doorway of your room for one round) are played from here. Lantern, Flashlight and
+  weapons are used in context.
+- **Meetings** (hot-seat) — walk in on a guest you have not met in that room this round and you
+  must Trade or Attack. In a trade each side picks a card in private and sees only what they
+  received. Give a Lantern and a Possession card cannot take you. The lobby is safe.
+- **Escape** — a clean guest carrying the Bow, the Shank and the Bit walks into the Fire Exit.
+- **End turn** — refills action points to 4; if you hold more than 6 ordinary cards you discard
+  first (key pieces and Possession cards never count).
 
 Controls (camera): pinch / wheel to zoom, two-finger or right-drag to pan, ↺ ↻ to rotate,
 the map button (bottom-right) for the 2D map.
@@ -84,23 +83,23 @@ src/
   main.js             starts everything; the turn flow; window.__game debug hooks
   config.js           display / camera / feel tuning
   data/
-    rules.js          THE RULE NUMBERS: AP, health, hand size, deck, card behaviour
+    rules.js          THE RULE NUMBERS — implements docs/GAME_RULES.md (owner-approved changes only)
     floor1.js         THE FLOOR: rooms, doorways, furniture, moods, dark rooms
     characters.js     body types, outfits and the guests (up to six)
   game/               pure rules, no rendering (a server could reuse these)
     floor.js  grid.js   world geometry, walkable grid + A* pathfinding
     cards.js            deck build, seeded shuffle, deal, hand helpers
-    state.js            players, turns, Offers, escapes, possession, win checks
-    actions.js          search, hints, meeting resolution, legacy trade/attack
+    state.js            players, turns, key pieces, locked rooms, barricades, meetings, win checks
+    actions.js          search, the deck and discard pile, cards played, trade, attack, death
     moves.js            plan a walk from a tap
   render/             Three.js placeholder visuals (rooms, doorways, characters, cutaway, mood,
                       searched-room ticks)
   camera.js input.js player.js discovery.js   camera rig, gestures, movement, tap→plan glue
   hud.js  map.js  overlays.js   HUD + action bar, 2D map, start/end/error overlays
   ui/
-    cards.js  hand.js  encounter.js   card tiles, the hand panel, the legacy encounter modal
-    handoff.js                        hot-seat pass-the-device + private role/Offer screens
-    meeting.js                        hot-seat meeting: who to meet, then the PUBLIC result
+    cards.js  hand.js                 card tiles; the hand sheet with Bandage / key / Barricade actions
+    handoff.js                        pass-the-device + every private screen (role, turn, card pick, result)
+    meeting.js                        the PUBLIC side of a meeting: who, Trade or Attack, weapon, outcome
     fullHand.js  discard.js           hand-limit prompts
 docs/                 GAME_RULES (spec), GAME_CONCEPT, DECISIONS, PROGRESS
 tests/                Node checks (rules-check, logic-check) + a headless browser walkthrough
@@ -120,28 +119,20 @@ working checkpoint for the character + interface phase.)
 
 ## Changing the rules or the floor
 
-Every rule number — the phase flags, action points, action costs, hand size, room counts,
-objective count, deck composition, card behaviour — is in `src/data/rules.js`. The floor (rooms,
-their `role`, doorways, furniture, which rooms are dark, moods) is in `src/data/floor1.js`.
-Change those files, not the game code.
+Every rule number — action points, costs, health, the deck, the key pieces, locked rooms, the
+timer — is in `src/data/rules.js`, which implements `docs/GAME_RULES.md`. The floor (rooms, their
+doorways, furniture, which rooms are dark, moods) is in `src/data/floor1.js`. Change those files,
+not the game code — and per `CLAUDE.md`, not without the owner's approval of a before/after list.
 
-Which mode runs is decided by the address, not by editing a file: `applyMode()` at the bottom of
-`src/data/rules.js` applies the practice defaults and then whatever that mode changes. The
-hot-seat block (`hotseatRules`) and the table-scaling helpers (`objectivesForPlayers`,
-`cleanEscapeesForPlayers`) are there too.
-
-To exercise the older multiplayer engine (health, weapons, the three-Lantern Exit Key), set
-`practiceMode: false` in `src/data/rules.js`; `tests/browser-test.mjs` then runs instead of
-skipping.
+Which mode runs is decided by the address: `applyMode()` at the bottom of `src/data/rules.js`.
 
 ### Tests
 
 ```
 python3 -m http.server 8123 --bind 127.0.0.1 &
-node tests/rules-check.mjs        # rules engine: practice, hot-seat and the legacy engine
-node tests/logic-check.mjs        # floor, room roles, map topology, grid, pathfinding
-node tests/browser-practice.mjs   # the practice loop in a real browser [--screens]
-node tests/browser-hotseat.mjs    # the hot-seat loop in a real browser [--screens]
-node tests/browser-test.mjs       # the legacy multiplayer walkthrough (skips while practiceMode)
-node tools/balance/hotseat-sim.mjs   # 400 simulated hot-seat matches through the pure rules
+node tests/rules-check.mjs        # the rules engine against docs/GAME_RULES.md (125 assertions)
+node tests/logic-check.mjs        # floor, map topology, grid, pathfinding
+node tests/browser-practice.mjs   # practice mode in a real browser [--screens]
+node tests/browser-hotseat.mjs    # hot-seat in a real browser: roles, private trades, attacks, escape [--screens]
+node tools/balance/hotseat-sim.mjs 400 6   # 400 simulated six-player matches through the pure rules
 ```

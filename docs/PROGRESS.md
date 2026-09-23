@@ -447,7 +447,7 @@ The full Hotel Escape rules from `docs/GAME_RULES.md` play on the greybox:
 
 ---
 
-# Phase 1 — hot-seat rules sandbox (local, this pass)
+# Phase 1 — hot-seat rules sandbox (SUPERSEDED — see "Rules reset" below; kept for history)
 
 **What it is:** four to six people play the approved rules on one iPad, passing it round. There is
 no server and no networking; online multiplayer is not implemented.
@@ -527,3 +527,94 @@ initiative — the implemented rules are exactly the ones approved.
 - Guest names (Victor, Eleanor, Marcus, Beatrice, Henry, Clara) and all art are still placeholders.
 - Receiving a card in a meeting can take a player to seven cards; they are asked to discard at the
   end of their own next turn, not immediately.
+
+
+---
+
+# Rules reset — the owner's restored ruleset (current)
+
+`docs/GAME_RULES.md` is now the owner's design, implemented as written. Health and combat are
+back on; Offers, Hint, Distraction, public objectives, the round limit and the two-escape win are
+retired (git history keeps them). Practice mode is one guest finding the three key pieces and
+escaping; hot-seat is 4-6 guests on one device.
+
+## Test results
+| Suite | Checks | Result |
+| --- | --- | --- |
+| `tests/rules-check.mjs` | 125 | pass |
+| `tests/logic-check.mjs` | 67 | pass |
+| `tests/browser-practice.mjs` (root and `/Gaming-App/`) | 43 | pass |
+| `tests/browser-hotseat.mjs` (root and `/Gaming-App/`) | 70 | pass |
+
+## Simulation — 400 six-player matches (`node tools/balance/hotseat-sim.mjs 400 6`)
+Bots that search everything, heal when hurt, bring key pieces to one carrier (standing in for
+table talk), always give a Lantern when they have one, and attack only a guest they have unmasked.
+The possessed bot gives a Possession card whenever it has one and hunts clean guests.
+
+| | |
+| --- | --- |
+| Clean guests win | about 60% |
+| The hotel wins | 0% |
+| No ending (stuck) | about 40% — in 9 of 10 of those a possessed guest is holding a key piece |
+| Match length (finished matches) | median 5 rounds; the longest finished 120 |
+| Meetings / trades / attacks per match | 19 / 19 / 0.3 |
+| Possession attempts / succeeded / blocked by a Lantern | 3.2 / 0.5 / 2.7 |
+| Lanterns given in trades | 27 per match |
+| Bandages / Master Keys / Lock Picks used | 0.2 / 0.9 / 1.3 |
+| Key pieces found | 2.95 of 3 |
+| Deck reshuffles | none |
+
+**What looks broken (recommendations only — nothing has been changed):**
+1. **A possessed guest holding a key piece can stall the match for ever.** Possession spreads by
+   trade, the possessed guest keeps the piece, and there is no round limit and no other way for the
+   clean side to get it back except killing them — which needs a weapon, an attack, and knowing
+   who to attack. Two-fifths of simulated matches never end for this reason. Possible fixes for
+   you to choose between: a converted guest drops their key pieces; a possessed guest cannot hold
+   pieces at all; a round limit that hands the match to the hotel; or accept it and rely on table
+   talk and weapons (the bots barely attack: 0.3 attacks a match).
+2. **The Lantern is too strong as written.** Twelve in a 40-card deck plus one guaranteed each,
+   and giving one costs nothing you want, so competent guests give one in nearly every trade:
+   27 Lanterns change hands per match and 5 of every 6 possession attempts are blocked. The
+   possessed side converts about half a guest per match and never wins.
+3. **The hotel never wins.** Follows from 1 and 2: possession does not spread, and the possessed
+   guest does not die, so neither of the hotel's two win conditions is ever reached.
+4. **Attacks are rare and weapons barely matter** (0.3 attacks a match) because nobody knows whom
+   to attack until a Lantern unmasks someone. Real players will accuse and gamble more than bots.
+5. **Locked rooms and keys work but rarely bite**: 1.5 rooms opened a match, no match was ever
+   stuck for lack of keys.
+
+The remaining stuck cases (about 4% of matches) are bot limitations, not rules problems — pieces
+split between two guests who never manage to meet.
+
+## Open questions (placeholders chosen where the rules are silent)
+1. A room's card draw is once per room (as before); anything lying on the floor can always be
+   picked up. Should searching draw a card every time instead?
+2. The two locked rooms are chosen at random each match (never the lobby, its neighbours or the
+   exit). Should they be fixed rooms in the floor data?
+3. A Master Key or Lock Pick is used from the room next door to the locked room.
+4. A Barricade stands until the guest who placed it starts their next turn.
+5. A dead guest's Possession cards leave the game; everything else drops. Should Possession cards
+   drop too, and what happens when a clean guest picks one up?
+6. The exit room cannot hide a key piece (it is not searchable).
+7. In hot-seat the possessed tell (portrait + tint) is shown only on the possessed guest's private
+   screens, never on the shared screen. Online it can be on the main screen.
+8. A found key piece is told privately; an ordinary card draw is still a public toast.
+9. The end screen reveals everyone's role and who died.
+
+## What to test on the iPad (hot-seat, two or three of you is enough)
+1. **Roles.** Six pass-and-reveal screens; the pass screen shows nothing private; the possessed
+   guest's private screen says POSSESSED and shows three Possession cards.
+2. **The public screen.** Health hearts in the strip, no purple wash, no "possessed" anywhere.
+3. **A trade.** Walk in on a guest in a corridor → Trade → pick a card → pass the device → they
+   pick → pass back → you read what you received alone. The table sees only "Trade complete".
+4. **Possession and the Lantern.** As the possessed guest, give a Possession card. If the other
+   guest gave a Lantern, their private card says it burned; yours says they know. Otherwise they
+   are told they are possessed on their next private screen.
+5. **An attack.** With a Knife or Revolver, walk in on someone → Attack → pick the weapon → the
+   result is public and their hearts drop. Kill someone and search the room: you take their cards.
+6. **Dark and locked rooms.** Search says "need a Flashlight" in a dark room; a locked door says
+   so when tapped; open it from the hand sheet with a Master Key or Lock Pick.
+7. **The key.** Find pieces (a private card each), trade them to one guest, walk that guest into
+   the Fire Exit: "The guests got out".
+8. **The clock.** Stops on every pass screen and during meetings; running out ends the turn.
+9. **Practice.** The plain address: one guest, no clock, find three pieces, escape.

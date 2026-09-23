@@ -1,11 +1,12 @@
-// Headless browser test of the PHASE 1 HOT-SEAT rules sandbox (dev only, not part of the game).
+// Headless browser test of HOT-SEAT mode (dev only, not part of the game).
 // Setup once (from the repo root):  npm --prefix tests install
 // Run:  python3 -m http.server 8123 --bind 127.0.0.1 &   then   node tests/browser-hotseat.mjs [--screens]
 //       node tests/browser-hotseat.mjs --url http://127.0.0.1:8123/Gaming-App/   (Pages sub-path)
 //
-// Covers the whole local hot-seat loop: secret roles, the pass-the-device flow, turn structure
-// and the timer, pre-committed Offers, every meeting outcome, the exit end-zone, escaping, the
-// round limit, and — just as important — that the public interface never leaks a hidden role.
+// Four to six guests passing one device under docs/GAME_RULES.md: secret roles, the pass-the-
+// device flow, the timer, private trades, possession and the Lantern, attacks and death, the
+// three key pieces, escape, and the two ways the hotel wins. And that the public screen never
+// leaks a role or a trade result.
 import { chromium } from 'playwright-core';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -34,6 +35,7 @@ const failures = [];
 const check = (cond, msg) => { if (cond) console.log('  ok  ', msg); else { console.log('  FAIL', msg); failures.push(msg); } };
 
 const browser = await chromium.launch({ executablePath: findChrome(), headless: true, args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--no-sandbox'] });
+// iPad-landscape sized viewport with touch enabled — the primary target.
 const context = await browser.newContext({ viewport: { width: 1180, height: 820 }, deviceScaleFactor: 2, hasTouch: true });
 const page = await context.newPage();
 const consoleMessages = [];
@@ -46,7 +48,7 @@ await page.route(`${CDN}**`, route => {
   route.fulfill(fs.existsSync(file) ? { status: 200, contentType: 'application/javascript', body: fs.readFileSync(file) } : { status: 404, body: 'x' });
 });
 
-const game = fn => page.evaluate(fn);
+const game = (fn, arg) => page.evaluate(fn, arg);
 const shot = async n => { if (shots) await page.screenshot({ path: path.join(outDir, `${n}.png`) }); };
 const settle = async (t = 40000) => page.waitForFunction(
   () => !window.__game.activeMover().walking && window.__game.activeMover().path.length === 0, null, { timeout: t, polling: 50 });
@@ -54,324 +56,332 @@ const settle = async (t = 40000) => page.waitForFunction(
 // Is an element actually painted? (`hidden` alone is not proof — CSS can override it.)
 const visible = sel => page.evaluate(s => {
   const el = document.querySelector(s);
-  if (!el) return false;
-  return el.offsetParent !== null && getComputedStyle(el).display !== 'none' && getComputedStyle(el).visibility !== 'hidden';
+  return !!el && el.offsetParent !== null && getComputedStyle(el).display !== 'none' && getComputedStyle(el).visibility !== 'hidden';
 }, sel);
-
-async function load(query) {
-  const url = baseUrl + (baseUrl.includes('?') ? '&' : '?') + query;
-  await page.goto(url, { waitUntil: 'domcontentloaded' });
-  await page.waitForFunction(() => window.__game && !document.getElementById('btn-begin').disabled, null, { timeout: 40000 });
-  // Headless software rendering runs at a few frames a second, so a walk across the hotel would
-  // take a real minute. Only the walking speed is changed — no rule, cost or timer is touched.
-  await game(() => { window.__game.cfg.player.speed = 16; });
-}
 const kind = () => game(() => window.__game.handoffKind());
-// Stand a player in a room for real — the figure has to move too, or the discovery watcher
-// notices the mismatch on the next frame and walks the rules back to where the figure is.
-const place = (index, room) => page.evaluate(({ index, room }) => {
+const tap = async sel => { await page.click(sel); await page.waitForTimeout(70); };
+const next = () => tap('#btn-handoff-next');
+// Stand a guest in a room for real: the figure moves too, or the discovery watcher walks the
+// rules back to where the figure is on the next frame.
+const place = (index, room, ap = null) => page.evaluate(({ index, room, ap }) => {
   const g = window.__game, p = g.state.players[index], c = g.roomCenter(room);
   g.state.discovered.add(room);
   p.currentRoom = room;
+  if (ap != null) p.actionPoints = ap;
   g.movers[index].reset(c[0], c[1]);
   g.discovery.refresh(); g.refresh();
-}, { index, room });
-const put = async (room, ap = 4) => {
-  await page.evaluate(({ room, ap }) => { window.__game.activePlayer().actionPoints = ap; window.__game.state.discovered.add(room); }, { room, ap });
-  await place(await game(() => window.__game.state.activeIndex), room);
-};
-const tap = async (sel) => { await page.click(sel); await page.waitForTimeout(70); };
-const next = () => tap('#btn-handoff-next');
-
-// Click through whatever hand-over screens are up until the active player's turn is running.
+}, { index, room, ap });
+const put = async (room, ap = 4) => place(await game(() => window.__game.state.activeIndex), room, ap);
+const give = (index, cards) => page.evaluate(({ index, cards }) => {
+  const g = window.__game; g.state.players[index].hand.push(...cards); g.refresh();
+}, { index, cards });
+async function load(query) {
+  const u = baseUrl + (query ? (baseUrl.includes('?') ? '&' : '?') + query : '');
+  await page.goto(u, { waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(() => window.__game && !document.getElementById('btn-begin').disabled, null, { timeout: 45000 });
+  // Headless software rendering runs at a few frames a second; only the walking speed is raised.
+  await game(() => { window.__game.cfg.player.speed = 16; window.__game.setPixelRatio(0.5); });
+}
+// Click through hand-over screens until the active guest's turn is running.
 async function intoTurn() {
-  for (let i = 0; i < 12; i++) {
+  for (let i = 0; i < 14; i++) {
     if (await game(() => window.__game.inActionPhase() && !window.__game.handoffOpen())) return true;
     if (await game(() => window.__game.handoffOpen())) { await next(); continue; }
     return false;
   }
   return false;
 }
-// Click through the six secret-role screens at the start of a match.
 async function throughRoles() {
   for (let i = 0; i < 20; i++) {
-    if (await game(() => window.__game.handoffKind()) === 'turn') return;
+    if (await kind() === 'turn') return;
     if (await game(() => window.__game.handoffOpen())) await next(); else return;
   }
 }
-
-console.log('\n1. a six-player hot-seat match starts');
-await load('mode=hotseat&players=6&seed=4242');
-check(await game(() => window.__game.mode) === 'hotseat', 'the page starts in hot-seat mode');
-check(await game(() => window.__game.state.players.length) === 6, 'six guests are at the table');
-check(await game(() => window.__game.rules.gameMode) === 'hotseatRulesV1', 'the rules are the approved hotseatRulesV1 set');
-check(await game(() => window.__game.possessedIndexes().length) === 1, 'exactly one hidden Possessor');
-check(await game(() => window.__game.state.players.every(p => p.hand.every(c => c.type !== 'possession'))),
-  'no Possession cards exist — possession is an intent, not a card');
-check(await game(() => window.__game.state.players.every(p => p.hand.length === 4)), 'four cards each');
-check(await game(() => window.__game.state.players.every(p => p.hand.some(c => c.type === 'lantern'))),
-  'every starting hand holds at least one Lantern');
-await shot('p1-01-start');
-
-console.log('\n2. secret roles are shown one player at a time');
-await tap('#btn-begin');
-check(await kind() === 'pass', 'the first screen is a neutral hand-over, not a role');
-check(!(await visible('#handoff-hand')) && !(await visible('#handoff-role')),
-  'the hand-over screen shows no hand and no role');
-check((await page.textContent('#handoff-title')).includes('Pass the device to'), 'it says who to pass the device to');
-await shot('p1-02-pass');
-await next();
-check(await kind() === 'role', 'then that player alone sees their role');
-check(await visible('#handoff-role'), 'the role badge is on screen');
-const firstRole = await page.textContent('#handoff-role');
-check(/GUEST|POSSESSED/.test(firstRole), `the role is stated plainly ("${firstRole.trim().split('\n')[0]}")`);
-await shot('p1-03-role');
-await next();
-check(await kind() === 'pass', 'and the device is handed to the next player');
-await throughRoles();
-check(await game(() => window.__game.state.players.every(p => p.roleSeen)), 'all six acknowledged their role');
-check(await kind() === 'turn', "the first player's private turn screen follows");
-
-console.log('\n3. the private turn screen and the Offer');
-check(await visible('#handoff-offer'), 'the Offer chooser is on the private screen');
-check((await page.textContent('#offer-summary')).includes('Nothing'), 'the Offer starts as Nothing');
-check(await game(() => !window.__game.inActionPhase()), 'the turn has not started yet');
-check(await game(() => window.__game.timeLeft()) === 0, 'and the timer is not running during the private screen');
-await shot('p1-04-private-turn');
-// Commit the first card as the Offer by tapping it.
-await page.click('#offer-cards .card-tile:nth-child(2)');
-await page.waitForTimeout(80);
-check(await game(() => window.__game.offerOf(0).offer !== null), 'tapping a card commits it as the Offer');
-check(await game(() => !window.__game.offerOf(0).locked), 'it is still changeable before the turn starts');
-await next();
-
-console.log('\n4. the action phase and the turn timer');
-check(await game(() => window.__game.inActionPhase()), 'the turn is running');
-check(await game(() => Math.round(window.__game.timeLeft())) === 45, 'the 45-second timer starts after the hand-over screen');
-check(await visible('#turn-timer'), 'the timer is on screen');
-check(await game(() => window.__game.rules.actionPointsPerTurn) === 4, 'four action points a turn');
-check(await game(() => window.__game.activePlayer().actionPoints) === 4, 'the active player has all four');
-await page.waitForFunction(() => window.__game.timeLeft() < 45, null, { timeout: 15000 }).catch(() => {});
-const ticked = await game(() => window.__game.timeLeft());
-check(ticked < 45, `the timer counts down (${ticked.toFixed(2)}s left)`);
-await shot('p1-05-action');
-
-console.log('\n5. the public interface never carries a hidden role');
-check(!(await visible('#possess-tint')), 'there is no possessed screen wash in hot-seat');
-check(await page.evaluate(() => !document.getElementById('player-panel').classList.contains('possessed')),
-  'the active-player panel never styles itself as possessed');
-check(!(await visible('#health-row')), 'no health row (health is off in this mode)');
-check(!(await visible('#btn-trade')), 'no Trade button');
-const hudText = await page.evaluate(() => document.getElementById('hud').innerText);
-check(!/POSSESS/i.test(hudText), 'the word "possessed" appears nowhere in the public interface');
-check(await visible('#escapes'), 'escape progress is public');
-check((await page.textContent('#esc-count')).trim() === '0 / 2', 'two clean guests must get out at six players');
-check((await page.textContent('#obj-count')).trim() === '0 / 3', 'three objectives at six players');
-check(await visible('#btn-offer'), 'the active player can review their own Offer');
-// The top strip carries public facts only.
-const strip = await page.evaluate(() => document.getElementById('players-strip').innerText);
-check(/cards/.test(strip), 'the strip shows each guest’s room and card count');
-check(!/POSSESS|GUEST/i.test(strip), 'and never a role');
-
-console.log('\n6. the Offer locks on the first action');
-await put('corridorW', 4);
-await page.click('#btn-search');
-await page.waitForTimeout(150);
-check(await game(() => window.__game.offerOf(0).locked), 'searching locks the Offer for the rest of the turn');
-check(await game(() => window.__game.setOffer(null).reason) === 'locked', 'and it can no longer be changed');
-check(await game(() => window.__game.state.searchedRooms.has('corridorW')), 'the room is marked searched');
-check((await page.textContent('#search-sub')).includes('Already searched'), 'and the Search button says so');
-await shot('p1-05b-searched');
-
-console.log('\n7. the timer running out ends the turn with an Offer of Nothing');
-await game(() => { const g = window.__game; g.activePlayer().offer = null; g.activePlayer().offerLocked = false; });
-await game(() => window.__game.forceTimeUp());
-await page.waitForFunction(() => window.__game.state.activeIndex === 1, null, { timeout: 20000 }).catch(() => {});
-await page.waitForTimeout(150);
-check(await game(() => window.__game.offerOf(0).offer === null && window.__game.offerOf(0).locked),
-  'the Offer locks as Nothing when time runs out');
-check(await game(() => window.__game.state.activeIndex) === 1, 'and the turn passes on');
-check(await kind() === 'pass', 'the next player gets the neutral hand-over screen');
-check(await game(() => window.__game.timeLeft()) === 0, 'the timer does not run during the hand-over');
-
-console.log('\n8. meetings resolve from the two stored Offers, with no off-turn prompt');
-await load('mode=hotseat&players=6&seed=51');
-await tap('#btn-begin');
-await throughRoles();
-// Stage it: player 0 clean and moving, player 1 holding a Lantern as their Offer, both in a
-// normal room, and the Possessor role on player 0 committing a possession attempt.
-await game(() => {
-  const g = window.__game, s = g.state;
-  const A = s.players[0], B = s.players[1];
-  s.players.forEach(p => { p.possessed = false; p.knows = new Set(); p.notes = []; });
-  A.possessed = true;
-  A.hand = [{ id: 'a1', type: 'hint' }];
-  B.hand = [{ id: 'b1', type: 'lantern' }];
-  s.activeIndex = 1; B.offerLocked = false; g.setOffer('b1', 'trade');
-  s.activeIndex = 0; A.offerLocked = false; g.setOffer('a1', 'possess');
-  s.discovered.add('corridorE'); s.discovered.add('corridorW');
-  g.refresh();
-});
-await intoTurn();
-check(await game(() => window.__game.offerOf(1).offer) === 'b1', 'the other player already committed their Offer on their own turn');
-// Stand them in adjacent rooms and walk player 0 onto player 1 through the real movement path.
-await place(1, 'corridorE');
-await place(0, 'hall');
-await game(() => { window.__game.activePlayer().actionPoints = 4; window.__game.refresh(); });
-await game(() => window.__game.moveToRoom('corridorE'));
-await settle();
-await page.waitForTimeout(300);
-check(await game(() => window.__game.meetingOpen()), 'arriving on another guest opens the meeting panel');
-const publicLine = await page.textContent('#encounter-body');
-check(/blocked/i.test(publicLine), `the public result says the attempt was blocked ("${publicLine.trim().slice(0, 80)}")`);
-check(!/POSSESSED/.test(publicLine), 'and never names who tried it');
-check(await game(() => !window.__game.state.players[1].possessed), 'the Lantern stopped the possession');
-check(await game(() => window.__game.state.players[1].hand.every(c => c.type !== 'lantern')), 'the Lantern was spent');
-check(await game(() => window.__game.state.players[0].hand.some(c => c.id === 'a1')), 'no card changed hands');
-check(await game(() => window.__game.notesOf(1).length) > 0, "the defender has a PRIVATE note waiting on their own screen");
-await shot('p1-06-meeting');
-await tap('#encounter-actions .btn.primary');
-check(await game(() => window.__game.handoffKind()) === 'note', 'the attacker reads their own private consequence alone');
-await next();
-check(await game(() => window.__game.state.meetingThisTurn), 'only one forced meeting is allowed this turn');
-
-console.log('\n9. conversion is told to the new Possessor privately, on their own screen');
-await load('mode=hotseat&players=6&seed=88');
-await tap('#btn-begin');
-await throughRoles();
-await game(() => {
-  const g = window.__game, s = g.state;
-  const A = s.players[0], B = s.players[1];
-  s.players.forEach(p => { p.possessed = false; p.notes = []; });
-  A.possessed = true;
-  A.hand = [{ id: 'a1', type: 'hint' }]; B.hand = [{ id: 'b1', type: 'hint' }];
-  s.activeIndex = 1; B.offerLocked = false; g.setOffer('b1', 'trade');
-  s.activeIndex = 0; A.offerLocked = false; g.setOffer('a1', 'possess');
-  s.discovered.add('corridorE'); s.discovered.add('corridorW');
-  g.refresh();
-});
-await intoTurn();
-await place(1, 'corridorE');
-await place(0, 'hall');
-await game(() => { window.__game.activePlayer().actionPoints = 4; window.__game.refresh(); });
-await game(() => window.__game.moveToRoom('corridorE'));
-await settle();
-await page.waitForTimeout(300);
-const convLine = await page.textContent('#encounter-body');
-check(/No cards changed hands/i.test(convLine), 'publicly a successful possession looks like an empty meeting');
-check(await game(() => window.__game.state.players[1].possessed), 'the target is now possessed');
-check(await game(() => window.__game.state.players[1].roleChangePending), 'they have not been told yet');
-await tap('#encounter-actions .btn.primary');
-if (await game(() => window.__game.handoffKind()) === 'note') await next();
-// Hand the turn on until it is the converted player's turn.
-await game(() => { window.__game.state.activeIndex = 0; window.__game.endTurn(); });
-await page.waitForTimeout(200);
-check(await kind() === 'pass', 'the next turn opens with the neutral hand-over');
-await next();
-check(await kind() === 'role', 'the converted guest gets a PRIVATE role-change screen');
-const changed = await page.textContent('#handoff-role');
-check(/POSSESSED/.test(changed), 'and it tells them what they now are');
-await shot('p1-07-converted');
-await next();
-check(await game(() => !window.__game.state.players[1].roleChangePending), 'the change is acknowledged once');
-
-console.log('\n10. objectives, the sealed exit and escaping');
-await load('mode=hotseat&players=6&seed=9001');
-await tap('#btn-begin');
-await throughRoles();
-await intoTurn();
-check(await game(() => !window.__game.exitUnlocked()), 'the exit starts sealed');
-await game(() => {
+// A room that can be searched with no fuss: not dark, not locked, nothing lying in it.
+const plainRoom = () => game(() => {
   const g = window.__game;
-  g.floor.roomList.filter(r => r.role === 'objective').forEach(r => g.state.objectivesFound.add(r.id));
+  return g.floor.roomList.find(r => r.searchable && !r.dark && !g.state.lockedRooms.has(r.id) && !g.state.roomDrops.has(r.id)).id;
+});
+const finish = async () => {
+  // A request cut off by the test's own page navigation (ERR_ABORTED) is harness noise, not a game error.
+  const noisy = consoleMessages.filter(m => !/favicon/i.test(m) && !/requestfailed:.*ERR_ABORTED/.test(m));
+  check(noisy.length === 0, noisy.length ? `console noise:\n    ${noisy.slice(0, 6).join('\n    ')}` : 'no console errors or failed requests (clean)');
+  await browser.close();
+};
+
+// Stage a meeting: guest `mover` in the hall with `ap`, guest `other` in corridorE; the mover
+// then walks in. Returns once the meeting panel is up.
+async function walkInto(mover, other) {
+  await place(other, 'corridorE');
+  await place(mover, 'hall', 4);
+  await game(() => window.__game.moveToRoom('corridorE'));
+  await settle();
+  await page.waitForFunction(() => window.__game.meetingOpen(), null, { timeout: 8000 }).catch(() => {});
+}
+const clickBtn = async (sel, text) => {
+  const handle = await page.$$(sel);
+  for (const h of handle) if ((await h.textContent()).trim().startsWith(text)) { await h.click(); await page.waitForTimeout(80); return true; }
+  return false;
+};
+
+console.log('1. a six-player match');
+await load('mode=hotseat&players=6&seed=4242');
+const st = await game(() => ({
+  mode: window.__game.mode, n: window.__game.state.players.length, poss: window.__game.possessedIndexes(),
+  supply: window.__game.state.players.map(p => p.hand.filter(c => c.type === 'possession').length),
+  lanterns: window.__game.state.players.every(p => p.hand.some(c => c.type === 'lantern')),
+  four: window.__game.state.players.every(p => p.hand.filter(c => c.type !== 'possession').length === 4),
+  pieces: window.__game.pieces().rooms, locked: window.__game.lockedRooms(), pile: window.__game.state.drawPile.length,
+  timer: window.__game.rules.turnTimerEnabled,
+}));
+check(st.mode === 'hotseat' && st.n === 6, 'six guests, hot-seat');
+check(st.poss.length === 1 && st.supply[st.poss[0]] === 3 && st.supply.filter(x => x > 0).length === 1, 'exactly one possessed guest, holding 3 Possession cards');
+check(st.lanterns && st.four, 'four cards each, a Lantern among them');
+check(st.pieces.length === 3 && st.locked.length === 2 && st.pile === 16, 'three pieces hidden, two rooms locked, 16 cards left in the deck');
+check(st.timer, 'the 45-second timer is on');
+
+console.log('\n2. secret roles, one guest at a time');
+await tap('#btn-begin');
+check(await kind() === 'pass', 'a neutral hand-over screen comes first');
+check(!(await visible('#handoff-role')) && !(await visible('#handoff-hand')), 'with no role and no hand on it');
+await next();
+check(await kind() === 'role' && /CLEAN GUEST|POSSESSED/.test(await page.textContent('#handoff-role')), 'then that guest alone reads their role');
+await shot('hs-01-role');
+await throughRoles();
+check(await game(() => window.__game.state.players.every(p => p.roleSeen)), 'all six acknowledged');
+check(await kind() === 'turn', "the first guest's private turn screen follows");
+check(await visible('#handoff-hand') && await visible('#handoff-role'), 'it shows their role and their hand');
+check((await page.textContent('#handoff-kicker')).includes('health 3 of 3'), 'and their health');
+await shot('hs-02-private-turn');
+await next();
+
+console.log('\n3. the action phase and the public screen');
+check(await game(() => window.__game.inActionPhase()) && await visible('#turn-timer'), 'the turn runs with the clock showing');
+check(await game(() => Math.round(window.__game.timeLeft())) === 45, 'starting at 45 seconds');
+check(await visible('#health-row'), 'health is shown');
+const hudText = await page.evaluate(() => document.getElementById('hud').innerText);
+check(!/POSSESS/i.test(hudText), 'the word "possessed" is nowhere on the public screen');
+check(!(await visible('#possess-tint')) && await page.evaluate(() => !document.getElementById('player-panel').classList.contains('possessed')),
+  'no possessed tint or portrait on the shared screen — the tell lives on the private screens');
+check(/cards/.test(await page.evaluate(() => document.getElementById('players-strip').innerText)), 'the strip shows rooms, cards and health');
+// Possessed guest's private screen carries the tell.
+const evilIdx = st.poss[0];
+await game(i => { window.__game.state.activeIndex = i; window.__game.refresh(); }, evilIdx);
+await game(() => window.__game.endTurn());
+await page.waitForTimeout(150);
+// endTurn moved to the next guest; step back to the possessed one directly.
+await game(i => { window.__game.state.activeIndex = i; window.__game.refresh(); }, evilIdx);
+await game(() => window.__game.handoff.privateTurn(window.__game.state, window.__game.floor, window.__game.activePlayer(), { onStart: () => {} }));
+check(/POSSESSED/.test(await page.textContent('#handoff-role')) && await page.evaluate(() => document.querySelector('#handoff-role').classList.contains('evil')),
+  'the possessed guest sees POSSESSED on their own private screen');
+check(await page.evaluate(() => [...document.querySelectorAll('#handoff-hand .card-tile')].filter(t => t.classList.contains('evil')).length) === 3,
+  'with their three Possession cards');
+await shot('hs-03-possessed-private');
+await next();
+
+console.log('\n4. a trade, each side choosing in private');
+await load('mode=hotseat&players=6&seed=4242');
+await tap('#btn-begin'); await throughRoles(); await intoTurn();
+// Guest 0 clean and moving; the possessed guest waits in the corridor.
+const P = 0, E = 1;   // the staging below makes guest 1 the possessed one for these two sections
+await game(({ P, E }) => {
+  const s = window.__game.state;
+  s.players.forEach((p, i) => { p.possessed = i === E; p.notes = []; p.knows = new Set(); });
+  s.players[P].hand = [{ id: 'p1', type: 'bandage' }, { id: 'p2', type: 'knife' }];
+  s.players[E].hand = [{ id: 'e1', type: 'lantern' }, { id: 'x1', type: 'possession' }, { id: 'x2', type: 'possession' }, { id: 'x3', type: 'possession' }];
+  s.activeIndex = P; window.__game.refresh();
+}, { P, E });
+await walkInto(P, E);
+check(await game(() => window.__game.meetingOpen()), 'walking in on a guest opens the meeting');
+check(await clickBtn('#encounter-actions .btn', 'Trade'), 'the arriving guest chooses Trade');
+check(await kind() === 'pick' && (await page.textContent('#handoff-kicker')).includes('Victor'), 'they choose their card in private');
+check(await page.evaluate(() => document.querySelectorAll('#offer-cards .card-tile').length) === 2, 'from their own hand only');
+await page.click('#offer-cards .card-tile[data-card-id="p1"]'); await page.waitForTimeout(80);
+check(await kind() === 'pass' && (await page.textContent('#handoff-title')).includes('Pass the device'), 'the device is passed to the other guest');
+await next();
+check(await kind() === 'pick', 'who chooses in private too');
+check(await page.evaluate(() => !!document.querySelector('#offer-cards .card-tile[data-card-id="x1"]')), 'a possessed guest may give a Possession card');
+await page.click('#offer-cards .card-tile[data-card-id="x1"]'); await page.waitForTimeout(80);
+check(await kind() === 'pass', 'the device goes back');
+await next();
+check(await kind() === 'note' && /POSSESSED/.test(await page.textContent('#handoff-notes')), 'the receiver privately learns they are now possessed');
+await shot('hs-04-possessed-note');
+await next();
+check(await game(() => window.__game.meetingOpen()) && !/Possession|POSSESS/.test(await page.textContent('#encounter-body')), 'the public result says only that a trade was made');
+await tap('#encounter-actions .btn.primary');
+const after = await game(({ P, E }) => ({
+  poss: window.__game.state.players[P].possessed, keeps: window.__game.state.players[P].hand.some(c => c.id === 'x1'),
+  gave: window.__game.state.players[E].hand.some(c => c.id === 'p1'), log: window.__game.publicLog().join(' '),
+}), { P, E });
+check(after.poss && after.keeps, 'the guest is possessed and keeps the Possession card');
+check(after.gave, 'the possessed giver keeps what they were given');
+check(!/possess/i.test(after.log), 'the public log never mentions possession');
+
+console.log('\n5. a Lantern blocks it');
+await load('mode=hotseat&players=6&seed=4242');
+await tap('#btn-begin'); await throughRoles(); await intoTurn();
+await game(({ P, E }) => {
+  const s = window.__game.state;
+  s.players.forEach((p, i) => { p.possessed = i === E; p.notes = []; p.knows = new Set(); });
+  s.players[P].hand = [{ id: 'p1', type: 'lantern' }];
+  s.players[E].hand = [{ id: 'e1', type: 'bandage' }, { id: 'x1', type: 'possession' }, { id: 'x2', type: 'possession' }, { id: 'x3', type: 'possession' }];
+  s.activeIndex = P; window.__game.refresh();
+}, { P, E });
+await walkInto(P, E);
+await clickBtn('#encounter-actions .btn', 'Trade');
+await page.click('#offer-cards .card-tile[data-card-id="p1"]'); await page.waitForTimeout(80);
+await next();
+await page.click('#offer-cards .card-tile[data-card-id="x1"]'); await page.waitForTimeout(80);
+await next();
+check(await kind() === 'note' && (await page.textContent('#handoff-notes')).includes('Lantern'), 'the defender is told their Lantern burned the attempt');
+await next(); await tap('#encounter-actions .btn.primary');
+const blk = await game(({ P, E }) => {
+  const s = window.__game.state;
+  return { poss: s.players[P].possessed, knows: s.players[P].knows.has(s.players[E].id),
+    lanternWent: s.players[E].hand.some(c => c.id === 'p1'), destroyed: !s.players.some(p => p.hand.some(c => c.id === 'x1')) && !s.discardPile.some(c => c.id === 'x1'),
+    left: s.players[E].hand.filter(c => c.type === 'possession').length };
+}, { P, E });
+check(!blk.poss && blk.knows, 'the defender is not possessed and knows who tried');
+check(blk.lanternWent, 'the Lantern still went to the attacker');
+check(blk.destroyed && blk.left === 2, 'the Possession card is destroyed; two remain');
+
+console.log('\n6. attack, death and dropped cards');
+await load('mode=hotseat&players=6&seed=4242');
+await tap('#btn-begin'); await throughRoles(); await intoTurn();
+await game(() => {
+  const s = window.__game.state;
+  s.players[0].hand = [{ id: 'rv', type: 'revolver', shots: 2 }];
+  s.players[1].hand = [{ id: 'v1', type: 'lantern' }, { id: 'v2', type: 'bow' }];
+  s.players[1].health = 2; s.activeIndex = 0; window.__game.refresh();
+});
+await walkInto(0, 1);
+check(await clickBtn('#encounter-actions .btn', 'Attack'), 'with a weapon, Attack is offered');
+await page.click('#encounter-body .card-tile[data-card-id="rv"]'); await page.waitForTimeout(120);
+check(/dead/i.test(await page.textContent('#encounter-body')), 'a Revolver at 2 health kills — and says so publicly');
+await shot('hs-05-attack');
+await tap('#encounter-actions .btn.primary');
+const dead = await game(() => ({
+  alive: window.__game.state.players[1].alive, drops: (window.__game.state.roomDrops.get('corridorE') || []).map(c => c.id),
+  strip: document.getElementById('players-strip').innerText, ap: window.__game.state.players[0].actionPoints,
+}));
+check(!dead.alive && dead.drops.includes('v1') && dead.drops.includes('v2'), 'the dead guest’s cards — the key piece included — lie on the floor');
+check(/Dead/.test(dead.strip), 'the strip marks them dead');
+check(dead.ap === 2, 'the move and the attack cost one each');
+await game(() => { window.__game.activePlayer().actionPoints = 4; window.__game.refresh(); });
+await tap('#btn-search');
+await page.waitForTimeout(150);
+if (await kind() === 'note') await next();
+check(await game(() => window.__game.state.players[0].hand.some(c => c.id === 'v2')), 'searching the room picks the dropped piece up');
+await game(() => window.__game.endTurn());
+await page.waitForTimeout(150);
+check(await game(() => window.__game.state.activeIndex) === 2, 'the dead guest is skipped in the turn order');
+
+console.log('\n7. the exit is resolved before any meeting');
+await load('mode=hotseat&players=6&seed=4242');
+await tap('#btn-begin'); await throughRoles(); await intoTurn();
+await game(() => {
+  const s = window.__game.state, g = window.__game;
+  s.players.forEach((p, i) => { p.possessed = i === 5; });
+  s.players[0].hand.push({ id: 'b1', type: 'bow' }, { id: 'b2', type: 'shank' }, { id: 'b3', type: 'bit' });
   g.refresh();
 });
-check(await game(() => window.__game.exitUnlocked()), 'finding every objective opens the way out');
-await game(() => { window.__game.activePlayer().possessed = false; });
-// Put another guest in the exit: arriving there must STILL not force a meeting.
 await place(1, await game(() => window.__game.floor.exitRoom));
 await put('stairs', 4);
 await game(() => window.__game.moveToRoom(window.__game.floor.exitRoom));
 await settle();
-await page.waitForTimeout(400);
-check(!(await game(() => window.__game.meetingOpen())), 'arriving in the exit forces NO meeting, even with a guest standing there');
-check(await game(() => window.__game.escapes().escaped) === 1, 'the clean guest escaped on entry');
-check(await game(() => window.__game.noticeOpen()), 'the table is told who is out');
-await shot('p1-08-escaped');
-await game(() => window.__game.clickNotice());
-await page.waitForTimeout(250);
-check(await game(() => window.__game.state.escaped.size) === 1, 'the escape is permanent');
-check(await game(() => window.__game.state.activeIndex !== 0), 'the escaped guest takes no further turn');
-await intoTurn();
-check(await game(() => {
-  const g = window.__game;
-  for (let i = 0; i < 12; i++) { if (g.state.activeIndex === 0) return false; g.endTurn(); }
-  return true;
-}) !== false, 'the escaped guest is skipped for the rest of the match');
-
-console.log('\n11. the round limit is the clock');
-await load('mode=hotseat&players=6&seed=1234');
-await tap('#btn-begin');
-await throughRoles();
-await intoTurn();
-check(await game(() => window.__game.rules.roundLimit) === 8, 'eight rounds');
-check((await page.textContent('#round')).includes('/ 8'), 'the header counts them down');
-await game(() => { window.__game.state.round = window.__game.rules.roundLimit + 1; });
-await game(() => window.__game.endTurn());
 await page.waitForTimeout(300);
-check(await game(() => window.__game.isFinished()), 'running out of rounds ends the match');
-check(await game(() => window.__game.state.won) === 'possessed', 'and the hotel keeps them');
-check(await visible('#end-overlay'), 'the end screen is shown');
-const endText = await page.textContent('#end-summary');
-check(/Possessed at the end/.test(endText), 'the end screen finally reveals who was possessed');
-check((await page.textContent('#btn-restart')).trim() === 'New match', 'the end screen offers a new match, not "restart practice"');
-check((await page.textContent('#round')).trim() === 'Round 8 / 8', 'the round counter never reads past the limit');
-await shot('p1-09-end');
+check(!(await game(() => window.__game.meetingOpen())), 'no meeting is forced in the exit');
+check(await game(() => window.__game.isFinished() && window.__game.state.won === 'humans'), 'a clean guest with all three pieces escapes: the guests win');
+check(/got out/i.test(await page.textContent('#end-title')), 'the end screen says so');
+await shot('hs-06-escaped');
+// A possessed guest cannot.
+await load('mode=hotseat&players=6&seed=4242');
+await tap('#btn-begin'); await throughRoles(); await intoTurn();
+await game(() => {
+  const s = window.__game.state;
+  s.players.forEach((p, i) => { p.possessed = i === 0; });
+  s.players[0].hand.push({ id: 'b1', type: 'bow' }, { id: 'b2', type: 'shank' }, { id: 'b3', type: 'bit' });
+  window.__game.refresh();
+});
+await put('stairs', 4);
+await game(() => window.__game.moveToRoom(window.__game.floor.exitRoom));
+await settle();
+await page.waitForTimeout(200);
+check(await game(() => !window.__game.isFinished()), 'a possessed guest with all three pieces cannot escape');
 
-console.log('\n12. practice mode is untouched');
+console.log('\n8. the hotel wins');
+await game(() => { window.__game.state.players.forEach(p => { p.possessed = true; }); window.__game.endTurn(); });
+await page.waitForTimeout(200);
+check(await game(() => window.__game.isFinished() && window.__game.state.won === 'possessed'), 'every living guest possessed: the match ends');
+check(/keeps them/i.test(await page.textContent('#end-title')) && /Possessed:/.test(await page.textContent('#end-summary')), 'the end screen reveals the possessed');
+check((await page.textContent('#btn-restart')).trim() === 'New match', 'and offers a new match');
+
+console.log('\n9. a voluntary trade in the lobby');
+await load('mode=hotseat&players=6&seed=4242');
+await tap('#btn-begin'); await throughRoles(); await intoTurn();
+await game(() => {
+  const s = window.__game.state;
+  s.players.forEach((p, i) => { p.possessed = i === 5; });
+  s.players[0].hand = [{ id: 'p1', type: 'bandage' }]; s.players[1].hand = [{ id: 'q1', type: 'knife' }];
+  s.players.forEach((p, i) => { if (i > 1) p.currentRoom = 'corridorW'; });
+  window.__game.refresh();
+});
+check(await visible('#btn-trade'), 'a Trade button is offered in the lobby with someone there');
+await tap('#btn-trade');
+check(await kind() === 'pass', 'the other guest is handed the device');
+await next();
+check(await kind() === 'choice' && /would like to trade/.test(await page.textContent('#handoff-title')), 'and asked in private whether they agree');
+await clickBtn('#offer-intent .btn', 'Accept');
+check(await kind() === 'pick', 'on accepting, they pick their card first');
+await page.click('#offer-cards .card-tile[data-card-id="q1"]'); await page.waitForTimeout(80);
+await next();
+await page.click('#offer-cards .card-tile[data-card-id="p1"]'); await page.waitForTimeout(80);
+await next();
+check(await kind() === 'note' && /Bandage/.test(await page.textContent('#handoff-notes')), 'the proposer privately reads what they received');
+await next(); await tap('#encounter-actions .btn.primary');
+check(await game(() => window.__game.state.players[0].hand.some(c => c.id === 'q1') && window.__game.state.players[1].hand.some(c => c.id === 'p1')), 'the cards swapped');
+
+console.log('\n10. the clock');
+check(await game(() => window.__game.inActionPhase()), 'the turn is still running');
+await game(() => window.__game.forceTimeUp());
+await page.waitForFunction(() => window.__game.state.activeIndex === 1, null, { timeout: 20000 }).catch(() => {});
+check(await game(() => window.__game.state.activeIndex) === 1 && await kind() === 'pass', 'when the clock runs out the turn ends and the device is passed');
+check(await game(() => window.__game.timeLeft()) === 0, 'the clock does not run on the hand-over screen');
+
+console.log('\n11. practice is untouched');
 await load('');
-check(await game(() => window.__game.mode) === 'practice', 'the plain address still starts practice mode');
-check(await game(() => window.__game.state.players.length) === 1, 'one guest');
-check(await game(() => window.__game.rules.practiceMode === true && window.__game.rules.turnTimerEnabled === false),
-  'practice has no turn timer');
-await tap('#btn-begin');
-check(!(await visible('#handoff-overlay')), 'and no hand-over screens');
-check(!(await visible('#turn-timer')), 'and no clock');
-check(await visible('#btn-restart-practice'), 'Restart practice is still there');
-check(await game(() => window.__game.isRunning()), 'practice runs straight into the hotel');
+check(await game(() => window.__game.mode === 'practice' && window.__game.state.players.length === 1), 'the plain address is still one guest alone');
 
-console.log('\n13. layouts');
+console.log('\n12. layouts');
 for (const [name, w, h] of [['ipad-landscape', 1180, 820], ['ipad-small', 1024, 768], ['desktop', 1440, 900]]) {
   await page.setViewportSize({ width: w, height: h });
   await load('mode=hotseat&players=6&seed=7');
   await tap('#btn-begin');
   await page.waitForTimeout(120);
   const fits = await page.evaluate(() => {
-    const card = document.getElementById('handoff-card');
-    const r = card.getBoundingClientRect();
-    return { inView: r.top >= -1 && r.bottom <= window.innerHeight + 1, btn: document.getElementById('btn-handoff-next').getBoundingClientRect() };
+    const r = document.getElementById('handoff-card').getBoundingClientRect();
+    const b = document.getElementById('btn-handoff-next').getBoundingClientRect();
+    return { inView: r.top >= -1 && r.bottom <= window.innerHeight + 1, btn: b.height >= 40 && b.bottom <= window.innerHeight + 1 };
   });
-  check(fits.inView, `${name}: the hand-over card fits on screen`);
-  check(fits.btn.height >= 40 && fits.btn.bottom <= h + 1, `${name}: the Continue button is a comfortable size and reachable`);
+  check(fits.inView && fits.btn, `${name}: the hand-over card and its button fit on screen`);
   await throughRoles();
+  const turn = await page.evaluate(() => {
+    const b = document.getElementById('btn-handoff-next').getBoundingClientRect();
+    return b.bottom <= window.innerHeight + 1 && b.height >= 40;
+  });
+  check(turn, `${name}: the private turn screen's Start button is reachable`);
   await intoTurn();
   const bars = await page.evaluate(() => {
     const t = document.getElementById('turn-timer').getBoundingClientRect();
-    const o = document.getElementById('btn-offer').getBoundingClientRect();
     const e = document.getElementById('btn-end-turn').getBoundingClientRect();
-    return { timerIn: t.right <= window.innerWidth + 1 && t.top >= 0, overlap: o.right > e.left + 1, offerH: o.height };
+    return t.right <= window.innerWidth + 1 && e.height >= 44 && e.bottom <= window.innerHeight + 1;
   });
-  check(bars.timerIn, `${name}: the turn timer sits inside the screen`);
-  check(!bars.overlap, `${name}: the Offer and End turn buttons do not overlap`);
-  check(bars.offerH >= 44, `${name}: the Offer button is a comfortable touch size`);
-  await shot(`p1-10-${name}`);
+  check(bars, `${name}: the clock and the End turn button sit inside the screen`);
+  await shot(`hs-07-${name}`);
 }
 await page.setViewportSize({ width: 1180, height: 820 });
 
-console.log('\n14. console');
-const noisy = consoleMessages.filter(m => !/favicon|Download the React/i.test(m));
-check(noisy.length === 0, noisy.length ? `console noise:\n    ${noisy.slice(0, 6).join('\n    ')}` : 'no console errors or failed requests (clean)');
-
-await browser.close();
+console.log('\n13. console');
+await finish();
 console.log(failures.length ? `\n${failures.length} FAILED` : '\nALL HOT-SEAT BROWSER CHECKS PASSED');
 process.exit(failures.length ? 1 : 0);

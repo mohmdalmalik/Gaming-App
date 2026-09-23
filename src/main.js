@@ -1,5 +1,7 @@
 // Entry point: builds the floor, sets up rendering, interface and the turn-based rules of
-// Hotel Escape, and runs the game loop. Five players take turns on one device (hot-seat).
+// Hotel Escape, and runs the game loop. Two ways to play the same ruleset (docs/GAME_RULES.md):
+// practice (one guest alone) and hot-seat (4-6 guests passing one device). No server, no
+// networking — hot-seat is a testing tool for the real online game.
 import * as THREE from 'three';
 import { config as cfg } from './config.js';
 import { rules, applyMode } from './data/rules.js';
@@ -8,16 +10,15 @@ import { roster } from './data/characters.js';
 import { buildFloor } from './game/floor.js';
 import { buildGrid } from './game/grid.js';
 import {
-  createState, resetState, endTurn, activePlayer, nextPlayer, checkWin,
-  usableDoorways, pendingEncounters, lockEncounter, playersInRoom,
-  isRoomOpen, exitUnlocked, objectivesFound, objectivesRequired,
-  escapedCount, escapeesRequired, clearOffer, setOffer, lockOffer, possessedPlayers,
+  createState, resetState, endTurn, activePlayer, nextPlayer, checkWin, canEscape,
+  usableDoorways, pendingEncounters, lockEncounter, playersInRoom, doorwayPassable, isLocked,
+  isBarricaded,
 } from './game/state.js';
 import {
-  search, useBandage, useHint, resolveFullHand, resolveTrade, resolveAttack, discardCard,
-  overHandLimit, resolveMeeting,
+  search, useBandage, useUnlock, useBarricade, resolveFullHand, resolveTrade, resolveAttack,
+  discardCard, overHandLimit, tradeableCards,
 } from './game/actions.js';
-import { CARDS } from './game/cards.js';
+import { CARDS, weaponsIn, piecesIn, hasAllPieces } from './game/cards.js';
 import { createScene } from './render/scene.js';
 import { createRoomViews, createDoorwayViews } from './render/roomView.js';
 import { dressRooms } from './render/roomDressing.js';
@@ -33,7 +34,6 @@ import { createHud } from './hud.js';
 import { createMap } from './map.js';
 import { createOverlays } from './overlays.js';
 import { createHand } from './ui/hand.js';
-import { createEncounter } from './ui/encounter.js';
 import { createDiscard } from './ui/discard.js';
 import { createFullHand } from './ui/fullHand.js';
 import { createHandoff } from './ui/handoff.js';
@@ -44,18 +44,15 @@ const floor = buildFloor(floor1, cfg);
 const grid = buildGrid(floor, cfg);
 if (floor.problems.length) throw new Error(`Problems in the floor data:\n• ${floor.problems.join('\n• ')}`);
 
-// Which game this page is: practice (the default) or a local hot-seat match. The choice is in
-// the address so it can be linked, bookmarked and driven by the tests; the start screen writes
-// it for the player, who never has to touch a file.
+// Which game this page is. The choice is in the address so it can be linked, bookmarked and
+// driven by the tests; the start screen writes it for the player.
 //   ?mode=hotseat&players=6   a six-person hot-seat match on one device
-//   ?seed=123                 force the deal and the hidden role (testing)
+//   ?seed=123                 force the deal, the hidden role, the key-piece rooms (testing)
 //   ?timer=off                play without the 45-second turn clock
-// There is no server and no networking anywhere in this project.
 const params = new URLSearchParams(window.location.search);
 const MODE = params.get('mode') === 'hotseat' ? 'hotseat' : 'practice';
 const askedPlayers = parseInt(params.get('players'), 10);
 applyMode(MODE, Number.isFinite(askedPlayers) ? askedPlayers : 6);
-// Developer switch for play-testing without the clock: ?timer=off
 if (params.get('timer') === 'off') rules.turnTimerEnabled = false;
 const HOTSEAT = MODE === 'hotseat';
 const PRACTICE = !HOTSEAT;
@@ -83,21 +80,20 @@ const rig = createCameraRig(view.camera, cfg);
 const hud = createHud(document, cfg);
 const map = createMap(document, floor, cfg);
 const overlays = createOverlays(document);
-const hand = createHand(document, cfg, { onUseBandage, onUseHint });
-const encounter = createEncounter(document, cfg);
+const hand = createHand(document, cfg, { onUseBandage, onUnlock, onBarricade });
 const discard = createDiscard(document, cfg, {
-  onDiscard: cardId => { discardCard(state, activePlayer(state), cardId); refresh(); },
+  onDiscard: cardId => { const r = discardCard(state, activePlayer(state), cardId); if (!r.ok) hud.toast('That card cannot be discarded.'); refresh(); },
 });
 const fullHand = createFullHand(document);
 const handoff = createHandoff(document);
-const meeting = createMeeting(document);
+const meeting = createMeeting(document, cfg);
 
 let running = false;
 let pendingArrival = null;   // enterRoom result waiting for the walk to finish
 let selectedMove = null;     // a door move awaiting confirmation
 
-const uiBusy = () => map.isOpen || hand.isOpen || encounter.isOpen || discard.isOpen
-  || fullHand.isOpen || overlays.endOpen || overlays.noticeOpen || handoff.isOpen || meeting.isOpen;
+const uiBusy = () => map.isOpen || hand.isOpen || discard.isOpen || fullHand.isOpen
+  || overlays.endOpen || overlays.noticeOpen || handoff.isOpen || meeting.isOpen;
 
 const discovery = createDiscovery({
   floor, grid, state, movers, cfg,
@@ -118,37 +114,31 @@ function syncViews(animate) {
   }
   searchMarks.update(state);
   for (const dv of doorways.views.values()) {
-    // A doorway into the sealed exit reads as plain wall until every objective is found.
-    const sealed = !isRoomOpen(state, floor, dv.doorway.a) || !isRoomOpen(state, floor, dv.doorway.b);
     const a = state.discovered.has(dv.doorway.a), b = state.discovered.has(dv.doorway.b);
-    dv.setState(sealed ? { known: false, frontier: false } : { known: a || b, frontier: a !== b });
+    dv.setState({ known: a || b, frontier: a !== b });
   }
   characters.forEach((cv, i) => {
-    // A guest who escaped has left the hotel: their figure goes with them.
     cv.group.visible = !state.escaped?.has(state.players[i].id);
     cv.setDead(!state.players[i].alive);
     cv.setActive(i === state.activeIndex && !state.finished);
   });
 }
 
-// Blink the doors the active player may use this turn.
+// Blink the doors the active guest may use this turn.
 function refreshUsable() {
   const usable = new Set(state.finished ? [] : usableDoorways(state, floor, activePlayer(state)).map(d => d.id));
   for (const dv of doorways.views.values()) dv.setUsable(usable.has(dv.doorway.id));
 }
 
-function refresh() { hud.update(state, floor); refreshUsable(); hand.refresh(); searchMarks.update(state); }
+function refresh() { hud.update(state, floor); refreshUsable(); hand.refresh(); searchMarks.update(state); discovery.refresh(); }
 
 function activeMover() { return movers[state.activeIndex]; }
 
 // --- Turn flow ---------------------------------------------------------------------------
-// In hot-seat every turn runs through the same three steps, and private information only ever
-// appears in step 2:
-//   1. a neutral "pass the device to X" screen        (timer NOT running)
-//   2. X's own private screen: role, news, hand, Offer (timer NOT running)
-//   3. the action phase                                (timer running)
+// Hot-seat: every turn is pass screen -> private screen -> action phase. Private information
+// only ever appears in the middle step. Practice skips both hand-over screens.
 let timerLeft = 0;
-let inActionPhase = !HOTSEAT;   // practice has no hand-over, so it is always in its action phase
+let inActionPhase = !HOTSEAT;
 
 function begin() {
   overlays.hideStart();
@@ -158,7 +148,7 @@ function begin() {
   if (HOTSEAT) revealRoles(0);
 }
 
-// Once at the start of a match: every player reads their own secret role and acknowledges it.
+// Once at the start of a match: every guest reads their own secret role and acknowledges it.
 function revealRoles(i) {
   if (i >= state.players.length) { beginTurn(); return; }
   const p = state.players[i];
@@ -167,7 +157,6 @@ function revealRoles(i) {
   });
 }
 
-// Step 1 + 2: hand the device over, then that player's private screen.
 function beginTurn() {
   if (state.finished) { showEnd(); return; }
   inActionPhase = false;
@@ -179,8 +168,7 @@ function beginTurn() {
   mood.snap(p.currentRoom);
   syncViews(false);
   refresh();
-  handoff.passTo(p, `Round ${state.round} of ${rules.roundLimit} · turn ${state.turn}`, () => {
-    // A guest converted since their last turn is told here, on their own screen and nowhere else.
+  handoff.passTo(p, `Round ${state.round} · turn ${state.turn}`, () => {
     if (p.roleChangePending) {
       p.roleChangePending = false;
       handoff.revealRole(p, { changed: true }, () => openPrivateTurn(p));
@@ -189,15 +177,12 @@ function beginTurn() {
 }
 
 function openPrivateTurn(p) {
-  handoff.privateTurn(state, floor, p, {
-    onOffer: (cardId, intent) => { setOffer(state, p, cardId, intent); refresh(); },
-    onStart: () => { inActionPhase = true; startTimer(); refresh(); },
-  });
+  handoff.privateTurn(state, floor, p, { onStart: () => { inActionPhase = true; startTimer(); refresh(); } });
 }
 
 // --- Turn timer --------------------------------------------------------------------------
-// It counts only the action phase. Hand-over screens, role reveals, the end screen and any
-// blocking prompt all pause it, so passing the iPad round never costs anybody their turn.
+// Counts the active guest's actions only. Meetings, hand-over screens, the end screen and every
+// blocking prompt pause it.
 function startTimer() {
   if (!rules.turnTimerEnabled) { hud.hideTimer(); timerLeft = 0; return; }
   timerLeft = rules.turnTimerSeconds;
@@ -215,41 +200,29 @@ function tickTimer(dt) {
   if (timerLeft <= 0) onTimeUp();
 }
 
-// Out of time: the Offer locks as Nothing (intent Trade) and the turn ends. Nothing else happens.
 function onTimeUp() {
-  const p = activePlayer(state);
   stopTimer();
-  if (!p.offerLocked) setOffer(state, p, null, 'trade');
-  lockOffer(p);
-  hud.toast(`Time is up — ${p.name}'s turn ends, offering nothing.`);
+  hud.toast(`Time is up — ${activePlayer(state).name}'s turn ends.`);
   endTurnNow();
 }
 
 function passTurn() {
   hud.hideConfirm(); selectedMove = null;
-  hand.close();            // private panels never carry across a turn change
+  hand.close();
   stopTimer();
   const result = endTurn(state, floor);
-  // In hot-seat an Offer is a STANDING commitment: it survives until this player's next turn or
-  // until a meeting consumes it. Phase 0 keeps its original behaviour.
-  if (!HOTSEAT) clearOffer(result.from);
   movers[result.from.index]?.halt();
   syncViews(false);
-  if (result.finished) { refresh(); if (HOTSEAT) showEnd(); return; }
-  if (HOTSEAT) {
-    // The round limit is the only clock in this mode; it is checked as the round rolls over.
-    if (checkWin(state, floor)) { refresh(); showEnd(); return; }
-    beginTurn();
-    return;
-  }
+  if (result.finished) { refresh(); showEnd(); return; }
+  if (checkWin(state, floor)) { refresh(); showEnd(); return; }
+  if (HOTSEAT) { beginTurn(); return; }
   rig.setFocus(activeMover().x, activeMover().z);
   mood.snap(activePlayer(state).currentRoom);
   refresh();
-  hud.toast(`${result.to.name}'s turn — ${rules.actionPointsPerTurn} action points.`);
+  hud.toast(`Turn ${state.turn} — ${rules.actionPointsPerTurn} action points.`);
 }
 
-// End the turn, forcing the hand-limit discard first if it applies. Used by the End turn button
-// and by the timer running out.
+// End the turn, forcing the hand-limit discard first if it applies.
 function endTurnNow() {
   if (overHandLimit(activePlayer(state)) > 0) { discard.open(activePlayer(state), passTurn); return; }
   passTurn();
@@ -261,243 +234,191 @@ function doEndTurn() {
   endTurnNow();
 }
 
-// The active player finished walking into a new room: check the exit, then a single forced
-// encounter — with a player of their choosing when more than one is here.
+// The active guest finished walking into a room. ORDER MATTERS: the exit is resolved FIRST —
+// a clean guest carrying all three pieces escapes before any meeting can be forced there.
 function onArrive() {
   const player = activePlayer(state);
   const room = floor.rooms.get(player.currentRoom);
   pendingArrival = null;
-  // ORDER MATTERS. The exit is a safe end-zone: arriving there is resolved FIRST, before any
-  // meeting or challenge can be generated for the room. A clean guest escapes on entry and that
-  // is permanent; a possessed guest may stand there and simply nothing happens. The exit room is
-  // also flagged `safe` in the floor data, so pendingEncounters() returns nothing there either —
-  // two independent guarantees, because this is the one ordering the rules must not get wrong.
   if (room?.isExit) {
-    const before = escapedCount(state);
-    const won = checkWin(state, floor, player);
-    syncViews(false); refresh();
-    if (won) { showEnd(); return; }
-    if (escapedCount(state) > before) onEscaped(player);
-    return;
+    if (checkWin(state, floor, player)) { syncViews(false); refresh(); showEnd(); return; }
+    if (PRACTICE || !piecesIn(player.hand).length) hud.toast(hasAllPieces(player.hand)
+      ? 'The exit will not open for you.' : 'The fire exit. It needs the whole key.');
   }
   const candidates = pendingEncounters(state, floor, player);
   if (!candidates.length) { refresh(); return; }
-  if (HOTSEAT) { startMeeting(player, candidates); return; }
-  openEncounter(player, candidates);
+  startMeeting(player, candidates);
 }
 
-// A clean guest reached the exit and the match carries on without them.
-function onEscaped(player) {
-  stopTimer();
-  overlays.showNotice(`${player.name} is out`,
-    `${player.name} reached the fire exit and is out of the hotel — ${escapedCount(state)} of `
-    + `${escapeesRequired(state)} clean guests away. They take no further turns.`,
-    () => passTurn());
-}
-
-// --- Hot-seat meeting --------------------------------------------------------------------
-// The arriving player picks ONE guest to meet. It then resolves from the two Offers alone: the
-// other player is never asked anything, because they committed on their own turn.
-function startMeeting(player, candidates) {
+// --- Meetings ----------------------------------------------------------------------------
+// The arriving guest picks ONE guest to meet, then Trade or Attack. A trade is made with each
+// side choosing in private (the device changes hands); an attack is public.
+function startMeeting(P, candidates) {
   hud.hideConfirm(); selectedMove = null;
-  const go = Q => {
-    const res = resolveMeeting(state, floor, player, Q);
-    lockEncounter(state, player.currentRoom, player.index, Q.index);
-    syncViews(false); refresh();
-    if (!res.ok) { if (state.finished) showEnd(); return; }
-    meeting.result(res, floor.rooms.get(player.currentRoom)?.name, () => {
-      // Anything private that this meeting produced for the player holding the device is shown
-      // to them alone; the other player reads theirs on their own screen next turn.
-      const mine = player.notes?.length ? player.notes.splice(0, player.notes.length) : [];
-      const finish = () => { refresh(); if (state.finished) showEnd(); };
-      if (mine.length) handoff.privateNote(player, mine, finish);
-      else finish();
+  const met = Q => {
+    lockEncounter(state, P.currentRoom, P.index, Q.index);
+    const canAttack = weaponsIn(P.hand).length > 0 && P.actionPoints >= rules.actionCost.attack;
+    meeting.chooseAction(P, Q, {
+      canAttack,
+      onTrade: () => runTrade(P, Q, { first: P, second: Q }),
+      onAttack: () => runAttack(P, Q),
     });
   };
-  if (candidates.length === 1) go(candidates[0]);
-  else meeting.choose(player, candidates, go);
+  if (candidates.length === 1) met(candidates[0]);
+  else meeting.choose(P, candidates, met);
 }
 
-function openEncounter(P, candidates) {
-  hud.hideConfirm(); selectedMove = null;
-  encounter.start({
-    state, P, candidates,
-    onResolveTrade: (Q, cardIdP, cardIdQ) => resolveTrade(state, floor, P, Q, cardIdP, cardIdQ),
-    onResolveAttack: (Q, weaponId) => resolveAttack(state, floor, P, Q, weaponId),
-    onDone: (Q) => {
-      // One meeting per entry: only the chosen pair is locked; the others aren't forced.
-      lockEncounter(state, P.currentRoom, P.index, Q.index);
-      syncViews(false); refresh();
-      if (state.finished) showEnd();
-    },
+function afterMeeting() {
+  syncViews(false); refresh();
+  if (state.finished) showEnd();
+}
+
+// A trade between A and B. `first` holds the device now and picks first; then it is passed to
+// `second`, who picks; the cards swap; `first` gets the device back and privately reads what they
+// received. `second` reads theirs on their own next private screen.
+function runTrade(A, B, { first, second }, onDone = afterMeeting) {
+  const pick = (who, other, then) => handoff.privatePick(who, {
+    kicker: `Private — ${who.name} only`,
+    title: `Give one card to ${other.name}`,
+    sub: 'They will not see which until the cards have already changed hands.',
+    cards: tradeableCards(who),
+    onPick: then,
+  });
+  pick(first, second, firstCard => {
+    handoff.passTo(second, 'A trade — they choose in private', () => {
+      pick(second, first, secondCard => {
+        const [cardA, cardB] = first === A ? [firstCard, secondCard] : [secondCard, firstCard];
+        const events = resolveTrade(state, floor, A, B, cardA, cardB);
+        handoff.passTo(first, 'Back to you', () => {
+          const got = events.ok ? events.received[first.id] : null;
+          const lines = [events.ok
+            ? (got ? `You received a ${CARDS[got].name} from ${second.name}.` : `The card ${second.name} gave you burned away in your Lantern's light.`)
+            : 'The trade could not be made.'];
+          const mine = first.notes.splice(0, first.notes.length);
+          handoff.privateNote(first, [...lines, ...mine], () => meeting.tradeDone(A, B, onDone));
+        });
+      });
+    });
   });
 }
 
-// Voluntary trade — only offered in a SAFE room (no forced encounters, no attacks there). The
-// player picks a partner present in the room and trades by the normal rules; nothing is locked.
+function runAttack(P, Q) {
+  meeting.attackPick(P, Q, weaponId => {
+    const events = resolveAttack(state, floor, P, Q, weaponId);
+    meeting.attackResult(P, Q, events, afterMeeting);
+  });
+}
+
+// Voluntary trade in the lobby: the other guest must agree, in private, before anyone chooses.
 function onTrade() {
-  if (!running || state.finished || uiBusy() || activeMover().walking) return;
-  // Not in hot-seat: the old voluntary-trade panel shows both hands, which would hand the whole
-  // table another player's cards. See docs/DECISIONS.md.
-  if (HOTSEAT) return;
+  if (!running || state.finished || uiBusy() || activeMover().walking || PRACTICE) return;
   const P = activePlayer(state);
   if (!floor.rooms.get(P.currentRoom)?.safe) return;
   const others = playersInRoom(state, P.currentRoom, P.id);
   if (!others.length) return;
   hud.hideConfirm(); selectedMove = null;
-  encounter.start({
-    state, P, candidates: others, mode: 'voluntary',
-    onResolveTrade: (Q, cardIdP, cardIdQ) => resolveTrade(state, floor, P, Q, cardIdP, cardIdQ),
-    onDone: () => { syncViews(false); refresh(); if (state.finished) showEnd(); },
-    onCancel: () => refresh(),
-  });
+  const ask = Q => handoff.passTo(Q, 'A trade is proposed', () => handoff.privateChoice(Q, {
+    title: `${P.name} would like to trade`,
+    sub: 'You each give one card. Nobody has to agree.',
+    options: [{ label: 'Accept', value: true, primary: true }, { label: 'Decline', value: false }],
+    onPick: yes => {
+      if (yes) runTrade(P, Q, { first: Q, second: P }, () => { refresh(); if (state.finished) showEnd(); });
+      else handoff.passTo(P, 'Back to you', () => meeting.notice(`${Q.name} declined.`, refresh));
+    },
+  }));
+  if (others.length === 1) ask(others[0]);
+  else meeting.choose(P, others, ask, { voluntary: true, onCancel: refresh });
 }
 
-// Reopen the Offer while it is still changeable. It is the same private screen used at the start
-// of the turn, so nothing new is exposed.
-function onOffer() {
-  if (!HOTSEAT || !running || state.finished || activeMover().walking) return;
-  if (map.isOpen || hand.isOpen || meeting.isOpen || discard.isOpen || fullHand.isOpen || handoff.isOpen) return;
-  const p = activePlayer(state);
-  handoff.offerOnly(state, floor, p, {
-    onOffer: (cardId, intent) => { setOffer(state, p, cardId, intent); refresh(); },
-    onClose: () => refresh(),
-  });
-}
+// --- Actions -----------------------------------------------------------------------------
+const SEARCH_FAIL = {
+  notSearchable: 'There is nothing to search in here.',
+  searched: 'This room has already been searched.',
+  dark: 'Too dark to search — you need a Flashlight.',
+  ap: 'No action points left to search.',
+  empty: 'Nothing left to find here.',
+};
 
 function onSearch() {
   if (!running || state.finished || uiBusy() || activeMover().walking) return;
   const player = activePlayer(state);
   const r = search(state, floor, player);
-  if (!r.ok) {
-    hud.toast(r.reason === 'notSearchable' ? 'There is nothing to search in here.'
-      : r.reason === 'searched' ? 'This room has already been searched.'
-      : r.reason === 'dark' ? 'This room is dark — you need a Flashlight to search.'
-      : r.reason === 'ap' ? 'No action points left to search.'
-      : r.reason === 'empty' ? 'Nothing left to find here.' : 'Cannot search now.');
-    return;
-  }
-
-  // Wording always names the thing that was searched, never the whole room — you go through the
-  // console table in a corridor, you do not ransack the corridor.
+  if (!r.ok) { hud.toast(SEARCH_FAIL[r.reason] || 'Cannot search now.'); return; }
   const where = r.searchPoint || 'the room';
-  if (r.kind === 'objective') {
+  if (r.kind === 'found') {
+    // A key piece is told to the finder alone; dropped cards likewise.
+    const names = r.cards.map(c => CARDS[c.type].name).join(', ');
+    const line = r.pieces.length
+      ? `Hidden in ${where}: ${names}. ${piecesIn(player.hand).length} of ${rules.keyPiecesToEscape} key pieces are now yours.`
+      : `Lying in ${where}: ${names}.`;
     syncViews(false);
-    hud.toast(`You search ${where} and recover an objective — ${r.found} of ${r.required}.`);
-    if (r.exitJustUnlocked) onExitUnlocked();
-    refresh();
+    if (HOTSEAT) handoff.privateNote(player, [line], refresh);
+    else { hud.toast(line); refresh(); }
     return;
   }
-  if (r.kind === 'nothing') {
-    hud.toast(`You search ${where}. Nothing but linen and dust.`);
-    refresh();
-    return;
-  }
+  if (r.kind === 'nothing') { hud.toast(`You search ${where}. Nothing.`); refresh(); return; }
   if (r.full) { askFullHand(player, r.card, where); return; }
   hud.toast(`You search ${where} and find a ${CARDS[r.card.type].name}.`);
   refresh();
 }
 
-// A card was found with no room for it: never dropped silently — the player decides.
+// A drawn card with no room for it: never dropped silently — the guest decides.
 function askFullHand(player, card, where = 'the room') {
-  const canUse = card.type === 'hint' && player.actionPoints >= rules.actionCost.useCard;
   fullHand.open(state, player, card, {
     onTake: dropId => {
       const res = resolveFullHand(state, player, card, 'take', dropId);
-      if (res.ok) hud.toast(`Kept the ${CARDS[card.type].name}, left the ${CARDS[res.dropped.type].name} behind.`);
-      void where;
+      hud.toast(res.ok ? `Kept the ${CARDS[card.type].name}, left the ${CARDS[res.dropped.type].name} behind.` : 'That card cannot be dropped.');
       refresh();
     },
-    onUse: () => {
-      // Use it straight away without ever holding it: put it in hand, play it, done.
-      player.hand.push(card);
-      const res = useHint(state, floor, player, card.id);
-      if (!res.ok) { resolveFullHand(state, player, card, 'leave'); player.hand.pop(); hud.toast(hintReason(res.reason)); }
-      else { syncViews(true); hud.toast(`Hint: ${res.name} lies through the next door.`); }
-      refresh();
-    },
-    onLeave: () => {
-      resolveFullHand(state, player, card, 'leave');
-      hud.toast(`Left the ${CARDS[card.type].name} in ${where}.`);
-      refresh();
-    },
+    onUse: () => { resolveFullHand(state, player, card, 'leave'); refresh(); },
+    onLeave: () => { resolveFullHand(state, player, card, 'leave'); hud.toast(`Left the ${CARDS[card.type].name} in ${where}.`); refresh(); },
   });
-}
-
-const hintReason = reason => reason === 'nothingAdjacent'
-  ? 'Every room next door is already on your map.'
-  : reason === 'ap' ? 'No action points left to use a card.' : 'Cannot use that now.';
-
-// Every objective is in: reveal the way out.
-function onExitUnlocked() {
-  syncViews(true);
-  const exitName = floor.rooms.get(floor.exitRoom)?.name ?? 'the exit';
-  overlays.showNotice('The way out is open', `All ${objectivesRequired()} objectives are accounted for. ${exitName} is now on your map.`);
 }
 
 function onUseBandage(cardId) {
   const r = useBandage(state, activePlayer(state), cardId);
-  if (!r.ok) {
-    hud.toast(r.reason === 'full' ? 'Already at full health.' : r.reason === 'ap' ? 'No action points left.' : 'Cannot use that now.');
-    return;
-  }
+  if (!r.ok) { hud.toast(r.reason === 'full' ? 'Already at full health.' : r.reason === 'ap' ? 'No action points left.' : 'Cannot use that now.'); return; }
+  hud.toast(`Bandaged — health ${r.health} of ${rules.maxHealth}.`);
   refresh();
 }
 
-function onUseHint(cardId) {
-  const player = activePlayer(state);
-  // Using the card you committed is allowed, but it is never silent: the Offer becomes Nothing
-  // and the player is told, so nobody discovers it only when a meeting resolves.
-  const wasOffered = HOTSEAT && player.offer === cardId;
-  const r = useHint(state, floor, player, cardId);
-  if (!r.ok) { hud.toast(hintReason(r.reason)); return; }
-  if (wasOffered) clearOffer(player);
-  syncViews(true);
-  hud.toast(wasOffered
-    ? `Hint: ${r.name} lies through the next door. That was your Offer — you are now offering Nothing.`
-    : `Hint: ${r.name} lies through the next door.`);
+function onUnlock(cardId, roomId) {
+  const r = useUnlock(state, floor, activePlayer(state), cardId, roomId);
+  if (!r.ok) { hud.toast(r.reason === 'ap' ? 'No action points left.' : 'Cannot use that here.'); return; }
+  const name = floor.rooms.get(roomId)?.name ?? 'the room';
+  hud.toast(r.opened ? `${name} is open.` : `The lock pick snapped. ${name} stays locked.`);
+  hand.close();
+  syncViews(false); refresh();
+}
+
+function onBarricade(cardId, doorwayId) {
+  const r = useBarricade(state, floor, activePlayer(state), cardId, doorwayId);
+  if (!r.ok) { hud.toast(r.reason === 'ap' ? 'No action points left.' : 'Cannot barricade that.'); return; }
+  hud.toast('Doorway barricaded for one round.');
+  hand.close();
   refresh();
 }
 
+// --- End of the match ----------------------------------------------------------------------
 function showEnd() {
+  stopTimer();
   if (state.practice) {
-    const searched = state.searchedRooms.size, total = floor.roomList.filter(r => r.searchable).length;
-    void escapedCount(state); void escapeesRequired(state);
+    const p = activePlayer(state);
     overlays.showEnd('You reached the fire exit',
-      `Practice complete — ${objectivesFound(state)} of ${objectivesRequired()} objectives, `
-      + `${state.discovered.size} of ${floor.roomList.length} rooms discovered, `
-      + `${searched} of ${total} rooms searched, on round ${state.round}.`,
-      { keepExploring: true });
-    refreshUsable();
+      `Practice complete — all ${rules.keyPiecesToEscape} key pieces found, ${state.discovered.size} of ${floor.roomList.length} rooms discovered, on round ${state.round}.`,
+      { keepExploring: false });
+    void p;
     return;
   }
-  if (state.hotseat) { showHotseatEnd(); return; }
-  const possessedNames = state.players.filter(p => p.possessed).map(p => p.name).join(', ');
+  const evil = state.players.filter(p => p.possessed).map(p => p.name);
   const dead = state.players.filter(p => !p.alive).map(p => p.name);
-  const parts = [`Possessed: ${possessedNames || 'nobody'}`];
+  const out = [...state.escaped].map(id => state.players.find(p => p.id === id)?.name).filter(Boolean);
+  const parts = [`Possessed: ${evil.length ? evil.join(', ') : 'nobody'}`];
   if (dead.length) parts.push(`Dead: ${dead.join(', ')}`);
   parts.push(`Round ${state.round}`);
-  if (state.won === 'humans') overlays.showEnd('The humans escaped!', `A clean guest reached the Fire Exit with the Exit Key. ${parts.join(' · ')}`);
-  else overlays.showEnd('The hotel keeps them', `No clean guest is left to escape. ${parts.join(' · ')}`);
-  refreshUsable();
-}
-
-// Everything is revealed here and only here: who was possessed, and who got out.
-function showHotseatEnd() {
-  stopTimer();
-  const out = [...state.escaped].map(id => state.players.find(p => p.id === id)?.name).filter(Boolean);
-  const evil = possessedPlayers(state).map(p => p.name);
-  const parts = [
-    `Escaped clean: ${out.length ? out.join(', ') : 'nobody'} (${escapedCount(state)} of ${escapeesRequired(state)})`,
-    `Possessed at the end: ${evil.length ? evil.join(', ') : 'nobody'}`,
-    `Objectives ${objectivesFound(state)} of ${objectivesRequired()}`,
-    `Round ${Math.min(state.round, rules.roundLimit)} of ${rules.roundLimit}`,
-  ];
   const opts = { restartLabel: 'New match' };
-  if (state.won === 'guests') overlays.showEnd('The guests got out', parts.join(' · '), opts);
-  else if (state.round > rules.roundLimit) overlays.showEnd('Dawn never came', `Time ran out. ${parts.join(' · ')}`, opts);
-  else overlays.showEnd('The hotel keeps them', `Not enough clean guests were left to escape. ${parts.join(' · ')}`, opts);
-  refreshUsable();
+  if (state.won === 'humans') overlays.showEnd('The guests got out', `${out.join(', ')} escaped with the whole key. ${parts.join(' · ')}`, opts);
+  else overlays.showEnd('The hotel keeps them', `No clean guest is left. ${parts.join(' · ')}`, opts);
 }
 
 function restart() {
@@ -516,14 +437,6 @@ function restart() {
   refresh();
   if (HOTSEAT) { inActionPhase = false; if (running) revealRoles(0); return; }
   if (running) hud.toast('Practice restarted.');
-}
-
-// Finish the practice run but stay in the hotel, so the rest of the map can still be explored.
-function keepExploring() {
-  state.finished = false; state.won = null;
-  overlays.hideEnd();
-  refresh();
-  hud.toast('Still exploring — the exit stays open.');
 }
 
 // --- Screen ↔ ground plane ----------------------------------------------------------------
@@ -562,6 +475,18 @@ function usableDoorwayNear(px, pz, player) {
   }
   if (!best) return null;
   return { door: best, dest: best.a === player.currentRoom ? best.b : best.a };
+}
+
+// Any doorway of the current room near a ground point, usable or not (for explaining a refusal).
+function doorwayNear(px, pz, player) {
+  const t = cfg.walls.thickness;
+  for (const d of (floor.rooms.get(player.currentRoom)?.doorways || [])) {
+    const along = d.axis === 'x';
+    const da = along ? Math.abs(px - d.center[0]) : Math.abs(pz - d.center[1]);
+    const dc = along ? Math.abs(pz - d.center[1]) : Math.abs(px - d.center[0]);
+    if (da <= d.width / 2 + 0.6 && dc <= t + 0.7) return d;
+  }
+  return null;
 }
 
 // A free standing spot in a discovered room: the centre, or a nearby ring position not on
@@ -610,6 +535,15 @@ createInput(view.renderer.domElement, {
       }
       return;
     }
+    // 1b. A door that is there but cannot be used: say why.
+    const blocked = doorwayNear(p.x, p.z, player);
+    if (blocked) {
+      const dest = blocked.otherRoom(player.currentRoom);
+      hud.toast(isBarricaded(state, blocked.id) ? 'That doorway is barricaded.'
+        : isLocked(state, dest) ? 'That door is locked — a Master Key or Lock Pick opens it from here.'
+          : 'Not enough action points to go through.');
+      return;
+    }
     // 2. Otherwise, a free reposition inside the current room.
     const plan = discovery.plan(p.x, p.z);
     if (plan.ok && plan.cost === 0) discovery.go(plan);
@@ -631,17 +565,15 @@ hud.on('rotateRight', () => rig.rotateRight());
 hud.on('endTurn', doEndTurn);
 hud.on('search', onSearch);
 hud.on('trade', onTrade);
-hud.on('offer', onOffer);
 hud.onHand(() => { if (running && !uiBusy()) hand.open(state, floor); });
 hud.on('private', () => { if (running && !uiBusy()) hand.open(state, floor); });
-hud.on('map', () => { if (!encounter.isOpen && !discard.isOpen && !overlays.endOpen) map.toggle(state, movers); });
+hud.on('map', () => { if (!meeting.isOpen && !discard.isOpen && !overlays.endOpen && !handoff.isOpen) map.toggle(state, movers); });
 hud.onConfirm(
   () => { if (selectedMove) { discovery.go(selectedMove); selectedMove = null; hud.hideConfirm(); } },
   () => { selectedMove = null; hud.hideConfirm(); },
 );
 overlays.onBegin(begin);
 overlays.onRestart(restart);
-overlays.onKeepExploring(keepExploring);
 hud.on('restartPractice', () => { if (!uiBusy() || overlays.endOpen) restart(); });
 
 // --- Start screen: choose the game ---------------------------------------------------------
@@ -652,9 +584,8 @@ function buildStartScreen() {
   const host = document.getElementById('mode-buttons');
   if (sub) {
     sub.textContent = HOTSEAT
-      ? `Hot-seat · ${rules.playerCount} guests, one device · find ${objectivesRequired()} objectives · `
-        + `${rules.requiredCleanEscapees} must get out clean · ${rules.roundLimit} rounds`
-      : 'Practice mode · explore the hotel, find the objectives, reach the exit';
+      ? `Hot-seat · ${rules.playerCount} guests, one device · one is secretly possessed · find the three key pieces and get one clean guest out`
+      : 'Practice mode · explore the hotel alone, find the three key pieces, reach the fire exit';
   }
   document.title = HOTSEAT ? `Hotel Escape — Hot-seat (${rules.playerCount})` : 'Hotel Escape — Practice';
   if (!host) return;
@@ -674,7 +605,6 @@ function buildStartScreen() {
   }
 }
 buildStartScreen();
-
 // --- Initial state -----------------------------------------------------------------------
 syncViews(false);
 rig.setFocus(activeMover().x, activeMover().z, true);
@@ -718,40 +648,38 @@ document.addEventListener('visibilitychange', () => { last = performance.now(); 
 window.__game = {
   cfg, rules, floor, grid, state, movers, rig, roomViews, doorways, characters, discovery, view,
   begin, restart, endTurn: doEndTurn,
-  refresh,                // re-sync HUD/doors after tests mutate state directly
+  refresh,
   activePlayer: () => activePlayer(state),
   nextPlayer: () => nextPlayer(state),
   activeMover,
   walkTo: (x, z) => discovery.walkTo(x, z),
-  moveToRoom,             // scripted move through a door (used by tests)
+  moveToRoom,
   search: () => onSearch(),
-  useHint: cardId => onUseHint(cardId),
-  objectives: () => ({ found: objectivesFound(state), required: objectivesRequired(), unlocked: exitUnlocked(state) }),
-  escapes: () => ({ escaped: escapedCount(state), required: escapeesRequired(state), who: [...state.escaped] }),
-  exitUnlocked: () => exitUnlocked(state),
+  useBandage: id => onUseBandage(id),
+  unlock: (id, room) => onUnlock(id, room),
+  barricade: (id, door) => onBarricade(id, door),
+  trade: () => onTrade(),
   fullHandOpen: () => fullHand.isOpen,
-  keepExploring,
-  // --- hot-seat hooks (used by tests/browser-hotseat.mjs) ---
-  mode: MODE,
-  hotseat: HOTSEAT,
-  handoff, meeting, handoffOpen: () => handoff.isOpen, handoffKind: () => handoff.kind,
+  mode: MODE, hotseat: HOTSEAT,
+  handoff, meeting,
+  handoffOpen: () => handoff.isOpen, handoffKind: () => handoff.kind,
   handoffNext: () => document.getElementById('btn-handoff-next').click(),
   meetingOpen: () => meeting.isOpen,
   noticeOpen: () => overlays.noticeOpen,
   clickNotice: () => document.getElementById('btn-notice-ok').click(),
-  setOffer: (cardId, intent) => setOffer(state, activePlayer(state), cardId, intent),
-  offerOf: i => ({ offer: state.players[i].offer, intent: state.players[i].intent, locked: state.players[i].offerLocked }),
   timeLeft: () => timerLeft,
   forceTimeUp: () => { timerLeft = 0.0001; },
   inActionPhase: () => inActionPhase,
   publicLog: () => state.log.map(l => l.text),
   notesOf: i => [...(state.players[i].notes || [])],
   possessedIndexes: () => state.players.filter(p => p.possessed).map(p => p.index),
+  pieces: () => ({ rooms: [...state.pieceRooms], held: piecesIn(activePlayer(state).hand).map(c => c.type) }),
+  lockedRooms: () => [...state.lockedRooms],
+  canEscape: () => canEscape(state, floor, activePlayer(state)),
   openHand: () => hand.open(state, floor),
   rotate: steps => rig.rotate(steps),
   toggleMap: () => map.toggle(state, movers),
   isMapOpen: () => map.isOpen,
-  encounterOpen: () => encounter.isOpen,
   isRunning: () => running,
   isFinished: () => state.finished,
   groundToScreen,

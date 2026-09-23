@@ -2,18 +2,28 @@
 // and action points. Pure logic — a server could run the same function to validate a
 // client's move.
 import { findPath, smoothPath, roomSequence, nearestWalkable } from './grid.js';
-import { canAffordRoute } from './state.js';
+import { canAffordRoute, doorwayPassable } from './state.js';
 
-// Cells the player may use right now: discovered rooms, plus a step inside any
-// undiscovered room that a discovered doorway leads to (its "landing").
+// Cells the player may use right now: discovered rooms, plus a step inside any undiscovered
+// room that a discovered doorway leads to (its "landing"). A doorway that cannot be passed — a
+// barricade, or a door into a locked room — has the cells just inside it on BOTH sides taken
+// away, so no route can thread through the opening.
 export function buildAllowed(state, floor, grid) {
   const frontier = new Set();
+  const sealed = new Set();
   for (const d of floor.doorways) {
+    const landings = grid.landings.get(d.id) || {};
+    if (!doorwayPassable(state, d)) {
+      for (const idx of landings[d.a] || []) sealed.add(idx);
+      for (const idx of landings[d.b] || []) sealed.add(idx);
+      continue;
+    }
     const aKnown = state.discovered.has(d.a), bKnown = state.discovered.has(d.b);
     if (aKnown === bKnown) continue;
-    for (const idx of grid.landings.get(d.id)?.[aKnown ? d.b : d.a] || []) frontier.add(idx);
+    for (const idx of landings[aKnown ? d.b : d.a] || []) frontier.add(idx);
   }
   return idx => {
+    if (sealed.has(idx)) return false;
     const k = grid.room[idx];
     if (k >= 0 && state.discovered.has(grid.roomList[k].id)) return true;
     return frontier.has(idx);

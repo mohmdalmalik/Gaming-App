@@ -35,18 +35,6 @@
       </div>
       <div class="hud-top-right">
         <div id="round" class="round-label">Round 1</div>
-        <!-- Objectives are public progress for the whole table, so they live in the header. -->
-        <div id="objectives" class="objectives">
-          <span class="obj-label">Objectives</span>
-          <span id="obj-pips" class="obj-pips" aria-hidden="true"></span>
-          <span id="obj-count" class="obj-count">0 / 3</span>
-        </div>
-        <!-- Hot-seat only: how many clean guests are out, and the turn clock. -->
-        <div id="escapes" class="objectives escapes" hidden>
-          <span class="obj-label">Escaped</span>
-          <span id="esc-pips" class="obj-pips" aria-hidden="true"></span>
-          <span id="esc-count" class="obj-count">0 / 2</span>
-        </div>
         <div id="turn-timer" class="turn-timer" hidden>
           <div class="tt-track"><div id="tt-fill" class="tt-fill"></div></div>
           <span id="tt-seconds" class="tt-seconds">45s</span>
@@ -87,7 +75,6 @@
           <div class="action-row">
             <button id="btn-search" class="btn action" type="button"><span class="btn-main">Search</span><span id="search-sub" class="btn-sub">1 action</span></button>
             <button id="btn-trade" class="btn action" type="button" hidden><span class="btn-main">Trade</span><span class="btn-sub">Safe zone</span></button>
-            <button id="btn-offer" class="btn action" type="button" hidden><span class="btn-main">Offer</span><span id="offer-sub" class="btn-sub">Nothing</span></button>
             <button id="btn-end-turn" class="btn primary end" type="button"><span class="btn-main">End turn &#x203A;</span><span id="end-sub" class="btn-sub">Next: —</span></button>
           </div>
         </div>
@@ -169,7 +156,7 @@
         <div class="map-legend">
           <span><span class="sw here"></span> You are here</span>
           <span><span class="sw searched"></span> Searched</span>
-          <span><span class="sw objective"></span> Objective found</span>
+          <span><span class="sw objective"></span> Something on the floor</span>
           <span><span class="sw frontier"></span> Unexplored door</span>
         </div>
       </div>
@@ -185,7 +172,7 @@
         <div id="handoff-notes" class="handoff-notes" hidden></div>
         <div id="handoff-hand" class="cards handoff-hand" hidden></div>
         <div id="handoff-offer" class="offer-block" hidden>
-          <div class="offer-label">Your Offer &#8212; what you hand over if someone walks in on you</div>
+          <div class="offer-label">Tap the card you give</div>
           <div id="offer-cards" class="cards"></div>
           <div id="offer-intent" class="offer-intent" hidden></div>
           <div id="offer-summary" class="offer-summary"></div>
@@ -200,7 +187,7 @@
     <div id="start-overlay" class="overlay center">
       <div class="card">
         <h1>Hotel Escape</h1>
-        <p id="start-sub" class="muted">Practice mode &#183; explore the hotel, find the objectives, reach the exit</p>
+        <p id="start-sub" class="muted">Practice mode &#183; explore the hotel alone, find the three key pieces, reach the fire exit</p>
         <button id="btn-begin" class="btn primary big" type="button" disabled>Loading&#8230;</button>
         <div class="mode-switch">
           <span class="mode-label">Or start a different game:</span>

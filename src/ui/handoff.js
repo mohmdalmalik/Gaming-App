@@ -1,20 +1,15 @@
-// The hot-seat pass-the-device flow: the only place private information is ever shown.
+// The pass-the-device flow: the ONLY place private information is ever shown in hot-seat.
 //
-// Three screens, in this order, every turn:
-//   1. PASS    — neutral. "Pass the device to Eleanor." Nothing private on screen, so the
-//                previous player's hand and role are already gone before anyone else looks.
-//   2. PRIVATE — that player alone: their role, anything that happened to them since, their
-//                hand, and the Offer they commit for this turn.
-//   3. (the turn itself — this overlay closes and the turn timer starts)
+//   PASS     — neutral. "Pass the device to Eleanor." Nothing private on screen.
+//   ROLE     — that guest alone: their secret role (once at the start, again if converted).
+//   TURN     — their private start-of-turn screen: role, news, health, hand, key pieces.
+//   PICK     — a private card choice (which card to give in a trade).
+//   CHOICE   — a private yes/no (accept a lobby trade?).
+//   NOTE     — a private consequence (what you received, that you were possessed, who tried).
 //
-// The role screen is also used on its own: once per player at the start of a match, and again
-// privately for a guest who has just been converted.
-//
-// Nothing in here is ever shown on the public HUD, and nothing here asks a player anything while
-// it is not their turn.
+// Nothing here ever appears on the public HUD, and the turn timer is paused while any of it is up.
 import { rules } from '../data/rules.js';
-import { CARDS, countableCards, countableCount } from '../game/cards.js';
-
+import { CARDS, countableCards, countableCount, piecesIn } from '../game/cards.js';
 import { cardTile } from './cards.js';
 
 export function createHandoff(doc) {
@@ -27,176 +22,137 @@ export function createHandoff(doc) {
     role: doc.getElementById('handoff-role'),
     notes: doc.getElementById('handoff-notes'),
     hand: doc.getElementById('handoff-hand'),
-    offer: doc.getElementById('handoff-offer'),
-    offerCards: doc.getElementById('offer-cards'),
-    offerIntent: doc.getElementById('offer-intent'),
-    offerSummary: doc.getElementById('offer-summary'),
+    pick: doc.getElementById('handoff-offer'),
+    pickCards: doc.getElementById('offer-cards'),
+    pickIntent: doc.getElementById('offer-intent'),
+    pickSummary: doc.getElementById('offer-summary'),
     next: doc.getElementById('btn-handoff-next'),
   };
   let onNext = null;
-  let kind = null;      // which screen is showing: pass | role | note | turn | offeronly
+  let kind = null;
 
-  function reset(kind) {
-    el.card.className = `card handoff-card ${kind}`;
+  function reset(which) {
+    kind = which;
+    el.card.className = `card handoff-card ${which}`;
     el.role.hidden = true; el.role.className = 'role-badge';
     el.notes.hidden = true; el.notes.innerHTML = '';
     el.hand.hidden = true; el.hand.innerHTML = '';
-    el.offer.hidden = true; el.offerCards.innerHTML = '';
-    el.offerIntent.hidden = true; el.offerIntent.innerHTML = '';
-    el.offerSummary.textContent = '';
-    el.sub.textContent = '';
-    el.kicker.textContent = '';
+    el.pick.hidden = true; el.pickCards.innerHTML = '';
+    el.pickIntent.hidden = true; el.pickIntent.innerHTML = '';
+    el.pickSummary.textContent = '';
+    el.sub.textContent = ''; el.kicker.textContent = '';
+    el.next.hidden = false;
   }
-
-  function show(which, label, fn) {
-    kind = which;
+  function show(label, fn) {
     el.next.textContent = label;
     onNext = fn;
     el.overlay.hidden = false;
-    el.card.classList.add(which);
   }
-
-  const roleName = p => (p.possessed ? 'POSSESSED' : 'GUEST');
 
   function renderRole(player) {
     el.role.hidden = false;
     el.role.className = `role-badge ${player.possessed ? 'evil' : 'good'}`;
-    el.role.innerHTML = `<span class="role-word">${roleName(player)}</span>`
+    el.role.innerHTML = `<span class="role-word">${player.possessed ? 'POSSESSED' : 'CLEAN GUEST'}</span>`
       + `<span class="role-line">${player.possessed
-        ? 'On your turn you may commit to POSSESS instead of trading. A guest who offers you a Lantern blocks it — and learns what you are.'
-        : 'Find the objectives, open the fire exit and get out clean. Keep a Lantern in your Offer if you are worried.'}</span>`;
+        ? 'In a trade you may give a Possession card to convert someone — unless they hand you a Lantern, which burns it and tells them what you are. You can never escape.'
+        : 'Find the three pieces of the fire-exit key, get them into one clean pair of hands, and get that guest out. Give a Lantern in a trade if you fear who you are trading with.'}</span>`;
   }
 
-  function renderNotes(player) {
-    if (!player.notes?.length) return;
+  function renderNotes(player, extra = []) {
+    const lines = [...extra, ...(player.notes || [])];
+    if (!lines.length) return;
     el.notes.hidden = false;
-    for (const line of player.notes) {
-      const d = doc.createElement('div');
-      d.className = 'handoff-note';
-      d.textContent = line;
+    for (const line of lines) {
+      const d = doc.createElement('div'); d.className = 'handoff-note'; d.textContent = line;
       el.notes.appendChild(d);
     }
-    player.notes.length = 0;    // read once, on the owner's own screen
+    if (player.notes) player.notes.length = 0;   // read once, on the owner's own screen
   }
 
-  // The Offer chooser. Tapping a card commits it; "Nothing" commits an empty Offer. A possessed
-  // player also picks Trade or Possess. `onChange(cardId, intent)` writes it into the rules engine.
-  function renderOffer(state, player, onChange, label) {
-    el.offer.hidden = false;
-    el.offer.querySelector('.offer-label').textContent = label
-      || 'Your Offer — what you hand over if someone walks in on you';
-    el.offerCards.innerHTML = '';
-    const locked = player.offerLocked;
-
-    const nothing = doc.createElement('div');
-    nothing.className = 'card-tile nothing selectable' + (player.offer == null ? ' selected' : '');
-    nothing.innerHTML = '<div class="art"><span class="glyph">—</span></div><span class="cname">Nothing</span>';
-    if (!locked) nothing.addEventListener('click', e => { e.preventDefault(); onChange(null, player.intent); });
-    el.offerCards.appendChild(nothing);
-
-    for (const c of countableCards(player.hand)) {
-      el.offerCards.appendChild(cardTile(doc, c, {
-        hideDesc: true,
-        selectable: !locked,
-        selected: player.offer === c.id,
-        onSelect: card => onChange(card.id, player.intent),
-      }));
-    }
-
-    if (player.possessed) {
-      el.offerIntent.hidden = false;
-      for (const [value, label] of [['trade', 'Trade normally'], ['possess', 'Try to POSSESS']]) {
-        const b = doc.createElement('button');
-        b.type = 'button';
-        b.className = 'btn intent' + (player.intent === value ? ' on' : '') + (value === 'possess' ? ' evil' : '');
-        b.textContent = label;
-        b.disabled = locked;
-        b.addEventListener('click', e => { e.preventDefault(); onChange(player.offer, value); });
-        el.offerIntent.appendChild(b);
-      }
-    }
-
-    const card = player.offer ? player.hand.find(c => c.id === player.offer) : null;
-    const what = card ? CARDS[card.type].name : 'Nothing';
-    el.offerSummary.textContent = locked
-      ? `Committed: ${what}${player.intent === 'possess' ? ' · POSSESS' : ''} — your turn has already started, so it cannot be changed.`
-      : `You are offering: ${what}${player.intent === 'possess' ? ' · POSSESS' : ''}.`;
-    el.offerSummary.classList.toggle('locked', locked);
+  function renderHand(player) {
+    el.hand.hidden = false;
+    const cards = [...piecesIn(player.hand), ...player.hand.filter(c => c.type === 'possession'), ...countableCards(player.hand)];
+    if (!cards.length) { el.hand.innerHTML = '<div class="panel-note">No cards.</div>'; return; }
+    for (const c of cards) el.hand.appendChild(cardTile(doc, c, { hideDesc: true }));
   }
 
   const api = {
     get isOpen() { return !el.overlay.hidden; },
     get kind() { return el.overlay.hidden ? null : kind; },
-    // True while a HAND-OVER or ROLE screen is up. The turn timer must not run during these.
-    get handingOver() { return !el.overlay.hidden && kind !== 'offeronly'; },
+    // Every screen here is private or a hand-over; the turn timer must not run during any of them.
+    get handingOver() { return !el.overlay.hidden; },
 
-    // 1. Neutral hand-over. Nothing private is on screen.
     passTo(player, info, onContinue) {
       reset('pass');
       el.kicker.textContent = info || '';
       el.title.textContent = `Pass the device to ${player.name}`;
       el.sub.textContent = 'Everyone else: look away. Tap Continue only when they are holding it.';
-      show('pass', `I am ${player.name} — continue`, onContinue);
+      show(`I am ${player.name} — continue`, onContinue);
     },
 
-    // 2. A private role screen: at the start of a match, and again if a guest is converted.
     revealRole(player, opts, onContinue) {
       reset('role');
       el.kicker.textContent = opts?.changed ? 'Something has changed' : 'Your secret role';
-      el.title.textContent = opts?.changed ? `${player.name}, read this alone` : `${player.name}`;
-      el.sub.textContent = opts?.changed
-        ? 'Do not show this to anyone.'
-        : 'Only you may see this screen. Memorise it and pass the device on.';
+      el.title.textContent = opts?.changed ? `${player.name}, read this alone` : player.name;
+      el.sub.textContent = opts?.changed ? 'Do not show this to anyone.' : 'Only you may see this screen. Memorise it and pass the device on.';
       renderRole(player);
       renderNotes(player);
-      show('role', 'I understand', onContinue);
+      show('I understand', onContinue);
     },
 
-    // A private consequence of something that just happened, for the player holding the device.
+    privateTurn(state, floor, player, handlers) {
+      reset('turn');
+      el.kicker.textContent = `Round ${state.round} · ${rules.actionPointsPerTurn} action points · health ${player.health} of ${rules.maxHealth}`;
+      el.title.textContent = `${player.name}'s turn`;
+      const room = floor.rooms.get(player.currentRoom);
+      const pieces = piecesIn(player.hand).length;
+      el.sub.textContent = `You are in ${room?.name ?? 'the hotel'}. Cards ${countableCount(player.hand)} / ${rules.handLimit}`
+        + (pieces ? ` · key pieces ${pieces} / ${rules.keyPiecesToEscape}` : '') + '.';
+      renderRole(player);
+      renderNotes(player);
+      renderHand(player);
+      show('Start my turn', handlers.onStart);
+    },
+
+    // A private card choice. `cards` are the options; the guest taps one.
+    privatePick(player, { kicker, title, sub, cards, onPick, cancelLabel, onCancel }) {
+      reset('pick');
+      el.kicker.textContent = kicker || `Private — ${player.name} only`;
+      el.title.textContent = title;
+      el.sub.textContent = sub || '';
+      el.pick.hidden = false;
+      el.pick.querySelector('.offer-label').textContent = 'Tap the card you give';
+      if (!cards.length) el.pickCards.innerHTML = '<div class="panel-note">No card you are allowed to give.</div>';
+      for (const c of cards) {
+        el.pickCards.appendChild(cardTile(doc, c, { hideDesc: true, selectable: true, onSelect: card => { api.close(); onPick(card.id); } }));
+      }
+      if (onCancel) show(cancelLabel || 'Cancel', onCancel); else el.next.hidden = true, el.overlay.hidden = false;
+    },
+
+    // A private yes/no.
+    privateChoice(player, { kicker, title, sub, options, onPick }) {
+      reset('choice');
+      el.kicker.textContent = kicker || `Private — ${player.name} only`;
+      el.title.textContent = title;
+      el.sub.textContent = sub || '';
+      el.pickIntent.hidden = false;
+      for (const o of options) {
+        const b = doc.createElement('button');
+        b.type = 'button'; b.className = 'btn intent' + (o.primary ? ' on' : '');
+        b.textContent = o.label;
+        b.addEventListener('click', e => { e.preventDefault(); api.close(); onPick(o.value); });
+        el.pickIntent.appendChild(b);
+      }
+      el.next.hidden = true; el.overlay.hidden = false;
+    },
+
+    // A private consequence for the guest holding the device.
     privateNote(player, lines, onContinue) {
       reset('note');
       el.kicker.textContent = 'Private — hold the device close';
       el.title.textContent = `For ${player.name} only`;
-      el.sub.textContent = '';
-      el.notes.hidden = false;
-      for (const line of lines) {
-        const d = doc.createElement('div'); d.className = 'handoff-note'; d.textContent = line;
-        el.notes.appendChild(d);
-      }
-      show('note', 'I understand', onContinue);
-    },
-
-    // 3. The private start-of-turn screen: role, news, hand and this turn's Offer.
-    privateTurn(state, floor, player, handlers) {
-      reset('turn');
-      el.kicker.textContent = `Round ${state.round} of ${rules.roundLimit} · ${rules.actionPointsPerTurn} action points`;
-      el.title.textContent = `${player.name}'s turn`;
-      const room = floor.rooms.get(player.currentRoom);
-      el.sub.textContent = `You are in ${room?.name ?? 'the hotel'}. Cards ${countableCount(player.hand)} / ${rules.handLimit}.`;
-      renderRole(player);
-      renderNotes(player);
-      // No separate hand row here: the Offer chooser below already shows every card the player
-      // holds, and showing them twice pushes the Start button off a landscape iPad screen.
-      const redraw = () => renderOffer(state, player, (cardId, intent) => {
-        handlers.onOffer(cardId, intent);
-        redraw();
-      }, 'Your hand — tap one to make it your Offer if someone walks in on you');
-      redraw();
-      show('turn', 'Start my turn', handlers.onStart);
-    },
-
-    // The Offer on its own, reopened from the turn bar before the first action locks it.
-    offerOnly(state, floor, player, handlers) {
-      reset('offeronly');
-      el.kicker.textContent = 'Private';
-      el.title.textContent = 'Your Offer';
-      el.sub.textContent = 'What you hand over if another guest walks in on you before your next turn.';
-      const redraw = () => renderOffer(state, player, (cardId, intent) => {
-        handlers.onOffer(cardId, intent);
-        redraw();
-      });
-      redraw();
-      show('offeronly', 'Done', handlers.onClose);
+      renderNotes(player, lines);
+      show('I understand', onContinue);
     },
 
     close() { el.overlay.hidden = true; onNext = null; kind = null; },

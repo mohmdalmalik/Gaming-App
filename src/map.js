@@ -1,6 +1,8 @@
 // 2D map overlay: discovered rooms, their doorways/connections and the player's position.
 
-import { activePlayer, isRoomOpen, exitUnlocked, objectivesFound, objectivesRequired } from './game/state.js';
+import { activePlayer, isLocked, isBarricaded } from './game/state.js';
+import { piecesIn } from './game/cards.js';
+import { rules } from './data/rules.js';
 
 export function createMap(doc, floor, cfg) {
   const overlay = doc.getElementById('map-overlay');
@@ -23,8 +25,7 @@ export function createMap(doc, floor, cfg) {
     // A quiet charcoal ground for the plan, with a faint 1 m drafting grid.
     ctx.fillStyle = '#0e1017'; ctx.fillRect(0, 0, cw, ch);
 
-    // A sealed exit is not on the plan at all — it must not be findable by studying the map.
-    const rooms = floor.roomList.filter(r => state.discovered.has(r.id) && isRoomOpen(state, floor, r.id));
+    const rooms = floor.roomList.filter(r => state.discovered.has(r.id));
     if (!rooms.length) return;
     const margin = 1.5;
     const minX = Math.min(...rooms.map(r => r.min[0])) - margin, maxX = Math.max(...rooms.map(r => r.max[0])) + margin;
@@ -43,17 +44,17 @@ export function createMap(doc, floor, cfg) {
     for (let gz = Math.floor(minZ); gz <= maxZ; gz++) { ctx.beginPath(); ctx.moveTo(0, Z(gz)); ctx.lineTo(cw, Z(gz)); ctx.stroke(); }
     ctx.restore();
 
-    // Objective progress, top-left of the plan: public information, always visible.
-    ctx.save();
-    const found = objectivesFound(state), need = objectivesRequired();
-    ctx.font = `bold 13px ${serif}`; ctx.textAlign = 'left'; ctx.textBaseline = 'top';
-    ctx.fillStyle = found >= need ? '#9fe3b8' : BRASS_BRIGHT;
-    ctx.fillText(`Objectives ${found} / ${need}`, 14, 12);
-    if (found >= need) {
-      ctx.font = `12px ${serif}`; ctx.fillStyle = '#9fe3b8';
-      ctx.fillText('The fire exit is open', 14, 30);
+    // Key pieces are private to whoever holds them, so the plan only counts them in practice,
+    // where the one guest is the only person looking.
+    if (state.practice) {
+      ctx.save();
+      const held = piecesIn(activePlayer(state).hand).length, need = rules.keyPiecesToEscape;
+      ctx.font = `bold 13px ${serif}`; ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+      ctx.fillStyle = held >= need ? '#9fe3b8' : BRASS_BRIGHT;
+      ctx.fillText(`Key pieces ${held} / ${need}`, 14, 12);
+      if (held >= need) { ctx.font = `12px ${serif}`; ctx.fillStyle = '#9fe3b8'; ctx.fillText('Reach the fire exit', 14, 30); }
+      ctx.restore();
     }
-    ctx.restore();
 
     // Compass: north is "up" on the plan (world -z).
     ctx.save();
@@ -99,39 +100,40 @@ export function createMap(doc, floor, cfg) {
         ctx.textAlign = 'right'; ctx.textBaseline = 'top';
         ctx.fillText('✓', x + w - 8, z + 7);
       }
-      // An objective already recovered here gets a brass star in the opposite corner.
-      if (state.objectivesFound?.has(r.id)) {
+      // Something is lying on the floor here (a dead guest's cards): a small brass mark.
+      if (state.roomDrops?.get(r.id)?.length) {
         ctx.fillStyle = BRASS_BRIGHT; ctx.font = `bold 14px ${serif}`;
         ctx.textAlign = 'left'; ctx.textBaseline = 'top';
-        ctx.fillText('★', x + 8, z + 6);
+        ctx.fillText('◆', x + 8, z + 6);
       }
     }
 
     // Doorways: a gap between known rooms; a dashed brass mark with a "?" toward the unknown.
     for (const d of floor.doorways) {
-      // Never hint at a sealed exit, even as an unexplored door.
-      if (!isRoomOpen(state, floor, d.a) || !isRoomOpen(state, floor, d.b)) continue;
       const aKnown = state.discovered.has(d.a), bKnown = state.discovered.has(d.b);
       if (!aKnown && !bKnown) continue;
       const frontier = aKnown !== bKnown;
+      const locked = isLocked(state, d.a) || isLocked(state, d.b);
+      const sealed = isBarricaded(state, d.id);
       ctx.save();
-      ctx.lineWidth = frontier ? 4 : 4;
-      ctx.strokeStyle = frontier ? BRASS_BRIGHT : 'rgba(239,231,214,0.35)';
-      ctx.setLineDash(frontier ? [4, 3] : []);
+      ctx.lineWidth = 4;
+      ctx.strokeStyle = sealed ? '#cf6a5c' : locked ? '#c9a24e' : frontier ? BRASS_BRIGHT : 'rgba(239,231,214,0.35)';
+      ctx.setLineDash(frontier && !locked && !sealed ? [4, 3] : []);
       ctx.beginPath();
       if (d.axis === 'x') { ctx.moveTo(X(d.center[0] - d.width / 2), Z(d.center[1])); ctx.lineTo(X(d.center[0] + d.width / 2), Z(d.center[1])); }
       else { ctx.moveTo(X(d.center[0]), Z(d.center[1] - d.width / 2)); ctx.lineTo(X(d.center[0]), Z(d.center[1] + d.width / 2)); }
       ctx.stroke();
       ctx.restore();
-      if (frontier) {
-        ctx.fillStyle = BRASS_BRIGHT;
+      // A locked door gets a padlock, a barricade a bar, an unexplored door a question mark.
+      if (locked || sealed || frontier) {
+        ctx.fillStyle = sealed ? '#f0b4ae' : BRASS_BRIGHT;
         ctx.font = `bold 13px ${serif}`;
         ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-        const side = aKnown ? d.sideB : d.sideA; // the unknown side
+        const side = aKnown ? d.sideB : d.sideA;
         const off = 0.9;
         const lx = d.center[0] + (side === 'east' ? -off : side === 'west' ? off : 0);
         const lz = d.center[1] + (side === 'south' ? -off : side === 'north' ? off : 0);
-        ctx.fillText('?', X(lx), Z(lz));
+        ctx.fillText(sealed ? '▬' : locked ? '🔒' : '?', X(lx), Z(lz));
       }
     }
 

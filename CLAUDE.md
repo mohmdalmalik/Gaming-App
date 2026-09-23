@@ -31,6 +31,9 @@ Build → Run → Test → Fix → Approve → Continue.
 - Keep performance smooth on iPad: few draw calls, simple materials, no heavy post-processing.
 - Multiplayer comes later: keep game rules separate from rendering so a server can reuse them.
 
+## Rules changes
+docs/GAME_RULES.md is the owner's product design. Never add, remove or change a rule or rule number without first giving the owner a plain-language before/after list of every change and getting explicit approval of that list. Audits and simulations may recommend changes; never implement a redesign on your own. Hot-seat is a testing tool: design rules for the real online game, not around one shared device.
+
 ## Security
 Proportional to the project stage. No secrets or API keys in client code or the repo. Never trust client data for important server operations once a server exists.
 

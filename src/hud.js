@@ -170,8 +170,7 @@ export function createHud(doc, cfg) {
       el.trade.hidden = state.practice
         || !(safeRoom && !state.finished && playersInRoom(state, p.currentRoom, p.id).length > 0);
 
-      // Public card count excludes Possession cards and key pieces, so it never reveals a role or
-      // who is carrying the way out.
+      // Public card count excludes Possession cards, so it never reveals a role.
       renderHand(countableCount(p.hand));
 
       // Top strip: current-turn + next-player indicators.

@@ -6,7 +6,7 @@
 // before/after list (see CLAUDE.md, "Rules changes").
 //
 // Two ways to play the same ruleset, chosen at startup by applyMode() at the bottom:
-//   'practice'  — one guest alone: find the three key pieces and escape. No meetings, no
+//   'practice'  — one guest alone: find three Lanterns and escape. No meetings, no
 //                 hidden role, no timer. Everything else (dark rooms, locked rooms, cards) applies.
 //   'hotseat'   — 4-6 guests passing ONE device. A testing tool for the real online game; the
 //                 rules are designed for one device each, not around the shared iPad.
@@ -42,21 +42,24 @@ export const rules = {
   // --- Possession ----------------------------------------------------------------------------
   possessionSupply: 3,      // the Possessed guest starts with this many Possession cards
 
-  // --- Key pieces and escape -----------------------------------------------------------------
-  // Three different pieces, hidden in three different random rooms at setup — never the lobby,
-  // never a room next to it. Carried cards: tradeable, outside the hand limit, undroppable,
-  // dropped on death. A clean guest holding all three who enters the exit escapes at once.
-  keyPieces: ['bow', 'shank', 'bit'],
+  // --- Lanterns and escape ------------------------------------------------------------------
+  // A clean guest holding this many Lanterns who enters the exit escapes at once. Lanterns are
+  // never dealt — they are found only by searching.
+  lanternsToEscape: 3,
+  lanternsDealtEach: 0,     // APPROVED: 0. The simulator compares 1 (one Lantern dealt to each guest).
+  // What happens to a Lantern that blocks a possession attempt.
+  //   'discard'  APPROVED: used up — the Lantern and the Possession card are both discarded.
+  //   'attacker' comparison only (Panic Station style): the Lantern goes to the possessed guest.
+  lanternBlock: 'discard',
 
   // --- Rooms ---------------------------------------------------------------------------------
-  lockedRoomCount: 2,       // chosen at random at setup (never the lobby, its neighbours, the exit)
+  lockedRoomCount: 2,       // chosen at random each match (never the lobby, its neighbours, the exit)
   lockPickChance: 0.5,      // a Lock Pick works half the time; discarded either way
-  barricadeRounds: 1,       // a Barricade seals one doorway of your room for one round
+  barricadeRounds: 1,       // a Barricade seals one doorway of your room until your next turn starts
 
   // --- Hand ----------------------------------------------------------------------------------
-  startingHandSize: 4,
-  guaranteedLantern: true,  // every starting hand holds at least one Lantern
-  handLimit: 6,             // checked at the end of your turn; pieces and Possession cards don't count
+  startingHandSize: 4,      // dealt from the deck with the Lanterns taken out
+  handLimit: 6,             // checked at the end of your turn; Lanterns count, Possession cards don't
 
   // --- Seeds ---------------------------------------------------------------------------------
   practiceSeed: 20260917,   // practice deals the same hotel every time; null for random
@@ -64,7 +67,7 @@ export const rules = {
   // --- Card catalogue ------------------------------------------------------------------------
   cards: {
     lantern:    { name: 'Lantern',    glyph: '✦', tint: '#ffd66b',
-                  desc: 'Give it in a trade to block a possession attempt. Defence only.' },
+                  desc: 'Give it in a trade to block a possession attempt. Three of them let a clean guest escape.' },
     bandage:    { name: 'Bandage',    glyph: '✚', tint: '#8fe0a8', heal: 1, active: true,
                   desc: 'Restores 1 health bar. 1 action.' },
     flashlight: { name: 'Flashlight', glyph: '▮', tint: '#8fd8ff',
@@ -82,13 +85,6 @@ export const rules = {
     // The possessed side's supply — never in the deck.
     possession: { name: 'Possession', glyph: '☠', tint: '#b46bff', evil: true,
                   desc: 'Give it in a trade to possess someone — unless they hand you a Lantern.' },
-    // The three pieces of the fire-exit key — hidden in rooms, never dealt, never in the deck.
-    bow:        { name: 'Key Bow',    glyph: '◯', tint: '#e8ca80', piece: true,
-                  desc: 'The head of the fire-exit key. One of three pieces.' },
-    shank:      { name: 'Key Shank',  glyph: '│', tint: '#e8ca80', piece: true,
-                  desc: 'The shaft of the fire-exit key. One of three pieces.' },
-    bit:        { name: 'Key Bit',    glyph: '⌐', tint: '#e8ca80', piece: true,
-                  desc: 'The teeth of the fire-exit key. One of three pieces.' },
   },
 
   // --- The draw deck (40, tuned for 6 players) --------------------------------------------------
@@ -114,7 +110,6 @@ function derive() {
     attack: rules.attackCost,
   };
   rules.handSize = rules.startingHandSize;
-  rules.keyPiecesToEscape = rules.keyPieces.length;
 }
 derive();
 

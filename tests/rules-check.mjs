@@ -5,9 +5,9 @@ import { rules, applyMode } from '../src/data/rules.js';
 import { floor1 } from '../src/data/floor1.js';
 import { roster } from '../src/data/characters.js';
 import { buildFloor } from '../src/game/floor.js';
-import { lanternCount, countType, countableCount, piecesIn, hasAllPieces, isPiece } from '../src/game/cards.js';
+import { lanternCount, countType, countableCount, hasEscapeLanterns } from '../src/game/cards.js';
 import {
-  createState, activePlayer, nextPlayer, endTurn, enterRoom, checkWin, canEscape, hidingRooms,
+  createState, activePlayer, nextPlayer, endTurn, enterRoom, checkWin, canEscape, lockableRooms,
   usableDoorways, pendingEncounters, lockEncounter, hasEncounterLock, playersInRoom, canAffordRoute,
   isLocked, isBarricaded, doorwayPassable, adjacentLockedRooms, convertToPossessed,
 } from '../src/game/state.js';
@@ -35,15 +35,18 @@ check(rules.turnTimerSeconds === 45 && rules.turnTimerEnabled === true, 'hot-sea
 check(rules.maxHealth === 3 && rules.bandageHeal === 1, '3 health bars; a Bandage restores 1');
 check(rules.healthEnabled && rules.combatEnabled && rules.lockedDoorsEnabled && rules.darkRoomsRequireLight, 'health, combat, locked doors and dark rooms are ON');
 check(rules.possessionSupply === 3, 'the Possessed guest starts with 3 Possession cards');
-check(rules.keyPieces.join(',') === 'bow,shank,bit' && rules.keyPiecesToEscape === 3, 'three key pieces: Bow, Shank, Bit');
+check(rules.lanternsToEscape === 3, 'three Lanterns let a clean guest escape');
+check(!('keyPieces' in rules) && !['bow', 'shank', 'bit'].some(t => t in rules.cards), 'the key pieces are gone entirely');
+check(rules.lanternBlock === 'discard', 'the game uses the approved rule: a blocking Lantern is used up');
+check(rules.lanternsDealtEach === 0, 'the game uses the approved rule: Lanterns are never dealt');
 check(rules.lockedRoomCount === 2 && rules.lockPickChance === 0.5, 'two locked rooms; a Lock Pick works half the time');
-check(rules.startingHandSize === 4 && rules.guaranteedLantern && rules.handLimit === 6, '4-card start with a Lantern; hand limit 6');
+check(rules.startingHandSize === 4 && rules.handLimit === 6, '4-card starting hand; hand limit 6');
 check(deckTotal === 40, `the draw deck has ${deckTotal} cards (40)`);
 check(rules.deck.lantern === 12 && rules.deck.bandage === 7 && rules.deck.flashlight === 5 && rules.deck.knife === 4
   && rules.deck.barricade === 4 && rules.deck.lockPick === 4 && rules.deck.revolver === 2 && rules.deck.masterKey === 2,
   'deck mix: 12 Lantern, 7 Bandage, 5 Flashlight, 4 Knife, 4 Barricade, 4 Lock Pick, 2 Revolver, 2 Master Key');
 check(!('hint' in rules.cards) && !('distraction' in rules.cards) && !('trinket' in rules.cards), 'no Hint, Distraction or Trinket cards');
-check(!('possession' in rules.deck) && !rules.keyPieces.some(t => t in rules.deck), 'Possession cards and key pieces are never in the deck');
+check(!('possession' in rules.deck), 'Possession cards are never in the deck');
 check(rules.onlineMode === false, 'no server, no networking');
 check(!('roundLimit' in rules) && !('objectiveCount' in rules), 'no round limit and no public objectives in this ruleset');
 
@@ -55,39 +58,47 @@ console.log('\nsetup');
   check(countType(possessed(s).hand, 'possession') === 3, 'and holds 3 Possession cards');
   check(cleanOnes(s).every(p => countType(p.hand, 'possession') === 0), 'nobody else holds one');
   check(s.players.every(p => countableCount(p.hand) === 4), 'four ordinary cards each');
-  check(s.players.every(p => lanternCount(p.hand) >= 1), 'every hand holds at least one Lantern');
   check(s.drawPile.length === deckTotal - 24, `${s.drawPile.length} cards left in the pile after dealing`);
+  check(countType(s.drawPile, 'lantern') === rules.deck.lantern, 'all 12 Lanterns are in the draw pile');
   check(s.discardPile.length === 0, 'the discard pile starts empty');
   check(s.players.every(p => p.health === 3 && p.alive), 'everyone starts at full health');
-  check(s.players.every(p => piecesIn(p.hand).length === 0), 'nobody starts with a key piece');
+  check(s.roomDrops.size === 0, 'nothing is lying on any floor at the start');
 }
-// Key pieces: three different rooms, never the lobby or next to it, never the exit.
+// Lanterns are never dealt — over many deals, at every table size.
 {
-  const lobbyRoom = floor.rooms.get(lobby);
-  const allowed = new Set(hidingRooms(floor));
-  check(!allowed.has(lobby) && ![...lobbyRoom.neighbours].some(id => allowed.has(id)) && !allowed.has(floor.exitRoom),
-    'hiding rooms exclude the lobby, its neighbours and the exit');
-  let ok = true, distinct = true, lockedOk = true, inDark = 0, inLocked = 0;
+  let dealt = 0, pileOk = true;
   for (let seed = 1; seed <= 200; seed++) {
     const s = hs(seed);
-    const rooms = s.pieceRooms;
-    if (rooms.length !== 3 || !rooms.every(r => allowed.has(r))) ok = false;
-    if (new Set(rooms).size !== 3) distinct = false;
-    for (const r of rooms) {
-      const drops = s.roomDrops.get(r) || [];
-      if (!drops.some(isPiece)) ok = false;
-      if (floor.rooms.get(r).dark) inDark++;
-      if (s.lockedRooms.has(r)) inLocked++;
-    }
-    if (s.lockedRooms.size !== 2 || [...s.lockedRooms].some(r => !allowed.has(r))) lockedOk = false;
+    dealt += s.players.reduce((n, p) => n + lanternCount(p.hand), 0);
+    if (countType(s.drawPile, 'lantern') !== 12) pileOk = false;
   }
-  check(ok, 'over 200 deals every piece lies in an allowed room, on that room’s floor');
-  check(distinct, 'the three pieces are always in three different rooms');
+  check(dealt === 0, 'over 200 six-player deals, not one Lantern was dealt');
+  check(pileOk, 'every time, all 12 Lanterns went into the draw pile');
+  applyMode('hotseat', 4);
+  const f = createState(floor, roster.slice(0, 4), 3, { mode: 'hotseat' });
+  check(f.players.every(p => lanternCount(p.hand) === 0 && countableCount(p.hand) === 4), 'four players: four cards each, no Lanterns');
+  applyMode('hotseat', 6);
+  // The Lanterns are shuffled into the remainder, not stacked at the bottom.
+  let early = 0;
+  for (let seed = 1; seed <= 200; seed++) if (hs(seed).drawPile.slice(0, 4).some(c => c.type === 'lantern')) early++;
+  check(early > 150, `Lanterns are shuffled through the pile (one in the first four draws in ${early} of 200 deals)`);
+}
+// Locked rooms: two, random each match, never the lobby, its neighbours or the exit.
+{
+  const lobbyRoom = floor.rooms.get(lobby);
+  const allowed = new Set(lockableRooms(floor));
+  check(!allowed.has(lobby) && ![...lobbyRoom.neighbours].some(id => allowed.has(id)) && !allowed.has(floor.exitRoom),
+    'lockable rooms exclude the lobby, its neighbours and the exit');
+  let lockedOk = true; const seen = new Set();
+  for (let seed = 1; seed <= 200; seed++) {
+    const s = hs(seed);
+    if (s.lockedRooms.size !== 2 || [...s.lockedRooms].some(r => !allowed.has(r))) lockedOk = false;
+    seen.add([...s.lockedRooms].sort().join('+'));
+  }
   check(lockedOk, 'two locked rooms every deal, never the lobby, its neighbours or the exit');
-  check(inDark > 0 && inLocked > 0, `a piece can be in a dark room (${inDark} times) or a locked room (${inLocked} times)`);
-  const a = hs(77), b = hs(77), c = hs(78);
-  check(a.pieceRooms.join() === b.pieceRooms.join() && a.lockedRooms.size === b.lockedRooms.size, 'the same seed hides things in the same places');
-  check(a.pieceRooms.join() !== c.pieceRooms.join() || [...a.lockedRooms].join() !== [...c.lockedRooms].join(), 'a different seed changes them');
+  check(seen.size > 20, `the locked rooms change from match to match (${seen.size} different pairs in 200 deals)`);
+  const a = hs(77), b = hs(77);
+  check([...a.lockedRooms].join() === [...b.lockedRooms].join(), 'the same seed locks the same rooms');
 }
 
 console.log('\nturns and movement');
@@ -122,15 +133,18 @@ console.log('\nsearching, the deck and the discard pile');
   check(r.ok && r.kind === 'card' && p.hand.length === n + 1 && s.drawPile.length === pile - 1 && p.actionPoints === 3,
     'searching an ordinary room draws one card for 1 action point');
   check(canSearch(s, floor, p).reason === 'searched', 'a room gives up its draw once');
-  // Drops are always there for the taking.
-  const pieceRoom = s.pieceRooms[0];
-  p.currentRoom = pieceRoom; s.discovered.add(pieceRoom); s.lockedRooms.delete(pieceRoom);
-  if (floor.rooms.get(pieceRoom).dark) p.hand.push({ id: 'fl', type: 'flashlight' });
+  check(s.log.at(-1).text === `${p.name} searched ${plain.name}.`, 'the public log says only that a search happened');
+  check(!s.log.some(l => /Lantern|Bandage|Knife|Flashlight|Revolver|Barricade|Lock Pick|Master Key/.test(l.text)), 'it never names what was found');
+  // Dropped items are always there for the taking, even in a room already searched.
+  s.roomDrops.set(plain.id, [{ id: 'd1', type: 'lantern' }, { id: 'd2', type: 'knife' }]);
+  p.actionPoints = 4;
   const f = search(s, floor, p);
-  check(f.ok && f.kind === 'found' && f.pieces.length === 1 && piecesIn(p.hand).length === 1, 'searching a piece’s room finds the piece');
-  check(!s.roomDrops.has(pieceRoom), 'and it is gone from the floor');
-  check(countableCount(p.hand) === 5, 'a key piece does not count toward the hand limit');
-  check(discardCard(s, p, piecesIn(p.hand)[0].id).reason === 'undroppable', 'a key piece cannot be discarded');
+  check(f.ok && f.kind === 'found' && p.hand.some(c => c.id === 'd1') && p.hand.some(c => c.id === 'd2'), 'dropped cards in an already-searched room can still be picked up');
+  check(!s.roomDrops.has(plain.id), 'and they are gone from the floor');
+  const before = countableCount(p.hand);
+  p.hand.push({ id: 'lx', type: 'lantern' });
+  check(countableCount(p.hand) === before + 1, 'a Lantern counts toward the hand limit like any card');
+  check(discardCard(s, p, 'lx').ok, 'and can be discarded like any card');
   const s2 = hs(9), q = activePlayer(s2);
   check(discardCard(s2, possessed(s2), possessed(s2).hand.find(c => c.type === 'possession').id).reason === 'undroppable', 'a Possession card cannot be discarded');
   // Discard pile recycles into the deck.
@@ -197,8 +211,18 @@ console.log('\nbarricades');
   check(!usableDoorways(s, floor, p).some(d => d.id === door.id), 'not even the guest who placed it');
   check(useBarricade(s, floor, p, 'x', door.id).reason === 'noCard', 'used up');
   const living = s.players.filter(q => q.alive).length;
-  for (let i = 0; i < living; i++) endTurn(s, floor);
-  check(!isBarricaded(s, door.id), 'it comes down when that guest’s next turn comes round (one round)');
+  let stood = true;
+  for (let i = 0; i < living - 1; i++) { endTurn(s, floor); if (!isBarricaded(s, door.id)) stood = false; }
+  check(stood, 'it stands through every other guest’s turn');
+  endTurn(s, floor);
+  check(activePlayer(s) === p && !isBarricaded(s, door.id), 'it comes down the moment the placer’s next turn starts');
+  // Still exactly "until your next turn" when somebody dies in between.
+  p.hand.push({ id: 'bar3', type: 'barricade' }); p.actionPoints = 4;
+  useBarricade(s, floor, p, 'bar3', door.id);
+  s.players[3].alive = false;
+  let turns = 0;
+  do { endTurn(s, floor); turns++; } while (activePlayer(s) !== p && turns < 10);
+  check(!isBarricaded(s, door.id) && turns === living - 1, 'with a guest dead in between, it still comes down exactly at the placer’s next turn');
   const other = floor.rooms.get('kitchen').doorways[0];
   p.hand.push({ id: 'bar2', type: 'barricade' }); p.actionPoints = 4;
   check(useBarricade(s, floor, p, 'bar2', other.id).reason === 'notYourDoorway', 'only a doorway of the room you are in');
@@ -237,14 +261,14 @@ console.log('\nhealth, bandages and attacks');
   const s = hs(15);
   const V = possessed(s); const K = cleanOnes(s)[0];
   V.currentRoom = K.currentRoom = 'kitchen'; K.actionPoints = 4;
-  V.hand.push({ id: 'pc', type: 'bow' });
+  V.hand.push({ id: 'pc', type: 'lantern' });
   const carried = V.hand.filter(c => c.type !== 'possession').map(c => c.id);
   K.hand.push({ id: 'rv', type: 'revolver', shots: 2 });
   V.health = 2;
   resolveAttack(s, floor, K, V, 'rv');
   check(!V.alive && V.hand.length === 0, 'the dead guest’s hand is empty');
   const drops = s.roomDrops.get('kitchen') || [];
-  check(carried.every(id => drops.some(c => c.id === id)), 'everything they carried — the key piece included — is on the floor of that room');
+  check(carried.every(id => drops.some(c => c.id === id)), 'everything they carried — Lanterns included — is on the floor of that room');
   check(!drops.some(c => c.type === 'possession'), 'their Possession cards leave the game with them');
   K.currentRoom = 'kitchen'; s.discovered.add('kitchen'); K.actionPoints = 4;
   const f = search(s, floor, K);
@@ -306,11 +330,44 @@ console.log('\ntrade and possession');
   check(t.ok && !K.possessed, 'giving a Lantern blocks the attempt');
   check(!K.hand.some(c => c.id === pc.id) && !V.hand.some(c => c.id === pc.id) && !s.discardPile.some(c => c.id === pc.id),
     'the Possession card is destroyed');
-  check(V.hand.some(c => c.id === 'la'), 'the Lantern STILL goes to the other guest');
+  check(!V.hand.some(c => c.id === 'la') && !K.hand.some(c => c.id === 'la'), 'the blocking Lantern is used up — nobody holds it');
+  check(s.discardPile.some(c => c.id === 'la'), 'it goes to the discard pile');
+  check(t.lanternsBurned === 1, 'the trade reports one Lantern burned');
   check(K.knows.has(V.id), 'the defender privately learns who tried');
-  check(t.received[K.id] === null, 'the defender received nothing');
+  check(t.received[K.id] === null && t.received[V.id] === null, 'neither side received anything');
   check(countType(V.hand, 'possession') === 2, 'the possessed side is down to two Possession cards');
   check(K.notes.some(n => n.includes(V.name)), 'the defender’s private note names the attacker');
+}
+{
+  // An ORDINARY trade: a Lantern changes hands like any card, so teammates can pool them.
+  const s = hs(26);
+  const [A, B] = cleanOnes(s);
+  A.currentRoom = B.currentRoom = 'corridorE';
+  A.hand = [{ id: 'l1', type: 'lantern' }]; B.hand = [{ id: 'b1', type: 'bandage' }];
+  const t = resolveTrade(s, floor, A, B, 'l1', 'b1');
+  check(t.ok && t.swap && B.hand.some(c => c.id === 'l1') && A.hand.some(c => c.id === 'b1'), 'in an ordinary trade a Lantern goes to the other guest');
+  check(!s.discardPile.some(c => c.id === 'l1'), 'and is not used up');
+  // A possessed guest giving a Lantern normally (no Possession card) is an ordinary trade too.
+  const V = possessed(s); V.currentRoom = 'corridorE';
+  V.hand.push({ id: 'vl', type: 'lantern' });
+  const t2 = resolveTrade(s, floor, V, A, 'vl', 'b1');
+  check(t2.ok && t2.swap && A.hand.some(c => c.id === 'vl') && !A.possessed, 'a possessed guest can hand over a Lantern to look innocent');
+}
+{
+  // The comparison variant exists only for the simulator; the game never switches it on.
+  rules.lanternBlock = 'attacker';
+  const s = hs(27);
+  const V = possessed(s), K = cleanOnes(s)[0];
+  V.currentRoom = K.currentRoom = 'corridorE';
+  const pc = V.hand.find(c => c.type === 'possession');
+  K.hand = [{ id: 'la', type: 'lantern' }];
+  resolveTrade(s, floor, V, K, pc.id, 'la');
+  check(V.hand.some(c => c.id === 'la') && !K.possessed, 'simulator variant: the blocking Lantern goes to the possessed guest');
+  rules.lanternBlock = 'discard';
+  rules.lanternsDealtEach = 1;
+  const d = hs(28);
+  check(d.players.every(p => lanternCount(p.hand) === 1 && countableCount(p.hand) === 4), 'simulator variant: one Lantern dealt to each guest');
+  rules.lanternsDealtEach = 0;
 }
 {
   // Possession cards never count and are hidden from the public count.
@@ -318,8 +375,8 @@ console.log('\ntrade and possession');
   const V = possessed(s);
   check(countableCount(V.hand) === 4 && V.hand.length === 7, 'three Possession cards, public count still 4');
   check(overHandLimit(V) === 0, 'they never push a hand over the limit');
-  V.hand.push({ id: 'x1', type: 'bow' }, { id: 'x2', type: 'lantern' }, { id: 'x3', type: 'lantern' }, { id: 'x4', type: 'lantern' });
-  check(countableCount(V.hand) === 7 && overHandLimit(V) === 1, 'ordinary cards over 6 must be discarded; the piece does not count');
+  V.hand.push({ id: 'x2', type: 'lantern' }, { id: 'x3', type: 'lantern' }, { id: 'x4', type: 'lantern' });
+  check(countableCount(V.hand) === 7 && overHandLimit(V) === 1, 'seven ordinary cards (Lanterns included) must come down to 6');
 }
 
 console.log('\nescape and winning');
@@ -327,22 +384,23 @@ console.log('\nescape and winning');
   const s = hs(20);
   const K = cleanOnes(s)[0];
   K.currentRoom = floor.exitRoom; s.discovered.add(floor.exitRoom);
-  check(!canEscape(s, floor, K) && checkWin(s, floor, K) === null, 'entering the exit with no pieces does nothing');
-  K.hand.push({ id: 'b1', type: 'bow' }, { id: 'b2', type: 'shank' });
-  check(!canEscape(s, floor, K), 'two pieces are not enough');
-  K.hand.push({ id: 'b3', type: 'bit' });
-  check(hasAllPieces(K.hand) && canEscape(s, floor, K), 'all three pieces and the exit: the guest can escape');
+  K.hand = K.hand.filter(c => c.type !== 'lantern');
+  check(!canEscape(s, floor, K) && checkWin(s, floor, K) === null, 'entering the exit with no Lanterns does nothing');
+  K.hand.push({ id: 'b1', type: 'lantern' }, { id: 'b2', type: 'lantern' });
+  check(!canEscape(s, floor, K), 'two Lanterns are not enough');
+  K.hand.push({ id: 'b3', type: 'lantern' });
+  check(hasEscapeLanterns(K.hand) && canEscape(s, floor, K), 'three Lanterns and the exit: the guest can escape');
   // ORDER: the exit is resolved before any meeting.
   const other = cleanOnes(s)[1]; other.currentRoom = floor.exitRoom;
   check(pendingEncounters(s, floor, K).length === 0, 'the exit is safe: no meeting can be forced there');
-  check(checkWin(s, floor, K) === 'humans' && s.finished && s.escaped.has(K.id), 'a clean guest with all three pieces escapes and the guests win');
+  check(checkWin(s, floor, K) === 'humans' && s.finished && s.escaped.has(K.id), 'a clean guest with three Lanterns escapes and the guests win');
 }
 {
   const s = hs(21);
   const V = possessed(s);
   V.currentRoom = floor.exitRoom;
-  V.hand.push({ id: 'b1', type: 'bow' }, { id: 'b2', type: 'shank' }, { id: 'b3', type: 'bit' });
-  check(!canEscape(s, floor, V) && checkWin(s, floor, V) === null, 'a possessed guest holding all three pieces can never escape');
+  V.hand.push({ id: 'b1', type: 'lantern' }, { id: 'b2', type: 'lantern' }, { id: 'b3', type: 'lantern' });
+  check(!canEscape(s, floor, V) && checkWin(s, floor, V) === null, 'a possessed guest holding three Lanterns can never escape');
 }
 {
   const s = hs(22);
@@ -356,16 +414,18 @@ console.log('\nescape and winning');
   check(checkWin(s3, floor) === null, 'there is no round limit');
 }
 {
-  // Practice: alone, find the pieces and get out.
+  // Practice: alone, find three Lanterns and get out.
   applyMode('practice');
-  const s = createState(floor, roster.slice(0, 1), 5, { mode: 'practice' });
+  const s = createState(floor, roster.slice(0, 1), rules.practiceSeed, { mode: 'practice' });
   const p = activePlayer(s);
-  check(s.players.length === 1 && !p.possessed && s.pieceRooms.length === 3, 'practice: one clean guest, three pieces hidden');
+  check(s.players.length === 1 && !p.possessed && lanternCount(p.hand) === 0, 'practice: one clean guest, no Lanterns dealt');
   check(rules.turnTimerEnabled === false, 'practice has no timer');
+  const third = s.drawPile.map((c, i) => (c.type === 'lantern' ? i : -1)).filter(i => i >= 0)[2];
+  check(third < 16, `the fixed practice deal is winnable: the third Lantern is draw ${third + 1} of the 16 rooms`);
   p.currentRoom = floor.exitRoom;
-  check(checkWin(s, floor, p) === null, 'the exit does nothing without the pieces');
-  p.hand.push({ id: 'b1', type: 'bow' }, { id: 'b2', type: 'shank' }, { id: 'b3', type: 'bit' });
-  check(checkWin(s, floor, p) === 'humans', 'with all three pieces, practice is complete');
+  check(checkWin(s, floor, p) === null, 'the exit does nothing without three Lanterns');
+  p.hand.push({ id: 'b1', type: 'lantern' }, { id: 'b2', type: 'lantern' }, { id: 'b3', type: 'lantern' });
+  check(checkWin(s, floor, p) === 'humans', 'with three Lanterns, practice is complete');
   applyMode('hotseat', 6);
 }
 

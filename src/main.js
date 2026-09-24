@@ -18,7 +18,7 @@ import {
   search, useBandage, useUnlock, useBarricade, resolveFullHand, resolveTrade, resolveAttack,
   discardCard, overHandLimit, tradeableCards,
 } from './game/actions.js';
-import { CARDS, weaponsIn, piecesIn, hasAllPieces } from './game/cards.js';
+import { CARDS, weaponsIn } from './game/cards.js';
 import { createScene } from './render/scene.js';
 import { createRoomViews, createDoorwayViews } from './render/roomView.js';
 import { dressRooms } from './render/roomDressing.js';
@@ -47,7 +47,7 @@ if (floor.problems.length) throw new Error(`Problems in the floor data:\n• ${f
 // Which game this page is. The choice is in the address so it can be linked, bookmarked and
 // driven by the tests; the start screen writes it for the player.
 //   ?mode=hotseat&players=6   a six-person hot-seat match on one device
-//   ?seed=123                 force the deal, the hidden role, the key-piece rooms (testing)
+//   ?seed=123                 force the deal, the hidden role, the locked rooms (testing)
 //   ?timer=off                play without the 45-second turn clock
 const params = new URLSearchParams(window.location.search);
 const MODE = params.get('mode') === 'hotseat' ? 'hotseat' : 'practice';
@@ -235,15 +235,16 @@ function doEndTurn() {
 }
 
 // The active guest finished walking into a room. ORDER MATTERS: the exit is resolved FIRST —
-// a clean guest carrying all three pieces escapes before any meeting can be forced there.
+// a clean guest carrying three Lanterns escapes before any meeting can be forced there.
 function onArrive() {
   const player = activePlayer(state);
   const room = floor.rooms.get(player.currentRoom);
   pendingArrival = null;
   if (room?.isExit) {
     if (checkWin(state, floor, player)) { syncViews(false); refresh(); showEnd(); return; }
-    if (PRACTICE || !piecesIn(player.hand).length) hud.toast(hasAllPieces(player.hand)
-      ? 'The exit will not open for you.' : 'The fire exit. It needs the whole key.');
+    // The same words for everyone, so the shared screen gives nothing away about who is carrying
+    // what or who is possessed.
+    hud.toast(`The fire exit — it opens only for a clean guest carrying ${rules.lanternsToEscape} Lanterns.`);
   }
   const candidates = pendingEncounters(state, floor, player);
   if (!candidates.length) { refresh(); return; }
@@ -345,33 +346,42 @@ function onSearch() {
   const r = search(state, floor, player);
   if (!r.ok) { hud.toast(SEARCH_FAIL[r.reason] || 'Cannot search now.'); return; }
   const where = r.searchPoint || 'the room';
-  if (r.kind === 'found') {
-    // A key piece is told to the finder alone; dropped cards likewise.
-    const names = r.cards.map(c => CARDS[c.type].name).join(', ');
-    const line = r.pieces.length
-      ? `Hidden in ${where}: ${names}. ${piecesIn(player.hand).length} of ${rules.keyPiecesToEscape} key pieces are now yours.`
-      : `Lying in ${where}: ${names}.`;
-    syncViews(false);
-    if (HOTSEAT) handoff.privateNote(player, [line], refresh);
-    else { hud.toast(line); refresh(); }
-    return;
+  syncViews(false);
+  // A card that does not fit goes straight to the take-or-leave prompt, on the searcher's own turn.
+  if (r.kind === 'card' && r.full) { askFullHand(player, r.card, where); return; }
+  const line = r.kind === 'found'
+    ? `Lying in ${where}: ${r.cards.map(c => CARDS[c.type].name).join(', ')}. You take it all.`
+    : r.kind === 'nothing' ? `You search ${where}. Nothing.`
+      : `You search ${where} and find a ${CARDS[r.card.type].name}.`;
+  const lanterns = player.hand.filter(c => c.type === 'lantern').length;
+  const tally = lanterns ? ` You now hold ${lanterns} Lantern${lanterns === 1 ? '' : 's'}.` : '';
+  // Search results are PRIVATE. In hot-seat the table sees only that a search happened; the
+  // result goes on a private card for the searcher. Practice has nobody to hide it from.
+  if (HOTSEAT) {
+    hud.toast(`${player.name} searched.`);
+    handoff.privateNote(player, [line + tally], refresh);
+  } else {
+    hud.toast(line + tally);
+    refresh();
   }
-  if (r.kind === 'nothing') { hud.toast(`You search ${where}. Nothing.`); refresh(); return; }
-  if (r.full) { askFullHand(player, r.card, where); return; }
-  hud.toast(`You search ${where} and find a ${CARDS[r.card.type].name}.`);
-  refresh();
 }
 
 // A drawn card with no room for it: never dropped silently — the guest decides.
 function askFullHand(player, card, where = 'the room') {
   fullHand.open(state, player, card, {
+    // Search results are private: in hot-seat nothing about the card goes on the shared toast.
     onTake: dropId => {
       const res = resolveFullHand(state, player, card, 'take', dropId);
-      hud.toast(res.ok ? `Kept the ${CARDS[card.type].name}, left the ${CARDS[res.dropped.type].name} behind.` : 'That card cannot be dropped.');
+      if (!res.ok) hud.toast('That card cannot be dropped.');
+      else if (PRACTICE) hud.toast(`Kept the ${CARDS[card.type].name}, left the ${CARDS[res.dropped.type].name} behind.`);
       refresh();
     },
     onUse: () => { resolveFullHand(state, player, card, 'leave'); refresh(); },
-    onLeave: () => { resolveFullHand(state, player, card, 'leave'); hud.toast(`Left the ${CARDS[card.type].name} in ${where}.`); refresh(); },
+    onLeave: () => {
+      resolveFullHand(state, player, card, 'leave');
+      if (PRACTICE) hud.toast(`Left the ${CARDS[card.type].name} in ${where}.`);
+      refresh();
+    },
   });
 }
 
@@ -405,7 +415,7 @@ function showEnd() {
   if (state.practice) {
     const p = activePlayer(state);
     overlays.showEnd('You reached the fire exit',
-      `Practice complete — all ${rules.keyPiecesToEscape} key pieces found, ${state.discovered.size} of ${floor.roomList.length} rooms discovered, on round ${state.round}.`,
+      `Practice complete — ${rules.lanternsToEscape} Lanterns carried out, ${state.discovered.size} of ${floor.roomList.length} rooms discovered, on round ${state.round}.`,
       { keepExploring: false });
     void p;
     return;
@@ -417,7 +427,7 @@ function showEnd() {
   if (dead.length) parts.push(`Dead: ${dead.join(', ')}`);
   parts.push(`Round ${state.round}`);
   const opts = { restartLabel: 'New match' };
-  if (state.won === 'humans') overlays.showEnd('The guests got out', `${out.join(', ')} escaped with the whole key. ${parts.join(' · ')}`, opts);
+  if (state.won === 'humans') overlays.showEnd('The guests got out', `${out.join(', ')} escaped carrying ${rules.lanternsToEscape} Lanterns. ${parts.join(' · ')}`, opts);
   else overlays.showEnd('The hotel keeps them', `No clean guest is left. ${parts.join(' · ')}`, opts);
 }
 
@@ -584,8 +594,8 @@ function buildStartScreen() {
   const host = document.getElementById('mode-buttons');
   if (sub) {
     sub.textContent = HOTSEAT
-      ? `Hot-seat · ${rules.playerCount} guests, one device · one is secretly possessed · find the three key pieces and get one clean guest out`
-      : 'Practice mode · explore the hotel alone, find the three key pieces, reach the fire exit';
+      ? `Hot-seat · ${rules.playerCount} guests, one device · one is secretly possessed · find ${rules.lanternsToEscape} Lanterns and get one clean guest out`
+      : `Practice mode · explore the hotel alone, find ${rules.lanternsToEscape} Lanterns, reach the fire exit`;
   }
   document.title = HOTSEAT ? `Hotel Escape — Hot-seat (${rules.playerCount})` : 'Hotel Escape — Practice';
   if (!host) return;
@@ -673,7 +683,7 @@ window.__game = {
   publicLog: () => state.log.map(l => l.text),
   notesOf: i => [...(state.players[i].notes || [])],
   possessedIndexes: () => state.players.filter(p => p.possessed).map(p => p.index),
-  pieces: () => ({ rooms: [...state.pieceRooms], held: piecesIn(activePlayer(state).hand).map(c => c.type) }),
+  lanterns: () => activePlayer(state).hand.filter(c => c.type === 'lantern').length,
   lockedRooms: () => [...state.lockedRooms],
   canEscape: () => canEscape(state, floor, activePlayer(state)),
   openHand: () => hand.open(state, floor),

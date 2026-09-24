@@ -6,7 +6,7 @@
 // points, current room, hand and the hidden possession flag are per guest.
 import { rules } from '../data/rules.js';
 import {
-  makeRng, buildDrawDeck, buildPossessionSupply, buildKeyPieces, deal, shuffle, hasAllPieces,
+  makeRng, buildDrawDeck, buildPossessionSupply, deal, shuffle, hasEscapeLanterns,
 } from './cards.js';
 
 // `opts.mode`: 'practice' (one guest, no hidden role, no meetings) or 'hotseat' (4-6 guests).
@@ -17,9 +17,9 @@ export function createState(floor, roster, seed = 1, opts = {}) {
   return state;
 }
 
-// Rooms a hidden thing may go in: not the lobby, not a room next to it, not the exit, and only
-// rooms that can actually be searched.
-export function hidingRooms(floor) {
+// Rooms that may be locked at setup: not the lobby, not a room next to it, not the exit, and
+// only rooms that can be searched (so a locked room is worth opening).
+export function lockableRooms(floor) {
   const lobby = floor.rooms.get(floor.start.room);
   return floor.roomList.filter(r =>
     r.id !== lobby.id && !lobby.neighbours.has(r.id) && !r.isExit && r.searchable).map(r => r.id);
@@ -32,9 +32,9 @@ export function resetState(state, floor, seed) {
   state.rng = rng;                       // kept: reshuffles and Lock Picks draw from it later
   state.discovered = new Set([floor.start.room]);
 
-  // Deal from a shuffled draw pile, one guaranteed Lantern each.
+  // Deal from a shuffled draw pile. Lanterns are never dealt — they are found only by searching.
   const drawPile = shuffle(buildDrawDeck(rules.deck), rng);
-  const { hands, deck } = deal(drawPile, state.roster.length);
+  const { hands, deck } = deal(drawPile, state.roster.length, rng);
   state.drawPile = deck;
   state.discardPile = [];                // reshuffled into a new draw pile when the deck runs out
 
@@ -61,17 +61,10 @@ export function resetState(state, floor, seed) {
   }));
   if (possessedIndex >= 0) state.players[possessedIndex].hand.push(...buildPossessionSupply());
 
-  // Hide the three key pieces in three different rooms, and lock two rooms. Same pool of
-  // candidate rooms for both; a piece may well end up behind a locked door.
-  const pool = shuffle(hidingRooms(floor), rng);
-  state.roomDrops = new Map();           // roomId -> cards lying on the floor (pieces, a dead guest's hand)
-  buildKeyPieces().forEach((piece, i) => {
-    const roomId = pool[i % pool.length];
-    state.roomDrops.set(roomId, [...(state.roomDrops.get(roomId) || []), piece]);
-  });
-  state.pieceRooms = rules.keyPieces.map((_, i) => pool[i % pool.length]);
+  // Lock two rooms, chosen at random each match.
+  state.roomDrops = new Map();           // roomId -> cards lying on the floor (a dead guest's hand)
   state.lockedRooms = new Set(rules.lockedDoorsEnabled
-    ? shuffle(pool.slice(), rng).slice(0, rules.lockedRoomCount) : []);
+    ? shuffle(lockableRooms(floor), rng).slice(0, rules.lockedRoomCount) : []);
   state.barricades = new Map();          // doorwayId -> { by: playerId, until: turn number }
 
   state.activeIndex = 0;
@@ -97,17 +90,19 @@ export function logPublic(state, text) {
 export const isLocked = (state, roomId) => state.lockedRooms?.has(roomId) ?? false;
 export function unlockRoom(state, roomId) { state.lockedRooms.delete(roomId); }
 
-export const isBarricaded = (state, doorwayId) => {
-  const b = state.barricades?.get(doorwayId);
-  return !!b && state.turn < b.until;
-};
+export const isBarricaded = (state, doorwayId) => !!state.barricades?.has(doorwayId);
+// A Barricade stands until the guest who placed it starts their next turn.
 export function placeBarricade(state, player, doorwayId) {
-  // "For one round": it stands until this guest's next turn comes round.
-  const living = state.players.filter(p => p.alive).length;
-  state.barricades.set(doorwayId, { by: player.id, until: state.turn + living });
+  state.barricades.set(doorwayId, { by: player.id, placedTurn: state.turn });
 }
+// Called as a turn starts: the new active guest's own barricades come down. A barricade whose
+// placer has died has no "next turn", so it comes down at the next turn start instead.
 export function expireBarricades(state) {
-  for (const [id, b] of state.barricades) if (state.turn >= b.until) state.barricades.delete(id);
+  const now = activePlayer(state);
+  for (const [id, b] of state.barricades) {
+    const placer = state.players.find(p => p.id === b.by);
+    if (b.by === now.id || !placer?.alive) state.barricades.delete(id);
+  }
 }
 
 // Can `player` step through this doorway right now?
@@ -184,11 +179,11 @@ export function endTurn(state, floor) {
 
 // --- Escape and winning -----------------------------------------------------------------------
 export const canEscape = (state, floor, player) =>
-  player.alive && !player.possessed && hasAllPieces(player.hand)
+  player.alive && !player.possessed && hasEscapeLanterns(player.hand)
   && !!floor.rooms.get(player.currentRoom)?.isExit;
 
 // Decide the game. `enteredExitBy` is the guest who just stepped into the exit, if any. The exit
-// is resolved FIRST: a clean guest carrying all three pieces escapes before anything else can
+// is resolved FIRST: a clean guest carrying three Lanterns escapes before anything else can
 // happen to them there. There is no round limit in this ruleset.
 export function checkWin(state, floor, enteredExitBy = null) {
   if (state.finished) return state.won;

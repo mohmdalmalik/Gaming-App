@@ -2,14 +2,14 @@
 //
 //   PASS     — neutral. "Pass the device to Eleanor." Nothing private on screen.
 //   ROLE     — that guest alone: their secret role (once at the start, again if converted).
-//   TURN     — their private start-of-turn screen: role, news, health, hand, key pieces.
+//   TURN     — their private start-of-turn screen: role, news, health, hand, Lanterns.
 //   PICK     — a private card choice (which card to give in a trade).
 //   CHOICE   — a private yes/no (accept a lobby trade?).
 //   NOTE     — a private consequence (what you received, that you were possessed, who tried).
 //
 // Nothing here ever appears on the public HUD, and the turn timer is paused while any of it is up.
 import { rules } from '../data/rules.js';
-import { CARDS, countableCards, countableCount, piecesIn } from '../game/cards.js';
+import { CARDS, countableCards, countableCount } from '../game/cards.js';
 import { cardTile } from './cards.js';
 
 export function createHandoff(doc) {
@@ -55,7 +55,7 @@ export function createHandoff(doc) {
     el.role.innerHTML = `<span class="role-word">${player.possessed ? 'POSSESSED' : 'CLEAN GUEST'}</span>`
       + `<span class="role-line">${player.possessed
         ? 'In a trade you may give a Possession card to convert someone — unless they hand you a Lantern, which burns it and tells them what you are. You can never escape.'
-        : 'Find the three pieces of the fire-exit key, get them into one clean pair of hands, and get that guest out. Give a Lantern in a trade if you fear who you are trading with.'}</span>`;
+        : `Find Lanterns, pass them to one clean guest, and get that guest out through the fire exit with ${rules.lanternsToEscape}. Give a Lantern in a trade if you fear who you are trading with — it blocks possession, but is used up doing it.`}</span>`;
   }
 
   function renderNotes(player, extra = []) {
@@ -71,7 +71,7 @@ export function createHandoff(doc) {
 
   function renderHand(player) {
     el.hand.hidden = false;
-    const cards = [...piecesIn(player.hand), ...player.hand.filter(c => c.type === 'possession'), ...countableCards(player.hand)];
+    const cards = [...player.hand.filter(c => c.type === 'possession'), ...countableCards(player.hand)];
     if (!cards.length) { el.hand.innerHTML = '<div class="panel-note">No cards.</div>'; return; }
     for (const c of cards) el.hand.appendChild(cardTile(doc, c, { hideDesc: true }));
   }
@@ -105,9 +105,9 @@ export function createHandoff(doc) {
       el.kicker.textContent = `Round ${state.round} · ${rules.actionPointsPerTurn} action points · health ${player.health} of ${rules.maxHealth}`;
       el.title.textContent = `${player.name}'s turn`;
       const room = floor.rooms.get(player.currentRoom);
-      const pieces = piecesIn(player.hand).length;
+      const lanterns = player.hand.filter(c => c.type === 'lantern').length;
       el.sub.textContent = `You are in ${room?.name ?? 'the hotel'}. Cards ${countableCount(player.hand)} / ${rules.handLimit}`
-        + (pieces ? ` · key pieces ${pieces} / ${rules.keyPiecesToEscape}` : '') + '.';
+        + ` · Lanterns ${lanterns} / ${rules.lanternsToEscape}.`;
       renderRole(player);
       renderNotes(player);
       renderHand(player);

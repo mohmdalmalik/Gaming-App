@@ -1,9 +1,9 @@
 // The hand sheet: the active guest's cards as large illustrated tiles, with a detail pane that
 // explains the selected card and offers its action when it has one. Private to whoever holds
-// the device: it shows their key pieces, their Possession cards and who they have unmasked.
+// the device: it shows their Lanterns, their Possession cards and who they have unmasked.
 import { activePlayer, adjacentLockedRooms, isBarricaded } from '../game/state.js';
 import { rules } from '../data/rules.js';
-import { CARDS, countableCount, piecesIn } from '../game/cards.js';
+import { CARDS, countableCount } from '../game/cards.js';
 import { cardTile } from './cards.js';
 
 export function createHand(doc, cfg, { onUseBandage, onUnlock, onBarricade }) {
@@ -32,9 +32,9 @@ export function createHand(doc, cfg, { onUseBandage, onUnlock, onBarricade }) {
       banner.textContent = `You have unmasked: ${names.join(', ')} — possessed.`;
     } else banner.hidden = true;
 
-    // Key pieces first, then Possession cards, then the rest grouped by type.
+    // Possession cards first, then the rest grouped by type (Lanterns lead the catalogue).
     const order = Object.keys(CARDS);
-    const rank = c => (CARDS[c.type]?.piece ? -2 : c.type === 'possession' ? -1 : order.indexOf(c.type));
+    const rank = c => (c.type === 'possession' ? -1 : order.indexOf(c.type));
     const hand = [...p.hand].sort((a, b) => rank(a) - rank(b));
     if (!hand.some(c => c.id === selectedId)) selectedId = hand[0]?.id ?? null;
 
@@ -50,7 +50,7 @@ export function createHand(doc, cfg, { onUseBandage, onUnlock, onBarricade }) {
     renderDetail(state, floor, p, hand.find(c => c.id === selectedId) || null);
 
     const parts = [`Health ${p.health}/${rules.maxHealth}`, `Actions ${p.actionPoints}/${rules.actionPointsPerTurn}`,
-      `Cards ${countableCount(p.hand)}/${rules.handLimit}`, `Key pieces ${piecesIn(p.hand).length}/${rules.keyPiecesToEscape}`];
+      `Cards ${countableCount(p.hand)}/${rules.handLimit}`, `Lanterns ${p.hand.filter(c => c.type === 'lantern').length}/${rules.lanternsToEscape}`];
     note.textContent = parts.join(' · ');
   }
 
@@ -74,15 +74,12 @@ export function createHand(doc, cfg, { onUseBandage, onUnlock, onBarricade }) {
     line(meta.desc, 'd-desc');
 
     const noAp = p.actionPoints < rules.actionCost.useCard;
-    if (meta.piece) {
-      const held = piecesIn(p.hand).length;
-      line(`You hold ${held} of ${rules.keyPiecesToEscape}. A clean guest carrying all three who walks into the fire exit escapes at once. Tradeable; cannot be discarded; drops if you die.`, 'd-tag');
-      return;
-    }
     if (card.type === 'lantern') {
-      line(state.practice
-        ? 'No one to defend against on your own — carry it.'
-        : 'Give it in a trade. If the other guest handed you a Possession card, the attempt fails, the Possession card is destroyed, and you learn who they are. The Lantern still goes to them.', 'd-tag');
+      const held = p.hand.filter(c => c.type === 'lantern').length;
+      line(`<b>Escape:</b> you hold ${held} of ${rules.lanternsToEscape}. A clean guest carrying ${rules.lanternsToEscape} Lanterns who walks into the fire exit escapes at once.${p.possessed ? ' While you are possessed it will not open for you.' : ''}`);
+      if (!state.practice) {
+        line('<b>In a trade:</b> in an ordinary trade it goes to the other guest like any card — pass them to one guest. If they handed you a Possession card, your Lantern blocks it: both cards are used up and you learn who tried.', 'd-tag');
+      }
       return;
     }
     if (card.type === 'possession') {

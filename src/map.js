@@ -1,7 +1,6 @@
 // 2D map overlay: discovered rooms, their doorways/connections and the player's position.
 
 import { activePlayer, isLocked, isBarricaded } from './game/state.js';
-import { piecesIn } from './game/cards.js';
 import { rules } from './data/rules.js';
 
 export function createMap(doc, floor, cfg) {
@@ -44,14 +43,14 @@ export function createMap(doc, floor, cfg) {
     for (let gz = Math.floor(minZ); gz <= maxZ; gz++) { ctx.beginPath(); ctx.moveTo(0, Z(gz)); ctx.lineTo(cw, Z(gz)); ctx.stroke(); }
     ctx.restore();
 
-    // Key pieces are private to whoever holds them, so the plan only counts them in practice,
-    // where the one guest is the only person looking.
+    // What someone carries is private, so the plan only counts Lanterns in practice, where the
+    // one guest is the only person looking.
     if (state.practice) {
       ctx.save();
-      const held = piecesIn(activePlayer(state).hand).length, need = rules.keyPiecesToEscape;
+      const held = activePlayer(state).hand.filter(c => c.type === 'lantern').length, need = rules.lanternsToEscape;
       ctx.font = `bold 13px ${serif}`; ctx.textAlign = 'left'; ctx.textBaseline = 'top';
       ctx.fillStyle = held >= need ? '#9fe3b8' : BRASS_BRIGHT;
-      ctx.fillText(`Key pieces ${held} / ${need}`, 14, 12);
+      ctx.fillText(`Lanterns ${held} / ${need}`, 14, 12);
       if (held >= need) { ctx.font = `12px ${serif}`; ctx.fillStyle = '#9fe3b8'; ctx.fillText('Reach the fire exit', 14, 30); }
       ctx.restore();
     }

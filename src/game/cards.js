@@ -23,7 +23,7 @@ export function makeCard(type) {
   return card;
 }
 
-// The draw pile (Possession cards and key pieces are never in it).
+// The draw pile (Possession cards are never in it).
 export function buildDrawDeck(spec = rules.deck) {
   const deck = [];
   for (const [type, count] of Object.entries(spec)) {
@@ -36,10 +36,6 @@ export function buildPossessionSupply() {
   return Array.from({ length: rules.possessionSupply }, () => makeCard('possession'));
 }
 
-// The three pieces of the fire-exit key: one card each, hidden in rooms at setup.
-export function buildKeyPieces() {
-  return rules.keyPieces.map(type => makeCard(type));
-}
 
 // Fisher–Yates using the seeded rng.
 export function shuffle(arr, rng) {
@@ -52,28 +48,30 @@ export function shuffle(arr, rng) {
 
 // Deal `handSize` cards to each of `playerCount` players, guaranteeing one Lantern each
 // when the rules ask for it. Mutates and returns the remaining draw pile.
-export function deal(deck, playerCount) {
+// Deal the starting hands. Lanterns are taken out first and never dealt (rules.lanternsDealtEach
+// is 0); the hands come from the rest of the shuffled deck, and the Lanterns are then shuffled
+// back into what is left. `rng` shuffles that remainder.
+export function deal(deck, playerCount, rng) {
   const hands = Array.from({ length: playerCount }, () => []);
-  if (rules.guaranteedLantern) {
-    for (let p = 0; p < playerCount; p++) {
-      const i = deck.findIndex(c => c.type === 'lantern');
-      if (i >= 0) hands[p].push(deck.splice(i, 1)[0]);
-    }
+  const lanterns = deck.filter(c => c.type === 'lantern');
+  const rest = deck.filter(c => c.type !== 'lantern');
+  for (let p = 0; p < playerCount; p++) {
+    for (let k = 0; k < (rules.lanternsDealtEach || 0) && lanterns.length; k++) hands[p].push(lanterns.shift());
   }
   for (let p = 0; p < playerCount; p++) {
-    while (hands[p].length < rules.handSize && deck.length) hands[p].push(deck.shift());
+    while (hands[p].length < rules.handSize && rest.length) hands[p].push(rest.shift());
   }
-  return { hands, deck };
+  const remaining = shuffle([...rest, ...lanterns], rng);
+  return { hands, deck: remaining };
 }
 
 // --- Hand helpers ------------------------------------------------------------------------
-// Possession cards are the possessed side's hidden supply and key pieces are the way out. Neither
-// counts toward the hand limit, neither can be discarded, and neither shows in the public card
-// count — so the number of cards on screen never gives away a role or a piece. Both are tradeable.
-export const isPiece = card => !!CARDS[card?.type]?.piece;
-export const isCountable = card => card.type !== 'possession' && !isPiece(card);
-export const piecesIn = hand => hand.filter(isPiece);
-export const hasAllPieces = hand => rules.keyPieces.every(t => hand.some(c => c.type === t));
+// Possession cards are the possessed side's hidden supply: they never count toward the hand limit,
+// can't be discarded and never show in the public card count, so the number of cards on screen
+// never gives away a role. Lanterns are ordinary cards and count like any other.
+export const isCountable = card => card.type !== 'possession';
+export const hasEscapeLanterns = hand =>
+  hand.filter(c => c.type === 'lantern').length >= rules.lanternsToEscape;
 export const countableCards = hand => hand.filter(isCountable);
 export const countableCount = hand => hand.reduce((n, c) => n + (isCountable(c) ? 1 : 0), 0);
 

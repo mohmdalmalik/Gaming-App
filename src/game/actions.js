@@ -2,7 +2,7 @@
 // forced meeting resolves — trade or attack. Pure logic; the interface calls these and shows
 // whatever they return. Implements docs/GAME_RULES.md (the owner's design — see CLAUDE.md).
 import { rules } from '../data/rules.js';
-import { CARDS, takeCard, isWeapon, isPiece, countableCount, shuffle } from './cards.js';
+import { CARDS, takeCard, isWeapon, countableCount, shuffle } from './cards.js';
 import {
   checkWin, logPublic, convertToPossessed, isLocked, unlockRoom, placeBarricade, isBarricaded,
   adjacentLockedRooms,
@@ -17,10 +17,10 @@ export function drawCard(state) {
   return state.drawPile.shift() || null;
 }
 
-// Put a played or discarded card on the discard pile. Possession cards and key pieces never go
-// there — they are not deck cards.
+// Put a played or discarded card on the discard pile. Possession cards never go there — they are
+// not deck cards; a discarded Possession card leaves the game.
 export function toDiscard(state, card) {
-  if (!card || card.type === 'possession' || isPiece(card)) return;
+  if (!card || card.type === 'possession') return;
   state.discardPile.push(card);
 }
 
@@ -41,8 +41,9 @@ export function canSearch(state, floor, player) {
   return { ok: true };
 }
 
-// Search the current room (1 AP). If the room hides a key piece or dropped cards, you take them
-// all. Otherwise you draw one card. A drawn card that does not fit is reported with `full` so
+// Search the current room (1 AP). If dropped cards are lying there you take them all (always
+// possible). Otherwise you draw one card, once per room. Results are PRIVATE to the searcher: the
+// public log records only that a search happened. A drawn card that does not fit is reported with `full` so
 // the caller can ask what to do with it; the room counts as searched either way.
 export function search(state, floor, player) {
   const gate = canSearch(state, floor, player);
@@ -51,13 +52,13 @@ export function search(state, floor, player) {
   player.actionPoints -= rules.actionCost.search;
   const base = { ok: true, room: room.id, searchPoint: room.searchPoint || null };
 
+  logPublic(state, `${player.name} searched ${room.name}.`);
   const drops = state.roomDrops.get(room.id);
   if (drops?.length) {
     state.roomDrops.delete(room.id);
     player.hand.push(...drops);
     return {
       ...base, kind: 'found', cards: drops,
-      pieces: drops.filter(isPiece),
       full: countableCount(player.hand) > rules.handLimit,   // settled at the end of the turn
     };
   }
@@ -76,7 +77,7 @@ export function resolveFullHand(state, player, card, choice, dropId = null) {
     if (!dropId) return { ok: false, reason: 'noChoice' };
     const dropped = takeCard(player.hand, dropId);
     if (!dropped) return { ok: false, reason: 'noCard' };
-    if (dropped.type === 'possession' || isPiece(dropped)) { player.hand.push(dropped); return { ok: false, reason: 'undroppable' }; }
+    if (dropped.type === 'possession') { player.hand.push(dropped); return { ok: false, reason: 'undroppable' }; }
     toDiscard(state, dropped);
     player.hand.push(card);
     return { ok: true, kept: card, dropped };
@@ -85,18 +86,17 @@ export function resolveFullHand(state, player, card, choice, dropId = null) {
   return { ok: true, left: card };
 }
 
-// Discard a card to obey the hand limit at the end of a turn. Free. Never a piece or a
-// Possession card.
+// Discard a card to obey the hand limit at the end of a turn. Free. Never a Possession card.
 export function discardCard(state, player, cardId) {
   const card = player.hand.find(c => c.id === cardId);
   if (!card) return { ok: false, reason: 'noCard' };
-  if (card.type === 'possession' || isPiece(card)) return { ok: false, reason: 'undroppable' };
+  if (card.type === 'possession') return { ok: false, reason: 'undroppable' };
   takeCard(player.hand, cardId);
   toDiscard(state, card);
   return { ok: true, card };
 }
 
-// How many cards a guest must shed to obey the hand limit (pieces and Possession excluded).
+// How many cards a guest must shed to obey the hand limit (Possession cards excluded).
 export function overHandLimit(player) {
   return Math.max(0, countableCount(player.hand) - rules.handLimit);
 }
@@ -161,9 +161,12 @@ export function tradeableCards(player) {
 // cardIdP; Q gives cardIdQ. Results are PRIVATE — the returned `received` map says what each
 // side gets to see, and `notes` carries the two private consequences (a block, a conversion).
 //
+//   An ordinary trade: a Lantern changes hands like any other card.
 //   Receive a Possession card without giving a Lantern -> possessed; you keep the card.
-//   Receive a Possession card while giving a Lantern  -> the attempt fails, the Possession card
-//     is destroyed, the Lantern STILL goes to the other guest, and you learn who tried.
+//   Receive a Possession card while giving a Lantern  -> the attempt fails and the Lantern is used
+//     up: the Lantern and the Possession card are both discarded, and you learn who tried.
+//     (rules.lanternBlock 'attacker' is a comparison variant for the simulator only: the Lantern
+//     goes to the possessed guest instead.)
 export function resolveTrade(state, floor, P, Q, cardIdP, cardIdQ) {
   if (state.finished) return { ok: false, reason: 'finished' };
   const cP = P.hand.find(c => c.id === cardIdP);
@@ -183,14 +186,22 @@ export function resolveTrade(state, floor, P, Q, cardIdP, cardIdQ) {
 
   // One direction of possession: giver G hands `pc`, receiver R handed `rc`.
   const passPossession = (G, R, pc, rc) => {
-    G.hand.push(rc);                                  // whatever R gave, G keeps — Lantern included
     if (rc.type === 'lantern') {
-      R.knows.add(G.id);                              // blocked, and R knows who tried
+      // Blocked. The Possession card leaves the game; the Lantern is used up (approved rule) —
+      // or, in the simulator's comparison variant only, goes to the possessed guest.
+      const toAttacker = rules.lanternBlock === 'attacker';
+      if (toAttacker) G.hand.push(rc); else toDiscard(state, rc);
+      events.received[G.id] = toAttacker ? 'lantern' : null;
+      events.received[R.id] = null;
+      events.lanternsBurned = toAttacker ? 0 : 1;
+      R.knows.add(G.id);
       events.blocks.push({ blocker: R.id, revealed: G.id });
-      events.received[R.id] = null;                   // the Possession card is destroyed
-      note(R.id, `You handed over a Lantern and it burned away a Possession card. ${G.name} is POSSESSED — only you know.`);
+      note(R.id, toAttacker
+        ? `Your Lantern burned away a Possession card. ${G.name} is POSSESSED — only you know.`
+        : `Your Lantern burned away a Possession card and was used up. ${G.name} is POSSESSED — only you know.`);
       note(G.id, `${R.name} blocked you with a Lantern. They now know what you are.`);
     } else {
+      G.hand.push(rc);                                // whatever R gave, G keeps
       R.hand.push(pc);                                // R keeps the Possession card
       if (!R.possessed) {
         convertToPossessed(state, R, G.id);

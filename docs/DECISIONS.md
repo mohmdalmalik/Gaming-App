@@ -435,12 +435,11 @@ the lessons). Key decisions:
   gone. `src/data/rules.js` holds one ruleset; `applyMode('practice' | 'hotseat')` only changes the
   table size, whether there is a hidden role, and whether the clock runs. Far less code, and every
   test now tests the rules that ship.
-- **Placeholders where the rules are silent** (all listed as questions for the owner in
-  `docs/PROGRESS.md`): a room gives up its card draw once, but anything lying on its floor can
-  always be picked up; the two locked rooms are chosen at random at setup from the same pool as the
-  key pieces (never the lobby, its neighbours or the exit); a key or pick is used from the room next
-  door; a Barricade stands until the placer's next turn; a dead guest's Possession cards leave the
-  game rather than dropping; the exit room cannot hide a piece (it is not searchable).
+- **Placeholders where the rules were silent** — since approved by the owner and written into
+  `docs/GAME_RULES.md`: one card draw per room, dropped items always pickable; locked rooms random
+  each match (never the lobby, its neighbours or the exit); keys and picks used from the next room;
+  a Barricade lasts until its placer's next turn starts; a dead guest's Possession cards leave the
+  game; the possessed tell shows only on private screens in hot-seat.
 - **The possessed tell stays off the shared screen in hot-seat.** The rule says the tell is private;
   on one iPad between six people, a purple wash during someone's turn is the opposite of private.
   So the possessed portrait and tint appear on the private screens and in the hand sheet, and the
@@ -449,11 +448,37 @@ the lessons). Key decisions:
   other guest who picks in private, the cards swap, and the device comes back with a private
   "you received…" card. The other guest reads theirs on their own next private screen. The public
   panel says only that a trade was made.
-- **A key piece found is told to the finder alone** (a private card in hot-seat, a toast in
-  practice); an ordinary card draw is still a toast. The map counts pieces only in practice.
+- **Superseded by the approved Lantern rules** (next section): key pieces are gone.
 - **Locked and barricaded doorways are enforced in pathfinding**, not just in the door blink: the
   landing cells on both sides of such a doorway are removed from the walkable set, so no route can
   thread through the opening. The map draws a padlock or a bar on them.
 - **Dead guests drop everything** into `state.roomDrops` and the next search there takes it all.
 - **The discard pile reshuffles into the deck** when it runs out; the state carries its seeded RNG
   so reshuffles and Lock Pick rolls stay reproducible under `?seed=`.
+
+
+## Approved rule changes — Lanterns are the way out
+- **Lanterns do double duty.** Three in a clean guest's hand open the exit (`rules.lanternsToEscape`);
+  given in a trade they block possession. The key pieces, their hiding and the `pieceRooms` state
+  are gone.
+- **Lanterns are never dealt.** `deal()` takes the Lanterns out, deals the four-card hands from the
+  rest, then shuffles the Lanterns back into what is left using the match's seeded RNG — so they are
+  spread through the pile, not stacked at the bottom.
+- **A blocking Lantern is used up.** Both it and the Possession card are discarded (the Possession
+  card leaves the game; the Lantern goes to the discard pile). In an ordinary trade a Lantern moves
+  like any card.
+- **Comparison variants live in the rules file but only the simulator touches them.**
+  `rules.lanternBlock` ('discard' approved / 'attacker') and `rules.lanternsDealtEach` (0 approved /
+  1) let `tools/balance/hotseat-sim.mjs` compare the alternatives through the real engine rather
+  than a copy of it; the game and every test run the approved values, and a rules test asserts it.
+- **Search results are private.** `search()` writes only "X searched the Kitchen." to the public log;
+  in hot-seat the result goes on the searcher's private card and the shared toast just says someone
+  searched. The full-hand take/leave toasts are suppressed in hot-seat for the same reason. The exit's
+  refusal message is the same words for everyone, so it gives away neither possession nor Lanterns.
+- **Barricade expiry is tied to the placer, not a turn count.** It comes down when the guest who
+  placed it starts their next turn; the earlier "turn + living guests" count ran one turn long if
+  someone died in between. A dead placer's barricade comes down at the next turn start.
+- **The full-hand and discard prompts wrap.** Six cards in one row overflowed the box and clipped the
+  outer cards out of reach on an iPad; with Lanterns counting toward the hand limit, full hands are
+  common, so the rows now wrap with compact tiles and the browser test checks every card is on
+  screen and tappable.

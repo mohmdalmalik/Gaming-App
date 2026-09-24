@@ -531,7 +531,7 @@ initiative — the implemented rules are exactly the ones approved.
 
 ---
 
-# Rules reset — the owner's restored ruleset (current)
+# Rules reset — the owner's restored ruleset (superseded by the Lantern changes below)
 
 `docs/GAME_RULES.md` is now the owner's design, implemented as written. Health and combat are
 back on; Offers, Hint, Distraction, public objectives, the round limit and the two-escape win are
@@ -618,3 +618,95 @@ split between two guests who never manage to meet.
    the Fire Exit: "The guests got out".
 8. **The clock.** Stops on every pass screen and during meetings; running out ends the turn.
 9. **Practice.** The plain address: one guest, no clock, find three pieces, escape.
+
+
+---
+
+# Approved rule changes — Lanterns are the way out (current)
+
+Applied exactly the owner-approved before/after list: the key pieces are gone and three Lanterns in a
+clean guest's hand open the exit; a Lantern moves normally in an ordinary trade but is used up (with
+the Possession card) when it blocks; Lanterns are never dealt; all search results are private; the
+earlier placeholders are now written rules. Practice: find three Lanterns and reach the exit.
+
+## Test results
+| Suite | Checks | Result |
+| --- | --- | --- |
+| `tests/rules-check.mjs` | 141 | pass |
+| `tests/logic-check.mjs` | 67 | pass |
+| `tests/browser-practice.mjs` (root and `/Gaming-App/`) | 46 | pass |
+| `tests/browser-hotseat.mjs` (root and `/Gaming-App/`) | 76 | pass |
+
+One run of the hot-seat suite from the sub-path failed a single check while the simulator was
+running alongside it and competing for the processor; which check was not captured. Five further
+runs, including a clean full pass of every suite with nothing else running, all passed. The likely
+cause is a timing-sensitive check (the turn clock) under load; watch for it if it recurs.
+
+Found and fixed on the way (interface only, no rule change): the "Your hands are full → which card do
+you leave behind?" prompt put six cards in one row that ran off both sides of the box, so some could
+not be tapped on an iPad. It now wraps; the practice test checks every card is on screen.
+
+## Simulation — 400 six-player matches per column (`node tools/balance/hotseat-sim.mjs 400 6`)
+Only the first column is the game; the other three are comparisons run through the same engine.
+
+| | **Approved:** Lantern burned · found by search only | Burned · 1 dealt each | To possessed · search only | To possessed · 1 dealt each |
+| --- | --- | --- | --- | --- |
+| Clean guests win | **50%** | 30% | 50% | 29% |
+| The hotel wins | **34%** | 40% | 35% | 39% |
+| Never ends (100+ rounds) | **16%** | 31% | 15% | 32% |
+| … clean side can never reach 3 Lanterns | 16% | 28% | 14% | 29% |
+| … Lanterns stuck with the possessed | 8.7 of 12 | 8.1 | 11.6 | 10.7 |
+| … and no Possession cards left | 97% of them | 93% | 98% | 91% |
+| Rounds when the clean side wins (median) | 3 | 3 | 3 | 3 |
+| Rounds when the hotel wins (median) | 3 | 3 | 3 | 3 |
+| Meetings per round | 4.2 | 4.5 | 4.3 | 4.4 |
+| Possession attempts / succeeded / blocked | 4.3 / 2.5 / 1.8 | 4.9 / 2.9 / 2.0 | 4.3 / 2.5 / 1.9 | 4.8 / 2.8 / 2.0 |
+| Lanterns found by searching | 8.0 | 3.6 | 8.0 | 3.6 |
+| Lanterns burned | 1.8 | 2.0 | 0 | 0 |
+| Attacks / deaths | 0.12 / 0.02 | 0.10 / 0 | 0.12 / 0.01 | 0.11 / 0 |
+
+Bots: clean guests pick a "carrier" (the clean-looking guest holding the most Lanterns) and bring
+Lanterns to them, standing in for table talk; anyone else gives a Lantern in every trade when they
+have one, because they can't tell who is possessed. The possessed bot gives a Possession card
+whenever it can, otherwise an ordinary card, and never gives up a Lantern.
+
+**What still looks broken (recommendations only — nothing has been changed):**
+1. **About one match in six can never end.** The hotel has used up every Possession card (blocks burn
+   them), so it can't convert anyone else. The possessed guests hold 8–12 of the 12 Lanterns, so the
+   clean side can never get three. There's no round limit, and the only way out is killing the
+   possessed, which needs a weapon and knowing whom to kill (0.1 attacks a match). Options: a round
+   limit (the hotel wins when it runs out); a possessed guest drops their Lanterns when unmasked or
+   converted; Lanterns burned in a block go back into the deck; or a clean win when every Possession
+   card is gone.
+2. **Dealing one Lantern each makes the clean side weaker, not stronger** (50% → 30%). The Possessor
+   gets one too and keeps it, only six are left to find, and guests who "defend" by giving their
+   Lantern hand it to the possessed guest pretending to trade normally. The approved rule is the
+   better of the two.
+3. **Whether the blocking Lantern is burned or goes to the Possessor barely matters** (50/34 vs 50/35):
+   burned Lanterns are gone, but ones handed to the Possessor are just as lost to the clean side.
+4. **Matches are short: about three rounds either way.** With no Lanterns in hand at the start,
+   nobody can defend early, so possession cascades fast; and when it doesn't, the 12 Lanterns sit in
+   a 16-card deck, so three turn up almost at once. Real players will be slower than bots, but not
+   six rounds slower.
+5. **The discard pile never reshuffles at six players.** Six hands of four leave exactly 16 cards for
+   16 searchable rooms, and each room draws once, so the deck runs out just as the last room is
+   searched. Burned Lanterns never come back.
+6. **Weapons barely matter** (0.1 attacks a match) — nobody knows whom to attack until a Lantern
+   unmasks someone.
+7. **Practice with a forced random seed** can be unwinnable about 1 time in 80 (the third Lantern is
+   beyond the 16 room draws). The normal practice address uses a fixed deal that is winnable (the
+   third Lantern is the fifth draw).
+
+## What to test on the iPad
+1. **Practice** (plain address): search rooms; every result says how many Lanterns you hold. Fill
+   your hand to six and search again: all six cards fit in the "which card do you leave behind?"
+   screen. Carry three Lanterns into the Fire Exit.
+2. **Hot-seat** `?mode=hotseat&players=6`: nobody's private screen shows a Lantern at the start.
+3. **Search in hot-seat**: the result appears on a private card; the shared screen only says
+   "Marcus searched."
+4. **Pass a Lantern to a teammate**: in the lobby, Trade, both pick — the Lantern arrives.
+5. **A block**: offer a Lantern to the possessed guest's Possession card. Your private card says it
+   burned and was used up; afterwards neither of you holds it.
+6. **Escape**: a clean guest with three Lanterns walks into the Fire Exit → "The guests got out".
+   A possessed guest with three does nothing.
+7. **Barricade**: it stays up through everyone else's turn and comes down as your next turn starts.

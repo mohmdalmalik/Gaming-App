@@ -4,9 +4,9 @@
 //       node tests/browser-hotseat.mjs --url http://127.0.0.1:8123/Gaming-App/   (Pages sub-path)
 //
 // Four to six guests passing one device under docs/GAME_RULES.md: secret roles, the pass-the-
-// device flow, the timer, private trades, possession and the Lantern, attacks and death, the
-// three key pieces, escape, and the two ways the hotel wins. And that the public screen never
-// leaks a role or a trade result.
+// device flow, the timer, private trades, possession and the Lantern, attacks and death, private
+// search results, escaping with three Lanterns, and the two ways the hotel wins. And that the
+// public screen never leaks a role, a trade result or a search result.
 import { chromium } from 'playwright-core';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -129,15 +129,17 @@ await load('mode=hotseat&players=6&seed=4242');
 const st = await game(() => ({
   mode: window.__game.mode, n: window.__game.state.players.length, poss: window.__game.possessedIndexes(),
   supply: window.__game.state.players.map(p => p.hand.filter(c => c.type === 'possession').length),
-  lanterns: window.__game.state.players.every(p => p.hand.some(c => c.type === 'lantern')),
+  lanterns: window.__game.state.players.every(p => !p.hand.some(c => c.type === 'lantern')),
+  pileLanterns: window.__game.state.drawPile.filter(c => c.type === 'lantern').length,
   four: window.__game.state.players.every(p => p.hand.filter(c => c.type !== 'possession').length === 4),
-  pieces: window.__game.pieces().rooms, locked: window.__game.lockedRooms(), pile: window.__game.state.drawPile.length,
+  locked: window.__game.lockedRooms(), pile: window.__game.state.drawPile.length,
   timer: window.__game.rules.turnTimerEnabled,
 }));
 check(st.mode === 'hotseat' && st.n === 6, 'six guests, hot-seat');
 check(st.poss.length === 1 && st.supply[st.poss[0]] === 3 && st.supply.filter(x => x > 0).length === 1, 'exactly one possessed guest, holding 3 Possession cards');
-check(st.lanterns && st.four, 'four cards each, a Lantern among them');
-check(st.pieces.length === 3 && st.locked.length === 2 && st.pile === 16, 'three pieces hidden, two rooms locked, 16 cards left in the deck');
+check(st.lanterns && st.four, 'four cards each, and not one Lantern dealt');
+check(st.pileLanterns === 12 && st.pile === 16, 'all 12 Lanterns wait in the 16-card deck');
+check(st.locked.length === 2, 'two rooms locked');
 check(st.timer, 'the 45-second timer is on');
 
 console.log('\n2. secret roles, one guest at a time');
@@ -233,16 +235,17 @@ await page.click('#offer-cards .card-tile[data-card-id="p1"]'); await page.waitF
 await next();
 await page.click('#offer-cards .card-tile[data-card-id="x1"]'); await page.waitForTimeout(80);
 await next();
-check(await kind() === 'note' && (await page.textContent('#handoff-notes')).includes('Lantern'), 'the defender is told their Lantern burned the attempt');
+check(await kind() === 'note' && /Lantern.*used up/.test(await page.textContent('#handoff-notes')), 'the defender is told their Lantern burned the attempt and was used up');
 await next(); await tap('#encounter-actions .btn.primary');
 const blk = await game(({ P, E }) => {
   const s = window.__game.state;
   return { poss: s.players[P].possessed, knows: s.players[P].knows.has(s.players[E].id),
-    lanternWent: s.players[E].hand.some(c => c.id === 'p1'), destroyed: !s.players.some(p => p.hand.some(c => c.id === 'x1')) && !s.discardPile.some(c => c.id === 'x1'),
+    lanternGone: !s.players.some(p => p.hand.some(c => c.id === 'p1')) && s.discardPile.some(c => c.id === 'p1'),
+    destroyed: !s.players.some(p => p.hand.some(c => c.id === 'x1')) && !s.discardPile.some(c => c.id === 'x1'),
     left: s.players[E].hand.filter(c => c.type === 'possession').length };
 }, { P, E });
 check(!blk.poss && blk.knows, 'the defender is not possessed and knows who tried');
-check(blk.lanternWent, 'the Lantern still went to the attacker');
+check(blk.lanternGone, 'the blocking Lantern is used up — nobody holds it, it is on the discard pile');
 check(blk.destroyed && blk.left === 2, 'the Possession card is destroyed; two remain');
 
 console.log('\n6. attack, death and dropped cards');
@@ -251,7 +254,7 @@ await tap('#btn-begin'); await throughRoles(); await intoTurn();
 await game(() => {
   const s = window.__game.state;
   s.players[0].hand = [{ id: 'rv', type: 'revolver', shots: 2 }];
-  s.players[1].hand = [{ id: 'v1', type: 'lantern' }, { id: 'v2', type: 'bow' }];
+  s.players[1].hand = [{ id: 'v1', type: 'lantern' }, { id: 'v2', type: 'lantern' }];
   s.players[1].health = 2; s.activeIndex = 0; window.__game.refresh();
 });
 await walkInto(0, 1);
@@ -264,17 +267,37 @@ const dead = await game(() => ({
   alive: window.__game.state.players[1].alive, drops: (window.__game.state.roomDrops.get('corridorE') || []).map(c => c.id),
   strip: document.getElementById('players-strip').innerText, ap: window.__game.state.players[0].actionPoints,
 }));
-check(!dead.alive && dead.drops.includes('v1') && dead.drops.includes('v2'), 'the dead guest’s cards — the key piece included — lie on the floor');
+check(!dead.alive && dead.drops.includes('v1') && dead.drops.includes('v2'), 'the dead guest’s cards — their Lanterns included — lie on the floor');
 check(/Dead/.test(dead.strip), 'the strip marks them dead');
 check(dead.ap === 2, 'the move and the attack cost one each');
 await game(() => { window.__game.activePlayer().actionPoints = 4; window.__game.refresh(); });
 await tap('#btn-search');
 await page.waitForTimeout(150);
 if (await kind() === 'note') await next();
-check(await game(() => window.__game.state.players[0].hand.some(c => c.id === 'v2')), 'searching the room picks the dropped piece up');
+check(await game(() => window.__game.state.players[0].hand.some(c => c.id === 'v2')), 'searching the room picks the dropped Lanterns up');
 await game(() => window.__game.endTurn());
 await page.waitForTimeout(150);
 check(await game(() => window.__game.state.activeIndex) === 2, 'the dead guest is skipped in the turn order');
+
+console.log('\n6b. search results are private');
+{
+  await intoTurn();
+  const room = await plainRoom();
+  await put(room, 4);
+  const logBefore = await game(() => window.__game.publicLog().length);
+  await tap('#btn-search');
+  await page.waitForTimeout(120);
+  check(await kind() === 'note', 'the result goes on a private card for the searcher');
+  const note = await page.textContent('#handoff-notes');
+  check(/You search .* find a /.test(note), `it says what they found ("${note.trim().slice(0, 60)}")`);
+  await next();
+  const toast = await page.textContent('#toast');
+  check(/searched\.$/.test(toast.trim()) && !/find|Lantern|Bandage|Knife|Flashlight|Revolver|Barricade|Lock Pick|Master Key/.test(toast),
+    `the shared screen only says that someone searched ("${toast.trim()}")`);
+  const log = await game(() => window.__game.publicLog());
+  check(log.length === logBefore + 1 && /searched/.test(log.at(-1)) && !/Lantern|Bandage|Knife|Flashlight|Revolver/.test(log.at(-1)),
+    'the public log records the search, not the result');
+}
 
 console.log('\n7. the exit is resolved before any meeting');
 await load('mode=hotseat&players=6&seed=4242');
@@ -282,7 +305,8 @@ await tap('#btn-begin'); await throughRoles(); await intoTurn();
 await game(() => {
   const s = window.__game.state, g = window.__game;
   s.players.forEach((p, i) => { p.possessed = i === 5; });
-  s.players[0].hand.push({ id: 'b1', type: 'bow' }, { id: 'b2', type: 'shank' }, { id: 'b3', type: 'bit' });
+  s.lockedRooms.clear();   // the route to the exit must be open for this staging
+  s.players[0].hand = [{ id: 'b1', type: 'lantern' }, { id: 'b2', type: 'lantern' }, { id: 'b3', type: 'lantern' }];
   g.refresh();
 });
 await place(1, await game(() => window.__game.floor.exitRoom));
@@ -291,7 +315,7 @@ await game(() => window.__game.moveToRoom(window.__game.floor.exitRoom));
 await settle();
 await page.waitForTimeout(300);
 check(!(await game(() => window.__game.meetingOpen())), 'no meeting is forced in the exit');
-check(await game(() => window.__game.isFinished() && window.__game.state.won === 'humans'), 'a clean guest with all three pieces escapes: the guests win');
+check(await game(() => window.__game.isFinished() && window.__game.state.won === 'humans'), 'a clean guest with three Lanterns escapes: the guests win');
 check(/got out/i.test(await page.textContent('#end-title')), 'the end screen says so');
 await shot('hs-06-escaped');
 // A possessed guest cannot.
@@ -300,14 +324,15 @@ await tap('#btn-begin'); await throughRoles(); await intoTurn();
 await game(() => {
   const s = window.__game.state;
   s.players.forEach((p, i) => { p.possessed = i === 0; });
-  s.players[0].hand.push({ id: 'b1', type: 'bow' }, { id: 'b2', type: 'shank' }, { id: 'b3', type: 'bit' });
+  s.lockedRooms.clear();
+  s.players[0].hand = [{ id: 'b1', type: 'lantern' }, { id: 'b2', type: 'lantern' }, { id: 'b3', type: 'lantern' }];
   window.__game.refresh();
 });
 await put('stairs', 4);
 await game(() => window.__game.moveToRoom(window.__game.floor.exitRoom));
 await settle();
 await page.waitForTimeout(200);
-check(await game(() => !window.__game.isFinished()), 'a possessed guest with all three pieces cannot escape');
+check(await game(() => !window.__game.isFinished()), 'a possessed guest with three Lanterns cannot escape');
 
 console.log('\n8. the hotel wins');
 await game(() => { window.__game.state.players.forEach(p => { p.possessed = true; }); window.__game.endTurn(); });
@@ -322,7 +347,7 @@ await tap('#btn-begin'); await throughRoles(); await intoTurn();
 await game(() => {
   const s = window.__game.state;
   s.players.forEach((p, i) => { p.possessed = i === 5; });
-  s.players[0].hand = [{ id: 'p1', type: 'bandage' }]; s.players[1].hand = [{ id: 'q1', type: 'knife' }];
+  s.players[0].hand = [{ id: 'p1', type: 'lantern' }]; s.players[1].hand = [{ id: 'q1', type: 'knife' }];
   s.players.forEach((p, i) => { if (i > 1) p.currentRoom = 'corridorW'; });
   window.__game.refresh();
 });
@@ -337,9 +362,9 @@ await page.click('#offer-cards .card-tile[data-card-id="q1"]'); await page.waitF
 await next();
 await page.click('#offer-cards .card-tile[data-card-id="p1"]'); await page.waitForTimeout(80);
 await next();
-check(await kind() === 'note' && /Bandage/.test(await page.textContent('#handoff-notes')), 'the proposer privately reads what they received');
+check(await kind() === 'note' && /Lantern/.test(await page.textContent('#handoff-notes')), 'the guest who chose first privately reads what they received — a Lantern');
 await next(); await tap('#encounter-actions .btn.primary');
-check(await game(() => window.__game.state.players[0].hand.some(c => c.id === 'q1') && window.__game.state.players[1].hand.some(c => c.id === 'p1')), 'the cards swapped');
+check(await game(() => window.__game.state.players[0].hand.some(c => c.id === 'q1') && window.__game.state.players[1].hand.some(c => c.id === 'p1')), 'the cards swapped — a Lantern passes to a teammate like any card');
 
 console.log('\n10. the clock');
 check(await game(() => window.__game.inActionPhase()), 'the turn is still running');

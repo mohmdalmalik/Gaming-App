@@ -634,3 +634,14 @@ html, body {
 .mode-label { display: block; font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); margin-bottom: 10px; }
 .mode-buttons { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
 .btn.mode { text-decoration: none; min-height: 46px; display: inline-flex; align-items: center; font-family: var(--serif); }
+
+/* Full-hand and discard prompts: the whole hand must fit on an iPad at once. Six cards in a
+   single row overflowed the box and clipped the outer cards out of reach, so the rows wrap and
+   the tiles are compact; the found card shrinks once the player is choosing what to drop. */
+#fullhand-overlay .modal, #discard-overlay .modal { max-height: 94vh; overflow-y: auto; }
+#fullhand-hand, #discard-cards, #fullhand-found { flex-wrap: wrap; justify-content: center; padding: 4px 0; }
+#fullhand-hand .card-tile, #discard-cards .card-tile { width: 112px; }
+#fullhand-hand .card-tile .art, #discard-cards .card-tile .art { min-height: 70px; }
+#fullhand-hand .card-tile .cdesc, #discard-cards .card-tile .cdesc { display: none; }
+#fullhand-overlay .modal:has(#fullhand-hand:not([hidden])) #fullhand-found .card-tile { width: 112px; }
+#fullhand-overlay .modal:has(#fullhand-hand:not([hidden])) #fullhand-found .cdesc { display: none; }

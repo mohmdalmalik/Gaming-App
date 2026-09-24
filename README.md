@@ -16,12 +16,13 @@ technical choices are in **[docs/DECISIONS.md](docs/DECISIONS.md)**; status and 
 design; `CLAUDE.md` says no rule or number changes without the owner's approval of a before/after
 list). Two ways to play the same rules, chosen on the start screen:
 
-- **Practice (default).** One guest alone: explore the 18-room hotel, find the three pieces of the
-  fire-exit key (dark rooms need a Flashlight, two rooms are locked), reach the fire exit.
+- **Practice (default).** One guest alone: explore the 18-room hotel, find three Lanterns by
+  searching (dark rooms need a Flashlight, two rooms are locked), reach the fire exit.
 - **Hot-seat — `?mode=hotseat&players=6`.** Four to six people passing **one device**: one hidden
   Possessor with three Possession cards, private role screens, forced meetings with Trade or
   Attack, trades chosen in private on the passed device, health and weapons, Lanterns that block
-  possession, a 45-second turn clock. A testing tool for the real online game.
+  possession (and are used up doing it), three Lanterns to escape, private search results, a
+  45-second turn clock. A testing tool for the real online game.
 
 **Online multiplayer is not implemented.** There is no server, no networking, no accounts and no
 database in this project. No real art beyond the hall and Victor, no sound, no menu yet.
@@ -42,24 +43,25 @@ Published with GitHub Pages from `main`: **https://mohmdalmalik.github.io/Gaming
    health, hand, key pieces) → their 45-second action phase.
 
 `?players=4` / `?players=5` for a smaller table, `?timer=off` to play without the clock,
-`?seed=123` to deal the same hands, hide the pieces in the same rooms and pick the same Possessor.
+`?seed=123` to deal the same hands, lock the same rooms and pick the same Possessor.
 
 ## How to play (each turn, 4 action points)
 
 - **Move** — usable doors glow and blink. Tap one, then **Move**. Any adjacent room costs 1,
   new or known. Tapping empty floor in your room repositions for free. A locked door says so;
   a Master Key or Lock Pick (from the hand sheet) opens it from next door.
-- **Search** (1 AP) — takes anything lying in the room (a key piece, a dead guest's cards);
-  otherwise draws one card, once per room. Dark rooms need a Flashlight in hand.
+- **Search** (1 AP) — takes anything lying in the room (a dead guest's cards); otherwise draws
+  one card, once per room. Dark rooms need a Flashlight in hand. What you find is private: the
+  table only sees that you searched. Lanterns are never dealt — searching is the only way to get one.
 - **Hand** — Bandage (heal 1), Master Key / Lock Pick (open a locked room next door), Barricade
   (seal a doorway of your room for one round) are played from here. Lantern, Flashlight and
   weapons are used in context.
 - **Meetings** (hot-seat) — walk in on a guest you have not met in that room this round and you
   must Trade or Attack. In a trade each side picks a card in private and sees only what they
   received. Give a Lantern and a Possession card cannot take you. The lobby is safe.
-- **Escape** — a clean guest carrying the Bow, the Shank and the Bit walks into the Fire Exit.
+- **Escape** — a clean guest carrying three Lanterns walks into the Fire Exit.
 - **End turn** — refills action points to 4; if you hold more than 6 ordinary cards you discard
-  first (key pieces and Possession cards never count).
+  first (Lanterns count; Possession cards never do).
 
 Controls (camera): pinch / wheel to zoom, two-finger or right-drag to pan, ↺ ↻ to rotate,
 the map button (bottom-right) for the 2D map.
@@ -89,7 +91,7 @@ src/
   game/               pure rules, no rendering (a server could reuse these)
     floor.js  grid.js   world geometry, walkable grid + A* pathfinding
     cards.js            deck build, seeded shuffle, deal, hand helpers
-    state.js            players, turns, key pieces, locked rooms, barricades, meetings, win checks
+    state.js            players, turns, locked rooms, barricades, meetings, escape and win checks
     actions.js          search, the deck and discard pile, cards played, trade, attack, death
     moves.js            plan a walk from a tap
   render/             Three.js placeholder visuals (rooms, doorways, characters, cutaway, mood,
@@ -119,7 +121,7 @@ working checkpoint for the character + interface phase.)
 
 ## Changing the rules or the floor
 
-Every rule number — action points, costs, health, the deck, the key pieces, locked rooms, the
+Every rule number — action points, costs, health, the deck, Lanterns to escape, locked rooms, the
 timer — is in `src/data/rules.js`, which implements `docs/GAME_RULES.md`. The floor (rooms, their
 doorways, furniture, which rooms are dark, moods) is in `src/data/floor1.js`. Change those files,
 not the game code — and per `CLAUDE.md`, not without the owner's approval of a before/after list.
@@ -134,5 +136,5 @@ node tests/rules-check.mjs        # the rules engine against docs/GAME_RULES.md 
 node tests/logic-check.mjs        # floor, map topology, grid, pathfinding
 node tests/browser-practice.mjs   # practice mode in a real browser [--screens]
 node tests/browser-hotseat.mjs    # hot-seat in a real browser: roles, private trades, attacks, escape [--screens]
-node tools/balance/hotseat-sim.mjs 400 6   # 400 simulated six-player matches through the pure rules
+node tools/balance/hotseat-sim.mjs 400 6   # 400 six-player matches x 4 rule variants, side by side
 ```

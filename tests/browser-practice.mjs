@@ -3,8 +3,8 @@
 // Run:  python3 -m http.server 8123 --bind 127.0.0.1 &   then   node tests/browser-practice.mjs [--screens]
 //       node tests/browser-practice.mjs --url http://127.0.0.1:8123/Gaming-App/   (Pages sub-path)
 //
-// One guest alone under docs/GAME_RULES.md: movement, searching, dark and locked rooms, the
-// three key pieces, and the fire exit. No meetings.
+// One guest alone under docs/GAME_RULES.md: movement, searching, dark and locked rooms, finding
+// three Lanterns, and the fire exit. No meetings.
 import { chromium } from 'playwright-core';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -113,12 +113,14 @@ const info = await game(() => ({
   problems: window.__game.floor.problems, rooms: window.__game.floor.roomList.length,
   practice: window.__game.state.practice, players: window.__game.state.players.length,
   ap: window.__game.rules.actionPointsPerTurn, move: window.__game.rules.actionCost.move, discover: window.__game.rules.actionCost.discover,
-  pieces: window.__game.pieces().rooms, locked: window.__game.lockedRooms(), timer: window.__game.rules.turnTimerEnabled,
+  dealt: window.__game.activePlayer().hand.filter(c => c.type === 'lantern').length,
+  inPile: window.__game.state.drawPile.filter(c => c.type === 'lantern').length,
+  locked: window.__game.lockedRooms(), timer: window.__game.rules.turnTimerEnabled,
 }));
 check(info.problems.length === 0, 'no floor problems');
 check(info.rooms === 18 && info.practice && info.players === 1, '18 rooms, one guest, practice mode');
 check(info.ap === 4 && info.move === 1 && info.discover === 0, '4 action points; any move costs 1');
-check(info.pieces.length === 3 && new Set(info.pieces).size === 3, 'three key pieces hidden in three different rooms');
+check(info.dealt === 0 && info.inPile === 12, 'no Lantern is dealt; all 12 are in the deck, to be found by searching');
 check(info.locked.length === 2, 'two locked rooms');
 check(info.timer === false, 'no turn timer in practice');
 await tap('#btn-begin');
@@ -194,17 +196,44 @@ await game(() => window.__game.endTurn());
 check(await game(() => window.__game.moveToRoom('hall').ok) === true, 'it comes down after one round');
 await settle();
 
-console.log('\n7. the key pieces and the fire exit');
-const pieceRooms = await game(() => window.__game.pieces().rooms);
-for (const r of pieceRooms) {
+console.log('\n7. finding three Lanterns and the fire exit');
+// A fresh start on the fixed practice deal, then search room after room for real until three
+// Lanterns have turned up.
+await tap('#btn-restart-practice');
+check(await game(() => window.__game.activePlayer().hand.some(c => c.type === 'flashlight')), 'the fixed practice deal includes a Flashlight for the dark rooms');
+const rooms = await game(() => window.__game.floor.roomList.filter(r => r.searchable).map(r => r.id));
+let searched = 0, fullHandChecked = false;
+for (const r of rooms) {
+  if (await game(() => window.__game.lanterns()) >= 3) break;
   await game(r => { window.__game.state.lockedRooms.delete(r); }, r);
   await put(r, 4);
-  await give(0, [{ id: `fl-${r}`, type: 'flashlight' }]);
   await tap('#btn-search');
+  // A full hand: keep a Lantern (dropping something that is not one); leave anything else.
+  if (await game(() => window.__game.fullHandOpen())) {
+    const isLantern = await page.evaluate(() => !!document.querySelector('#fullhand-found .card-tile [alt="Lantern"], #fullhand-found .card-tile')
+      && /Lantern/.test(document.getElementById('fullhand-found').textContent));
+    if (isLantern) {
+      await tap('#btn-fullhand-take');
+      const drop = await page.evaluate(() => [...document.querySelectorAll('#fullhand-hand .card-tile')].find(t => !/Lantern|Flashlight/.test(t.textContent))?.dataset.cardId);
+      // Every card in the hand must be fully on screen and tappable (six cards used to overflow).
+      if (!fullHandChecked) {
+        fullHandChecked = true;
+        const fit = await page.evaluate(() => [...document.querySelectorAll('#fullhand-hand .card-tile')].map(t => {
+          const r = t.getBoundingClientRect(); const top = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+          return r.left >= 0 && r.right <= innerWidth && r.top >= 0 && r.bottom <= innerHeight && t.contains(top);
+        }));
+        check(fit.length >= 6 && fit.every(Boolean), `with a full hand, all ${fit.length} cards to choose from are on screen and tappable`);
+        await shot('pr-02b-fullhand');
+      }
+      await page.click(`#fullhand-hand .card-tile[data-card-id="${drop}"]`); await page.waitForTimeout(80);
+    } else await tap('#btn-fullhand-leave');
+  }
+  searched++;
 }
-const held = await game(() => window.__game.pieces().held);
-check(held.length === 3 && new Set(held).size === 3, `searching the three rooms found all three pieces (${held.join(', ')})`);
-check(await game(() => window.__game.activePlayer().hand.filter(c => ['bow', 'shank', 'bit'].includes(c.type)).length) === 3, 'they are carried in the hand');
+const held = await game(() => window.__game.lanterns());
+check(held >= 3, `searching ${searched} rooms turned up ${held} Lanterns`);
+check(/Lantern/.test(await page.textContent('#toast')), 'the search message keeps count of the Lanterns you hold');
+check(await game(() => Number(document.getElementById('hand-count').textContent) === window.__game.activePlayer().hand.length), 'Lanterns count in the hand like any card');
 await game(() => window.__game.toggleMap());
 await page.waitForTimeout(150);
 check(await game(() => window.__game.isMapOpen()), 'the map opens');
@@ -214,7 +243,7 @@ await put('stairs', 4);
 await game(() => window.__game.moveToRoom(window.__game.floor.exitRoom));
 await settle();
 await page.waitForTimeout(300);
-check(await game(() => window.__game.isFinished()), 'entering the fire exit with all three pieces ends the practice run');
+check(await game(() => window.__game.isFinished()), 'entering the fire exit with three Lanterns ends the practice run');
 check(await visible('#end-overlay') && /fire exit/i.test(await page.textContent('#end-title')), 'the end screen says so');
 await shot('pr-03-end');
 await tap('#btn-restart');

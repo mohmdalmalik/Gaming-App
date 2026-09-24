@@ -1,0 +1,354 @@
+{
+ "id": "hall",
+ "center": [
+  0,
+  0
+ ],
+ "size": [
+  8,
+  8
+ ],
+ "min": [
+  -4,
+  -4
+ ],
+ "max": [
+  4,
+  4
+ ],
+ "wallThickness": 0.15,
+ "walls": [
+  {
+   "id": "hall:north:0",
+   "side": "north",
+   "neighbour": null,
+   "min": [
+    -4,
+    -4
+   ],
+   "max": [
+    -1.2,
+    -3.85
+   ]
+  },
+  {
+   "id": "hall:north:1",
+   "side": "north",
+   "neighbour": "corridorN",
+   "min": [
+    -1.2,
+    -4
+   ],
+   "max": [
+    -0.6,
+    -3.85
+   ]
+  },
+  {
+   "id": "hall:north:2",
+   "side": "north",
+   "neighbour": "corridorN",
+   "min": [
+    0.6,
+    -4
+   ],
+   "max": [
+    1.2,
+    -3.85
+   ]
+  },
+  {
+   "id": "hall:north:3",
+   "side": "north",
+   "neighbour": null,
+   "min": [
+    1.2,
+    -4
+   ],
+   "max": [
+    4,
+    -3.85
+   ]
+  },
+  {
+   "id": "hall:south:4",
+   "side": "south",
+   "neighbour": "dining",
+   "min": [
+    -4,
+    3.85
+   ],
+   "max": [
+    -0.6,
+    4
+   ]
+  },
+  {
+   "id": "hall:south:5",
+   "side": "south",
+   "neighbour": "dining",
+   "min": [
+    0.6,
+    3.85
+   ],
+   "max": [
+    4,
+    4
+   ]
+  },
+  {
+   "id": "hall:east:6",
+   "side": "east",
+   "neighbour": null,
+   "min": [
+    3.85,
+    -3.85
+   ],
+   "max": [
+    4,
+    -1.2
+   ]
+  },
+  {
+   "id": "hall:east:7",
+   "side": "east",
+   "neighbour": "corridorE",
+   "min": [
+    3.85,
+    -1.2
+   ],
+   "max": [
+    4,
+    -0.6
+   ]
+  },
+  {
+   "id": "hall:east:8",
+   "side": "east",
+   "neighbour": "corridorE",
+   "min": [
+    3.85,
+    0.6
+   ],
+   "max": [
+    4,
+    1.2
+   ]
+  },
+  {
+   "id": "hall:east:9",
+   "side": "east",
+   "neighbour": null,
+   "min": [
+    3.85,
+    1.2
+   ],
+   "max": [
+    4,
+    3.85
+   ]
+  },
+  {
+   "id": "hall:west:10",
+   "side": "west",
+   "neighbour": null,
+   "min": [
+    -4,
+    -3.85
+   ],
+   "max": [
+    -3.85,
+    -1.2
+   ]
+  },
+  {
+   "id": "hall:west:11",
+   "side": "west",
+   "neighbour": "corridorW",
+   "min": [
+    -4,
+    -1.2
+   ],
+   "max": [
+    -3.85,
+    -0.6
+   ]
+  },
+  {
+   "id": "hall:west:12",
+   "side": "west",
+   "neighbour": "corridorW",
+   "min": [
+    -4,
+    0.6
+   ],
+   "max": [
+    -3.85,
+    1.2
+   ]
+  },
+  {
+   "id": "hall:west:13",
+   "side": "west",
+   "neighbour": null,
+   "min": [
+    -4,
+    1.2
+   ],
+   "max": [
+    -3.85,
+    3.85
+   ]
+  }
+ ],
+ "doorways": [
+  {
+   "id": "hall->corridorW",
+   "axis": "z",
+   "center": [
+    -4,
+    0
+   ],
+   "width": 1.2
+  },
+  {
+   "id": "hall->corridorN",
+   "axis": "x",
+   "center": [
+    0,
+    -4
+   ],
+   "width": 1.2
+  },
+  {
+   "id": "hall->corridorE",
+   "axis": "z",
+   "center": [
+    4,
+    0
+   ],
+   "width": 1.2
+  },
+  {
+   "id": "hall->dining",
+   "axis": "x",
+   "center": [
+    0,
+    4
+   ],
+   "width": 1.2
+  }
+ ],
+ "furniture": [
+  {
+   "kind": "lift",
+   "center": [
+    -2.6,
+    -3.72
+   ],
+   "size": [
+    1.8,
+    2.1,
+    0.36
+   ]
+  },
+  {
+   "kind": "sofa",
+   "center": [
+    -2.4,
+    3.35
+   ],
+   "size": [
+    2.45,
+    1.15,
+    1.02
+   ]
+  },
+  {
+   "kind": "chair",
+   "center": [
+    -3.35,
+    2
+   ],
+   "size": [
+    1.02,
+    1.15,
+    1.23
+   ]
+  },
+  {
+   "kind": "coffeeTable",
+   "center": [
+    -2.1,
+    2.35
+   ],
+   "size": [
+    1.45,
+    0.51,
+    0.88
+   ]
+  },
+  {
+   "kind": "console",
+   "center": [
+    3.53,
+    2
+   ],
+   "size": [
+    0.9,
+    0.92,
+    1.28
+   ]
+  },
+  {
+   "kind": "plant",
+   "center": [
+    3.5,
+    3.5
+   ],
+   "size": [
+    0.64,
+    1.34,
+    0.73
+   ]
+  },
+  {
+   "kind": "plant",
+   "center": [
+    3.4,
+    -3.4
+   ],
+   "size": [
+    0.64,
+    1.34,
+    0.73
+   ]
+  }
+ ],
+ "start": [
+  [
+   0,
+   0
+  ],
+  [
+   -1.6,
+   -1.2
+  ],
+  [
+   1.6,
+   -1.2
+  ],
+  [
+   -1.6,
+   1.4
+  ],
+  [
+   1.6,
+   1.4
+  ],
+  [
+   0,
+   2.2
+  ]
+ ]
+}

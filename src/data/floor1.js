@@ -61,7 +61,7 @@ export const floor1 = {
       size: [8, 8],
       // Warm, cosy landing: several soft lamp points (index 0 is the ceiling fill, the rest sit
       // by the lamp models — see dressing.js). Bright ambient so the entry feels welcoming.
-      mood: { color: '#ffe0b0', intensity: 1.55, ambient: 1.05, lights: [[0, 0], [3.5, -1.9], [3.4, 3.4], [-3.3, 1.4]] },
+      mood: { color: '#ffe0b0', intensity: 1.55, ambient: 1.05, lights: [[0, 0], [3.4, 2.3], [-3.3, 3.2], [0, -3.2]] },
       // This room is DRESSED with real glTF furniture (see src/data/dressing.js). Each piece's
       // `size` is its collision footprint AND drives the walkable grid, so the models you see
       // match what you can walk around. `model` names the glTF; `yaw` rotates it (degrees);

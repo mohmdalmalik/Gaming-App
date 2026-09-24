@@ -98,80 +98,151 @@ export function createRoomViews(floor, cfg, scene) {
   return views;
 }
 
-// A doorway shows a floor strip once either side is known, and a steady bright frame while
-// it still leads somewhere undiscovered. (No pulsing: highlights must not read as flicker.)
+// Soft gradient textures for the doorway cues (built once, shared by every doorway).
+function gradientTexture(kind) {
+  const S = 128;
+  const c = document.createElement('canvas');
+  c.width = c.height = S;
+  const g = c.getContext('2d');
+  let grad;
+  if (kind === 'radial') {
+    grad = g.createRadialGradient(S / 2, S / 2, 0, S / 2, S / 2, S / 2);
+    grad.addColorStop(0, 'rgba(255,255,255,1)');
+    grad.addColorStop(0.45, 'rgba(255,255,255,0.45)');
+    grad.addColorStop(1, 'rgba(255,255,255,0)');
+  } else {   // 'rise': bright at the bottom edge, fading upward (a light spill in an opening)
+    grad = g.createLinearGradient(0, S, 0, 0);
+    grad.addColorStop(0, 'rgba(255,255,255,1)');
+    grad.addColorStop(0.35, 'rgba(255,255,255,0.4)');
+    grad.addColorStop(1, 'rgba(255,255,255,0)');
+  }
+  g.fillStyle = grad;
+  g.fillRect(0, 0, S, S);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+
+// Doorway cues. A doorway shows a floor strip once either side is known. The "way through" cue is
+// deliberately quiet so it sits in the hotel rather than on top of it:
+//   • a soft warm glow on the floor across the threshold (the doorway leads somewhere new, or the
+//     active guest can use it this turn),
+//   • a faint light spilling up the opening while the room behind is still undiscovered,
+//   • a gold ring on the floor in front of each door the active guest can step through, gently
+//     pulsing (the tap target; the tests know it as `blink`).
+// No hard posts or bars, and the pulse is slow so it never reads as the mood flicker.
 export function createDoorwayViews(floor, cfg, scene) {
   const views = new Map();
-  const H = cfg.walls.height;
   const t = cfg.walls.thickness;
-  // A warm brass-gold doorway highlight. Slightly translucent so it reads as a soft glow that fits
-  // the hotel palette rather than a hard neon bar, while staying clearly visible as the "leads
-  // somewhere new" cue. (Shared by every room — one indicator style, kept restrained.)
-  const frontierMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(cfg.palette.frontier), toneMapped: false, transparent: true, opacity: 0.72 });
+  const warm = new THREE.Color(cfg.palette.frontier);
+  const additive = (map, opacity) => new THREE.MeshBasicMaterial({
+    map, color: warm, transparent: true, opacity, depthWrite: false, toneMapped: false,
+    blending: THREE.AdditiveBlending, side: THREE.DoubleSide,
+  });
+  const radial = gradientTexture('radial'), rise = gradientTexture('rise');
+  const glowMat = additive(radial, 0.55);
+  const spillMat = additive(rise, 0.32);
+  const haloMat = additive(radial, 0.5);
+  const ringMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(cfg.palette.usable), transparent: true, opacity: 0.95, depthWrite: false, toneMapped: false });
+  const ringGeo = new THREE.RingGeometry(0.27, 0.33, 40);
+  ringGeo.rotateX(-Math.PI / 2);
   const stripMat = lambert(cfg.palette.doorStrip);
-  // A separate blinking floor bar shown on doorways the active player may step through this
-  // turn. Its opacity pulses (a deliberate action cue, not the ambient mood flicker).
-  const usableMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(cfg.palette.usable || '#7fe0a0'), transparent: true, opacity: 0.8, depthWrite: false, toneMapped: false });
+  const SPILL_H = 1.5;
+  const look = new THREE.Vector3();
 
   for (const d of floor.doorways) {
     const along = d.axis === 'x';
-    const sizeAlong = d.width, sizeAcross = t * 2;
+    const sizeAcross = t * 2;
 
     const strip = new THREE.Mesh(unitPlane, stripMat);
-    strip.scale.set(along ? sizeAlong : sizeAcross, 1, along ? sizeAcross : sizeAlong);
+    strip.scale.set(along ? d.width : sizeAcross, 1, along ? sizeAcross : d.width);
     strip.position.set(d.center[0], 0.02, d.center[1]);
     strip.visible = false;
     scene.add(strip);
 
-    const marker = new THREE.Group();
-    const post = 0.12;
-    for (const s of [-1, 1]) {
-      const p = new THREE.Mesh(unitBox, frontierMat);
-      p.scale.set(along ? post : sizeAcross + 0.02, H, along ? sizeAcross + 0.02 : post);
-      p.position.set(
-        d.center[0] + (along ? s * (d.width / 2 + post / 2) : 0),
-        0,
-        d.center[1] + (along ? 0 : s * (d.width / 2 + post / 2)),
-      );
-      marker.add(p);
-    }
-    const lintel = new THREE.Mesh(unitBox, frontierMat);
-    lintel.scale.set(along ? d.width + post * 2 : sizeAcross + 0.02, post, along ? sizeAcross + 0.02 : d.width + post * 2);
-    lintel.position.set(d.center[0], H, d.center[1]);
-    marker.add(lintel);
-    const bar = new THREE.Mesh(unitBox, frontierMat);
-    bar.scale.set(along ? d.width : sizeAcross + 0.02, 0.03, along ? sizeAcross + 0.02 : d.width);
-    bar.position.set(d.center[0], 0.03, d.center[1]);
-    marker.add(bar);
-    marker.visible = false;
-    scene.add(marker);
+    // The threshold glow: an oval pool of warm light across the doorway, reaching into both rooms.
+    const glow = new THREE.Mesh(unitPlane, glowMat);
+    glow.scale.set(along ? d.width + 0.9 : 1.9, 1, along ? 1.9 : d.width + 0.9);
+    glow.position.set(d.center[0], 0.035, d.center[1]);
+    glow.renderOrder = 2;
+    glow.visible = false;
+    scene.add(glow);
 
-    // The usable-door blink bar (a bright threshold strip on the floor).
-    const blink = new THREE.Mesh(unitPlane, usableMat);
-    blink.scale.set(along ? d.width + 0.2 : sizeAcross + 0.3, 1, along ? sizeAcross + 0.3 : d.width + 0.2);
-    blink.position.set(d.center[0], 0.04, d.center[1]);
+    // The light spill: a soft vertical gradient standing in the opening.
+    const spill = new THREE.Mesh(new THREE.PlaneGeometry(d.width, SPILL_H), spillMat);
+    spill.position.set(d.center[0], SPILL_H / 2, d.center[1]);
+    if (!along) spill.rotation.y = Math.PI / 2;
+    spill.renderOrder = 2;
+    spill.visible = false;
+    scene.add(spill);
+
+    // The ring (+ a soft halo) in front of the door, on the active guest's side.
+    const blink = new THREE.Group();
+    const ring = new THREE.Mesh(ringGeo, ringMat);
+    ring.position.y = 0.03;
+    const halo = new THREE.Mesh(unitPlane, haloMat);
+    halo.scale.set(1.1, 1, 1.1);
+    halo.position.y = 0.028;
+    blink.add(halo, ring);
+    blink.renderOrder = 3;
     blink.visible = false;
-    blink.renderOrder = 2;
     scene.add(blink);
 
+    let frontier = false, usable = false, overlooked = false;
+    const sync = () => {
+      glow.visible = frontier || usable;
+      spill.visible = frontier && !overlooked;
+      blink.visible = usable;
+    };
     views.set(d.id, {
       doorway: d,
+      // The camera is looking OVER this doorway's wall (it stands between the camera and the view,
+      // so the cutaway has lowered it): a standing light spill would stick up out of the cut wall.
+      setOverlooked(v) { if (v !== overlooked) { overlooked = v; sync(); } },
       strip,
-      marker,
+      glow,
+      spill,
       blink,
-      setState({ known, frontier }) {
+      setState({ known, frontier: f }) {
         strip.visible = known;
-        marker.visible = frontier;
+        frontier = f;
+        sync();
       },
-      setUsable(v) { blink.visible = v; },
+      // `fromRoom` is the room the active guest stands in: the ring sits on that side of the door.
+      setUsable(v, fromRoom) {
+        usable = v;
+        const room = fromRoom && floor.rooms.get(fromRoom);
+        if (room) {
+          const inset = t + 0.62;
+          const sx = along ? 0 : Math.sign(room.center[0] - d.center[0]) || 1;
+          const sz = along ? Math.sign(room.center[1] - d.center[1]) || 1 : 0;
+          blink.position.set(d.center[0] + sx * inset, 0, d.center[1] + sz * inset);
+        }
+        sync();
+      },
     });
   }
 
   return {
     views,
-    // Pulse the usable-door bars together.
-    update(time) {
-      usableMat.opacity = 0.35 + 0.45 * (0.5 + 0.5 * Math.sin(time * 4));
+    // A slow, gentle pulse on the rings (and a breath on the threshold glow). With the camera rig,
+    // also hide the light spill of doorways on the camera's side of the view.
+    update(time, rig) {
+      if (rig) {
+        const bx = Math.sin(rig.yaw), bz = Math.cos(rig.yaw);   // from the view centre toward the camera
+        const c = rig.camera.position, dir = rig.camera.getWorldDirection(look);
+        const k = dir.y < -1e-3 ? -c.y / dir.y : 0;      // where the view centre meets the floor
+        const fx = c.x + dir.x * k, fz = c.z + dir.z * k;
+        for (const v of views.values()) {
+          const d = v.doorway, facing = d.axis === 'x' ? Math.abs(bz) : Math.abs(bx);
+          const ahead = (d.center[0] - fx) * bx + (d.center[1] - fz) * bz;
+          v.setOverlooked(facing > cfg.cutaway.threshold && ahead > 0.5);
+        }
+      }
+      const p = 0.5 + 0.5 * Math.sin(time * 2.6);
+      ringMat.opacity = 0.6 + 0.4 * p;
+      haloMat.opacity = 0.25 + 0.3 * p;
+      glowMat.opacity = 0.45 + 0.12 * p;
     },
   };
 }

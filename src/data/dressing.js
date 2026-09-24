@@ -7,12 +7,16 @@
 // collision and visuals come from one place. This file is only the shell + non-colliding extras.
 
 export const roomDressings = {
-  // The starting room gets a bespoke Art Deco treatment (procedural surfaces + decorations in
-  // src/render/hallDeco.js): parquet floor, ivory/walnut/brass panelling, a patterned burgundy
-  // rug, brass sconces, a framed picture, doorway surrounds and a proper hotel lift. Furniture
-  // (from floor1.js) and the lamp lights below are still applied generically.
+  // The starting room is one baked model (tools/lobby-pipeline/, loaded by
+  // src/render/bakedRoom.js): walnut panelling cut at a consistent height, cream stone floor,
+  // burgundy rugs, red velvet seating, brass lamps and sconces, with soft shadows and lamp light
+  // baked in. The collision footprints are still the furniture in floor1.js.
   hall: {
-    style: 'deco',
+    style: 'baked',
+    model: 'lobby/lobby.glb',
+    light: 'lobby/lobby-light.jpg',
+    floorLight: 'lobby/lobby-floor-light.jpg',
+    exposure: 0.62,
     // Lamp lights: which of the room's mood-light indices (from mood.lights in floor1.js) sit
     // low by a lamp rather than up at the ceiling, and how warm/bright each is. Index 0 is the
     // ceiling fill and is left alone.

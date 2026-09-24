@@ -26,6 +26,7 @@ import { updateCutaway } from './render/cutaway.js';
 import { createMood } from './render/mood.js';
 import { createCharacterView } from './render/characterView.js';
 import { createSearchMarks } from './render/searchMarks.js';
+import { createPathPreview } from './render/pathPreview.js';
 import { createCameraRig } from './camera.js';
 import { createInput } from './input.js';
 import { createPlayer } from './player.js';
@@ -39,6 +40,7 @@ import { createFullHand } from './ui/fullHand.js';
 import { createHandoff } from './ui/handoff.js';
 import { createMeeting } from './ui/meeting.js';
 import { roundLabel, finalRoundNote, isFinal } from './ui/roundLabel.js';
+import { createPerfStats } from './ui/perfStats.js';
 
 // --- World (pure data + rules) ---------------------------------------------------------
 const floor = buildFloor(floor1, cfg);
@@ -50,7 +52,10 @@ if (floor.problems.length) throw new Error(`Problems in the floor data:\n• ${f
 //   ?mode=hotseat&players=6   a six-person hot-seat match on one device
 //   ?seed=123                 force the deal, the hidden role, the locked rooms (testing)
 //   ?timer=off                play without the 45-second turn clock
+//   ?camera=classic           the previous, higher camera angle (for comparison)
+//   ?stats=1                  a small frame-rate / draw-call readout, for measuring on the iPad
 const params = new URLSearchParams(window.location.search);
+if (params.get('camera') === 'classic') Object.assign(cfg.camera, cfg.cameraClassic);   // the old, higher view
 const MODE = params.get('mode') === 'hotseat' ? 'hotseat' : 'practice';
 const askedPlayers = parseInt(params.get('players'), 10);
 applyMode(MODE, Number.isFinite(askedPlayers) ? askedPlayers : 6);
@@ -74,6 +79,8 @@ const roomViews = createRoomViews(floor, cfg, view.scene);
 const doorways = createDoorwayViews(floor, cfg, view.scene);
 const characters = cast.map(def => createCharacterView(def, cfg, view.scene));
 const searchMarks = createSearchMarks(floor, view.scene);
+const pathPreview = createPathPreview(view.scene, view.camera, view.renderer.domElement, container);
+const perfStats = createPerfStats(document, view.renderer, params.get('stats') === '1');
 const mood = createMood(roomViews, view.hemi, cfg);
 const rig = createCameraRig(view.camera, cfg);
 
@@ -128,7 +135,8 @@ function syncViews(animate) {
 // Blink the doors the active guest may use this turn.
 function refreshUsable() {
   const usable = new Set(state.finished ? [] : usableDoorways(state, floor, activePlayer(state)).map(d => d.id));
-  for (const dv of doorways.views.values()) dv.setUsable(usable.has(dv.doorway.id));
+  const here = activePlayer(state).currentRoom;
+  for (const dv of doorways.views.values()) dv.setUsable(usable.has(dv.doorway.id), here);
 }
 
 function refresh() { hud.update(state, floor); refreshUsable(); hand.refresh(); searchMarks.update(state); discovery.refresh(); }
@@ -541,6 +549,8 @@ createInput(view.renderer.domElement, {
       const slot = moveTargetInto(near.dest, near.door, player.index);
       const plan = discovery.plan(slot.x, slot.z);
       if (plan.ok) {
+        // the dotted path + cost tag over the door, shown while the move awaits confirmation
+        plan.preview = { label: `${state.discovered.has(near.dest) ? 'Move' : 'Explore'} · ${plan.cost} AP`, anchor: near.door.center };
         selectedMove = plan;
         hud.showConfirm(`Move to ${floor.rooms.get(near.dest).name}?`, `Move · ${plan.cost} AP`);
       } else {
@@ -638,6 +648,7 @@ dressRooms(roomViews, floor, cfg)
 let last = performance.now();
 let frames = 0;
 view.renderer.setAnimationLoop(now => {
+  perfStats.frame(now - last);
   const dt = Math.min(0.05, Math.max(0, (now - last) / 1000));
   last = now;
   const time = now / 1000;
@@ -650,7 +661,8 @@ view.renderer.setAnimationLoop(now => {
   rig.setFocus(activeMover().x, activeMover().z);
   rig.update(dt);
   for (const rv of roomViews.values()) rv.update(dt);
-  doorways.update(time);
+  doorways.update(time, rig);
+  pathPreview.update(selectedMove && hud.confirmOpen && !activeMover().walking ? selectedMove : null, time);
   mood.update(activePlayer(state).currentRoom, dt, time);
   updateCutaway(roomViews, rig, state, cfg, dt);
   characters.forEach((cv, i) => cv.update(movers[i], dt));
@@ -661,7 +673,7 @@ document.addEventListener('visibilitychange', () => { last = performance.now(); 
 
 // --- Debug / test hooks ------------------------------------------------------------------
 window.__game = {
-  cfg, rules, floor, grid, state, movers, rig, roomViews, doorways, characters, discovery, view,
+  cfg, rules, floor, grid, state, movers, rig, roomViews, doorways, characters, discovery, view, pathPreview,
   begin, restart, endTurn: doEndTurn,
   refresh,
   activePlayer: () => activePlayer(state),

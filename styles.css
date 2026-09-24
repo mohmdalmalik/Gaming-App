@@ -50,6 +50,25 @@ html, body {
 #app { position: fixed; inset: 0; }
 #view { position: absolute; inset: 0; }
 #view canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+/* ?stats=1 performance readout (for measuring on the device). */
+.perf-stats {
+  position: fixed; left: 50%; top: calc(6px + var(--safe-top)); transform: translateX(-50%); z-index: 50;
+  pointer-events: none; padding: 3px 9px; border-radius: 6px; background: rgba(0, 0, 0, 0.72);
+  color: #9fe6a8; font: 12px/1.3 ui-monospace, Menlo, monospace;
+}
+/* The cost tag over a chosen door ("Explore · 2 AP"), positioned by src/render/pathPreview.js. */
+.path-label {
+  position: absolute; transform: translate(-50%, -100%); pointer-events: none;
+  padding: 6px 12px; border-radius: 9px; white-space: nowrap;
+  background: rgba(14, 16, 22, 0.9); border: 1.5px solid var(--brass);
+  color: var(--ivory); font: 600 15px/1.2 var(--sans); letter-spacing: 0.01em;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45);
+}
+.path-label::after {
+  content: ""; position: absolute; left: 50%; bottom: -7px; width: 10px; height: 10px;
+  transform: translateX(-50%) rotate(45deg); background: rgba(14, 16, 22, 0.9);
+  border-right: 1.5px solid var(--brass); border-bottom: 1.5px solid var(--brass);
+}
 
 /* A reusable brass-framed surface: a hairline brass border with a dark inner reveal. */
 .framed {

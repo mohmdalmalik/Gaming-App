@@ -5,8 +5,8 @@
 export const config = {
   camera: {
     fov: 42,              // vertical field of view in degrees
-    pitchDeg: 56,         // angle above the horizon (90 = straight down)
-    distance: 13,         // default distance from the focus point (zoom)
+    pitchDeg: 42,         // angle above the horizon (90 = straight down): low and close, so the
+    distance: 11.5,       // fronts of furniture and faces show; default distance from the focus (zoom)
     minDistance: 7,       // zoom-in limit
     maxDistance: 22,      // zoom-out limit
     rotateDuration: 0.4,  // seconds for a 90° snap rotation
@@ -17,6 +17,9 @@ export const config = {
     near: 0.5,
     far: 120,
   },
+
+  // The previous, higher camera, kept for comparison: add ?camera=classic to the address.
+  cameraClassic: { pitchDeg: 56, distance: 13 },
 
   cutaway: {
     threshold: 0.3,       // how directly a wall must face the camera before it is lowered (0..1)
@@ -76,7 +79,7 @@ export const config = {
     playerMarker: '#3a2a1a',
     doorStrip: '#57575f',
     frontier: '#ffcc66',
-    usable: '#7fe0a0',   // blink bar on doors the active player can step through
+    usable: '#f4cf6a',   // the ring in front of doors the active player can step through
     exit: '#8ff5b0',
   },
 

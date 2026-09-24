@@ -46,6 +46,10 @@ Published with GitHub Pages from `main`: **https://mohmdalmalik.github.io/Gaming
 `?players=4` / `?players=5` for a smaller table, `?timer=off` to play without the clock,
 `?seed=123` to deal the same hands, lock the same rooms and pick the same Possessor.
 
+Two viewing switches work in any mode: `?camera=classic` shows the previous, higher camera angle
+(for comparison with the new lower one), and `?stats=1` shows a small frame-rate / draw-call
+readout at the top of the screen, for measuring speed on the iPad.
+
 ## How to play (each turn, 4 action points)
 
 - **Move** — usable doors glow and blink. Tap one, then **Move**. Any adjacent room costs 1,
@@ -97,8 +101,9 @@ src/
     state.js            players, turns, locked rooms, barricades, meetings, escape and win checks
     actions.js          search, the deck and discard pile, cards played, trade, attack, death
     moves.js            plan a walk from a tap
-  render/             Three.js placeholder visuals (rooms, doorways, characters, cutaway, mood,
-                      searched-room ticks)
+  render/             Three.js visuals: greybox rooms, doorway cues, characters, cutaway, mood,
+                      searched-room ticks; bakedRoom.js loads the baked starting room;
+                      pathPreview.js draws the dotted path + cost tag for a chosen door
   camera.js input.js player.js discovery.js   camera rig, gestures, movement, tap→plan glue
   hud.js  map.js  overlays.js   HUD + action bar, 2D map, start/end/error overlays
   ui/
@@ -122,6 +127,17 @@ node tools/char-pipeline/portrait.mjs                 # interface portraits from
 (`tools/char-pipeline/README.md` lists every tool; `docs/CHARACTER_GUI_CHECKPOINT.md` is the
 working checkpoint for the character + interface phase.)
 
+## Starting-room pipeline (Blender → baked glTF → game)
+The starting room is one model with its light baked in (soft sky light, contact shadows, lamp and
+sconce pools), built headless from the game's own room data:
+```bash
+node    tools/lobby-pipeline/dump_lobby.mjs > tools/lobby-pipeline/lobby.json   # walls, doors, footprints
+python3 tools/lobby-pipeline/textures.py                                      # tiles, rugs, paintings
+python3 tools/lobby-pipeline/make_lobby.py --size 2048 --samples 64           # model + bake (~15 min)
+```
+Output: `assets/models/lobby/` (`lobby.glb`, `lobby-light.jpg`, `lobby-floor-light.jpg`).
+`tools/lobby-pipeline/README.md` explains the parts.
+
 ## Changing the rules or the floor
 
 Every rule number — action points, costs, health, the deck, Lanterns to escape, the dawn round limit, locked rooms, the
@@ -139,5 +155,6 @@ node tests/rules-check.mjs        # the rules engine against docs/GAME_RULES.md 
 node tests/logic-check.mjs        # floor, map topology, grid, pathfinding
 node tests/browser-practice.mjs   # practice mode in a real browser [--screens]
 node tests/browser-hotseat.mjs    # hot-seat in a real browser: roles, private trades, attacks, escape [--screens]
+node tests/browser-lobby.mjs      # the baked starting room, door cues, path preview, camera, draw calls
 node tools/balance/hotseat-sim.mjs 400 6   # 400 six-player matches under the rules as they stand (--compare for variants)
 ```

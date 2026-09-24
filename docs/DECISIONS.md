@@ -493,3 +493,48 @@ the lessons). Key decisions:
 - **One place writes the round** (`src/ui/roundLabel.js`): "Round 3 of 8" in hot-seat, "Round 3" in
   practice. The final round is marked in the header (in words and a warning colour), on the
   pass-the-device screen and on the private turn screen, since those are where people look.
+
+
+## Starting room — baked art pass (supersedes the hallDeco sections above for the lobby)
+Target: `docs/art-reference.jpg` (style, palette and finish; not its layout or its old interface).
+- **One baked model instead of hand-placed pieces.** The lobby is built headless in Blender
+  (`tools/lobby-pipeline/make_lobby.py`) from the game's own room data (`dump_lobby.mjs` →
+  `lobby.json`), so walls, doorways and every furniture footprint line up with collision and
+  pathfinding by construction; `tests/browser-lobby.mjs` fails if they drift. `hallDeco.js` is gone.
+  Room size, doorways, footprints, the walkable grid and the rules are unchanged.
+- **Baked, not live, lighting.** Soft sky light from the open top, a soft key light, every lamp and
+  sconce, and an ambient-occlusion pass are baked with Cycles into two light maps (an atlas for walls
+  and furniture; a straight-down one for the floor and rugs, since that is most of the view),
+  denoised with Open Image Denoise, stored as sRGB JPEG at `light / 4`. In the game every lobby
+  material is an unlit `MeshBasicMaterial` = albedo × light map (`src/render/bakedRoom.js`): the
+  cheapest shader Three.js has, with no per-pixel light cost. The room's point lights still exist
+  (moved to the new lamps) because they light the characters, who are not baked.
+- **Albedo from vertex colours** for all the solid pieces (walnut, brass, velvet, leaves), textures
+  only where a pattern is needed (floor tiles, rugs, paintings). Five materials in total.
+- **Walls cut like an architectural model.** All lobby walls stand at one height (2.4 m) under a
+  dark wood cap. Each game wall segment is two nodes: `_lo` (to 0.64 m, topped by a dark cut cap)
+  and `_up` (origin on the cut). The cutaway still decides *when* a wall lowers; `bakedRoom.js`
+  maps that to folding the upper part down onto the cut and hiding it, so a lowered wall reads as a
+  cut model instead of a squashed one, and wall-hung pieces (paintings, sconces) go with it. The cut
+  caps are baked separately with the upper walls hidden, the only state they are seen in.
+- **Doorway cue (every doorway, not only the lobby's).** The glowing yellow posts are replaced by a
+  soft warm pool across the threshold, a faint light spill standing in the opening while the room
+  behind is undiscovered, and a gold ring (slow pulse) on the active guest's side of each door they
+  can use. One cue style for the whole hotel, so it means the same thing everywhere; the tests still
+  address the ring as `blink`.
+- **Chosen-door preview.** While a door move waits for confirmation, `pathPreview.js` draws the
+  planned walk as gold dots (one `InstancedMesh`, one draw call) and an HTML tag over the door with
+  the cost ("Explore · 1 AP" / "Move · 1 AP"). It reads the same plan the confirm bar uses; the
+  interface panels themselves are unchanged.
+- **Lower camera.** Default pitch 42° at distance 11.5 (was 56° at 13) to show the fronts of
+  furniture and faces, as in the reference. `?camera=classic` restores the old values
+  (`config.cameraClassic`).
+- **Measuring on the device.** `?stats=1` shows fps, the slowest frame of each second, draw calls and
+  triangles (`src/ui/perfStats.js`), since headless software rendering says nothing about iPad speed.
+- **A light spill never stands in a cut wall.** Spills are hidden on doorways the camera is looking
+  over (on the camera's side of the view, in a wall facing the camera), since the cutaway has
+  lowered that wall and a standing glow would stick up out of it.
+- **Measured (headless, same code path as the iPad, start view):** lobby 271 → 89 draw calls, 29 → 9
+  textures, 56k → 87k triangles (the bevels; trivial for an iPad GPU), CPU time to submit a frame
+  2.6 → 2.3 ms. Download: `lobby.glb` ~2.5 MB (uncompressed geometry; Draco is not available
+  in this Blender) + light maps ~1 MB.

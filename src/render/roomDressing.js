@@ -11,7 +11,7 @@
 import * as THREE from 'three';
 import { loadModel, instancedFromModel } from './models.js';
 import { roomDressings } from '../data/dressing.js';
-import { dressHall } from './hallDeco.js';
+import { dressBaked } from './bakedRoom.js';
 
 const rad = deg => (deg || 0) * Math.PI / 180;
 
@@ -71,14 +71,17 @@ async function dressOne(view, floor, cfg, spec) {
   if (view.floorMesh) view.floorMesh.visible = false;
   for (const f of view.furniture) f.mesh.visible = false;
 
-  // Bespoke Art Deco hall: build the parquet floor, panelled walls and Deco decorations
-  // procedurally. Generic floor/walls/decor below are skipped; furniture + lamp lights still run.
-  const deco = spec.style === 'deco';
-  if (deco) dressHall(view, floor, cfg);
+  // A baked room (the starting room): one model built and lit offline replaces the shell, the
+  // furniture and the decoration. Only the lamp lights below still apply (they light the guests).
+  if (spec.style === 'baked') {
+    await dressBaked(view, spec, cfg);
+    applyLampLights(view, spec);
+    return;
+  }
 
   // 2. Wooden floor: one InstancedMesh of the 2 m tile, so the whole floor is a single draw
   //    call. The tile's top sits at y = 0 (model top is at `spec.floor.top`).
-  if (spec.floor && !deco) {
+  if (spec.floor) {
     const tile = spec.floor.tile;
     const nx = Math.max(1, Math.round(room.size[0] / tile));
     const nz = Math.max(1, Math.round(room.size[1] / tile));
@@ -95,7 +98,7 @@ async function dressOne(view, floor, cfg, spec) {
 
   // 3. Wall panels: swap each greybox wall segment's mesh for a tiled run, keeping the same
   //    `w` entry so the cutaway loop still finds it.
-  if (spec.wall && !deco) {
+  if (spec.wall) {
     for (const w of view.walls) {
       const run = await buildWallRun(w.wall, spec.wall);
       group.remove(w.mesh);
@@ -115,10 +118,7 @@ async function dressOne(view, floor, cfg, spec) {
   }
 
   // 5. Colliding furniture: one model per entry (+ any props on top). `lift` is a pair of doors.
-  //    The bespoke Deco hall builds all of its own furniture (see hallDeco.js), so skip the
-  //    generic pieces there — collision still comes from the same floor1.js footprints.
   for (const f of room.furniture) {
-    if (deco) continue;
     const [cx, cz] = f.center;
     if (f.kind === 'lift') {
       for (const dx of [-0.45, 0.45]) {
@@ -135,13 +135,17 @@ async function dressOne(view, floor, cfg, spec) {
     }
   }
 
-  // 6. Non-colliding decoration (rugs, cushions). The Deco hall builds its own rug.
-  for (const d of (deco ? [] : spec.decor) || []) {
+  // 6. Non-colliding decoration (rugs, cushions).
+  for (const d of spec.decor || []) {
     await place(group, d.model, room.center[0] + d.pos[0], room.center[1] + d.pos[1], d.yaw, d.y ?? 0.015, d.overrides, d.scale || 1);
   }
 
-  // 7. Lamp lights: drop the chosen mood-light points down to lamp height and warm them, so the
-  //    lamps read as the light source. Index 0 (the ceiling fill) is left as-is.
+  applyLampLights(view, spec);
+}
+
+// Lamp lights: drop the chosen mood-light points down to lamp height and warm them, so the lamps
+// read as the light source. Index 0 (the ceiling fill) is left as-is.
+function applyLampLights(view, spec) {
   if (spec.lampLights) {
     for (const idx of spec.lampLights.indices) {
       const L = view.lights[idx];

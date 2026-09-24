@@ -800,3 +800,60 @@ full "dawn breaks when it ends" wording is on the pass and turn screens, where t
 3. Finish round 8 with nobody out: the end screen reads "Dawn breaks" and reveals who was possessed.
 4. A clean guest who escapes during round 8 still wins.
 5. Practice (the plain address): the header reads "Round 1", with no "of 8", and never ends by itself.
+
+
+# Lobby art pass — the starting room to the reference's quality (current)
+
+Style target: `docs/art-reference.jpg` (the image previously at `tools/char-pipeline/ref/hotel-reference.jpg`;
+copied to the path the brief names). Only the Fourth Floor Landing changed; no rule, number, room size,
+doorway, furniture footprint or interface panel changed. Comparison images: `docs/art-pass/`.
+
+## What changed
+- The lobby is one model built in Blender from the game's own room data, with soft light, contact
+  shadows and warm lamp/sconce pools baked in (`tools/lobby-pipeline/`, loaded by `src/render/bakedRoom.js`).
+  Dark walnut raised panelling with brass inlay, crown moulding and a dark cap at one cut height;
+  cream stone floor; two burgundy rugs with gold borders; red velvet sofa and armchair; round walnut
+  table; walnut console with brass pulls; brass lamps with warm shades; sconces; gilt-framed paintings;
+  plants in brass-banded planters; a walnut lift in a brass frame; walnut door casings with brass
+  plinths and thresholds. The previous hand-coded lobby (`hallDeco.js`) is gone.
+- Walls fold down onto a dark cut cap when the camera looks over them, like a cut architectural model.
+- Doorways (whole hotel): the yellow blocks are replaced by a soft glow at the threshold, a faint light
+  spill in openings to undiscovered rooms, and a gently pulsing gold ring in front of each usable door.
+- Choosing a door draws a dotted gold path from the guest and a tag over the door ("Explore · 1 AP").
+- Camera lowered to 42° (was 56°) and slightly closer; `?camera=classic` shows the old view.
+- `?stats=1` shows frames per second, the slowest frame, draw calls and triangles, for the iPad.
+
+## Tests
+rules-check, logic-check, browser-practice, browser-hotseat and the new browser-lobby (31 checks: model
+loaded and matched to the data, walkable start spots, cutaway both ways, door cues, path + tag, cancel/
+confirm, camera angles, stats readout, budgets, clean console), from the root and the `/Gaming-App/`
+sub-path.
+
+## Performance (headless Chromium, start view; iPad numbers need `?stats=1` on the device)
+| | before | after |
+|---|---|---|
+| Draw calls | 271 | 89 |
+| Triangles | 56k | 87k |
+| Textures | 29 | 9 |
+| Per-pixel lighting on lobby surfaces | Lambert × ~19 point lights | none (baked) |
+| CPU time to submit a frame | 2.6 ms | 2.3 ms |
+| Lobby download | — | 2.5 MB model + 0.8 MB light maps |
+
+## What still differs from the reference
+- The reference is a diagonal (45°) isometric view; the game's camera snaps in 90° steps (a concept
+  default), so the lobby is seen square-on. A diagonal default would be a product decision.
+- The reference shows neighbouring rooms around the lobby; here they stay dark until discovered (a rule).
+- Seating: the reference has a sofa and two armchairs; the lobby keeps its existing footprints (one
+  sofa, one armchair) so pathfinding is unchanged.
+- The floor reads paler and its tile grid more visible than the reference's warm beige; the walls are a
+  little darker overall, the velvet a little brighter.
+- No door number plaques; paintings are simple placeholders.
+- The characters are unchanged (separate pass), so they are lit live while the room is baked.
+
+## What to test on the iPad
+1. Open the preview, tap Begin: the lobby should look like the side-by-side in `docs/art-pass/`.
+2. Rotate with ↺ ↻: the wall nearest you folds down to a low dark-capped stub; nothing floats.
+3. Tap a gold ring by a door: a dotted path and an "Explore · 1 AP" tag appear; Cancel clears them;
+   Move walks you through.
+4. Add `?camera=classic` to compare the old angle; add `?stats=1` and note the fps / worst ms.
+5. Walk around the furniture and into every doorway: nothing should block where it did not before.

@@ -75,7 +75,12 @@ const put = async (room, ap = 4) => place(await game(() => window.__game.state.a
 const give = (index, cards) => page.evaluate(({ index, cards }) => {
   const g = window.__game; g.state.players[index].hand.push(...cards); g.refresh();
 }, { index, cards });
+// Leaving a page while its furniture is still downloading cancels those downloads, and the game
+// rightly warns that a model could not load. So before every navigation, let the current page
+// finish dressing its rooms. (A genuinely missing model still fails the console check.)
+const dressed = () => page.waitForFunction(() => !window.__game || window.__game.dressingDone(), null, { timeout: 90000, polling: 200 });
 async function load(query) {
+  if (page.url().startsWith('http')) await dressed();
   const u = baseUrl + (query ? (baseUrl.includes('?') ? '&' : '?') + query : '');
   await page.goto(u, { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__game && !document.getElementById('btn-begin').disabled, null, { timeout: 45000 });
@@ -103,8 +108,8 @@ const plainRoom = () => game(() => {
   return g.floor.roomList.find(r => r.searchable && !r.dark && !g.state.lockedRooms.has(r.id) && !g.state.roomDrops.has(r.id)).id;
 });
 const finish = async () => {
-  // A request cut off by the test's own page navigation (ERR_ABORTED) is harness noise, not a game error.
-  const noisy = consoleMessages.filter(m => !/favicon/i.test(m) && !/requestfailed:.*ERR_ABORTED/.test(m));
+  await dressed();
+  const noisy = consoleMessages.filter(m => !/favicon/i.test(m));
   check(noisy.length === 0, noisy.length ? `console noise:\n    ${noisy.slice(0, 6).join('\n    ')}` : 'no console errors or failed requests (clean)');
   await browser.close();
 };
@@ -341,6 +346,38 @@ check(await game(() => window.__game.isFinished() && window.__game.state.won ===
 check(/keeps them/i.test(await page.textContent('#end-title')) && /Possessed:/.test(await page.textContent('#end-summary')), 'the end screen reveals the possessed');
 check((await page.textContent('#btn-restart')).trim() === 'New match', 'and offers a new match');
 
+console.log('\n8b. dawn');
+await load('mode=hotseat&players=6&seed=4242');
+await tap('#btn-begin'); await throughRoles(); await intoTurn();
+check((await page.textContent('#round')).trim() === 'Round 1 of 8', 'the header reads "Round 1 of 8"');
+check(!(await page.evaluate(() => document.getElementById('round').classList.contains('final'))), 'round 1 is not marked as the last');
+// Jump to the second-to-last turn of round 8 and hand the device on.
+await game(() => { const s = window.__game.state; s.players.forEach((p, i) => { p.possessed = i === 0; }); s.round = 8; s.activeIndex = 4; window.__game.refresh(); });
+check(/Round 8 of 8/.test(await page.textContent('#round')) && /Final round/.test(await page.textContent('#round')),
+  `the last round is marked in the header ("${(await page.textContent('#round')).trim()}")`);
+check(await page.evaluate(() => document.getElementById('round').classList.contains('final')), 'and shown in the warning colour');
+const fits = await page.evaluate(() => {
+  const r = document.getElementById('round').getBoundingClientRect();
+  const strip = document.getElementById('players-strip').getBoundingClientRect();
+  const overlap = r.left < strip.right && r.right > strip.left && r.top < strip.bottom && r.bottom > strip.top;
+  return r.right <= innerWidth + 1 && r.left >= 0 && !overlap;
+});
+check(fits, 'the longer label fits on screen without covering the guest strip');
+await shot('hs-08-final-round');
+await game(() => window.__game.endTurn());
+await page.waitForTimeout(150);
+check(await kind() === 'pass' && /Final round/.test(await page.textContent('#handoff-kicker')), 'the pass-the-device screen warns that this is the final round');
+await next();
+check(/Final round/.test(await page.textContent('#handoff-kicker')), 'and so does the private turn screen');
+await next();
+check(await game(() => !window.__game.isFinished()), 'the last guest still gets their round-8 turn');
+await game(() => window.__game.endTurn());
+await page.waitForTimeout(250);
+check(await game(() => window.__game.isFinished() && window.__game.state.won === 'possessed' && window.__game.state.dawn), 'when round 8 ends with nobody out, dawn breaks and the hotel wins');
+check(/Dawn breaks/.test(await page.textContent('#end-title')), `the end screen says so ("${(await page.textContent('#end-title')).trim()}")`);
+check(/Possessed:/.test(await page.textContent('#end-summary')), 'and reveals who was possessed');
+await shot('hs-09-dawn');
+
 console.log('\n9. a voluntary trade in the lobby');
 await load('mode=hotseat&players=6&seed=4242');
 await tap('#btn-begin'); await throughRoles(); await intoTurn();
@@ -402,6 +439,13 @@ for (const [name, w, h] of [['ipad-landscape', 1180, 820], ['ipad-small', 1024, 
     return t.right <= window.innerWidth + 1 && e.height >= 44 && e.bottom <= window.innerHeight + 1;
   });
   check(bars, `${name}: the clock and the End turn button sit inside the screen`);
+  await game(() => { window.__game.state.round = 8; window.__game.refresh(); });
+  const finalFits = await page.evaluate(() => {
+    const r = document.getElementById('round').getBoundingClientRect();
+    const strip = document.getElementById('players-strip').getBoundingClientRect();
+    return r.right <= innerWidth + 1 && !(r.left < strip.right && r.right > strip.left && r.top < strip.bottom && r.bottom > strip.top);
+  });
+  check(finalFits, `${name}: the final-round label fits without covering the guest strip`);
   await shot(`hs-07-${name}`);
 }
 await page.setViewportSize({ width: 1180, height: 820 });

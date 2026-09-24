@@ -9,7 +9,7 @@ import { lanternCount, countType, countableCount, hasEscapeLanterns } from '../s
 import {
   createState, activePlayer, nextPlayer, endTurn, enterRoom, checkWin, canEscape, lockableRooms,
   usableDoorways, pendingEncounters, lockEncounter, hasEncounterLock, playersInRoom, canAffordRoute,
-  isLocked, isBarricaded, doorwayPassable, adjacentLockedRooms, convertToPossessed,
+  isLocked, isBarricaded, doorwayPassable, adjacentLockedRooms, convertToPossessed, dawnHasBroken, isFinalRound,
 } from '../src/game/state.js';
 import {
   search, canSearch, useBandage, useUnlock, useBarricade, resolveFullHand, discardCard, overHandLimit,
@@ -48,7 +48,8 @@ check(rules.deck.lantern === 12 && rules.deck.bandage === 7 && rules.deck.flashl
 check(!('hint' in rules.cards) && !('distraction' in rules.cards) && !('trinket' in rules.cards), 'no Hint, Distraction or Trinket cards');
 check(!('possession' in rules.deck), 'Possession cards are never in the deck');
 check(rules.onlineMode === false, 'no server, no networking');
-check(!('roundLimit' in rules) && !('objectiveCount' in rules), 'no round limit and no public objectives in this ruleset');
+check(rules.roundLimit === 8, 'dawn deadline: 8 rounds');
+check(!('objectiveCount' in rules), 'no public objectives in this ruleset');
 
 console.log('\nsetup');
 {
@@ -409,9 +410,41 @@ console.log('\nescape and winning');
   const s2 = hs(23);
   cleanOnes(s2).forEach(p => { p.alive = false; });
   check(checkWin(s2, floor) === 'possessed', 'every clean guest dead: the hotel wins');
+  // DAWN: played out turn by turn through the real endTurn, not by setting the round directly.
   const s3 = hs(24);
-  s3.round = 50;
-  check(checkWin(s3, floor) === null, 'there is no round limit');
+  s3.players.forEach(p => { p.possessed = false; }); s3.players[5].possessed = true;   // nobody converts anyone here
+  let before = true;
+  while (s3.round < rules.roundLimit) { endTurn(s3, floor); if (checkWin(s3, floor)) before = false; }
+  check(before && !s3.finished, 'no dawn during rounds 1 to 7');
+  check(isFinalRound(s3) && !dawnHasBroken(s3), 'round 8 is the final round, and it is still being played');
+  for (let i = 0; i < 5; i++) { endTurn(s3, floor); if (checkWin(s3, floor)) before = false; }
+  check(before && s3.round === rules.roundLimit, 'every guest but the last has had their round-8 turn: still no dawn');
+  endTurn(s3, floor);
+  check(s3.round === rules.roundLimit + 1 && checkWin(s3, floor) === 'possessed' && s3.dawn && s3.finished,
+    'the moment round 8 ends with nobody out, dawn breaks and the hotel wins');
+  // An escape on the very last turn beats dawn.
+  const s4 = hs(29);
+  s4.round = rules.roundLimit; s4.activeIndex = 5;
+  const K = cleanOnes(s4).find(p => p.index === 5) || cleanOnes(s4)[0];
+  s4.activeIndex = K.index;
+  K.hand = [{ id: 'e1', type: 'lantern' }, { id: 'e2', type: 'lantern' }, { id: 'e3', type: 'lantern' }];
+  K.currentRoom = floor.exitRoom;
+  check(checkWin(s4, floor, K) === 'humans' && !s4.dawn, 'a clean guest who escapes during round 8 wins — dawn has not broken yet');
+  // Dead guests don't stretch the night: a round is one turn for every LIVING guest.
+  const s5 = hs(30);
+  s5.players.forEach(p => { p.possessed = false; }); s5.players[0].possessed = true;
+  s5.players[2].alive = false; s5.players[4].alive = false;
+  let turns = 0;
+  while (!checkWin(s5, floor) && turns < 200) { endTurn(s5, floor); turns++; }
+  check(s5.dawn && turns === rules.roundLimit * 4, `with four guests alive, dawn breaks after ${turns} turns (8 rounds of 4)`);
+}
+{
+  // Practice has no deadline.
+  applyMode('practice');
+  const ps = createState(floor, roster.slice(0, 1), rules.practiceSeed, { mode: 'practice' });
+  ps.round = 50;
+  check(checkWin(ps, floor) === null && !dawnHasBroken(ps), 'practice: no deadline, even in round 50');
+  applyMode('hotseat', 6);
 }
 {
   // Practice: alone, find three Lanterns and get out.

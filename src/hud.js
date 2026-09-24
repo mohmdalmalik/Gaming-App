@@ -8,6 +8,7 @@ import { canSearch } from './game/actions.js';
 import { rules } from './data/rules.js';
 import { countableCount } from './game/cards.js';
 import { makePortrait } from './ui/portrait.js';
+import { roundLabel, finalRoundShort, isFinal } from './ui/roundLabel.js';
 
 const MAX_BACKS = 8; // fanned face-down cards drawn before we rely on the count badge alone
 
@@ -148,7 +149,10 @@ export function createHud(doc, cfg) {
       const room = floor.rooms.get(p.currentRoom);
       el.room.textContent = room?.name ?? '—';
       el.safeBadge.hidden = !room?.safe;
-      el.round.textContent = `Round ${state.round}`;
+      // "Round 3 of 8"; the last round before dawn is marked in words and colour.
+      const last = isFinal(state) && !state.finished;
+      el.round.textContent = last ? `${roundLabel(state)} · ${finalRoundShort}` : roundLabel(state);
+      el.round.classList.toggle('final', last);
       // Practice is a single guest: the top strip of other players has nothing to show.
       el.topCenter.hidden = state.players.length < 2;
       el.restartPractice.hidden = !rules.practiceMode;

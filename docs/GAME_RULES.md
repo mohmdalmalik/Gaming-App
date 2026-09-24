@@ -5,13 +5,14 @@ Guests are trapped on a hotel floor. Lanterns are the way out: a clean guest car
 
 ## Players
 4–6, tuned for 6. Hot-seat on one iPad for testing; the real game will be online, one device each.
-- Practice mode: one guest alone finds three Lanterns and reaches the exit. No meetings, no possessed guest.
+- Practice mode: one guest alone finds three Lanterns and reaches the exit. No meetings, no possessed guest, no deadline.
 
 ## Turn
 - 4 action points (AP), never carried over.
 - Move into any adjacent room, new or already known: 1 AP. Search: 1 AP. Use a card: 1 AP. Repositioning inside a room: free.
 - 45-second timer for the active player's actions. It pauses during meetings and pass-the-device screens. When it runs out, the turn ends. ?timer=off disables it.
 - A round = every living guest takes one turn.
+- Dawn deadline: the match lasts at most 8 rounds. The round is shown as "Round 3 of 8", and the final round before dawn is clearly marked.
 
 ## Health
 - 3 health bars. Bandage restores 1 (max 3).
@@ -47,7 +48,7 @@ Guests are trapped on a hotel floor. Lanterns are the way out: a clean guest car
 
 ## Winning
 - Clean side: one clean guest escapes with three Lanterns.
-- Possessed side: every living guest is possessed, or every clean guest is dead.
+- Possessed side: every living guest is possessed, or every clean guest is dead, or dawn breaks — no clean guest has escaped when round 8 ends.
 
 ## Rooms
 - Start in the lobby. Rooms are revealed by entering them and stay visible.

@@ -34,6 +34,9 @@ export const rules = {
   turnTimerEnabled: false,  // practice: off. Hot-seat: on. ?timer=off disables it anywhere.
   turnTimerSeconds: 45,     // counts the active player's actions only; pauses in meetings and
                             // on every pass-the-device screen
+  // Dawn deadline: if no clean guest has escaped when this round ends, dawn breaks and the hotel
+  // wins. Hot-seat only — practice has no deadline.
+  roundLimit: 8,
 
   // --- Health --------------------------------------------------------------------------------
   maxHealth: 3,

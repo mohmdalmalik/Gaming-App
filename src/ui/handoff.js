@@ -11,6 +11,7 @@
 import { rules } from '../data/rules.js';
 import { CARDS, countableCards, countableCount } from '../game/cards.js';
 import { cardTile } from './cards.js';
+import { roundLabel, finalRoundNote, isFinal } from './roundLabel.js';
 
 export function createHandoff(doc) {
   const el = {
@@ -102,7 +103,8 @@ export function createHandoff(doc) {
 
     privateTurn(state, floor, player, handlers) {
       reset('turn');
-      el.kicker.textContent = `Round ${state.round} · ${rules.actionPointsPerTurn} action points · health ${player.health} of ${rules.maxHealth}`;
+      el.kicker.textContent = `${roundLabel(state)} · ${rules.actionPointsPerTurn} action points · health ${player.health} of ${rules.maxHealth}`;
+      if (isFinal(state)) el.kicker.textContent = `${finalRoundNote} · ${el.kicker.textContent}`;
       el.title.textContent = `${player.name}'s turn`;
       const room = floor.rooms.get(player.currentRoom);
       const lanterns = player.hand.filter(c => c.type === 'lantern').length;

@@ -1,8 +1,10 @@
 // Balance simulation (dev tool, not part of the game).
-//   node tools/balance/hotseat-sim.mjs [matches] [players]
+//   node tools/balance/hotseat-sim.mjs [matches] [players]            the rules as they stand
+//   node tools/balance/hotseat-sim.mjs [matches] [players] --compare  plus three Lantern variants
 //
-// Plays whole matches through the PURE rules engine — no browser — with simple bots, under the
-// approved rules and three comparison variants, and prints them side by side:
+// Plays whole matches through the PURE rules engine — no browser — with simple bots. By default
+// it reports the approved rules, including what the board looked like when dawn broke. With
+// --compare it also runs three comparison variants side by side:
 //
 //   blocking Lantern:  'discard'  (APPROVED — used up)   vs  'attacker' (goes to the possessed guest)
 //   Lanterns at start: 0 dealt    (APPROVED — search only) vs  1 dealt to each guest
@@ -27,7 +29,8 @@ const N = parseInt(process.argv[2], 10) || 400;
 const PLAYERS = parseInt(process.argv[3], 10) || 6;
 applyMode('hotseat', PLAYERS);
 const floor = buildFloor(floor1, config);
-const MAX_TURNS = 600;          // 100 rounds at six players: a match still going is "never ends"
+const COMPARE = process.argv.includes('--compare');
+const MAX_TURNS = 600;          // a safety net: with the dawn deadline no match should get near it
 const lanterns = hand => hand.filter(c => c.type === 'lantern');
 const rnd = arr => arr[Math.floor(Math.random() * arr.length)];
 
@@ -181,7 +184,15 @@ function match(seed) {
     deck: lanterns(st.drawPile).length, discard: lanterns(st.discardPile).length,
     floor: [...st.roomDrops.values()].reduce((n, cards) => n + lanterns(cards).length, 0),
   };
-  return { won: st.won, rounds: st.round, finished: st.finished, m, where,
+  // At dawn: could either side still have won? "Stuck" = the clean side can never reach three
+  // Lanterns (not counting any held by the possessed) AND the hotel has no Possession cards left.
+  const possessionLeft = st.players.filter(q => q.alive).reduce((n, q) => n + q.hand.filter(c => c.type === 'possession').length, 0);
+  const cleanCanReach = where.clean + where.deck + where.floor >= rules.lanternsToEscape;
+  const dawnState = !st.dawn ? null
+    : !cleanCanReach && possessionLeft === 0 ? 'stuck'
+      : !cleanCanReach ? 'cleanLockedOut'
+        : 'inPlay';
+  return { won: st.won, dawn: !!st.dawn, dawnState, rounds: Math.min(st.round, rules.roundLimit), finished: st.finished, m, where,
     possessedAtEnd: st.players.filter(q => q.alive && q.possessed).length,
     possessionCardsLeft: st.players.filter(q => q.alive).reduce((n, q) => n + q.hand.filter(c => c.type === 'possession').length, 0),
     cleanAlive: st.players.filter(q => q.alive && !q.possessed).length };
@@ -190,10 +201,13 @@ function match(seed) {
 function run(label, block, dealt) {
   rules.lanternBlock = block; rules.lanternsDealtEach = dealt;
   const out = { label, humans: 0, hotel: 0, never: 0, rounds: [], roundsH: [], roundsP: [], sums: {}, perRound: {},
+    dawn: 0, dawnStates: { stuck: 0, cleanLockedOut: 0, inPlay: 0 }, hotelOther: 0, lanternsAtDawn: [],
     neverWhy: { starved: 0, hoarded: 0, other: 0 }, hoardSum: 0, firstPossRound: [] };
   for (let i = 1; i <= N; i++) {
     const r = match(i * 7919 + 13);
     if (r.won === 'humans') out.humans++; else if (r.won === 'possessed') out.hotel++; else out.never++;
+    if (r.dawn) { out.dawn++; out.dawnStates[r.dawnState]++; out.lanternsAtDawn.push(r.where); }
+    else if (r.won === 'possessed') out.hotelOther++;
     if (r.finished) { out.rounds.push(r.rounds); (r.won === 'humans' ? out.roundsH : out.roundsP).push(r.rounds); }
     for (const [k, v] of Object.entries(r.m)) { out.sums[k] = (out.sums[k] || 0) + v; out.perRound[k] = (out.perRound[k] || 0) + v / r.rounds; }
     if (!r.finished) {
@@ -210,39 +224,57 @@ function run(label, block, dealt) {
   return out;
 }
 
-const variants = [
-  run('Approved: burned · search only', 'discard', 0),
-  run('Burned · 1 dealt each', 'discard', 1),
-  run('To possessed · search only', 'attacker', 0),
-  run('To possessed · 1 dealt each', 'attacker', 1),
-];
-
 const pct = (n) => `${Math.round(n / N * 100)}%`;
 const avg = (v, k) => (v.sums[k] / N).toFixed(2);
 const median = a => (a.length ? [...a].sort((x, y) => x - y)[Math.floor(a.length / 2)] : '—');
 const perRound = (v, k) => (v.perRound[k] / N).toFixed(2);
-const rows = [
-  ['Clean guests win', v => pct(v.humans)],
-  ['The hotel wins', v => pct(v.hotel)],
-  ['Never ends (100+ rounds)', v => pct(v.never)],
-  ['  … clean side can never reach 3 Lanterns', v => pct(v.neverWhy.starved + v.neverWhy.hoarded)],
-  ['  … Lanterns stuck with the possessed', v => (v.never ? (v.hoardSum / v.never).toFixed(1) : '—')],
-  ['  … and no Possession cards left', v => (v.never ? `${Math.round((v.deadlock || 0) / v.never * 100)}% of them` : '—')],
-  ['  … clean guests still alive', v => (v.never ? (v.cleanLeftSum / v.never).toFixed(1) : '—')],
-  ['Rounds when the clean side wins (median)', v => String(median(v.roundsH))],
-  ['Rounds when the hotel wins (median)', v => String(median(v.roundsP))],
-  ['Meetings per round', v => perRound(v, 'meetings')],
-  ['Possession attempts', v => avg(v, 'attempts')],
-  ['  … succeeded', v => avg(v, 'possessed')],
-  ['  … blocked by a Lantern', v => avg(v, 'blocked')],
-  ['Lanterns found by searching', v => avg(v, 'found')],
-  ['Lanterns burned', v => avg(v, 'burned')],
-  ['Attacks / deaths', v => `${avg(v, 'attacks')} / ${avg(v, 'deaths')}`],
+
+const approved = run('Approved rules', 'discard', 0);
+const v = approved;
+const ofDawn = n => (v.dawn ? `${n} (${Math.round(n / v.dawn * 100)}% of dawn matches)` : '0');
+const meanAt = k => (v.lanternsAtDawn.length ? (v.lanternsAtDawn.reduce((a, w) => a + w[k], 0) / v.lanternsAtDawn.length).toFixed(1) : '—');
+console.log(`${N} matches, ${PLAYERS} players, the rules as they stand (dawn after round ${rules.roundLimit})\n`);
+const lines = [
+  ['Clean guests win', pct(v.humans)],
+  ['The hotel wins', pct(v.hotel)],
+  ['  … by possessing or killing every clean guest', pct(v.hotelOther)],
+  ['  … at dawn', pct(v.dawn)],
+  ['Matches that never end', `${v.never}`],
+  ['Match length, median rounds (all matches)', String(median(v.rounds))],
+  ['  … when the clean side wins', String(median(v.roundsH))],
+  ['  … when the hotel wins', String(median(v.roundsP))],
+  ['Reached dawn', `${v.dawn} of ${N}`],
+  ['  … already stuck (neither side could win)', ofDawn(v.dawnStates.stuck)],
+  ['  … clean side locked out, hotel could still convert', ofDawn(v.dawnStates.cleanLockedOut)],
+  ['  … still genuinely in play (3 Lanterns reachable)', ofDawn(v.dawnStates.inPlay)],
+  ['Lanterns at dawn: clean hands / possessed hands / deck / floor', `${meanAt('clean')} / ${meanAt('possessed')} / ${meanAt('deck')} / ${meanAt('floor')}`],
+  ['Meetings per round', perRound(v, 'meetings')],
+  ['Possession attempts / succeeded / blocked', `${avg(v, 'attempts')} / ${avg(v, 'possessed')} / ${avg(v, 'blocked')}`],
+  ['Lanterns found / burned', `${avg(v, 'found')} / ${avg(v, 'burned')}`],
+  ['Attacks / deaths', `${avg(v, 'attacks')} / ${avg(v, 'deaths')}`],
 ];
-console.log(`${N} matches per column, ${PLAYERS} players\n`);
-const w0 = 42, w = 30;
-console.log(''.padEnd(w0) + variants.map(v => v.label.padEnd(w)).join(''));
-for (const [name, f] of rows) console.log(name.padEnd(w0) + variants.map(v => f(v).padEnd(w)).join(''));
-console.log('\n| | ' + variants.map(v => v.label).join(' | ') + ' |');
-console.log('| --- |' + variants.map(() => ' --- |').join(''));
-for (const [name, f] of rows) console.log(`| ${name.trim()} | ${variants.map(f).join(' | ')} |`);
+for (const [name, val] of lines) console.log(name.padEnd(64) + val);
+console.log('\n| | |\n| --- | --- |');
+for (const [name, val] of lines) console.log(`| ${name.trim()} | ${val} |`);
+
+if (COMPARE) {
+  const variants = [
+    approved,
+    run('Burned · 1 dealt each', 'discard', 1),
+    run('To possessed · search only', 'attacker', 0),
+    run('To possessed · 1 dealt each', 'attacker', 1),
+  ];
+  const rows = [
+    ['Clean guests win', x => pct(x.humans)],
+    ['The hotel wins', x => pct(x.hotel)],
+    ['  … at dawn', x => pct(x.dawn)],
+    ['Never ends', x => String(x.never)],
+    ['Median rounds', x => String(median(x.rounds))],
+    ['Possessions succeeded / blocked', x => `${avg(x, 'possessed')} / ${avg(x, 'blocked')}`],
+    ['Lanterns found / burned', x => `${avg(x, 'found')} / ${avg(x, 'burned')}`],
+  ];
+  console.log('\nComparison (only the first column is the game):\n');
+  console.log('| | ' + variants.map(x => x.label).join(' | ') + ' |');
+  console.log('| --- |' + variants.map(() => ' --- |').join(''));
+  for (const [name, f] of rows) console.log(`| ${name.trim()} | ${variants.map(f).join(' | ')} |`);
+}

@@ -22,7 +22,8 @@ list). Two ways to play the same rules, chosen on the start screen:
   Possessor with three Possession cards, private role screens, forced meetings with Trade or
   Attack, trades chosen in private on the passed device, health and weapons, Lanterns that block
   possession (and are used up doing it), three Lanterns to escape, private search results, a
-  45-second turn clock. A testing tool for the real online game.
+  45-second turn clock, and a dawn deadline: if nobody has escaped when round 8 ends, the hotel
+  wins. A testing tool for the real online game.
 
 **Online multiplayer is not implemented.** There is no server, no networking, no accounts and no
 database in this project. No real art beyond the hall and Victor, no sound, no menu yet.
@@ -60,6 +61,8 @@ Published with GitHub Pages from `main`: **https://mohmdalmalik.github.io/Gaming
   must Trade or Attack. In a trade each side picks a card in private and sees only what they
   received. Give a Lantern and a Possession card cannot take you. The lobby is safe.
 - **Escape** — a clean guest carrying three Lanterns walks into the Fire Exit.
+- **Dawn** (hot-seat) — the header reads "Round 3 of 8"; round 8 is marked as the final round.
+  If nobody has escaped when it ends, dawn breaks and the hotel wins. Practice has no deadline.
 - **End turn** — refills action points to 4; if you hold more than 6 ordinary cards you discard
   first (Lanterns count; Possession cards never do).
 
@@ -121,7 +124,7 @@ working checkpoint for the character + interface phase.)
 
 ## Changing the rules or the floor
 
-Every rule number — action points, costs, health, the deck, Lanterns to escape, locked rooms, the
+Every rule number — action points, costs, health, the deck, Lanterns to escape, the dawn round limit, locked rooms, the
 timer — is in `src/data/rules.js`, which implements `docs/GAME_RULES.md`. The floor (rooms, their
 doorways, furniture, which rooms are dark, moods) is in `src/data/floor1.js`. Change those files,
 not the game code — and per `CLAUDE.md`, not without the owner's approval of a before/after list.
@@ -136,5 +139,5 @@ node tests/rules-check.mjs        # the rules engine against docs/GAME_RULES.md 
 node tests/logic-check.mjs        # floor, map topology, grid, pathfinding
 node tests/browser-practice.mjs   # practice mode in a real browser [--screens]
 node tests/browser-hotseat.mjs    # hot-seat in a real browser: roles, private trades, attacks, escape [--screens]
-node tools/balance/hotseat-sim.mjs 400 6   # 400 six-player matches x 4 rule variants, side by side
+node tools/balance/hotseat-sim.mjs 400 6   # 400 six-player matches under the rules as they stand (--compare for variants)
 ```

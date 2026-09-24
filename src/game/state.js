@@ -76,6 +76,7 @@ export function resetState(state, floor, seed) {
   state.log = [];                        // PUBLIC log — never a hidden role
   state.finished = false;
   state.won = null;            // 'humans' | 'possessed' | null
+  state.dawn = false;          // true when the hotel won because dawn broke
   return state;
 }
 
@@ -182,9 +183,14 @@ export const canEscape = (state, floor, player) =>
   player.alive && !player.possessed && hasEscapeLanterns(player.hand)
   && !!floor.rooms.get(player.currentRoom)?.isExit;
 
+// Dawn: the match has run past its last round. `state.round` moves on as the last guest of a round
+// finishes, so this is true the moment round `roundLimit` ends. Practice has no deadline.
+export const dawnHasBroken = state => !state.practice && state.round > rules.roundLimit;
+export const isFinalRound = state => !state.practice && state.round === rules.roundLimit;
+
 // Decide the game. `enteredExitBy` is the guest who just stepped into the exit, if any. The exit
 // is resolved FIRST: a clean guest carrying three Lanterns escapes before anything else can
-// happen to them there. There is no round limit in this ruleset.
+// happen to them there — even on the last turn before dawn.
 export function checkWin(state, floor, enteredExitBy = null) {
   if (state.finished) return state.won;
   if (enteredExitBy && canEscape(state, floor, enteredExitBy)) {
@@ -196,6 +202,10 @@ export function checkWin(state, floor, enteredExitBy = null) {
   // The possessed side wins once no living clean guest remains.
   if (alive.length === 0 || !alive.some(p => !p.possessed)) {
     state.won = 'possessed'; state.finished = true; return 'possessed';
+  }
+  // ...or when round `roundLimit` has ended with nobody out: dawn breaks.
+  if (dawnHasBroken(state)) {
+    state.won = 'possessed'; state.dawn = true; state.finished = true; return 'possessed';
   }
   return null;
 }

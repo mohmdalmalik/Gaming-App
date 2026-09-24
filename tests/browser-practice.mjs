@@ -73,7 +73,12 @@ const put = async (room, ap = 4) => place(await game(() => window.__game.state.a
 const give = (index, cards) => page.evaluate(({ index, cards }) => {
   const g = window.__game; g.state.players[index].hand.push(...cards); g.refresh();
 }, { index, cards });
+// Leaving a page while its furniture is still downloading cancels those downloads, and the game
+// rightly warns that a model could not load. So before every navigation, let the current page
+// finish dressing its rooms. (A genuinely missing model still fails the console check.)
+const dressed = () => page.waitForFunction(() => !window.__game || window.__game.dressingDone(), null, { timeout: 90000, polling: 200 });
 async function load(query) {
+  if (page.url().startsWith('http')) await dressed();
   const u = baseUrl + (query ? (baseUrl.includes('?') ? '&' : '?') + query : '');
   await page.goto(u, { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__game && !document.getElementById('btn-begin').disabled, null, { timeout: 45000 });
@@ -101,8 +106,8 @@ const plainRoom = () => game(() => {
   return g.floor.roomList.find(r => r.searchable && !r.dark && !g.state.lockedRooms.has(r.id) && !g.state.roomDrops.has(r.id)).id;
 });
 const finish = async () => {
-  // A request cut off by the test's own page navigation (ERR_ABORTED) is harness noise, not a game error.
-  const noisy = consoleMessages.filter(m => !/favicon/i.test(m) && !/requestfailed:.*ERR_ABORTED/.test(m));
+  await dressed();
+  const noisy = consoleMessages.filter(m => !/favicon/i.test(m));
   check(noisy.length === 0, noisy.length ? `console noise:\n    ${noisy.slice(0, 6).join('\n    ')}` : 'no console errors or failed requests (clean)');
   await browser.close();
 };
@@ -133,6 +138,7 @@ check(await visible('#health-row') && await game(() => document.querySelectorAll
 check(!(await visible('.hud-top-center')), 'no guest strip for a single guest');
 check(!(await visible('#btn-trade')) && !(await visible('#possess-tint')) && !(await visible('#turn-timer')), 'no trade, no tint, no clock');
 check(await visible('#btn-restart-practice'), 'Restart practice is there');
+check((await page.textContent('#round')).trim() === 'Round 1', 'the round has no "of 8": practice has no dawn deadline');
 check(await game(() => [...window.__game.doorways.views.values()].filter(v => v.blink.visible).length) === 4, 'four usable doors blink from the lobby');
 
 console.log('\n3. movement');

@@ -482,3 +482,14 @@ the lessons). Key decisions:
   outer cards out of reach on an iPad; with Lanterns counting toward the hand limit, full hands are
   common, so the rows now wrap with compact tiles and the browser test checks every card is on
   screen and tappable.
+
+
+## Approved rule change — the dawn deadline
+- **`rules.roundLimit` (8) is checked in `checkWin`, hot-seat only.** `state.round` advances as the
+  last living guest of a round ends their turn, so `round > roundLimit` is true exactly when round 8
+  has ended. The dawn check comes after the escape check and after the "no clean guest left" check,
+  so an escape on the last turn of round 8 still wins, and a wipe-out is reported as a wipe-out.
+  `state.dawn` records why the hotel won, for the end screen. Practice never checks it.
+- **One place writes the round** (`src/ui/roundLabel.js`): "Round 3 of 8" in hot-seat, "Round 3" in
+  practice. The final round is marked in the header (in words and a warning colour), on the
+  pass-the-device screen and on the private turn screen, since those are where people look.

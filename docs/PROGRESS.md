@@ -622,7 +622,7 @@ split between two guests who never manage to meet.
 
 ---
 
-# Approved rule changes — Lanterns are the way out (current)
+# Approved rule changes — Lanterns are the way out (superseded in part by the dawn deadline below)
 
 Applied exactly the owner-approved before/after list: the key pieces are gone and three Lanterns in a
 clean guest's hand open the exit; a Lantern moves normally in an ordinary trade but is used up (with
@@ -710,3 +710,93 @@ whenever it can, otherwise an ordinary card, and never gives up a Lantern.
 6. **Escape**: a clean guest with three Lanterns walks into the Fire Exit → "The guests got out".
    A possessed guest with three does nothing.
 7. **Barricade**: it stays up through everyone else's turn and comes down as your next turn starts.
+
+
+---
+
+# Approved rule change — the dawn deadline (current)
+
+If no clean guest has escaped when round 8 ends, dawn breaks and the hotel wins
+(`rules.roundLimit` = 8). The round reads "Round 3 of 8"; round 8 is marked as the final round in
+the header, on the pass-the-device screen and on the private turn screen. Practice has no deadline.
+Every other rule is unchanged.
+
+## Simulation — 400 six-player matches, the rules as they stand (`node tools/balance/hotseat-sim.mjs 400 6`)
+| | |
+| --- | --- |
+| Clean guests win | 51% |
+| The hotel wins | 49% — 34% by possessing or killing every clean guest, 15% at dawn |
+| Matches that never end | 0 |
+| Match length, median rounds | 3 (3 when either side wins) |
+| Reached dawn | 61 of 400 |
+| … already stuck: neither side could have won | 58 (95%) |
+| … clean side locked out, hotel could still convert | 1 (2%) |
+| … still genuinely in play: three Lanterns within the clean side's reach | 2 (3%) |
+| Lanterns at dawn: clean hands / possessed hands / deck / floor | 0.4 / 8.4 / 0.3 / 0 |
+| Possession attempts / succeeded / blocked | 4.3 / 2.5 / 1.8 |
+| Lanterns found / burned | 7.9 / 1.8 |
+
+"Stuck" means the clean side can't reach three Lanterns (counting their own, the deck and the floor,
+but not any held by possessed guests) and the hotel has no Possession cards left.
+
+**Recommendations only — nothing has been changed:**
+1. **Dawn fixed the endless matches, but nearly all of them were decided long before round 8.**
+   In 95% of dawn matches the board was already a dead end: the possessed held about 8 of the 12
+   Lanterns and had no Possession cards left. Those tables sit through up to five pointless rounds
+   waiting for dawn. An early end when neither side can win (for example, "the hotel wins at once
+   when the clean side can't reach three Lanterns and the hotel has no Possession cards left") would
+   save that time. It's a rule change, so it's your call.
+2. **Most matches are short.** The median match is three rounds, so the deadline only bites in the
+   stuck matches above. The deadline number is not the lever for balance; the Lantern supply is.
+3. **The balance is now close to even** (51 / 49), mostly because dawn converts what used to be
+   endless matches into hotel wins.
+
+## The flaky hot-seat check — found and fixed
+**Which check:** the last one, "no console errors or failed requests". It was not a rules or clock
+check.
+
+**How it was found:** a frozen copy of the previous commit was run six times while four busy
+processes kept every core loaded, as the simulator did. It failed in two of the first four runs,
+each time on the console check only:
+- `warning: dressing: could not load furniture/bookcaseClosedWide.glb: Failed to fetch`
+- `error: THREE.GLTFLoader: Couldn't load texture Textures/colormap.png`
+
+**Why:** every page load dresses its rooms by downloading furniture models and textures in the
+background, after the page is already usable. The test opens a fresh page for each section. On a
+busy machine the previous page was still downloading when the test left it, the browser cancelled
+those downloads, and the game rightly warned that a model or texture had not loaded. The earlier
+"request aborted" filter hid the network half of the same thing; it was treating the symptom.
+
+**Fix:** the game now records when room dressing has finished (`window.__game.dressingDone()`, a
+test hook). Before every page change, and before the final console check, both browser suites wait
+for it. The "request aborted" filter is removed, so the console check is fully strict again — a
+genuinely missing model or texture still fails the test. Nothing in the game's behaviour changed.
+
+**Proof:** the fixed suite was then run four times under the same load — all four passed.
+
+## Test results
+| Suite | Checks | Result |
+| --- | --- | --- |
+| `tests/rules-check.mjs` | 148 | pass |
+| `tests/logic-check.mjs` | 67 | pass |
+| `tests/browser-practice.mjs` (root and `/Gaming-App/`) | 47 | pass |
+| `tests/browser-hotseat.mjs` (root and `/Gaming-App/`) | 90 | pass |
+
+New checks: no dawn during rounds 1–7 or before the last guest's round-8 turn; dawn the moment round 8
+ends; an escape during round 8 still wins; dead guests don't lengthen the night; practice has no
+deadline; "Round 1 of 8" in the header; the final round marked in the header, on the pass screen and
+on the private turn screen; the final-round label never covers the guest strip at any of the three
+screen sizes; the "Dawn breaks" end screen.
+
+Found on the way (interface only): the first version of the final-round header label was long
+enough to run over the guest strip on an iPad. The header now says "Round 8 of 8 · Final round"; the
+full "dawn breaks when it ends" wording is on the pass and turn screens, where there is room.
+
+## What to test on the iPad
+1. Start a six-player hot-seat match: the header reads "Round 1 of 8".
+2. Play into round 8 (or use `?timer=off` and end turns quickly): the header turns red and reads
+   "Round 8 of 8 · Final round"; each pass-the-device screen and private turn screen says "Final
+   round — dawn breaks when it ends".
+3. Finish round 8 with nobody out: the end screen reads "Dawn breaks" and reveals who was possessed.
+4. A clean guest who escapes during round 8 still wins.
+5. Practice (the plain address): the header reads "Round 1", with no "of 8", and never ends by itself.

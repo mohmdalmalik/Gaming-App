@@ -645,3 +645,6 @@ html, body {
 #fullhand-hand .card-tile .cdesc, #discard-cards .card-tile .cdesc { display: none; }
 #fullhand-overlay .modal:has(#fullhand-hand:not([hidden])) #fullhand-found .card-tile { width: 112px; }
 #fullhand-overlay .modal:has(#fullhand-hand:not([hidden])) #fullhand-found .cdesc { display: none; }
+
+/* The last round before dawn: the header round label says so and turns a warning colour. */
+.round-label.final { color: #f0b4ae; border-color: rgba(207, 74, 64, 0.65); background: rgba(80, 24, 22, 0.55); }

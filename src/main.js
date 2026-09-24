@@ -38,6 +38,7 @@ import { createDiscard } from './ui/discard.js';
 import { createFullHand } from './ui/fullHand.js';
 import { createHandoff } from './ui/handoff.js';
 import { createMeeting } from './ui/meeting.js';
+import { roundLabel, finalRoundNote, isFinal } from './ui/roundLabel.js';
 
 // --- World (pure data + rules) ---------------------------------------------------------
 const floor = buildFloor(floor1, cfg);
@@ -168,7 +169,8 @@ function beginTurn() {
   mood.snap(p.currentRoom);
   syncViews(false);
   refresh();
-  handoff.passTo(p, `Round ${state.round} · turn ${state.turn}`, () => {
+  // The hand-over screen is where everyone looks between turns, so it says so when dawn is next.
+  handoff.passTo(p, isFinal(state) ? `${roundLabel(state)} · ${finalRoundNote}` : roundLabel(state), () => {
     if (p.roleChangePending) {
       p.roleChangePending = false;
       handoff.revealRole(p, { changed: true }, () => openPrivateTurn(p));
@@ -425,9 +427,10 @@ function showEnd() {
   const out = [...state.escaped].map(id => state.players.find(p => p.id === id)?.name).filter(Boolean);
   const parts = [`Possessed: ${evil.length ? evil.join(', ') : 'nobody'}`];
   if (dead.length) parts.push(`Dead: ${dead.join(', ')}`);
-  parts.push(`Round ${state.round}`);
+  parts.push(roundLabel(state));
   const opts = { restartLabel: 'New match' };
   if (state.won === 'humans') overlays.showEnd('The guests got out', `${out.join(', ')} escaped carrying ${rules.lanternsToEscape} Lanterns. ${parts.join(' · ')}`, opts);
+  else if (state.dawn) overlays.showEnd('Dawn breaks', `Round ${rules.roundLimit} has ended and nobody got out. The hotel keeps them. ${parts.join(' · ')}`, opts);
   else overlays.showEnd('The hotel keeps them', `No clean guest is left. ${parts.join(' · ')}`, opts);
 }
 
@@ -594,7 +597,7 @@ function buildStartScreen() {
   const host = document.getElementById('mode-buttons');
   if (sub) {
     sub.textContent = HOTSEAT
-      ? `Hot-seat · ${rules.playerCount} guests, one device · one is secretly possessed · find ${rules.lanternsToEscape} Lanterns and get one clean guest out`
+      ? `Hot-seat · ${rules.playerCount} guests, one device · one is secretly possessed · find ${rules.lanternsToEscape} Lanterns and get one clean guest out before dawn (${rules.roundLimit} rounds)`
       : `Practice mode · explore the hotel alone, find ${rules.lanternsToEscape} Lanterns, reach the fire exit`;
   }
   document.title = HOTSEAT ? `Hotel Escape — Hot-seat (${rules.playerCount})` : 'Hotel Escape — Practice';
@@ -625,9 +628,11 @@ view.compile();
 // Dress the starting room with the real glTF furniture (async — the models are local files,
 // so this is quick). The greybox shows until it loads; if a piece fails the room just keeps
 // its greybox. Recompile once dressed so the new materials don't stall the first frames.
+let dressingDone = false;   // read by the tests: leaving the page mid-download cancels a fetch
 dressRooms(roomViews, floor, cfg)
   .then(() => view.compile())
-  .catch(err => console.warn('room dressing failed:', err && err.message));
+  .catch(err => console.warn('room dressing failed:', err && err.message))
+  .finally(() => { dressingDone = true; });
 
 // --- Game loop ---------------------------------------------------------------------------
 let last = performance.now();
@@ -680,6 +685,7 @@ window.__game = {
   timeLeft: () => timerLeft,
   forceTimeUp: () => { timerLeft = 0.0001; },
   inActionPhase: () => inActionPhase,
+  dressingDone: () => dressingDone,
   publicLog: () => state.log.map(l => l.text),
   notesOf: i => [...(state.players[i].notes || [])],
   possessedIndexes: () => state.players.filter(p => p.possessed).map(p => p.index),

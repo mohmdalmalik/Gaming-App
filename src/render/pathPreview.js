@@ -65,8 +65,13 @@ export function createPathPreview(scene, camera, canvas, container) {
       const [ax, az] = plan.preview?.anchor || plan.waypoints[plan.waypoints.length - 1];
       anchor.set(ax, 2.55, az).project(camera);
       const r = canvas.getBoundingClientRect(), c = container.getBoundingClientRect();
-      label.style.left = `${r.left - c.left + ((anchor.x + 1) / 2) * r.width}px`;
-      label.style.top = `${r.top - c.top + ((1 - anchor.y) / 2) * r.height}px`;
+      // Kept on screen: a door on the far wall can sit near the top edge. (The tag hangs above its
+      // point: `top` is the tag's bottom edge.)
+      const half = (label.offsetWidth || 120) / 2 + 8, tall = (label.offsetHeight || 34) + 12;
+      const x = THREE.MathUtils.clamp(((anchor.x + 1) / 2) * r.width, half, r.width - half);
+      const y = THREE.MathUtils.clamp(((1 - anchor.y) / 2) * r.height, tall + 56, r.height - 12);
+      label.style.left = `${r.left - c.left + x}px`;
+      label.style.top = `${r.top - c.top + y}px`;
     },
     get visible() { return dots.visible; },
     get dotCount() { return dots.count; },

@@ -107,33 +107,38 @@ export function createMap(doc, floor, cfg) {
       }
     }
 
-    // Doorways: a gap between known rooms; a dashed brass mark with a "?" toward the unknown.
-    for (const d of floor.doorways) {
-      const aKnown = state.discovered.has(d.a), bKnown = state.discovered.has(d.b);
-      if (!aKnown && !bKnown) continue;
-      const frontier = aKnown !== bKnown;
-      const locked = isLocked(state, d.a) || isLocked(state, d.b);
-      const sealed = isBarricaded(state, d.id);
+    // Open doorways: a gap between rooms (a padlock on a locked room's door, a bar on a barricade).
+    const doorLine = (d, style, dash = []) => {
       ctx.save();
-      ctx.lineWidth = 4;
-      ctx.strokeStyle = sealed ? '#cf6a5c' : locked ? '#c9a24e' : frontier ? BRASS_BRIGHT : 'rgba(239,231,214,0.35)';
-      ctx.setLineDash(frontier && !locked && !sealed ? [4, 3] : []);
+      ctx.lineWidth = 4; ctx.strokeStyle = style; ctx.setLineDash(dash);
       ctx.beginPath();
       if (d.axis === 'x') { ctx.moveTo(X(d.center[0] - d.width / 2), Z(d.center[1])); ctx.lineTo(X(d.center[0] + d.width / 2), Z(d.center[1])); }
       else { ctx.moveTo(X(d.center[0]), Z(d.center[1] - d.width / 2)); ctx.lineTo(X(d.center[0]), Z(d.center[1] + d.width / 2)); }
       ctx.stroke();
       ctx.restore();
-      // A locked door gets a padlock, a barricade a bar, an unexplored door a question mark.
-      if (locked || sealed || frontier) {
-        ctx.fillStyle = sealed ? '#f0b4ae' : BRASS_BRIGHT;
-        ctx.font = `bold 13px ${serif}`;
-        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-        const side = aKnown ? d.sideB : d.sideA;
-        const off = 0.9;
-        const lx = d.center[0] + (side === 'east' ? -off : side === 'west' ? off : 0);
-        const lz = d.center[1] + (side === 'south' ? -off : side === 'north' ? off : 0);
-        ctx.fillText(sealed ? '▬' : locked ? '🔒' : '?', X(lx), Z(lz));
+    };
+    const mark = (text, x, z, color) => {
+      ctx.fillStyle = color; ctx.font = `bold 13px ${serif}`;
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(text, X(x), Z(z));
+    };
+    const outward = { north: [0, -1], south: [0, 1], east: [1, 0], west: [-1, 0] };
+    for (const d of floor.doorways) {
+      const lockedRoom = isLocked(state, d.a) ? d.a : isLocked(state, d.b) ? d.b : null;
+      const sealed = isBarricaded(state, d.id);
+      doorLine(d, sealed ? '#cf6a5c' : lockedRoom ? '#c9a24e' : 'rgba(239,231,214,0.35)');
+      if (sealed || lockedRoom) {
+        const [ox, oz] = lockedRoom ? outward[d.sideFor(lockedRoom === d.a ? d.b : d.a)] : [0, 0];
+        mark(sealed ? '▬' : '🔒', d.center[0] + ox * 0.9, d.center[1] + oz * 0.9, sealed ? '#f0b4ae' : BRASS_BRIGHT);
       }
+    }
+    // Closed doors: a solid brass door with a "?" beyond it (still to be opened); a jammed door is
+    // drawn as wall.
+    for (const d of floor.frontier) {
+      if (d.jammed) { doorLine(d, 'rgba(120,88,52,0.9)'); continue; }
+      doorLine(d, BRASS_BRIGHT);
+      const [ox, oz] = outward[d.side];
+      mark('?', d.center[0] + ox * 0.9, d.center[1] + oz * 0.9, BRASS_BRIGHT);
     }
 
     // Players: a dot per player in their colour; the active one gets a heading arrow.

@@ -563,3 +563,40 @@ Target: `docs/art-reference.jpg` (style, palette and finish; not its layout or i
   (saves, settings, accounts later) goes through one small storage module that can switch to the
   wrapper's native storage, never scattered `localStorage` calls. Sound must start from a tap (iOS
   rule, already noted under Input).
+
+
+## Approved rule change — the random hotel (supersedes the fixed 18-room floor above)
+- **One pure module grows the map** (`src/game/hotel.js`), fed by a data file of tiles
+  (`src/data/hotel.js`). The floor object it builds keeps the shape the rest of the game already
+  read (rooms, roomList, doorways, walls, bounds, start, exitRoom), plus `frontier` (closed doors),
+  `cells` and `deck`, and it grows in place. `resetState` rebuilds it for every match, seeded, so
+  `?seed=` reproduces a whole hotel. The fixed map (`floor1.js`, `floor.js`) is retired.
+- **Tiles are 8 m squares, the lobby's size.** With one tile size every tile sits on one grid, so a
+  room reached by two different routes always lines up. A smaller standard tile beside the 8 m lobby
+  would put rooms reached along different paths half a tile out of line with each other.
+- **"Fits" means matching every neighbour.** Doorway meets doorway, wall meets wall, the tile keeps a
+  doorway toward the door that was opened, and a random orientation is picked among those that fit.
+  A locked tile never joins the lobby (the old "never next to the lobby" rule, carried over).
+- **Never closing off, made checkable.** Until the Fire Exit is placed, a placement is only allowed if
+  a closed door reachable from the lobby (not through a locked room) still leads to a cell with no
+  other room around it. Any tile, the Fire Exit included, always fits there, so exploring can always
+  continue to the exit. Tested over 400 hotels (logic-check), 400 rules-engine hotels (rules-check)
+  and every simulated match.
+- **Jammed doors (placeholder, awaiting approval):** a door no remaining tile can fit behind stays
+  shut for the match and costs nothing to try. It is rare before the exit is placed (about 1 match
+  in 12 in the generator test), and the rule above guarantees another way on.
+- **Doors cost 1 AP to open, you stay put; entering is a normal move.** Every revealed room is
+  "discovered", so the old doorway-landing logic has nothing to do.
+- **The walkable grid is rebuilt in place after each door** (`Object.assign(grid, buildGrid(...))`),
+  looking rooms up through the tile grid: at most about 30 ms (headless) for a full 24-tile hotel.
+- **Views are made as rooms appear.** `addRoomView` per revealed room, all dropped and rebuilt for a new
+  match. Door leaves (greybox walnut) stand in closed doors and swing open when opened; the ring cue
+  marks doors you can open or walk through. The 2D map draws closed doors with a "?".
+- **A fixed pool of lights.** Rooms no longer own point lights; each lists where its lights are and a
+  pool of 8 (`config.render.lightPool`) is given to those nearest the camera every frame. The light
+  count never changes, so no shader rebuild ever stalls the iPad as the hotel grows.
+- **The lobby keeps its baked art on any layout.** The model now has every side in parts
+  (A | B · door · C | D) plus a plain-wall part F; an open side shows A B C D, a closed-off side A F D.
+  The four bake passes each light only what is actually seen together.
+- **Other rooms are greybox for now.** The earlier Kenney-kit dressing cost 100+ draw calls per room,
+  which does not scale to 24 tiles; room art comes after this system is approved.

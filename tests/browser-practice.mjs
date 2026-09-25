@@ -3,8 +3,8 @@
 // Run:  python3 -m http.server 8123 --bind 127.0.0.1 &   then   node tests/browser-practice.mjs [--screens]
 //       node tests/browser-practice.mjs --url http://127.0.0.1:8123/Gaming-App/   (Pages sub-path)
 //
-// One guest alone under docs/GAME_RULES.md: movement, searching, dark and locked rooms, finding
-// three Lanterns, and the fire exit. No meetings.
+// One guest alone under docs/GAME_RULES.md in a random hotel: opening doors and moving, searching,
+// dark and locked rooms, finding three Lanterns, and the fire exit. No meetings.
 import { chromium } from 'playwright-core';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -58,6 +58,8 @@ const visible = sel => page.evaluate(s => {
 }, sel);
 const kind = () => game(() => window.__game.handoffKind());
 const tap = async sel => { await page.click(sel); await page.waitForTimeout(70); };
+// A search into a full hand asks whether to keep the card; for the staging checks, leave it.
+const leaveIfFull = async () => { if (await game(() => window.__game.fullHandOpen())) await tap('#btn-fullhand-leave'); };
 const next = () => tap('#btn-handoff-next');
 // Stand a guest in a room for real: the figure moves too, or the discovery watcher walks the
 // rules back to where the figure is on the next frame.
@@ -113,20 +115,20 @@ const finish = async () => {
 };
 
 console.log('1. practice loads');
-await load('');
+await load(`seed=${process.env.PRACTICE_SEED || 20260917}`);   // a fixed hotel, so every run explores the same one
 const info = await game(() => ({
-  problems: window.__game.floor.problems, rooms: window.__game.floor.roomList.length,
+  problems: window.__game.floor.problems, rooms: window.__game.hotelRooms().length,
   practice: window.__game.state.practice, players: window.__game.state.players.length,
-  ap: window.__game.rules.actionPointsPerTurn, move: window.__game.rules.actionCost.move, discover: window.__game.rules.actionCost.discover,
+  ap: window.__game.rules.actionPointsPerTurn, move: window.__game.rules.actionCost.move, open: window.__game.rules.actionCost.open,
   dealt: window.__game.activePlayer().hand.filter(c => c.type === 'lantern').length,
   inPile: window.__game.state.drawPile.filter(c => c.type === 'lantern').length,
   locked: window.__game.lockedRooms(), timer: window.__game.rules.turnTimerEnabled,
 }));
 check(info.problems.length === 0, 'no floor problems');
-check(info.rooms === 18 && info.practice && info.players === 1, '18 rooms, one guest, practice mode');
-check(info.ap === 4 && info.move === 1 && info.discover === 0, '4 action points; any move costs 1');
+check(info.practice && info.players === 1, 'one guest, practice mode');
+check(info.ap === 4 && info.move === 1 && info.open === 1, '4 action points; opening a door costs 1, a move costs 1');
 check(info.dealt === 0 && info.inPile === 12, 'no Lantern is dealt; all 12 are in the deck, to be found by searching');
-check(info.locked.length === 2, 'two locked rooms');
+check(info.locked.length === 0 && info.rooms === 1, 'the hotel starts as just the lobby; nothing is locked yet');
 check(info.timer === false, 'no turn timer in practice');
 await tap('#btn-begin');
 await page.waitForFunction(() => window.__game.isRunning(), null, { timeout: 8000 });
@@ -139,41 +141,54 @@ check(!(await visible('.hud-top-center')), 'no guest strip for a single guest');
 check(!(await visible('#btn-trade')) && !(await visible('#possess-tint')) && !(await visible('#turn-timer')), 'no trade, no tint, no clock');
 check(await visible('#btn-restart-practice'), 'Restart practice is there');
 check((await page.textContent('#round')).trim() === 'Round 1', 'the round has no "of 8": practice has no dawn deadline');
-check(await game(() => [...window.__game.doorways.views.values()].filter(v => v.blink.visible).length) === 4, 'four usable doors blink from the lobby');
+const lobbyDoors = await game(() => window.__game.closedDoors().length);
+check(lobbyDoors === 3 || lobbyDoors === 4, `the lobby has ${lobbyDoors} closed doors (3 or 4)`);
+check(await game(() => [...window.__game.doorways.views.values()].filter(v => v.blink.visible).length) === lobbyDoors, 'each has a ring: it can be opened');
 
-console.log('\n3. movement');
-await game(() => window.__game.moveToRoom('corridorE'));
+console.log('\n3. opening a door, then moving');
+const first = await game(() => window.__game.closedDoors()[0].id);
+await game(d => window.__game.openDoor(d), first);
+let a = await game(() => ({ room: window.__game.activePlayer().currentRoom, ap: window.__game.activePlayer().actionPoints, rooms: window.__game.hotelRooms() }));
+check(a.rooms.length === 2 && a.ap === 3 && a.room === 'hall', 'opening a door costs 1, reveals the room behind it, and you stay put');
+const opened = a.rooms[1];
+check(await game(r => window.__game.roomViews.has(r), opened), 'the new room appears');
+await game(r => window.__game.moveToRoom(r), opened);
 await settle();
-let a = await game(() => ({ room: window.__game.activePlayer().currentRoom, ap: window.__game.activePlayer().actionPoints }));
-check(a.room === 'corridorE' && a.ap === 3, 'walking into a new room costs 1');
+a = await game(() => ({ room: window.__game.activePlayer().currentRoom, ap: window.__game.activePlayer().actionPoints }));
+check(a.room === opened && a.ap === 2, 'going in is a normal move: 1');
 await game(() => window.__game.moveToRoom('hall'));
 await settle();
 a = await game(() => ({ room: window.__game.activePlayer().currentRoom, ap: window.__game.activePlayer().actionPoints }));
-check(a.room === 'hall' && a.ap === 2, 'walking back into a known room also costs 1');
+check(a.room === 'hall' && a.ap === 1, 'walking back also costs 1');
 await game(() => window.__game.walkTo(1.2, 1.2));
 await settle();
-check(await game(() => window.__game.activePlayer().actionPoints) === 2, 'moving about inside a room is free');
+check(await game(() => window.__game.activePlayer().actionPoints) === 1, 'moving about inside a room is free');
 await game(() => window.__game.endTurn());
 check(await game(() => window.__game.activePlayer().actionPoints) === 4, 'End turn refills to 4');
 
 console.log('\n4. searching');
-const plain = await plainRoom();
+await game(() => window.__game.revealTile('lounge'));
+const plain = 'lounge';
 await put(plain, 4);
 const before = await game(() => window.__game.activePlayer().hand.length);
 await tap('#btn-search');
+await leaveIfFull();
 check(await game(() => window.__game.activePlayer().hand.length) === before + 1, 'searching draws one card');
 check((await page.textContent('#search-sub')).includes('Already searched'), 'a room gives up its draw once');
-const dark = await game(() => window.__game.floor.roomList.find(r => r.dark && r.searchable && !window.__game.state.lockedRooms.has(r.id) && !window.__game.state.roomDrops.has(r.id))?.id);
+await game(() => window.__game.revealTile('storage'));
+const dark = 'storage';
 await put(dark, 4);
 await game(() => { const p = window.__game.activePlayer(); p.hand = p.hand.filter(c => c.type !== 'flashlight'); window.__game.refresh(); });
 check((await page.textContent('#search-sub')).includes('Flashlight'), 'a dark room says it needs a Flashlight');
 await give(0, [{ id: 'fl1', type: 'flashlight' }]);
 await tap('#btn-search');
+await leaveIfFull();
 check(await game(() => window.__game.state.searchedRooms.has(window.__game.activePlayer().currentRoom)), 'with a Flashlight the dark room can be searched');
 check(await game(() => window.__game.activePlayer().hand.some(c => c.id === 'fl1')), 'and the Flashlight is kept');
 
 console.log('\n5. locked rooms');
-const locked = await game(() => window.__game.lockedRooms()[0]);
+check(await game(() => window.__game.revealTile('cloakroom')) && await game(() => window.__game.lockedRooms().includes('cloakroom')), 'a locked room is locked as soon as it is revealed');
+const locked = 'cloakroom';
 const nb = await game(l => [...window.__game.floor.rooms.get(l).neighbours][0], locked);
 await put(nb, 4);
 check(await game(() => window.__game.moveToRoom(window.__game.lockedRooms()[0]).ok) === false, 'you cannot walk into a locked room');
@@ -192,22 +207,33 @@ await settle();
 check(await game(() => window.__game.activePlayer().currentRoom) === locked, 'and can now be entered');
 
 console.log('\n6. barricade');
-await put('corridorE', 4);
+await put(opened, 4);
 await give(0, [{ id: 'bar', type: 'barricade' }]);
-const door = await game(() => window.__game.floor.rooms.get('corridorE').doorways.find(d => d.otherRoom('corridorE') === 'hall').id);
+const door = await game(r => window.__game.floor.rooms.get(r).doorways.find(d => d.otherRoom(r) === 'hall').id, opened);
 await game(d => window.__game.barricade('bar', d), door);
-check(await game(() => window.__game.moveToRoom('hall').ok) === false, 'a barricaded doorway cannot be passed');
+// (the planned walk to the lobby may go round through other rooms, but never through that doorway)
+const straightToLobby = () => game(() => { const g = window.__game, c = g.roomCenter('hall'); const p = g.discovery.plan(c[0], c[1]); return p.ok && p.rooms.length === 2; });
+check(!(await straightToLobby()), 'a barricaded doorway cannot be passed');
 check(await game(() => window.__game.activePlayer().actionPoints) === 3, 'a Barricade costs 1 action point');
+// (the cards given above can push the hand past the limit, and End turn would then ask for a discard)
+await game(() => { const p = window.__game.activePlayer(); p.hand = p.hand.slice(0, 5); window.__game.refresh(); });
 await game(() => window.__game.endTurn());
-check(await game(() => window.__game.moveToRoom('hall').ok) === true, 'it comes down after one round');
+const ok6 = await straightToLobby();
+check(ok6, 'it comes down after one round');
 await settle();
 
 console.log('\n7. finding three Lanterns and the fire exit');
-// A fresh start on the fixed practice deal, then search room after room for real until three
-// Lanterns have turned up.
+// A fresh start builds a new random hotel. Open the whole hotel up, then search room after room for
+// real until three Lanterns have turned up.
+const before7 = await game(() => window.__game.hotelRooms().length);
 await tap('#btn-restart-practice');
-check(await game(() => window.__game.activePlayer().hand.some(c => c.type === 'flashlight')), 'the fixed practice deal includes a Flashlight for the dark rooms');
+check(await game(() => window.__game.hotelRooms().length) === 1 && before7 > 1, 'Restart practice builds a new hotel: just the lobby again');
+await give(0, [{ id: 'fl7', type: 'flashlight' }]);
+for (const t of ['lounge', 'ballroom', 'grandCorridor', 'gardenLounge', 'dining', 'library', 'kitchen', 'corridorE', 'corridorW', 'corridorN', 'corridorS', 'suite418', 'suite410', 'suite412', 'suite414', 'cornerCorridor', 'storage', 'stairs', 'serviceCorridor', 'backCorridor', 'housekeeping']) {
+  await game(id => window.__game.revealTile(id), t);
+}
 const rooms = await game(() => window.__game.floor.roomList.filter(r => r.searchable).map(r => r.id));
+check(rooms.length >= 15, `the hotel has grown to ${rooms.length} searchable rooms`);
 let searched = 0, fullHandChecked = false;
 for (const r of rooms) {
   if (await game(() => window.__game.lanterns()) >= 3) break;
@@ -245,7 +271,9 @@ await page.waitForTimeout(150);
 check(await game(() => window.__game.isMapOpen()), 'the map opens');
 await shot('pr-02-map');
 await game(() => window.__game.toggleMap());
-await put('stairs', 4);
+check(await game(() => window.__game.revealTile('exit')), 'the Fire Exit is revealed');
+await game(() => { window.__game.state.lockedRooms.clear(); window.__game.refresh(); });
+await put(await game(() => [...window.__game.floor.rooms.get(window.__game.floor.exitRoom).neighbours][0]), 4);
 await game(() => window.__game.moveToRoom(window.__game.floor.exitRoom));
 await settle();
 await page.waitForTimeout(300);

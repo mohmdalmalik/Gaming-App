@@ -488,7 +488,7 @@ html, body {
 .map-legend .sw { width: 14px; height: 14px; border-radius: 3px; border: 1px solid var(--line); }
 .map-legend .sw.here { background: rgba(201,162,78,0.3); border-color: var(--brass); }
 .map-legend .sw.searched { background: rgba(120,200,150,0.18); border-color: rgba(120,200,150,0.5); }
-.map-legend .sw.frontier { background: none; border-color: var(--brass); border-style: dashed; }
+.map-legend .sw.frontier { background: var(--brass-bright); border-color: var(--brass); height: 4px; margin-top: 5px; }
 .map-legend .sw.objective { background: rgba(201,162,78,0.35); border-color: var(--brass-bright); border-radius: 50%; }
 
 /* The one-off announcement when the exit opens, and the end-screen button pair. */

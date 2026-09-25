@@ -68,7 +68,7 @@ const pitch = () => game(() => {
 });
 
 console.log('1. the baked lobby loads');
-await load('');
+await load(`seed=${process.env.LOBBY_SEED || 7}`);   // a fixed hotel (seed 7: a lobby with one side closed off)
 const m = await game(() => {
   const g = window.__game, v = g.roomViews.get('hall');
   const names = new Set(); const mats = new Set(); let basic = true, lit = true;
@@ -84,14 +84,19 @@ const m = await game(() => {
   });
   return {
     hasStatic: names.has('static'), hasFloor: names.has('floor'),
-    walls: v.walls.length, hooked: v.walls.filter(w => w.baked).length,
+    walls: v.walls.length, hooked: v.walls.filter(w => w.baked?.length).length,
+    doors: v.room.doorSides.size,
+    // every model wall part is either on show for this match's layout or hidden
+    shown: [...names].filter(n => /^W_.*_lo$/.test(n)).map(n => { let o; v.group.traverse(x => { if (x.name === n) o = x; }); return o.visible; }).filter(Boolean).length,
     greyboxHidden: !v.floorMesh.visible && v.furniture.every(f => !f.mesh.visible),
     basic, lit, mats: [...mats],
     safe: (() => { const b = document.getElementById('safe-badge'); return !!b && b.offsetParent !== null && getComputedStyle(b).display !== 'none'; })(),
   };
 });
 check(m.hasStatic && m.hasFloor, 'the lobby model is in the room (furniture/shell + floor)');
-check(m.hooked === m.walls && m.walls === 14, `every wall segment has its two model parts (${m.hooked}/${m.walls})`);
+check(m.doors === 3 || m.doors === 4, `this match's lobby has ${m.doors} open doorways`);
+check(m.hooked === m.walls && m.walls === 4 + m.doors, `every wall segment has its model parts (${m.hooked}/${m.walls})`);
+check(m.shown === 4 * 3 + m.doors, `open sides show their doorway, the closed side a plain wall (${m.shown} wall parts on show)`);
 check(m.greyboxHidden, 'the greybox floor and furniture boxes are hidden');
 check(m.basic && m.lit, `unlit materials with baked light (${m.mats.join(', ')})`);
 check(m.safe, 'the lobby still says it is the safe zone');
@@ -101,14 +106,14 @@ const dumped = JSON.parse(fs.readFileSync(path.join(here, '..', 'tools/lobby-pip
 const live = await game(() => {
   const r = window.__game.floor.rooms.get('hall');
   return {
-    walls: r.walls.map(w => ({ id: w.id, min: w.min, max: w.max })),
-    doorways: r.doorways.map(d => ({ id: d.id, center: d.center, width: d.width })),
+    size: r.size,
+    doorways: r.frontier.map(d => ({ side: d.side, center: d.center, width: d.width })),
     furniture: r.furniture.map(f => ({ kind: f.kind, center: f.center, size: f.size })),
   };
 });
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
-check(same(live.walls, dumped.walls.map(w => ({ id: w.id, min: w.min, max: w.max }))), 'walls match the data the model was built from');
-check(same(live.doorways, dumped.doorways.map(d => ({ id: d.id, center: d.center, width: d.width }))), 'doorways match');
+check(same(live.size, dumped.size), 'the lobby is the size the model was built for');
+check(live.doorways.every(d => dumped.doorways.some(e => e.side === d.side && same(e.center, d.center) && e.width === d.width)), 'every doorway is one the model has a doorway for');
 check(same(live.furniture, dumped.furniture.map(f => ({ kind: f.kind, center: f.center, size: f.size }))), 'furniture footprints (collision) match');
 const walk = await game(() => {
   const g = window.__game, starts = g.floor.start.positions;
@@ -122,9 +127,9 @@ await frames(20);
 const cut = () => game(() => {
   const v = window.__game.roomViews.get('hall');
   const by = side => v.walls.filter(w => w.wall.side === side);
-  const up = side => by(side).every(w => w.baked.up.visible);
-  const down = side => by(side).every(w => !w.baked.up.visible && w.baked.lo.visible);
-  return { northUp: by('north').filter(w => !w.wall.neighbour).every(w => w.baked.up.visible), southDown: down('south'), southUp: up('south'), northDown: by('north').filter(w => !w.wall.neighbour).every(w => !w.baked.up.visible) };
+  const up = side => by(side).every(w => w.baked.every(p => p.up.visible));
+  const down = side => by(side).every(w => w.baked.every(p => !p.up.visible && p.lo.visible));
+  return { northUp: up('north'), southDown: down('south'), southUp: up('south'), northDown: down('north') };
 });
 let c = await cut();
 check(c.southDown && c.northUp, 'the near (south) wall is folded down to its cap, the far wall stands');
@@ -136,44 +141,57 @@ check(c.northDown && c.southUp, 'turned round, the north wall folds and the sout
 await game(() => window.__game.rotate(2));
 await turned();
 
-console.log('\n4. doorway cues');
+console.log('\n4. doors and their cues');
 const cues = await game(() => {
-  const g = window.__game, vs = [...g.doorways.views.values()].filter(v => v.doorway.a === 'hall' || v.doorway.b === 'hall');
+  const g = window.__game, vs = [...g.doorways.views.values()].filter(v => v.doorway.room === 'hall');
   return {
+    n: vs.length,
     rings: vs.filter(v => v.blink.visible).length,
     ringsInside: vs.every(v => Math.abs(v.blink.position.x) < 4 && Math.abs(v.blink.position.z) < 4),
     glows: vs.filter(v => v.glow.visible).length,
-    spills: vs.filter(v => v.spill.visible).length,
-    nearSpill: vs.find(v => v.doorway.id === 'hall->dining').spill.visible,
-    noPosts: vs.every(v => !('marker' in v)),
+    leaves: vs.filter(v => v.leaf && v.leaf.parent).length,
+    noPosts: vs.every(v => !('marker' in v) && !('spill' in v)),
   };
 });
-check(cues.rings === 4 && cues.ringsInside, 'a ring on the lobby side of each of the four usable doors');
-check(cues.glows === 4, 'a soft threshold glow at each door to an undiscovered room');
-check(cues.spills === 3 && !cues.nearSpill, 'a light spill in each opening you look into, none standing in the cut near wall');
-check(cues.noPosts, 'the old glowing yellow door blocks are gone');
+check(cues.n === m.doors, `the lobby's ${cues.n} doorways are closed doors`);
+check(cues.leaves === cues.n, 'each has a door leaf standing in it');
+check(cues.rings === cues.n && cues.ringsInside, 'and a ring on the lobby side: it can be opened');
+check(cues.glows === cues.n, 'a soft glow at each threshold');
+check(cues.noPosts, 'no glowing yellow door blocks');
 
-console.log('\n5. choosing a door: dotted path + cost tag');
-// where the east door's ring is on screen right now
-const ringAt = () => game(() => { const g = window.__game, v = [...g.doorways.views.values()].find(d => d.doorway.id === 'hall->corridorE'); return g.groundToScreen(v.blink.position.x, v.blink.position.z); });
-await tapDoor(await ringAt());
+console.log('\n5. choosing a door: open it, then walk through');
+// where a door's ring is on screen right now
+const ringAt = id => game(i => { const g = window.__game, v = g.doorways.views.get(i); return g.groundToScreen(v.blink.position.x, v.blink.position.z); }, id);
+const closedId = await game(() => window.__game.closedDoors()[0].id);
+await tapDoor(await ringAt(closedId));
 await frames(4);
-let pv = await game(() => ({ confirm: !document.getElementById('confirm-bar').hidden, on: window.__game.pathPreview.visible, dots: window.__game.pathPreview.dotCount, label: window.__game.pathPreview.labelText }));
-check(pv.confirm, 'tapping the ring offers the move');
-check(pv.on && pv.dots >= 4, `a dotted path is drawn from the guest to the door (${pv.dots} dots)`);
-check(pv.label === 'Explore · 1 AP', `the tag says what it costs ("${pv.label}")`);
+let pv = await game(() => ({ confirm: !document.getElementById('confirm-bar').hidden, text: document.getElementById('confirm-text').textContent, on: window.__game.pathPreview.visible, dots: window.__game.pathPreview.dotCount, label: window.__game.pathPreview.labelText }));
+check(pv.confirm && /Open this door/.test(pv.text), 'tapping the ring of a closed door offers to open it');
+check(pv.label === 'Open · 1 AP' && pv.dots === 0, `the tag says what it costs ("${pv.label}"), with no path: you stay put`);
+await page.click('#btn-confirm-cancel');
+await frames(3);
+check(await game(() => !window.__game.pathPreview.visible && document.querySelector('.path-label').hidden), 'cancelling clears the tag');
+await tapDoor(await ringAt(closedId));
+await page.click('#btn-confirm-move');
+await frames(6);
+const opened = await game(() => ({ rooms: window.__game.hotelRooms(), ap: window.__game.activePlayer().actionPoints, room: window.__game.activePlayer().currentRoom }));
+check(opened.rooms.length === 2 && opened.ap === 3 && opened.room === 'hall', `the door opens for 1 action point, ${opened.rooms[1]} is revealed, and you stay in the lobby`);
+const doorwayId = `hall->${opened.rooms[1]}`;
+await page.waitForTimeout(800); await frames(10);
+check(await game(i => { const v = window.__game.doorways.views.get(i); return v.kind === 'open' && Math.abs(v.leaf.rotation.y) > 1; }, doorwayId), 'its door swings open and stays open');
+await tapDoor(await ringAt(doorwayId));
+await frames(4);
+pv = await game(() => ({ confirm: !document.getElementById('confirm-bar').hidden, on: window.__game.pathPreview.visible, dots: window.__game.pathPreview.dotCount, label: window.__game.pathPreview.labelText }));
+check(pv.confirm && pv.on && pv.dots >= 4, `now tapping it offers the move, with a dotted path (${pv.dots} dots)`);
+check(pv.label === 'Move · 1 AP', `and the tag says what it costs ("${pv.label}")`);
 const tag = await page.evaluate(() => { const r = document.querySelector('.path-label').getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top, w: r.width, vw: innerWidth, vh: innerHeight }; });
 check(tag.w > 40 && tag.x > 0 && tag.x < tag.vw && tag.y > 0 && tag.y < tag.vh, 'the tag is on screen');
 await shot('lobby-02-path');
-await page.click('#btn-confirm-cancel');
-await frames(3);
-check(await game(() => !window.__game.pathPreview.visible && document.querySelector('.path-label').hidden), 'cancelling clears the path and the tag');
-await tapDoor(await ringAt());
 await page.click('#btn-confirm-move');
 await frames(3);
 check(await game(() => !window.__game.pathPreview.visible), 'confirming clears the preview as the guest sets off');
 await page.waitForFunction(() => !window.__game.activeMover().walking && window.__game.activeMover().path.length === 0, null, { timeout: 40000 });
-check(await game(() => window.__game.activePlayer().currentRoom) === 'corridorE', 'the guest walked through to the corridor');
+check(await game(() => window.__game.activePlayer().currentRoom) === opened.rooms[1], 'the guest walked through into the new room');
 
 console.log('\n6. camera');
 await load('');

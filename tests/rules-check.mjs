@@ -2,34 +2,55 @@
 // These test docs/GAME_RULES.md — the owner's restored ruleset — through the engine alone.
 import { config } from '../src/config.js';
 import { rules, applyMode } from '../src/data/rules.js';
-import { floor1 } from '../src/data/floor1.js';
+import { hotel } from '../src/data/hotel.js';
 import { roster } from '../src/data/characters.js';
-import { buildFloor } from '../src/game/floor.js';
+import { createHotel, openFrontierDoor, openDoors, exitPlaced, growTo } from '../src/game/hotel.js';
 import { lanternCount, countType, countableCount, hasEscapeLanterns } from '../src/game/cards.js';
 import {
-  createState, activePlayer, nextPlayer, endTurn, enterRoom, checkWin, canEscape, lockableRooms,
+  createState, activePlayer, nextPlayer, endTurn, enterRoom, checkWin, canEscape, openableDoors,
   usableDoorways, pendingEncounters, lockEncounter, hasEncounterLock, playersInRoom, canAffordRoute,
   isLocked, isBarricaded, doorwayPassable, adjacentLockedRooms, convertToPossessed, dawnHasBroken, isFinalRound,
 } from '../src/game/state.js';
 import {
   search, canSearch, useBandage, useUnlock, useBarricade, resolveFullHand, discardCard, overHandLimit,
-  resolveTrade, resolveAttack, tradeableCards, drawCard, dropEverything,
+  resolveTrade, resolveAttack, tradeableCards, drawCard, dropEverything, openDoor,
 } from '../src/game/actions.js';
 
 let failures = 0;
 const check = (cond, msg) => { console.log((cond ? '  ok   ' : '  FAIL ') + msg); if (!cond) failures++; };
-const floor = buildFloor(floor1, config);
-const lobby = floor.start.room;
+// One hotel object, rebuilt for every new match (createState -> resetState -> resetHotel).
+const floor = createHotel(hotel, config);
+const lobby = hotel.lobby.id;
 const SIX = roster.slice(0, 6);
 applyMode('hotseat', 6);
-const hs = (seed = 1) => createState(floor, SIX, seed, { mode: 'hotseat' });
+// Grow the hotel behind a closed door the way the game does (revealed; locked tiles lock).
+function grow(s, doorId) {
+  const r = openFrontierDoor(floor, doorId, { isLocked: id => s.lockedRooms.has(id) });
+  if (r.ok) { s.discovered.add(r.room.id); if (r.room.locked) s.lockedRooms.add(r.room.id); }
+  return r;
+}
+// Make sure a particular tile is on the board (the engine's test helper opens doors until it is).
+function ensureRoom(s, id) {
+  for (const room of growTo(floor, id, { isLocked: r => s.lockedRooms.has(r) })) {
+    s.discovered.add(room.id); if (room.locked) s.lockedRooms.add(room.id);
+  }
+  return floor.rooms.has(id);
+}
+// A six-guest match with a few familiar rooms already on the board for the rules checks below.
+const hs = (seed = 1) => {
+  const s = createState(floor, SIX, seed, { mode: 'hotseat' });
+  for (const id of ['corridorE', 'corridorW', 'kitchen']) ensureRoom(s, id);
+  return s;
+};
+const hsx = seed => { const s = hs(seed); ensureRoom(s, 'exit'); return s; };   // ...with the Fire Exit placed
 const possessed = s => s.players.find(p => p.possessed);
 const cleanOnes = s => s.players.filter(p => !p.possessed);
 const deckTotal = Object.values(rules.deck).reduce((a, b) => a + b, 0);
 
 console.log('configuration (docs/GAME_RULES.md)');
 check(rules.actionPointsPerTurn === 4, '4 action points a turn');
-check(rules.actionCost.move === 1 && rules.actionCost.discover === 0, 'moving into ANY adjacent room costs 1, new or known');
+check(rules.actionCost.move === 1, 'moving into any adjacent room through an open doorway costs 1');
+check(rules.actionCost.open === 1, 'opening a closed door costs 1');
 check(rules.actionCost.search === 1 && rules.actionCost.useCard === 1 && rules.actionCost.attack === 1, 'search, card and attack cost 1');
 check(rules.turnTimerSeconds === 45 && rules.turnTimerEnabled === true, 'hot-seat has the 45-second timer');
 check(rules.maxHealth === 3 && rules.bandageHeal === 1, '3 health bars; a Bandage restores 1');
@@ -39,7 +60,8 @@ check(rules.lanternsToEscape === 3, 'three Lanterns let a clean guest escape');
 check(!('keyPieces' in rules) && !['bow', 'shank', 'bit'].some(t => t in rules.cards), 'the key pieces are gone entirely');
 check(rules.lanternBlock === 'discard', 'the game uses the approved rule: a blocking Lantern is used up');
 check(rules.lanternsDealtEach === 0, 'the game uses the approved rule: Lanterns are never dealt');
-check(rules.lockedRoomCount === 2 && rules.lockPickChance === 0.5, 'two locked rooms; a Lock Pick works half the time');
+check(rules.lockPickChance === 0.5, 'a Lock Pick works half the time');
+check(!('lockedRoomCount' in rules), 'the locked rooms are tiles in the room deck, not a number here');
 check(rules.startingHandSize === 4 && rules.handLimit === 6, '4-card starting hand; hand limit 6');
 check(deckTotal === 40, `the draw deck has ${deckTotal} cards (40)`);
 check(rules.deck.lantern === 12 && rules.deck.bandage === 7 && rules.deck.flashlight === 5 && rules.deck.knife === 4
@@ -84,22 +106,94 @@ console.log('\nsetup');
   for (let seed = 1; seed <= 200; seed++) if (hs(seed).drawPile.slice(0, 4).some(c => c.type === 'lantern')) early++;
   check(early > 150, `Lanterns are shuffled through the pile (one in the first four draws in ${early} of 200 deals)`);
 }
-// Locked rooms: two, random each match, never the lobby, its neighbours or the exit.
+console.log('\nthe random hotel');
 {
-  const lobbyRoom = floor.rooms.get(lobby);
-  const allowed = new Set(lockableRooms(floor));
-  check(!allowed.has(lobby) && ![...lobbyRoom.neighbours].some(id => allowed.has(id)) && !allowed.has(floor.exitRoom),
-    'lockable rooms exclude the lobby, its neighbours and the exit');
-  let lockedOk = true; const seen = new Set();
-  for (let seed = 1; seed <= 200; seed++) {
-    const s = hs(seed);
-    if (s.lockedRooms.size !== 2 || [...s.lockedRooms].some(r => !allowed.has(r))) lockedOk = false;
-    seen.add([...s.lockedRooms].sort().join('+'));
+  const tiles = hotel.tiles, others = tiles.filter(t => !t.isExit);
+  const nDoors = n => others.filter(t => t.doors.length === n).length;
+  check(tiles.length === 24 && tiles.filter(t => t.isExit).length === 1, 'a room deck of 24 tiles with one Fire Exit');
+  check(tiles.filter(t => t.locked).length === 2, 'two locked rooms');
+  check(tiles.filter(t => t.dark).length === 5, 'five dark rooms (about the share there was before)');
+  check(nDoors(4) === 4 && nDoors(3) === 7 && nDoors(2) === 8 && nDoors(1) === 4, 'doorways: 4 crossings, 7 T-junctions, 8 two-way, 4 dead ends');
+  check(tiles.every(t => t.doors.length >= 1 && t.doors.length <= 4), 'every tile has 1 to 4 doorways');
+  let lobbyOk = true, exitOk = true; const shapes = new Set(); const decks = new Set();
+  for (let seed = 1; seed <= 300; seed++) {
+    const s = createState(floor, SIX, seed, { mode: 'hotseat' });
+    const L = floor.rooms.get(lobby);
+    if (floor.roomList.length !== 1 || (L.doorSides.size !== 3 && L.doorSides.size !== 4) || L.frontier.length !== L.doorSides.size) lobbyOk = false;
+    shapes.add([...L.doorSides].sort().join());
+    const at = floor.deck.findIndex(t => t.isExit);
+    if (floor.deck.length !== 24 || at < 24 - hotel.exitInLast) exitOk = false;
+    decks.add(floor.deck.map(t => t.id).join());
+    void s;
   }
-  check(lockedOk, 'two locked rooms every deal, never the lobby, its neighbours or the exit');
-  check(seen.size > 20, `the locked rooms change from match to match (${seen.size} different pairs in 200 deals)`);
-  const a = hs(77), b = hs(77);
-  check([...a.lockedRooms].join() === [...b.lockedRooms].join(), 'the same seed locks the same rooms');
+  check(lobbyOk, 'every match starts with only the lobby, with 3 or 4 closed doors');
+  check(shapes.size === 5, `the lobby's doorways are chosen at random (${shapes.size} of the 5 possible layouts seen)`);
+  check(exitOk, 'the Fire Exit is always shuffled into the last five tiles of the deck');
+  check(decks.size === 300, 'the deck is shuffled differently every match');
+  const a = createState(floor, SIX, 77, { mode: 'hotseat' }); const d1 = floor.deck.map(t => t.id).join() + [...floor.rooms.get(lobby).doorSides];
+  const b = createState(floor, SIX, 77, { mode: 'hotseat' }); const d2 = floor.deck.map(t => t.id).join() + [...floor.rooms.get(lobby).doorSides];
+  check(d1 === d2, 'the same seed builds the same starting hotel');
+  void a; void b;
+}
+
+console.log('\ndoors: opening and entering');
+{
+  const s = createState(floor, SIX, 41, { mode: 'hotseat' });
+  const p = activePlayer(s), q = s.players[1];
+  const door = floor.rooms.get(lobby).frontier[0];
+  check(openableDoors(s, floor, p).length === floor.rooms.get(lobby).doorSides.size, 'every closed door of your room can be opened');
+  const r = openDoor(s, floor, p, door.id);
+  check(r.ok && p.actionPoints === 3, 'opening a door costs 1 action point');
+  check(p.currentRoom === lobby, 'and you stay where you are');
+  check(s.discovered.has(r.room.id) && floor.rooms.has(r.room.id), 'the room behind it is revealed');
+  check(!floor.frontier.includes(door) && r.doorway && usableDoorways(s, floor, p).some(d => d.id === r.doorway.id), 'the door stays open: it is now a doorway you can walk through');
+  check(playersInRoom(s, r.room.id).length === 0, 'the new room is empty, so opening it never starts a meeting');
+  check(r.room.doorSides.has({ north: 'south', south: 'north', east: 'west', west: 'east' }[door.side]), 'one of its doorways meets the door that was opened');
+  const e = enterRoom(s, floor, p, r.room.id);
+  check(e.cost === 1 && p.actionPoints === 2 && p.currentRoom === r.room.id, 'going in is a normal move: 1 action point');
+  check(openDoor(s, floor, q, floor.rooms.get(r.room.id).frontier[0]?.id || 'x').reason === 'notYourDoor', 'you can only open a door of the room you are in');
+  p.actionPoints = 0;
+  const f2 = floor.rooms.get(r.room.id).frontier[0];
+  if (f2) check(openDoor(s, floor, p, f2.id).reason === 'ap' && openableDoors(s, floor, p).length === 0, 'with no action points left, no door opens');
+  // A locked tile is locked the moment it is revealed, and never joins the lobby.
+  let lockedOk = true, neverLobby = true;
+  for (let seed = 1; seed <= 60; seed++) {
+    const t = createState(floor, SIX, seed, { mode: 'hotseat' });
+    ensureRoom(t, 'cloakroom'); ensureRoom(t, 'suite416');
+    for (const id of ['cloakroom', 'suite416']) {
+      if (floor.rooms.has(id) && !t.lockedRooms.has(id)) lockedOk = false;
+      if (floor.rooms.get(id)?.neighbours.has(lobby)) neverLobby = false;
+    }
+  }
+  check(lockedOk, 'a locked room is locked from the moment it is revealed');
+  check(neverLobby, 'a locked room never joins the lobby');
+}
+{
+  // Every placement follows the tile rules; the hotel never closes itself off before the exit.
+  let bad = 0, closed = 0, exits = 0, jamAp = true;
+  for (let seed = 1; seed <= 400; seed++) {
+    const s = createState(floor, SIX, seed, { mode: 'hotseat' });
+    const p = activePlayer(s);
+    for (let step = 0; step < 120; step++) {
+      const doors = openDoors(floor);
+      if (!doors.length) { if (!exitPlaced(floor)) closed++; break; }
+      const d = doors[(seed * 31 + step * 7) % doors.length];
+      p.currentRoom = d.room; p.actionPoints = 4;
+      const r = openDoor(s, floor, p, d.id);
+      if (!r.ok && p.actionPoints !== 4) jamAp = false;
+      if (!r.ok) continue;
+      if (r.room.isExit) exits++;
+      // every side of the new room matches its neighbours: doorway to doorway, wall to wall
+      for (const [side, [di, dj]] of Object.entries({ north: [0, -1], south: [0, 1], east: [1, 0], west: [-1, 0] })) {
+        const other = floor.rooms.get(floor.cells.get(`${r.room.cell[0] + di},${r.room.cell[1] + dj}`));
+        if (other && other.doorSides.has({ north: 'south', south: 'north', east: 'west', west: 'east' }[side]) !== r.room.doorSides.has(side)) bad++;
+      }
+    }
+  }
+  check(bad === 0, 'no doorway ever opens into a wall: every new tile matches all its neighbours');
+  check(closed === 0, 'over 400 hotels opened door by door, the hotel never closed itself off before the Fire Exit');
+  check(exits === 400, 'the Fire Exit was reached in every one of them');
+  check(jamAp, 'a jammed door costs no action point');
 }
 
 console.log('\nturns and movement');
@@ -108,7 +202,7 @@ console.log('\nturns and movement');
   check(activePlayer(s).index === 0 && s.round === 1, 'starts on the first guest, round 1');
   const p = activePlayer(s);
   const r = enterRoom(s, floor, p, 'corridorE');
-  check(r.cost === 1 && p.actionPoints === 3 && r.revealed, 'entering a NEW room costs 1 and reveals it');
+  check(r.cost === 1 && p.actionPoints === 3, 'entering a room costs 1');
   enterRoom(s, floor, p, 'hall');
   check(p.actionPoints === 2, 'entering a KNOWN room also costs 1');
   p.actionPoints = 0;
@@ -159,6 +253,7 @@ console.log('\nsearching, the deck and the discard pile');
 // Dark rooms need a Flashlight (not used up).
 {
   const s = hs(10), p = activePlayer(s);
+  ensureRoom(s, 'storage');
   const dark = floor.roomList.find(r => r.dark && r.searchable && !s.lockedRooms.has(r.id));
   p.currentRoom = dark.id; s.discovered.add(dark.id); p.actionPoints = 4;
   p.hand = p.hand.filter(c => c.type !== 'flashlight');
@@ -171,6 +266,7 @@ console.log('\nsearching, the deck and the discard pile');
 console.log('\nlocked rooms, keys and picks');
 {
   const s = hs(11), p = activePlayer(s);
+  ensureRoom(s, 'cloakroom');
   const locked = [...s.lockedRooms][0];
   const neighbour = [...floor.rooms.get(locked).neighbours][0];
   p.currentRoom = neighbour; s.discovered.add(neighbour); p.actionPoints = 4;
@@ -187,6 +283,7 @@ console.log('\nlocked rooms, keys and picks');
   let opened = 0, tries = 0;
   for (let seed = 1; seed <= 200; seed++) {
     const t = hs(seed), q = activePlayer(t);
+    ensureRoom(t, 'suite416');
     const L = [...t.lockedRooms][0], nb = [...floor.rooms.get(L).neighbours][0];
     q.currentRoom = nb; q.actionPoints = 4; q.hand.push({ id: 'lp', type: 'lockPick' });
     const res = useUnlock(t, floor, q, 'lp', L);
@@ -196,6 +293,7 @@ console.log('\nlocked rooms, keys and picks');
   check(opened > 70 && opened < 130, `a Lock Pick opened ${opened} of ${tries} locked rooms (about half)`);
   check(opened !== -999, 'a Lock Pick is used up whether or not it works');
   const t2 = hs(12), q2 = activePlayer(t2);
+  ensureRoom(t2, 'cloakroom');
   q2.hand.push({ id: 'mk2', type: 'masterKey' });
   check(useUnlock(t2, floor, q2, 'mk2', [...t2.lockedRooms][0]).reason === 'notAdjacentLocked', 'a key only works on a locked room next door');
 }
@@ -204,7 +302,7 @@ console.log('\nbarricades');
 {
   const s = hs(13), p = activePlayer(s);
   p.currentRoom = 'corridorE'; s.discovered.add('corridorE'); p.actionPoints = 4;
-  const door = floor.rooms.get('corridorE').doorways.find(d => d.otherRoom('corridorE') === 'hall');
+  const door = floor.rooms.get('corridorE').doorways[0];
   p.hand.push({ id: 'bar', type: 'barricade' });
   const r = useBarricade(s, floor, p, 'bar', door.id);
   check(r.ok && isBarricaded(s, door.id) && p.actionPoints === 3, 'a Barricade seals a doorway of your room for 1 action point');
@@ -224,7 +322,7 @@ console.log('\nbarricades');
   let turns = 0;
   do { endTurn(s, floor); turns++; } while (activePlayer(s) !== p && turns < 10);
   check(!isBarricaded(s, door.id) && turns === living - 1, 'with a guest dead in between, it still comes down exactly at the placer’s next turn');
-  const other = floor.rooms.get('kitchen').doorways[0];
+  const other = floor.doorways.find(d => d.a !== 'corridorE' && d.b !== 'corridorE');
   p.hand.push({ id: 'bar2', type: 'barricade' }); p.actionPoints = 4;
   check(useBarricade(s, floor, p, 'bar2', other.id).reason === 'notYourDoorway', 'only a doorway of the room you are in');
 }
@@ -382,7 +480,7 @@ console.log('\ntrade and possession');
 
 console.log('\nescape and winning');
 {
-  const s = hs(20);
+  const s = hsx(20);
   const K = cleanOnes(s)[0];
   K.currentRoom = floor.exitRoom; s.discovered.add(floor.exitRoom);
   K.hand = K.hand.filter(c => c.type !== 'lantern');
@@ -397,7 +495,7 @@ console.log('\nescape and winning');
   check(checkWin(s, floor, K) === 'humans' && s.finished && s.escaped.has(K.id), 'a clean guest with three Lanterns escapes and the guests win');
 }
 {
-  const s = hs(21);
+  const s = hsx(21);
   const V = possessed(s);
   V.currentRoom = floor.exitRoom;
   V.hand.push({ id: 'b1', type: 'lantern' }, { id: 'b2', type: 'lantern' }, { id: 'b3', type: 'lantern' });
@@ -423,7 +521,7 @@ console.log('\nescape and winning');
   check(s3.round === rules.roundLimit + 1 && checkWin(s3, floor) === 'possessed' && s3.dawn && s3.finished,
     'the moment round 8 ends with nobody out, dawn breaks and the hotel wins');
   // An escape on the very last turn beats dawn.
-  const s4 = hs(29);
+  const s4 = hsx(29);
   s4.round = rules.roundLimit; s4.activeIndex = 5;
   const K = cleanOnes(s4).find(p => p.index === 5) || cleanOnes(s4)[0];
   s4.activeIndex = K.index;
@@ -441,7 +539,7 @@ console.log('\nescape and winning');
 {
   // Practice has no deadline.
   applyMode('practice');
-  const ps = createState(floor, roster.slice(0, 1), rules.practiceSeed, { mode: 'practice' });
+  const ps = createState(floor, roster.slice(0, 1), 3, { mode: 'practice' });
   ps.round = 50;
   check(checkWin(ps, floor) === null && !dawnHasBroken(ps), 'practice: no deadline, even in round 50');
   applyMode('hotseat', 6);
@@ -449,12 +547,19 @@ console.log('\nescape and winning');
 {
   // Practice: alone, find three Lanterns and get out.
   applyMode('practice');
-  const s = createState(floor, roster.slice(0, 1), rules.practiceSeed, { mode: 'practice' });
+  let reachable = 0;
+  for (let seed = 1; seed <= 200; seed++) {
+    const t = createState(floor, roster.slice(0, 1), seed, { mode: 'practice' });
+    const third = t.drawPile.map((c, i) => (c.type === 'lantern' ? i : -1)).filter(i => i >= 0)[2];
+    if (third < hotel.tiles.filter(x => !x.isExit).length) reachable++;
+  }
+  check(reachable >= 190, `practice is winnable: the third Lantern is within the ${hotel.tiles.length - 1} searchable rooms in ${reachable} of 200 deals`);
+  const s = createState(floor, roster.slice(0, 1), 5, { mode: 'practice' });
   const p = activePlayer(s);
   check(s.players.length === 1 && !p.possessed && lanternCount(p.hand) === 0, 'practice: one clean guest, no Lanterns dealt');
   check(rules.turnTimerEnabled === false, 'practice has no timer');
-  const third = s.drawPile.map((c, i) => (c.type === 'lantern' ? i : -1)).filter(i => i >= 0)[2];
-  check(third < 16, `the fixed practice deal is winnable: the third Lantern is draw ${third + 1} of the 16 rooms`);
+  check(rules.practiceSeed == null, 'practice builds a new random hotel every match');
+  ensureRoom(s, 'exit');
   p.currentRoom = floor.exitRoom;
   check(checkWin(s, floor, p) === null, 'the exit does nothing without three Lanterns');
   p.hand.push({ id: 'b1', type: 'lantern' }, { id: 'b2', type: 'lantern' }, { id: 'b3', type: 'lantern' });

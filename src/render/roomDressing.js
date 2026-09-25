@@ -1,5 +1,5 @@
 // Dress a room's greybox shell with real glTF pieces. Driven entirely by data:
-//   • src/data/floor1.js  — the colliding furniture (model + yaw + footprint)
+//   • the room data (src/data/hotel.js) — the colliding furniture (footprints; optional model + yaw)
 //   • src/data/dressing.js — the shell (floor, walls, columns), non-colliding decor, lamp lights
 //
 // Only rooms present in `roomDressings` are touched; every other room stays greybox. The swap
@@ -150,20 +150,19 @@ function applyLampLights(view, spec) {
     for (const idx of spec.lampLights.indices) {
       const L = view.lights[idx];
       if (!L) continue;
-      L.light.position.y = spec.lampLights.height;
-      L.light.color.set(spec.lampLights.color);
+      L.pos.y = spec.lampLights.height;
+      L.color.set(spec.lampLights.color);
       L.base *= spec.lampLights.intensityScale;
     }
   }
 }
 
-// Dress every room that has an entry in `roomDressings`. Resolves once all pieces are in place
-// (so the caller can warm the shaders); a failure in one room is logged, not thrown.
-export async function dressRooms(roomViews, floor, cfg) {
-  for (const [id, spec] of Object.entries(roomDressings)) {
-    const view = roomViews.get(id);
-    if (!view) continue;
-    try { await dressOne(view, floor, cfg, spec); }
-    catch (e) { console.warn(`dressing: room "${id}" failed:`, e.message); }
-  }
+// Dress one room view if it has an entry in `roomDressings` (rooms are dressed as they appear;
+// the lobby again at every new match). Resolves once its pieces are in place; a failure is logged,
+// not thrown, and the room keeps its greybox.
+export async function dressRoom(view, floor, cfg) {
+  const spec = roomDressings[view.room.id];
+  if (!spec) return false;
+  try { await dressOne(view, floor, cfg, spec); return true; }
+  catch (e) { console.warn(`dressing: room "${view.room.id}" failed:`, e.message); return false; }
 }

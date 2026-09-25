@@ -17,202 +17,10 @@
   4
  ],
  "wallThickness": 0.15,
- "walls": [
-  {
-   "id": "hall:north:0",
-   "side": "north",
-   "neighbour": null,
-   "min": [
-    -4,
-    -4
-   ],
-   "max": [
-    -1.2,
-    -3.85
-   ]
-  },
-  {
-   "id": "hall:north:1",
-   "side": "north",
-   "neighbour": "corridorN",
-   "min": [
-    -1.2,
-    -4
-   ],
-   "max": [
-    -0.6,
-    -3.85
-   ]
-  },
-  {
-   "id": "hall:north:2",
-   "side": "north",
-   "neighbour": "corridorN",
-   "min": [
-    0.6,
-    -4
-   ],
-   "max": [
-    1.2,
-    -3.85
-   ]
-  },
-  {
-   "id": "hall:north:3",
-   "side": "north",
-   "neighbour": null,
-   "min": [
-    1.2,
-    -4
-   ],
-   "max": [
-    4,
-    -3.85
-   ]
-  },
-  {
-   "id": "hall:south:4",
-   "side": "south",
-   "neighbour": "dining",
-   "min": [
-    -4,
-    3.85
-   ],
-   "max": [
-    -0.6,
-    4
-   ]
-  },
-  {
-   "id": "hall:south:5",
-   "side": "south",
-   "neighbour": "dining",
-   "min": [
-    0.6,
-    3.85
-   ],
-   "max": [
-    4,
-    4
-   ]
-  },
-  {
-   "id": "hall:east:6",
-   "side": "east",
-   "neighbour": null,
-   "min": [
-    3.85,
-    -3.85
-   ],
-   "max": [
-    4,
-    -1.2
-   ]
-  },
-  {
-   "id": "hall:east:7",
-   "side": "east",
-   "neighbour": "corridorE",
-   "min": [
-    3.85,
-    -1.2
-   ],
-   "max": [
-    4,
-    -0.6
-   ]
-  },
-  {
-   "id": "hall:east:8",
-   "side": "east",
-   "neighbour": "corridorE",
-   "min": [
-    3.85,
-    0.6
-   ],
-   "max": [
-    4,
-    1.2
-   ]
-  },
-  {
-   "id": "hall:east:9",
-   "side": "east",
-   "neighbour": null,
-   "min": [
-    3.85,
-    1.2
-   ],
-   "max": [
-    4,
-    3.85
-   ]
-  },
-  {
-   "id": "hall:west:10",
-   "side": "west",
-   "neighbour": null,
-   "min": [
-    -4,
-    -3.85
-   ],
-   "max": [
-    -3.85,
-    -1.2
-   ]
-  },
-  {
-   "id": "hall:west:11",
-   "side": "west",
-   "neighbour": "corridorW",
-   "min": [
-    -4,
-    -1.2
-   ],
-   "max": [
-    -3.85,
-    -0.6
-   ]
-  },
-  {
-   "id": "hall:west:12",
-   "side": "west",
-   "neighbour": "corridorW",
-   "min": [
-    -4,
-    0.6
-   ],
-   "max": [
-    -3.85,
-    1.2
-   ]
-  },
-  {
-   "id": "hall:west:13",
-   "side": "west",
-   "neighbour": null,
-   "min": [
-    -4,
-    1.2
-   ],
-   "max": [
-    -3.85,
-    3.85
-   ]
-  }
- ],
  "doorways": [
   {
-   "id": "hall->corridorW",
-   "axis": "z",
-   "center": [
-    -4,
-    0
-   ],
-   "width": 1.2
-  },
-  {
-   "id": "hall->corridorN",
+   "id": "hall:north",
+   "side": "north",
    "axis": "x",
    "center": [
     0,
@@ -221,7 +29,8 @@
    "width": 1.2
   },
   {
-   "id": "hall->corridorE",
+   "id": "hall:east",
+   "side": "east",
    "axis": "z",
    "center": [
     4,
@@ -230,11 +39,22 @@
    "width": 1.2
   },
   {
-   "id": "hall->dining",
+   "id": "hall:south",
+   "side": "south",
    "axis": "x",
    "center": [
     0,
     4
+   ],
+   "width": 1.2
+  },
+  {
+   "id": "hall:west",
+   "side": "west",
+   "axis": "z",
+   "center": [
+    -4,
+    0
    ],
    "width": 1.2
   }

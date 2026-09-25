@@ -27,7 +27,8 @@ export const rules = {
 
   // --- Turn ----------------------------------------------------------------------------------
   actionPointsPerTurn: 4,   // never carried over
-  moveCost: 1,              // into ANY adjacent room, new or already known
+  moveCost: 1,              // into ANY adjacent room through an open doorway
+  openDoorCost: 1,          // open a closed door of your room: reveals the room behind; you stay put
   searchCost: 1,
   playCardCost: 1,          // Bandage, Master Key, Lock Pick, Barricade
   attackCost: 1,
@@ -56,7 +57,8 @@ export const rules = {
   lanternBlock: 'discard',
 
   // --- Rooms ---------------------------------------------------------------------------------
-  lockedRoomCount: 2,       // chosen at random each match (never the lobby, its neighbours, the exit)
+  // The hotel itself — tile size, the room deck (incl. the 2 locked and the dark rooms), the lobby's
+  // 3 or 4 doorways, the Fire Exit in the last five tiles — is in src/data/hotel.js.
   lockPickChance: 0.5,      // a Lock Pick works half the time; discarded either way
   barricadeRounds: 1,       // a Barricade seals one doorway of your room until your next turn starts
 
@@ -65,7 +67,7 @@ export const rules = {
   handLimit: 6,             // checked at the end of your turn; Lanterns count, Possession cards don't
 
   // --- Seeds ---------------------------------------------------------------------------------
-  practiceSeed: 20260917,   // practice deals the same hotel every time; null for random
+  practiceSeed: null,       // null: a new random hotel every practice match (?seed= still forces one)
 
   // --- Card catalogue ------------------------------------------------------------------------
   cards: {
@@ -103,10 +105,11 @@ export const rules = {
   },
 };
 
-// The nested shape older code reads. `discover` is 0: a new room costs the same as a known one.
+// The nested shape older code reads. Entering a room is `move`; opening its door first is `open`.
 function derive() {
   rules.actionCost = {
     move: rules.moveCost,
+    open: rules.openDoorCost,
     discover: 0,
     search: rules.searchCost,
     useCard: rules.playCardCost,

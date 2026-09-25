@@ -2,8 +2,10 @@
 //   node tools/balance/hotseat-sim.mjs [matches] [players]            the rules as they stand
 //   node tools/balance/hotseat-sim.mjs [matches] [players] --compare  plus three Lantern variants
 //
-// Plays whole matches through the PURE rules engine — no browser — with simple bots. By default
-// it reports the approved rules, including what the board looked like when dawn broke. With
+// Plays whole matches through the PURE rules engine — no browser — with simple bots, each in a new
+// random hotel that grows as the bots open doors. By default it reports the approved rules: who
+// wins, dawn, match length, when the Fire Exit turns up, how much of the hotel gets explored,
+// meetings, and whether the hotel ever closed itself off (it must not). With
 // --compare it also runs three comparison variants side by side:
 //
 //   blocking Lantern:  'discard'  (APPROVED — used up)   vs  'attacker' (goes to the possessed guest)
@@ -17,10 +19,10 @@
 // who blocked them with a Lantern. Bots never waste a turn and never bluff, so read the numbers
 // as "the rules played competently and mechanically", not as a prediction of a real evening.
 import { rules, applyMode } from '../../src/data/rules.js';
-import { floor1 } from '../../src/data/floor1.js';
+import { hotel } from '../../src/data/hotel.js';
 import { roster } from '../../src/data/characters.js';
 import { config } from '../../src/config.js';
-import { buildFloor } from '../../src/game/floor.js';
+import { createHotel, openDoors, exitPlaced } from '../../src/game/hotel.js';
 import { weaponsIn } from '../../src/game/cards.js';
 import * as S from '../../src/game/state.js';
 import * as A from '../../src/game/actions.js';
@@ -28,8 +30,11 @@ import * as A from '../../src/game/actions.js';
 const N = parseInt(process.argv[2], 10) || 400;
 const PLAYERS = parseInt(process.argv[3], 10) || 6;
 applyMode('hotseat', PLAYERS);
-const floor = buildFloor(floor1, config);
+const floor = createHotel(hotel, config);   // rebuilt for every match by createState
 const COMPARE = process.argv.includes('--compare');
+// Bots: 'explorer' (default) — clean guests open doors whenever the Fire Exit is still hidden;
+// 'cautious' (--cautious) — they only open doors once nothing known is left to search.
+const EXPLORE = !process.argv.includes('--cautious');
 const MAX_TURNS = 600;          // a safety net: with the dawn deadline no match should get near it
 const lanterns = hand => hand.filter(c => c.type === 'lantern');
 const rnd = arr => arr[Math.floor(Math.random() * arr.length)];
@@ -52,6 +57,22 @@ function pathTo(st, from, targets, canOpen = false) {
     }
   }
   return null;
+}
+
+// Rooms with a closed door that can still be opened (the edge of the explored hotel).
+const roomsWithClosedDoors = st => [...new Set(openDoors(floor).map(d => d.room))].filter(r => !S.isLocked(st, r));
+
+// Open a closed door of the room I stand in (1 AP). Counts how the hotel grows and checks, every
+// time, that it has not closed itself off before the Fire Exit is on the board.
+function openHere(st, p, m) {
+  const doors = S.openableDoors(st, floor, p);
+  if (!doors.length) return false;
+  const r = A.openDoor(st, floor, p, rnd(doors).id);
+  if (!r.ok) { m.jammed++; return true; }
+  m.opened++;
+  if (r.room.isExit) m.exitRound = st.round;
+  if (!exitPlaced(floor) && openDoors(floor).length === 0) m.closedOff++;
+  return true;
 }
 
 // TEAM TALK: the clean-looking guest (as far as `me` knows) holding the most Lanterns.
@@ -118,7 +139,9 @@ function botTurn(st, p, m) {
     const carrier = carrierOf(st, p);
     let targets;
     if (!p.possessed && lanterns(p.hand).length >= rules.lanternsToEscape) {
-      targets = [floor.exitRoom];
+      // Three Lanterns: to the Fire Exit — or, until it has turned up, keep opening doors.
+      if (floor.exitRoom) targets = [floor.exitRoom];
+      else { if (openHere(st, p, m)) continue; targets = roomsWithClosedDoors(st); }
     } else {
       if (A.canSearch(st, floor, p).ok) {
         const r = A.search(st, floor, p);
@@ -134,14 +157,25 @@ function botTurn(st, p, m) {
       }
       const lockedNear = S.adjacentLockedRooms(st, floor, p).filter(r => !st.searchedRooms.has(r));
       if (lockedNear.length && opener) { A.useUnlock(st, floor, p, opener.id, lockedNear[0]); continue; }
+      // Clean guests explore while the Fire Exit has not turned up: open a closed door of this room
+      // (the room behind is searched next), since searching alone never finds the way out.
+      if (!p.possessed && !floor.exitRoom && EXPLORE && openHere(st, p, m)) continue;
       if (p.possessed) {
         targets = st.players.filter(q => q.alive && !q.possessed && !floor.rooms.get(q.currentRoom).safe).map(q => q.currentRoom);
+        if (!targets.length) { if (openHere(st, p, m)) continue; targets = roomsWithClosedDoors(st); }
       } else if (lanterns(p.hand).length && carrier && carrier.id !== p.id) {
         targets = [carrier.currentRoom];          // bring my Lanterns to the carrier
       } else {
         targets = [...st.roomDrops.keys()];
         if (!targets.length) targets = floor.roomList.filter(r => r.searchable && !st.searchedRooms.has(r.id)
           && (!r.dark || p.hand.some(c => c.type === 'flashlight')) && (!S.isLocked(st, r.id) || opener)).map(r => r.id);
+        // ...and, while the exit is still hidden, rooms with a closed door to open are as good a goal.
+        if (!floor.exitRoom && EXPLORE) targets = [...targets, ...roomsWithClosedDoors(st)];
+        // Nothing known left to search: explore — open a door here, or walk to a room that has one.
+        if (!targets.length) {
+          if (openHere(st, p, m)) continue;
+          targets = roomsWithClosedDoors(st);
+        }
         if (!targets.length && carrier?.id === p.id) {
           targets = st.players.filter(q => q.alive && q.id !== p.id && lanterns(q.hand).length && !p.knows.has(q.id)).map(q => q.currentRoom);
         }
@@ -162,7 +196,7 @@ function botTurn(st, p, m) {
 
 function match(seed) {
   const st = S.createState(floor, roster.slice(0, PLAYERS), seed, { mode: 'hotseat' });
-  const m = { meetings: 0, trades: 0, attacks: 0, deaths: 0, attempts: 0, possessed: 0, blocked: 0, burned: 0, found: 0, stuckTurns: 0 };
+  const m = { meetings: 0, trades: 0, attacks: 0, deaths: 0, attempts: 0, possessed: 0, blocked: 0, burned: 0, found: 0, stuckTurns: 0, opened: 0, jammed: 0, closedOff: 0 };
   let turns = 0;
   while (!st.finished && turns++ < MAX_TURNS) {
     const p = S.activePlayer(st);
@@ -192,6 +226,7 @@ function match(seed) {
     : !cleanCanReach && possessionLeft === 0 ? 'stuck'
       : !cleanCanReach ? 'cleanLockedOut'
         : 'inPlay';
+  m.tiles = floor.roomList.length - 1;
   return { won: st.won, dawn: !!st.dawn, dawnState, rounds: Math.min(st.round, rules.roundLimit), finished: st.finished, m, where,
     possessedAtEnd: st.players.filter(q => q.alive && q.possessed).length,
     possessionCardsLeft: st.players.filter(q => q.alive).reduce((n, q) => n + q.hand.filter(c => c.type === 'possession').length, 0),
@@ -202,10 +237,13 @@ function run(label, block, dealt) {
   rules.lanternBlock = block; rules.lanternsDealtEach = dealt;
   const out = { label, humans: 0, hotel: 0, never: 0, rounds: [], roundsH: [], roundsP: [], sums: {}, perRound: {},
     dawn: 0, dawnStates: { stuck: 0, cleanLockedOut: 0, inPlay: 0 }, hotelOther: 0, lanternsAtDawn: [],
+    exitRounds: [], exitNever: 0, tiles: [], closedOff: 0, meetingsPer: [],
     neverWhy: { starved: 0, hoarded: 0, other: 0 }, hoardSum: 0, firstPossRound: [] };
   for (let i = 1; i <= N; i++) {
     const r = match(i * 7919 + 13);
     if (r.won === 'humans') out.humans++; else if (r.won === 'possessed') out.hotel++; else out.never++;
+    if (r.m.exitRound) out.exitRounds.push(r.m.exitRound); else out.exitNever++;
+    out.tiles.push(r.m.tiles); out.closedOff += r.m.closedOff; out.meetingsPer.push(r.m.meetings);
     if (r.dawn) { out.dawn++; out.dawnStates[r.dawnState]++; out.lanternsAtDawn.push(r.where); }
     else if (r.won === 'possessed') out.hotelOther++;
     if (r.finished) { out.rounds.push(r.rounds); (r.won === 'humans' ? out.roundsH : out.roundsP).push(r.rounds); }
@@ -244,11 +282,16 @@ const lines = [
   ['  … when the clean side wins', String(median(v.roundsH))],
   ['  … when the hotel wins', String(median(v.roundsP))],
   ['Reached dawn', `${v.dawn} of ${N}`],
-  ['  … already stuck (neither side could win)', ofDawn(v.dawnStates.stuck)],
-  ['  … clean side locked out, hotel could still convert', ofDawn(v.dawnStates.cleanLockedOut)],
-  ['  … still genuinely in play (3 Lanterns reachable)', ofDawn(v.dawnStates.inPlay)],
+  ['  … no peaceful way left (3 Lanterns only by taking them from the possessed)', ofDawn(v.dawnStates.stuck + v.dawnStates.cleanLockedOut)],
+  ['  … 3 Lanterns still reachable without a fight', ofDawn(v.dawnStates.inPlay)],
   ['Lanterns at dawn: clean hands / possessed hands / deck / floor', `${meanAt('clean')} / ${meanAt('possessed')} / ${meanAt('deck')} / ${meanAt('floor')}`],
+  ['Fire Exit revealed: median round', `${median(v.exitRounds)} (never revealed in ${v.exitNever} of ${N})`],
+  ['  … by round 1-2 / 3-4 / 5-6 / 7-8', [[1, 2], [3, 4], [5, 6], [7, 8]].map(([a, b]) => pct(v.exitRounds.filter(x => x >= a && x <= b).length)).join(' / ')],
+  ['Tiles explored per match: median (fewest-most) of 24', `${median(v.tiles)} (${Math.min(...v.tiles)}-${Math.max(...v.tiles)})`],
+  ['Doors opened / jammed per match', `${avg(v, 'opened')} / ${avg(v, 'jammed')}`],
+  ['Meetings per match: median (average)', `${median(v.meetingsPer)} (${avg(v, 'meetings')})`],
   ['Meetings per round', perRound(v, 'meetings')],
+  ['Hotel closed itself off before the Fire Exit', `${v.closedOff} times`],
   ['Possession attempts / succeeded / blocked', `${avg(v, 'attempts')} / ${avg(v, 'possessed')} / ${avg(v, 'blocked')}`],
   ['Lanterns found / burned', `${avg(v, 'found')} / ${avg(v, 'burned')}`],
   ['Attacks / deaths', `${avg(v, 'attacks')} / ${avg(v, 'deaths')}`],

@@ -1,7 +1,7 @@
 // Ties taps, pathfinding, action points and room discovery together for the active
 // player. Talks to the renderer only through the callbacks in `on`, so the rules stay
 // reusable.
-import { roomAt } from './game/floor.js';
+import { roomAt } from './game/hotel.js';
 import { enterRoom, activePlayer } from './game/state.js';
 import { buildAllowed, planMove } from './game/moves.js';
 

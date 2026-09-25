@@ -2,12 +2,14 @@
 // of this unchanged. Implements docs/GAME_RULES.md — the owner's design; see CLAUDE.md before
 // changing any rule here.
 //
-// One floor, 4-6 guests (or one in practice). Discovered rooms are shared; health, action
-// points, current room, hand and the hidden possession flag are per guest.
+// One hotel, 4-6 guests (or one in practice). The hotel is random every match (src/game/hotel.js):
+// resetState builds a fresh one. Revealed rooms are shared; health, action points, current room,
+// hand and the hidden possession flag are per guest.
 import { rules } from '../data/rules.js';
 import {
   makeRng, buildDrawDeck, buildPossessionSupply, deal, shuffle, hasEscapeLanterns,
 } from './cards.js';
+import { resetHotel, openDoors } from './hotel.js';
 
 // `opts.mode`: 'practice' (one guest, no hidden role, no meetings) or 'hotseat' (4-6 guests).
 export function createState(floor, roster, seed = 1, opts = {}) {
@@ -17,20 +19,13 @@ export function createState(floor, roster, seed = 1, opts = {}) {
   return state;
 }
 
-// Rooms that may be locked at setup: not the lobby, not a room next to it, not the exit, and
-// only rooms that can be searched (so a locked room is worth opening).
-export function lockableRooms(floor) {
-  const lobby = floor.rooms.get(floor.start.room);
-  return floor.roomList.filter(r =>
-    r.id !== lobby.id && !lobby.neighbours.has(r.id) && !r.isExit && r.searchable).map(r => r.id);
-}
-
 export function resetState(state, floor, seed) {
   const rng = makeRng(seed ?? ((Math.floor(performance.now?.() ?? 0) || 1)));
   const practice = !!state.practice;
   state.seed = seed;
   state.rng = rng;                       // kept: reshuffles and Lock Picks draw from it later
-  state.discovered = new Set([floor.start.room]);
+  resetHotel(floor, seed ?? 1);          // a new random hotel: the lobby and a shuffled room deck
+  state.discovered = new Set([floor.start.room]);   // every placed room is revealed
 
   // Deal from a shuffled draw pile. Lanterns are never dealt — they are found only by searching.
   const drawPile = shuffle(buildDrawDeck(rules.deck), rng);
@@ -61,10 +56,8 @@ export function resetState(state, floor, seed) {
   }));
   if (possessedIndex >= 0) state.players[possessedIndex].hand.push(...buildPossessionSupply());
 
-  // Lock two rooms, chosen at random each match.
   state.roomDrops = new Map();           // roomId -> cards lying on the floor (a dead guest's hand)
-  state.lockedRooms = new Set(rules.lockedDoorsEnabled
-    ? shuffle(lockableRooms(floor), rng).slice(0, rules.lockedRoomCount) : []);
+  state.lockedRooms = new Set();         // the locked tiles, from the moment they are revealed
   state.barricades = new Map();          // doorwayId -> { by: playerId, until: turn number }
 
   state.activeIndex = 0;
@@ -220,9 +213,16 @@ export function usableDoorways(state, floor, player) {
     .filter(d => doorwayPassable(state, d) && player.actionPoints >= moveCostInto(state, d.otherRoom(player.currentRoom)));
 }
 
-// Doorways with exactly one side discovered: the places still to be explored.
+// Closed doors, anywhere in the hotel: the places still to be explored.
 export function frontierDoorways(state, floor) {
-  return floor.doorways.filter(d => state.discovered.has(d.a) !== state.discovered.has(d.b));
+  return openDoors(floor);
+}
+
+// Closed doors of the guest's own room they can open this turn (1 AP each).
+export function openableDoors(state, floor, player) {
+  if (state.finished || !player.alive) return [];
+  if (player.actionPoints < rules.actionCost.open) return [];
+  return (floor.rooms.get(player.currentRoom)?.frontier || []).filter(d => !d.jammed);
 }
 
 export const isDiscovered = (state, roomId) => state.discovered.has(roomId);

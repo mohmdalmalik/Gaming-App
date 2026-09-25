@@ -16,8 +16,8 @@ technical choices are in **[docs/DECISIONS.md](docs/DECISIONS.md)**; status and 
 design; `CLAUDE.md` says no rule or number changes without the owner's approval of a before/after
 list). Two ways to play the same rules, chosen on the start screen:
 
-- **Practice (default).** One guest alone: explore the 18-room hotel, find three Lanterns by
-  searching (dark rooms need a Flashlight, two rooms are locked), reach the fire exit.
+- **Practice (default).** One guest alone in a random hotel: open doors to explore, find three
+  Lanterns by searching (dark rooms need a Flashlight, two rooms are locked), reach the fire exit.
 - **Hot-seat — `?mode=hotseat&players=6`.** Four to six people passing **one device**: one hidden
   Possessor with three Possession cards, private role screens, forced meetings with Trade or
   Attack, trades chosen in private on the passed device, health and weapons, Lanterns that block
@@ -26,7 +26,8 @@ list). Two ways to play the same rules, chosen on the start screen:
   wins. A testing tool for the real online game.
 
 **Online multiplayer is not implemented.** There is no server, no networking, no accounts and no
-database in this project. No real art beyond the hall and Victor, no sound, no menu yet.
+database in this project. No real art beyond the lobby and Victor (the other rooms are grey boxes),
+no sound, no menu yet.
 
 ## Open the preview
 
@@ -44,7 +45,8 @@ Published with GitHub Pages from `main`: **https://mohmdalmalik.github.io/Gaming
    health, hand, key pieces) → their 45-second action phase.
 
 `?players=4` / `?players=5` for a smaller table, `?timer=off` to play without the clock,
-`?seed=123` to deal the same hands, lock the same rooms and pick the same Possessor.
+`?seed=123` to deal the same hands, pick the same Possessor and shuffle the same hotel (the same
+lobby doors and room deck).
 
 Two viewing switches work in any mode: `?camera=classic` shows the previous, higher camera angle
 (for comparison with the new lower one), and `?stats=1` shows a small frame-rate / draw-call
@@ -52,9 +54,14 @@ readout at the top of the screen, for measuring speed on the iPad.
 
 ## How to play (each turn, 4 action points)
 
-- **Move** — usable doors glow and blink. Tap one, then **Move**. Any adjacent room costs 1,
-  new or known. Tapping empty floor in your room repositions for free. A locked door says so;
-  a Master Key or Lock Pick (from the hand sheet) opens it from next door.
+- **The hotel** — a new random hotel every match. You start in the lobby with 3 or 4 closed doors;
+  rooms are tiles from a shuffled room deck, placed as doors are opened. The Fire Exit is one of the
+  last five tiles.
+- **Open a door** (1 AP) — tap a closed door's ring, then **Open**. The room behind it appears (it is
+  empty, so nothing happens there yet); you stay where you are.
+- **Move** (1 AP) — tap the ring of an open doorway, then **Move**. Tapping empty floor in your room
+  repositions for free. A locked room says so; a Master Key or Lock Pick (from the hand sheet) opens
+  it from next door.
 - **Search** (1 AP) — takes anything lying in the room (a dead guest's cards); otherwise draws
   one card, once per room. Dark rooms need a Flashlight in hand. What you find is private: the
   table only sees that you searched. Lanterns are never dealt — searching is the only way to get one.
@@ -93,10 +100,10 @@ src/
   config.js           display / camera / feel tuning
   data/
     rules.js          THE RULE NUMBERS — implements docs/GAME_RULES.md (owner-approved changes only)
-    floor1.js         THE FLOOR: rooms, doorways, furniture, moods, dark rooms
+    hotel.js          THE HOTEL: the lobby and the 24-tile room deck (doorways, dark, locked, furniture, moods)
     characters.js     body types, outfits and the guests (up to six)
   game/               pure rules, no rendering (a server could reuse these)
-    floor.js  grid.js   world geometry, walkable grid + A* pathfinding
+    hotel.js  grid.js   the random hotel (tiles placed as doors open), walkable grid + A* pathfinding
     cards.js            deck build, seeded shuffle, deal, hand helpers
     state.js            players, turns, locked rooms, barricades, meetings, escape and win checks
     actions.js          search, the deck and discard pile, cards played, trade, attack, death
@@ -142,7 +149,7 @@ Output: `assets/models/lobby/` (`lobby.glb`, `lobby-light.jpg`, `lobby-floor-lig
 
 Every rule number — action points, costs, health, the deck, Lanterns to escape, the dawn round limit, locked rooms, the
 timer — is in `src/data/rules.js`, which implements `docs/GAME_RULES.md`. The floor (rooms, their
-doorways, furniture, which rooms are dark, moods) is in `src/data/floor1.js`. Change those files,
+doorways, furniture, which rooms are dark or locked, moods) is the room deck in `src/data/hotel.js`. Change those files,
 not the game code — and per `CLAUDE.md`, not without the owner's approval of a before/after list.
 
 Which mode runs is decided by the address: `applyMode()` at the bottom of `src/data/rules.js`.

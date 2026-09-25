@@ -42,8 +42,11 @@ export function createSearchMarks(floor, scene) {
     // Show a tick in every discovered room that has been searched; hide the rest.
     update(state) {
       for (const id of state.searchedRooms) {
-        const sprite = markFor(id);
-        if (sprite) sprite.visible = state.discovered.has(id);
+        const sprite = markFor(id), room = floor.rooms.get(id);
+        if (!sprite) continue;
+        // (the hotel is rebuilt every match, so a room can be somewhere else now)
+        if (room) sprite.position.set(room.center[0], 2.05, room.center[1]);
+        sprite.visible = !!room && state.discovered.has(id);
       }
       for (const [id, sprite] of marks) if (!state.searchedRooms.has(id)) sprite.visible = false;
     },

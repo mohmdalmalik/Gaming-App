@@ -7,6 +7,31 @@ import {
   checkWin, logPublic, convertToPossessed, isLocked, unlockRoom, placeBarricade, isBarricaded,
   adjacentLockedRooms,
 } from './state.js';
+import { openFrontierDoor } from './hotel.js';
+
+// --- Doors -------------------------------------------------------------------------------------
+// Open a closed door of your room (1 AP): the room behind it is drawn from the room deck, turned to
+// fit and revealed. You stay where you are — going in is a normal move. A new room is empty, so
+// opening a door never starts a meeting. A door that no remaining tile can fit is jammed: nothing
+// is revealed and no action point is spent.
+export function openDoor(state, floor, player, doorId) {
+  if (state.finished) return { ok: false, reason: 'finished' };
+  if (!player.alive) return { ok: false, reason: 'dead' };
+  const door = floor.frontier.find(d => d.id === doorId);
+  if (!door || door.room !== player.currentRoom) return { ok: false, reason: 'notYourDoor' };
+  if (door.jammed) return { ok: false, reason: 'jammed' };
+  if (player.actionPoints < rules.actionCost.open) return { ok: false, reason: 'ap' };
+  const res = openFrontierDoor(floor, doorId, { isLocked: id => isLocked(state, id) });
+  if (!res.ok) {
+    logPublic(state, `${player.name} tried a door in ${floor.rooms.get(player.currentRoom)?.name}: it is jammed shut.`);
+    return res;
+  }
+  player.actionPoints -= rules.actionCost.open;
+  state.discovered.add(res.room.id);
+  if (res.room.locked && rules.lockedDoorsEnabled) state.lockedRooms.add(res.room.id);
+  logPublic(state, `${player.name} opened a door: ${res.room.name}.`);
+  return { ok: true, room: res.room, doorway: res.doorway, connected: res.connected, locked: isLocked(state, res.room.id) };
+}
 
 // --- Deck ------------------------------------------------------------------------------------
 // Draw one card; when the deck runs out the discard pile is shuffled into a new deck.

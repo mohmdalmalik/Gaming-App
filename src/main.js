@@ -5,23 +5,23 @@
 import * as THREE from 'three';
 import { config as cfg } from './config.js';
 import { rules, applyMode } from './data/rules.js';
-import { floor1 } from './data/floor1.js';
+import { hotel } from './data/hotel.js';
 import { roster } from './data/characters.js';
-import { buildFloor } from './game/floor.js';
+import { createHotel, stackDeck, growTo } from './game/hotel.js';
 import { buildGrid } from './game/grid.js';
 import {
   createState, resetState, endTurn, activePlayer, nextPlayer, checkWin, canEscape,
-  usableDoorways, pendingEncounters, lockEncounter, playersInRoom, doorwayPassable, isLocked,
+  usableDoorways, openableDoors, pendingEncounters, lockEncounter, playersInRoom, isLocked,
   isBarricaded,
 } from './game/state.js';
 import {
   search, useBandage, useUnlock, useBarricade, resolveFullHand, resolveTrade, resolveAttack,
-  discardCard, overHandLimit, tradeableCards,
+  discardCard, overHandLimit, tradeableCards, openDoor,
 } from './game/actions.js';
 import { CARDS, weaponsIn } from './game/cards.js';
 import { createScene } from './render/scene.js';
-import { createRoomViews, createDoorwayViews } from './render/roomView.js';
-import { dressRooms } from './render/roomDressing.js';
+import { addRoomView, clearRoomViews, createDoorwayViews } from './render/roomView.js';
+import { dressRoom } from './render/roomDressing.js';
 import { updateCutaway } from './render/cutaway.js';
 import { createMood } from './render/mood.js';
 import { createCharacterView } from './render/characterView.js';
@@ -43,14 +43,14 @@ import { roundLabel, finalRoundNote, isFinal } from './ui/roundLabel.js';
 import { createPerfStats } from './ui/perfStats.js';
 
 // --- World (pure data + rules) ---------------------------------------------------------
-const floor = buildFloor(floor1, cfg);
-const grid = buildGrid(floor, cfg);
-if (floor.problems.length) throw new Error(`Problems in the floor data:\n• ${floor.problems.join('\n• ')}`);
+// The hotel is random every match: it starts as the lobby and grows as doors are opened
+// (src/game/hotel.js). createState builds a fresh one.
+const floor = createHotel(hotel, cfg);
 
 // Which game this page is. The choice is in the address so it can be linked, bookmarked and
 // driven by the tests; the start screen writes it for the player.
 //   ?mode=hotseat&players=6   a six-person hot-seat match on one device
-//   ?seed=123                 force the deal, the hidden role, the locked rooms (testing)
+//   ?seed=123                 force the deal, the hidden role and the hotel's room deck (testing)
 //   ?timer=off                play without the 45-second turn clock
 //   ?camera=classic           the previous, higher camera angle (for comparison)
 //   ?stats=1                  a small frame-rate / draw-call readout, for measuring on the iPad
@@ -69,19 +69,36 @@ const newSeed = () => (Number.isFinite(forcedSeed) && forcedSeed > 0 ? forcedSee
     : (Date.now() & 0x7fffffff) || 1);
 let seed = newSeed();
 const state = createState(floor, cast, seed, { mode: MODE });
+const grid = buildGrid(floor, cfg);
+if (floor.problems.length) throw new Error(`Problems in the hotel:\n• ${floor.problems.join('\n• ')}`);
+// The walkable grid follows the hotel as it grows (rebuilt in place: everyone keeps the same object).
+function rebuildGrid() {
+  Object.assign(grid, buildGrid(floor, cfg));
+  if (floor.problems.length) console.warn('hotel problems:', floor.problems.join('; '));
+}
 const startSpot = i => floor.start.positions[i % floor.start.positions.length];
 const movers = cast.map((_, i) => createPlayer(cfg, startSpot(i)));
 
 // --- Rendering -------------------------------------------------------------------------
 const container = document.getElementById('view');
 const view = createScene(container, cfg);
-const roomViews = createRoomViews(floor, cfg, view.scene);
+const roomViews = new Map();          // roomId -> view, added as rooms are revealed
+// Rooms with real art (the lobby) are dressed as their views appear. The greybox shows until the
+// files have loaded; if a piece fails, the room keeps its greybox. The tests wait on this before
+// leaving a page (leaving mid-download cancels a fetch).
+let dressingDone = true;
+const dressing = new Set();
+function trackDressing(promise) {
+  dressing.add(promise); dressingDone = false;
+  promise.catch(err => console.warn('room dressing failed:', err && err.message))
+    .finally(() => { dressing.delete(promise); if (!dressing.size) dressingDone = true; });
+}
 const doorways = createDoorwayViews(floor, cfg, view.scene);
 const characters = cast.map(def => createCharacterView(def, cfg, view.scene));
 const searchMarks = createSearchMarks(floor, view.scene);
 const pathPreview = createPathPreview(view.scene, view.camera, view.renderer.domElement, container);
 const perfStats = createPerfStats(document, view.renderer, params.get('stats') === '1');
-const mood = createMood(roomViews, view.hemi, cfg);
+const mood = createMood(roomViews, view.hemi, cfg, view.scene);
 const rig = createCameraRig(view.camera, cfg);
 
 // --- Interface -------------------------------------------------------------------------
@@ -116,15 +133,14 @@ const discovery = createDiscovery({
 
 // --- Render sync -------------------------------------------------------------------------
 function syncViews(animate) {
-  for (const [id, rv] of roomViews) {
-    const known = state.discovered.has(id);
-    if (known !== rv.revealed) rv.setRevealed(known, animate);
+  // A view for every room the hotel has grown (dressed if it has dressing), and for every door.
+  for (const room of floor.roomList) {
+    if (roomViews.has(room.id)) continue;
+    const v = addRoomView(roomViews, room, cfg, view.scene, { animate });
+    trackDressing(dressRoom(v, floor, cfg).then(done => { if (done) view.compile(); }));
   }
+  doorways.sync();
   searchMarks.update(state);
-  for (const dv of doorways.views.values()) {
-    const a = state.discovered.has(dv.doorway.a), b = state.discovered.has(dv.doorway.b);
-    dv.setState({ known: a || b, frontier: a !== b });
-  }
   characters.forEach((cv, i) => {
     cv.group.visible = !state.escaped?.has(state.players[i].id);
     cv.setDead(!state.players[i].alive);
@@ -132,11 +148,11 @@ function syncViews(animate) {
   });
 }
 
-// Blink the doors the active guest may use this turn.
+// Ring the doors the active guest may use this turn: to open, or to walk through.
 function refreshUsable() {
-  const usable = new Set(state.finished ? [] : usableDoorways(state, floor, activePlayer(state)).map(d => d.id));
-  const here = activePlayer(state).currentRoom;
-  for (const dv of doorways.views.values()) dv.setUsable(usable.has(dv.doorway.id), here);
+  const p = activePlayer(state);
+  const usable = new Set(state.finished ? [] : [...usableDoorways(state, floor, p), ...openableDoors(state, floor, p)].map(d => d.id));
+  for (const dv of doorways.views.values()) dv.setUsable(usable.has(dv.doorway.id), p.currentRoom);
 }
 
 function refresh() { hud.update(state, floor); refreshUsable(); hand.refresh(); searchMarks.update(state); discovery.refresh(); }
@@ -425,7 +441,7 @@ function showEnd() {
   if (state.practice) {
     const p = activePlayer(state);
     overlays.showEnd('You reached the fire exit',
-      `Practice complete — ${rules.lanternsToEscape} Lanterns carried out, ${state.discovered.size} of ${floor.roomList.length} rooms discovered, on round ${state.round}.`,
+      `Practice complete — ${rules.lanternsToEscape} Lanterns carried out, ${floor.roomList.length} rooms of the hotel revealed, on round ${state.round}.`,
       { keepExploring: false });
     void p;
     return;
@@ -444,7 +460,10 @@ function showEnd() {
 
 function restart() {
   seed = newSeed();
-  resetState(state, floor, seed);
+  resetState(state, floor, seed);          // a new random hotel
+  clearRoomViews(roomViews, view.scene);
+  doorways.reset();
+  rebuildGrid();
   movers.forEach((m, i) => m.reset(startSpot(i)[0], startSpot(i)[1]));
   pendingArrival = null; selectedMove = null;
   discovery.refresh();
@@ -498,6 +517,18 @@ function usableDoorwayNear(px, pz, player) {
   return { door: best, dest: best.a === player.currentRoom ? best.b : best.a };
 }
 
+// A closed door of the current room near a ground point (to open it, or to explain why not).
+function closedDoorNear(px, pz, player) {
+  const t = cfg.walls.thickness;
+  for (const d of (floor.rooms.get(player.currentRoom)?.frontier || [])) {
+    const along = d.axis === 'x';
+    const da = along ? Math.abs(px - d.center[0]) : Math.abs(pz - d.center[1]);
+    const dc = along ? Math.abs(pz - d.center[1]) : Math.abs(px - d.center[0]);
+    if (da <= d.width / 2 + 0.6 && dc <= t + 0.7) return d;
+  }
+  return null;
+}
+
 // Any doorway of the current room near a ground point, usable or not (for explaining a refusal).
 function doorwayNear(px, pz, player) {
   const t = cfg.walls.thickness;
@@ -526,15 +557,30 @@ function standingSlot(roomId, forIndex) {
   return { x: cx, z: cz };
 }
 
-// Where to walk when moving through `door` into `dest`. A discovered room takes the standing
-// slot (its centre / a free spot beside others); an undiscovered room can only be entered as
-// far as the doorway landing until it is revealed.
+// Where to walk when moving through `door` into `dest`: the standing slot there (its centre, or a
+// free spot beside others). Every room you can walk into has already been revealed.
 function moveTargetInto(dest, door, forIndex) {
-  if (state.discovered.has(dest)) return standingSlot(dest, forIndex);
-  const room = floor.rooms.get(dest);
-  const depth = cfg.walls.thickness + cfg.player.clearance + 0.5;
-  if (door.axis === 'x') return { x: door.center[0], z: door.center[1] + (Math.sign(room.center[1] - door.center[1]) || 1) * depth };
-  return { x: door.center[0] + (Math.sign(room.center[0] - door.center[0]) || 1) * depth, z: door.center[1] };
+  return standingSlot(dest, forIndex);
+}
+
+// Open a closed door of the active guest's room (1 AP): the room behind it is revealed and the
+// guest stays put. The new room is empty, so nothing else happens.
+const DOOR_FAIL = {
+  jammed: 'The door is jammed shut — there is no way through here.',
+  ap: 'No action points left to open a door.',
+  notYourDoor: 'You can only open a door of the room you are in.',
+};
+function onOpenDoor(doorId) {
+  if (!running || state.finished) return;
+  const player = activePlayer(state);
+  const r = openDoor(state, floor, player, doorId);
+  if (!r.ok) { hud.toast(DOOR_FAIL[r.reason] || 'That door will not open.'); refresh(); syncViews(false); return; }
+  rebuildGrid();
+  discovery.refresh();
+  syncViews(true);
+  refresh();
+  hud.toast(r.room.isExit ? `The door opens onto the ${r.room.name}!`
+    : `The door opens: ${r.room.name}${r.locked ? ' — locked' : ''}${r.room.dark ? ' — dark' : ''}.`);
 }
 
 createInput(view.renderer.domElement, {
@@ -543,6 +589,16 @@ createInput(view.renderer.domElement, {
     const p = screenToGround(x, y);
     if (!p) return;
     const player = activePlayer(state);
+    // 0. A closed door of this room → offer to open it (you stay where you are).
+    const closed = closedDoorNear(p.x, p.z, player);
+    if (closed) {
+      if (closed.jammed) { hud.toast(DOOR_FAIL.jammed); return; }
+      if (player.actionPoints < rules.actionCost.open) { hud.toast(DOOR_FAIL.ap); return; }
+      const m = activeMover();
+      selectedMove = { kind: 'open', door: closed, waypoints: [[m.x, m.z]], preview: { label: `Open · ${rules.actionCost.open} AP`, anchor: closed.center } };
+      hud.showConfirm('Open this door?', `Open · ${rules.actionCost.open} AP`);
+      return;
+    }
     // 1. A usable door → offer to move there.
     const near = usableDoorwayNear(p.x, p.z, player);
     if (near) {
@@ -550,7 +606,7 @@ createInput(view.renderer.domElement, {
       const plan = discovery.plan(slot.x, slot.z);
       if (plan.ok) {
         // the dotted path + cost tag over the door, shown while the move awaits confirmation
-        plan.preview = { label: `${state.discovered.has(near.dest) ? 'Move' : 'Explore'} · ${plan.cost} AP`, anchor: near.door.center };
+        plan.preview = { label: `Move · ${plan.cost} AP`, anchor: near.door.center };
         selectedMove = plan;
         hud.showConfirm(`Move to ${floor.rooms.get(near.dest).name}?`, `Move · ${plan.cost} AP`);
       } else {
@@ -592,7 +648,13 @@ hud.onHand(() => { if (running && !uiBusy()) hand.open(state, floor); });
 hud.on('private', () => { if (running && !uiBusy()) hand.open(state, floor); });
 hud.on('map', () => { if (!meeting.isOpen && !discard.isOpen && !overlays.endOpen && !handoff.isOpen) map.toggle(state, movers); });
 hud.onConfirm(
-  () => { if (selectedMove) { discovery.go(selectedMove); selectedMove = null; hud.hideConfirm(); } },
+  () => {
+    if (!selectedMove) return;
+    const chosen = selectedMove;
+    selectedMove = null; hud.hideConfirm();
+    if (chosen.kind === 'open') onOpenDoor(chosen.door.id);
+    else discovery.go(chosen);
+  },
   () => { selectedMove = null; hud.hideConfirm(); },
 );
 overlays.onBegin(begin);
@@ -635,14 +697,6 @@ mood.snap(activePlayer(state).currentRoom);
 hud.update(state, floor);
 view.compile();
 
-// Dress the starting room with the real glTF furniture (async — the models are local files,
-// so this is quick). The greybox shows until it loads; if a piece fails the room just keeps
-// its greybox. Recompile once dressed so the new materials don't stall the first frames.
-let dressingDone = false;   // read by the tests: leaving the page mid-download cancels a fetch
-dressRooms(roomViews, floor, cfg)
-  .then(() => view.compile())
-  .catch(err => console.warn('room dressing failed:', err && err.message))
-  .finally(() => { dressingDone = true; });
 
 // --- Game loop ---------------------------------------------------------------------------
 let last = performance.now();
@@ -661,9 +715,9 @@ view.renderer.setAnimationLoop(now => {
   rig.setFocus(activeMover().x, activeMover().z);
   rig.update(dt);
   for (const rv of roomViews.values()) rv.update(dt);
-  doorways.update(time, rig);
+  doorways.update(time, dt, roomViews);
   pathPreview.update(selectedMove && hud.confirmOpen && !activeMover().walking ? selectedMove : null, time);
-  mood.update(activePlayer(state).currentRoom, dt, time);
+  mood.update(activePlayer(state).currentRoom, dt, time, activeMover());
   updateCutaway(roomViews, rig, state, cfg, dt);
   characters.forEach((cv, i) => cv.update(movers[i], dt));
   view.render();
@@ -713,6 +767,21 @@ window.__game = {
   groundToScreen,
   screenToGround: (x, y) => { const p = screenToGround(x, y, new THREE.Vector3()); return p ? [p.x, p.z] : null; },
   roomCenter: id => floor.rooms.get(id)?.center ?? null,
+  // the random hotel: closed doors of the active guest's room, open one, stack the deck (tests)
+  closedDoors: () => (floor.rooms.get(activePlayer(state).currentRoom)?.frontier || []).map(d => ({ id: d.id, side: d.side, jammed: d.jammed, center: d.center })),
+  openDoor: id => onOpenDoor(id),
+  stackDeck: id => stackDeck(floor, id),
+  // Tests: put a particular room on the board (next to room `nextTo` if given), as if its door
+  // had been opened, without spending anyone's action points.
+  revealTile: (id, nextTo = null) => {
+    for (const room of growTo(floor, id, { isLocked: r => isLocked(state, r) }, nextTo)) {
+      state.discovered.add(room.id);
+      if (room.locked && rules.lockedDoorsEnabled) state.lockedRooms.add(room.id);
+    }
+    rebuildGrid(); discovery.refresh(); syncViews(false); refresh();
+    return floor.rooms.has(id) && (!nextTo || floor.rooms.get(id).neighbours.has(nextTo));
+  },
+  hotelRooms: () => floor.roomList.map(r => r.id),
   programCount: () => view.renderer.info.programs.length,
   setPixelRatio: cap => view.setPixelRatio(cap),
 };

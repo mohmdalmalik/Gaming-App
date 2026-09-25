@@ -5,11 +5,11 @@ Guests are trapped on a hotel floor. Lanterns are the way out: a clean guest car
 
 ## Players
 4–6, tuned for 6. Hot-seat on one iPad for testing; the real game will be online, one device each.
-- Practice mode: one guest alone finds three Lanterns and reaches the exit. No meetings, no possessed guest, no deadline.
+- Practice mode: one guest alone, in a random hotel like any other match, finds three Lanterns and reaches the exit. No meetings, no possessed guest, no deadline.
 
 ## Turn
 - 4 action points (AP), never carried over.
-- Move into any adjacent room, new or already known: 1 AP. Search: 1 AP. Use a card: 1 AP. Repositioning inside a room: free.
+- Open a closed door of your room: 1 AP (see Doors and exploring). Move into an adjacent room through an open doorway: 1 AP. Search: 1 AP. Use a card: 1 AP. Repositioning inside a room: free.
 - 45-second timer for the active player's actions. It pauses during meetings and pass-the-device screens. When it runs out, the turn ends. ?timer=off disables it.
 - A round = every living guest takes one turn.
 - Dawn deadline: the match lasts at most 8 rounds. The round is shown as "Round 3 of 8", and the final round before dawn is clearly marked.
@@ -44,16 +44,31 @@ Guests are trapped on a hotel floor. Lanterns are the way out: a clean guest car
 ## Lanterns and escape
 - Lanterns do double duty: given in a trade they block a possession attempt, and three of them open the fire exit.
 - Lanterns are never dealt. They are found only by searching.
-- The exit room is discovered like any other room. A clean guest holding three Lanterns who enters it escapes immediately, before any meeting. A possessed guest can hold Lanterns but can never escape.
+- The Fire Exit is revealed like any other room, when the door to it is opened. A clean guest holding three Lanterns who enters it escapes immediately, before any meeting. A possessed guest can hold Lanterns but can never escape.
 
 ## Winning
 - Clean side: one clean guest escapes with three Lanterns.
 - Possessed side: every living guest is possessed, or every clean guest is dead, or dawn breaks — no clean guest has escaped when round 8 ends.
 
+## The hotel map
+- A new random hotel every match, built from a shuffled room deck of 24 tiles that are placed as the hotel is explored.
+- Every room is a same-size square tile with 1 to 4 doorways centred on its sides, so any room can join any other.
+- The lobby is the centre start tile. It starts with 3 or 4 open doorways, chosen at random each match; a closed-off side is a plain wall.
+- The Fire Exit is shuffled into the last five tiles of the room deck.
+- A new tile is turned automatically to a random orientation that fits: one of its doorways meets the door that was opened, and none of its doorways opens into a wall. Where two doorways meet, they connect. If a tile can't fit, it goes to the bottom of the deck and the next tile is tried.
+- The hotel never closes itself off before the Fire Exit is placed: there is always at least one reachable unexplored doorway.
+- Tile mix: 1 Fire Exit, 2 locked rooms, dark rooms in about the same share as before, and the rest ordinary rooms and corridors, with doorway counts that give branching routes and a few dead ends. The exact mix is in src/data/hotel.js (awaiting the owner's approval).
+- *Placeholder, awaiting approval:* if no remaining tile can fit behind a door, the door is jammed: it stays shut for the rest of the match, and trying it costs nothing.
+
+## Doors and exploring
+- Unexplored doorways are closed doors. Opening one costs 1 AP and reveals the room behind it, but you stay where you are. Entering is a normal move (1 AP). You are never forced to enter.
+- Opened doors stay open.
+- A newly revealed room is empty, so opening a door never triggers a meeting.
+
 ## Rooms
-- Start in the lobby. Rooms are revealed by entering them and stay visible.
+- Start in the lobby. Rooms stay visible once revealed.
 - Dark rooms: anyone can enter; searching needs a Flashlight (not used up).
-- Two locked rooms, chosen at random each match (never the lobby, a room next to it, or the exit): opened from a room next door with a Master Key (always works, then discarded) or a Lock Pick (works half the time, discarded either way). Once opened, they stay open.
+- Two locked rooms are tiles in the room deck. A locked room is locked from the moment it is revealed, and never joins the lobby. It is opened from a room next door with a Master Key (always works, then discarded) or a Lock Pick (works half the time, discarded either way). Once opened, it stays open.
 - Barricade: seals one doorway of your room until your next turn starts.
 
 ## Searching

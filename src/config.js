@@ -66,6 +66,7 @@ export const config = {
     moodTint: 0.2,        // how much each room's greys lean toward its mood colour (0..1)
     background: '#141318',
     pointLightScale: 22,  // multiplies mood.intensity from the data file into Three.js light units
+    lightPool: 8,         // point lights handed to the room lights nearest the camera (fixed count)
     hemisphere: { sky: '#ffffff', ground: '#3a3438', baseIntensity: 0.6 },
     ambientLerp: 1.5,     // how quickly the global light level follows the current room's mood (per second)
     revealDuration: 0.6,  // seconds for a newly discovered room to "rise" into view

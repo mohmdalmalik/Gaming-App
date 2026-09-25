@@ -857,3 +857,111 @@ sub-path.
    Move walks you through.
 4. Add `?camera=classic` to compare the old angle; add `?stats=1` and note the fps / worst ms.
 5. Walk around the furniture and into every doorway: nothing should block where it did not before.
+
+
+# Approved rule changes — the random hotel map (current)
+
+**Status: implemented, tested, committed.** One placeholder and the tile mix await the owner's
+approval (below). Room art for the new tiles comes after the system is approved; they are grey boxes.
+
+## What changed
+- **A new random hotel every match**, built from a shuffled deck of 24 square tiles (8 m, the lobby's
+  size) placed as doors are opened (`src/game/hotel.js`, deck in `src/data/hotel.js`). The fixed
+  18-room map is retired (git history keeps it).
+- **The lobby** keeps its baked look and starts with 3 or 4 open doorways, chosen each match; a
+  closed-off side is shown as plain panelled wall (the lobby model now has both versions of each side).
+- **The Fire Exit** is shuffled into the last five tiles of the deck.
+- **Placement:** a new tile turns to a random orientation that fits (a doorway meets the door that was
+  opened, doorway meets doorway and wall meets wall everywhere else). A tile that can't fit goes to the
+  bottom of the deck. Until the exit is placed, the hotel can never close itself off.
+- **Doors:** unexplored doorways are closed doors (a walnut leaf with a ring in front of it). Opening
+  one costs 1 AP and reveals the room behind it; you stay put. Entering is a normal move (1 AP). The door
+  swings open and stays open. A new room is empty, so opening never starts a meeting.
+- **Practice** uses the random map too (a new hotel on every start and every Restart practice).
+- **Locked rooms** are two tiles in the deck, locked from the moment they appear, never next to the lobby.
+- Map: closed doors are drawn with a "?", jammed ones as wall.
+
+## For the owner's approval
+**Tile mix (24 tiles)** — the four "crossroads" have 4 doorways, "T" 3, "straight"/"corner" 2, dead ends 1:
+
+| Doorways | Tiles |
+| --- | --- |
+| 4 (crossroads) | Lounge, Ballroom, Grand Corridor, Garden Lounge |
+| 3 (T) | Dining Room, Library, Kitchen, East Corridor, West Corridor, **Service Corridor** (dark), **Storage Room** (dark) |
+| 2 straight | North Corridor, South Corridor, Guest Suite 418, **Service Stairs** (dark) |
+| 2 corner | Corner Corridor, Guest Suite 410, **Back Stairs Passage** (dark), *Cloakroom* (locked) |
+| 1 (dead end) | Guest Suite 412, Guest Suite 414, *Guest Suite 416* (locked), **Housekeeping Store** (dark) |
+| 1 | Fire Exit (safe, not searchable) |
+
+5 dark rooms of 23 (22%; the old map had 4 of 17). Every room except the lobby and the exit can be
+searched once (23 searches available; the old map had 16).
+
+**Placeholder — jammed doors:** if no tile left in the deck can fit behind a door, the door is jammed: it
+stays shut for the match and trying it costs nothing. Rare before the exit is placed (about 1 match in
+12 in the generator test, 0.01 per simulated match); the never-close-off rule guarantees another way on.
+
+## Tests
+rules-check, logic-check (tiles in every orientation; 400 hotels grown to the end: no overlaps, every
+room walkable, the exit always reached, never closed off), browser-practice, browser-hotseat,
+browser-lobby — all passing, from the root and the `/Gaming-App/` sub-path.
+
+## Performance
+Lobby view at the start: 54 draw calls. With 13 rooms revealed: 154 draw calls, 1.3 ms to prepare a frame
+(the old fixed map: 271). The light count is fixed (a pool of 8), so no shader rebuilds as the hotel grows.
+Rebuilding the walkable grid after a door opens: at most ~30 ms for a full hotel.
+
+## Simulation — 400 six-player matches (`node tools/balance/hotseat-sim.mjs 400 6`)
+Bots now open doors. By default clean guests explore whenever the Fire Exit is still hidden (open a door,
+go in, search); `--cautious` bots only open doors once nothing known is left to search.
+
+| | |
+| --- | --- |
+| Clean guests win | 10% |
+| The hotel wins | 90% |
+| … by possessing or killing every clean guest | 80% |
+| … at dawn | 11% |
+| Matches that never end | 0 |
+| Match length, median rounds (all matches) | 3 |
+| … when the clean side wins | 5 |
+| … when the hotel wins | 3 |
+| Reached dawn | 42 of 400 |
+| … no peaceful way left (3 Lanterns only by taking them from the possessed) | 23 (55% of dawn matches) |
+| … 3 Lanterns still reachable without a fight | 19 (45% of dawn matches) |
+| Lanterns at dawn: clean hands / possessed hands / deck / floor | 0.8 / 8.3 / 1.5 / 0.0 |
+| Fire Exit revealed: median round | 4 (never revealed in 309 of 400) |
+| … by round 1-2 / 3-4 / 5-6 / 7-8 | 1% / 11% / 9% / 2% |
+| Tiles explored per match: median (fewest-most) of 24 | 13 (3-24) |
+| Doors opened / jammed per match | 13.30 / 0.01 |
+| Meetings per match: median (average) | 15 (18.07) |
+| Meetings per round | 5.00 |
+| Hotel closed itself off before the Fire Exit | 0 times |
+| Possession attempts / succeeded / blocked | 5.84 / 4.41 / 1.44 |
+| Lanterns found / burned | 6.28 / 1.44 |
+| Attacks / deaths | 0.14 / 0.01 |
+
+With cautious bots the clean side wins 2%. Before this change (fixed map, same bots): clean 50% / hotel
+50%, 2.5 possessions per match, 4.4 meetings per round, 7.9 Lanterns found.
+
+**Recommendations only — nothing has been changed:**
+1. **The Fire Exit rarely turns up in time.** It appeared in fewer than a quarter of matches. Being in the
+   last five of 24 tiles means about 20 doors must be opened first, and a match opens about 13 before
+   possession or dawn ends it. Options: shuffle the exit into the second half of the deck instead of the
+   last five, use a smaller deck, or make opening + entering cheaper.
+2. **Possession now dominates early.** Everyone starts packed in one lobby and the hotel grows a room at a
+   time, so guests crowd into the few rooms there are: more forced meetings (5.0 a round, was 4.4) while
+   holding fewer Lanterns (exploring costs action points). Possessions that succeed rose from 2.5 to 4.4
+   per match and most matches end by round 3. Options: always 4 lobby doors, or the lobby's
+   neighbours revealed at the start, or a meeting only when entering a room you did not just open.
+3. The never-close-off rule held in every simulated match (0 times), as did the tests.
+
+## What to test on the iPad
+1. Open the preview: the lobby should look as before, with 3 or 4 walnut doors; any closed-off side is
+   plain panelled wall. Restart practice a few times: the doors change.
+2. Tap a door's ring: "Open this door?" with an "Open · 1 AP" tag. Open: the door swings open, a grey room
+   appears behind it, you stay in the lobby with 3 AP left.
+3. Tap the ring again: "Move · 1 AP" with a dotted path. Move: you walk in.
+4. Keep exploring: rooms fit together, doorways always meet doorways, and there is always a closed door
+   left somewhere until the Fire Exit appears (it is one of the last five rooms).
+5. Map: closed doors show a "?"; a locked room shows a padlock.
+6. Hot-seat: opening a door never starts a meeting; walking into a room where someone stands does.
+7. With many rooms open, add `?stats=1` and note the fps.

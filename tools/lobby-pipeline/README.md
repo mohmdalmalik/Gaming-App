@@ -16,7 +16,8 @@ maps then no longer match; do not commit that).
 
 ## What each file does
 - `dump_lobby.mjs` — writes the room's walls, doorways and furniture footprints from
-  `src/data/floor1.js`, so the model is built on exactly what collision and pathfinding use.
+  `src/data/hotel.js` (the lobby, with a doorway on every side), so the model is built on exactly
+  what collision and pathfinding use.
   `tests/browser-lobby.mjs` fails if the data and `lobby.json` ever drift apart: re-run the steps.
 - `textures.py` — cream stone tiles, two burgundy rugs with gold borders, four paintings
   (into `build/`, embedded in the `.glb` as JPEG).
@@ -40,4 +41,6 @@ maps then no longer match; do not commit that).
 ## Tuning
 - Overall brightness in the game: `exposure` for `hall` in `src/data/dressing.js` (no re-bake).
 - Colours: `C` in `make_lobby.py`; lights: `setup_lighting()` and the `LIGHTS` entries (re-bake).
-- Furniture footprints (collision) stay in `src/data/floor1.js`; move a piece there, re-dump, re-bake.
+- Furniture footprints (collision) stay in `src/data/hotel.js` (the lobby); move a piece there, re-dump, re-bake.
+- Walls: every side is built as parts A | B · door · C | D plus a plain-wall part F; the game shows
+  A B C D on an open side and A F D on a side the match closes off (the lobby has 3 or 4 doorways).

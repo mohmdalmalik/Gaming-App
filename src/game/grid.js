@@ -32,17 +32,18 @@ export function buildGrid(floor, cfg) {
   });
 
   const inRect = (r, x, z) => x >= r.min[0] && x <= r.max[0] && z >= r.min[1] && z <= r.max[1];
+  // Which room owns a point: straight from the hotel's tile grid when there is one.
+  const S = floor.tileSize;
+  const ownerOf = S && floor.cells
+    ? (x, z) => { const id = floor.cells.get(`${Math.floor(x / S + 0.5)},${Math.floor(z / S + 0.5)}`); return id ? roomIndex.get(id) : -1; }
+    : (x, z) => floor.roomList.findIndex(r => x >= r.min[0] && x < r.max[0] && z >= r.min[1] && z < r.max[1]);
 
   for (let j = 0; j < rows; j++) {
     for (let i = 0; i < cols; i++) {
       const idx = j * cols + i;
       const x = originX + (i + 0.5) * cell;
       const z = originZ + (j + 0.5) * cell;
-      let owner = -1;
-      for (let k = 0; k < floor.roomList.length; k++) {
-        const r = floor.roomList[k];
-        if (x >= r.min[0] && x < r.max[0] && z >= r.min[1] && z < r.max[1]) { owner = k; break; }
-      }
+      const owner = ownerOf(x, z);
       if (owner < 0) continue;
       room[idx] = owner;
       const r = floor.roomList[owner];

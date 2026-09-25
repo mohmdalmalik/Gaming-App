@@ -11,7 +11,7 @@
 #                    furniture shadows and the warm pools under lamps and sconces), stored as
 #                    light / LM_SCALE in sRGB. The game multiplies it back (src/render/bakedRoom.js).
 #
-# The room is built on the game's own data (lobby.json is dumped from src/data/floor1.js), so the
+# The room is built on the game's own data (lobby.json is dumped from src/data/hotel.js), so the
 # walls, doorways and furniture footprints line up exactly with collision and pathfinding.
 #
 # Every wall segment of the game (room.walls) becomes two objects so the dollhouse cutaway can
@@ -242,7 +242,22 @@ class Seg:
             out.append((cur, s1))
         return [(a, b) for a, b in out if b - a > 0.02]
 
-segs = [Seg(w) for w in J['walls']]
+# Every side is built in the same four parts, A | B · door · C | D, plus a plain-wall part F that
+# fills B · door · C when the match closes that side off (the lobby has 3 or 4 doorways).
+T0 = J['wallThickness']
+PARTS = {'A': (-4.0, -1.2), 'B': (-1.2, -0.6), 'C': (0.6, 1.2), 'D': (1.2, 4.0), 'F': (-1.2, 1.2)}
+def side_part(side, letter):
+    s0, s1 = PARTS[letter]
+    if side in ('east', 'west'):             # east/west walls stop at the inner corners
+        s0, s1 = max(s0, R_MIN[1] + T0), min(s1, R_MAX[1] - T0)
+    if side == 'north': mn, mx = [s0, R_MIN[1]], [s1, R_MIN[1] + T0]
+    elif side == 'south': mn, mx = [s0, R_MAX[1] - T0], [s1, R_MAX[1]]
+    elif side == 'east': mn, mx = [R_MAX[0] - T0, s0], [R_MAX[0], s1]
+    else: mn, mx = [R_MIN[0], s0], [R_MIN[0] + T0, s1]
+    return {'id': 'hall:%s:%s' % (side, letter), 'side': side, 'neighbour': None, 'min': mn, 'max': mx}
+SIDE_NAMES = ('north', 'south', 'east', 'west')
+segs = [Seg(side_part(side, L)) for side in SIDE_NAMES for L in 'ABCD']
+fillers = [Seg(side_part(side, 'F')) for side in SIDE_NAMES]
 by_side = {}
 for s in segs:
     by_side.setdefault(s.side, []).append(s)
@@ -259,6 +274,8 @@ def inner_range(sg, proud):
 
 doors = J['doorways']
 def door_of(sg):
+    if sg.key.endswith('_F'):
+        return None
     for d in doors:
         dc = d['center'][0] if sg.axis == 'x' else d['center'][1]
         other = d['center'][1] if sg.axis == 'x' else d['center'][0]
@@ -337,7 +354,7 @@ def wall_run(sg):
     x0, x1, z0, z1 = sg.rect(sg.s0, sg.s1, -th - 0.02, -th)
     box(sg.up, x0, x1, 2.14, 2.20, z0, z1, C['rail'], 0.006)
 
-for sg in segs:
+for sg in segs + fillers:
     wall_run(sg)
 
 # ---- doorways: walnut casings with brass plinths, a lintel wall over the opening, threshold ----
@@ -378,12 +395,14 @@ def door_frame(sg):
         seg = sg if (sg.s0 <= s <= sg.s1) else next(o for o in by_side[sg.side] if o.s0 <= s <= o.s1)
         sconce(seg, s, 1.62)
 
-def sconce(sg, s, y):
+def sconce(sg, s, y, light=True):
     sg.put(s - 0.05, s + 0.05, y - 0.13, y + 0.13, 0.0, 0.02, C['brass'], 0.01, where=sg.up)
     sg.put(s - 0.015, s + 0.015, y - 0.03, y + 0.0, 0.0, 0.07, C['brass'], 0.006, where=sg.up)
     sg.put(s - 0.05, s + 0.05, y - 0.12, y + 0.12, 0.05, 0.15, C['shade'], 0.02, where=sg.up, mat='glow')
     sg.put(s - 0.055, s + 0.055, y + 0.12, y + 0.15, 0.045, 0.155, C['brass'], 0.008, where=sg.up)
     sg.put(s - 0.055, s + 0.055, y - 0.15, y - 0.12, 0.045, 0.155, C['brass'], 0.008, where=sg.up)
+    if not light:
+        return
     x0, x1, z0, z1 = sg.rect(s, s, 0.22, 0.22)
     LIGHTS.append((x0, y, z0, 22.0, 0.06, (1.0, 0.72, 0.42)))
 
@@ -417,6 +436,10 @@ def painting(sg, s, y, w, h, quad):
 for sg in segs:
     if sg.door:
         door_frame(sg)
+# the plain-wall fillers keep the two sconces a doorway would have had, so the light matches
+for sg in fillers:
+    for s in (-1.03, 1.03):
+        sconce(sg, s, 1.62, light=False)     # the doorway's sconce light is already at this spot
 
 # ---- the lift (north wall): walnut double doors in a brass frame, brass handles ---------------
 def build_lift():
@@ -694,27 +717,30 @@ def setup_lighting():
         po = bpy.data.objects.new('lamp', pd); po.location = G(x, y, z); scene.collection.objects.link(po)
 
 def bake_pass(kind, images, clear):
-    """Bake `kind` ('DIFFUSE' light or 'AO') for the atlas objects and the floor into `images`
-    ({'atlas': img, 'floor': img}); the cut caps are baked again with the upper walls hidden."""
+    """Bake `kind` ('DIFFUSE' light or 'AO') into `images` ({'atlas': img, 'floor': img}) in four
+    passes, each with only what is actually seen together: (1) the room with every doorway open;
+    (2) the plain-wall fillers, with the doorway parts they replace hidden; (3) the cut caps of the
+    doorway walls with the upper walls folded away; (4) the fillers' cut caps, likewise."""
     for m in materials:
         n = m.node_tree.nodes.get('bake') or m.node_tree.nodes.new('ShaderNodeTexImage')
         n.name = 'bake'
         n.image = images['floor'] if m.name in ('floor', 'rug') else images['atlas']
         n.select = True; m.node_tree.nodes.active = n
-    caps = [o for n, o in objs.items() if n.endswith('_cap')]
-    others = [o for n, o in objs.items() if not n.endswith('_cap')]
-    ups = [o for n, o in objs.items() if n.endswith('_up')]
+    F = lambda n: '_F_' in n
+    BC = lambda n: '_B_' in n or '_C_' in n
     extra = dict(pass_filter={'DIRECT', 'INDIRECT'}) if kind == 'DIFFUSE' else {}
-    bpy.ops.object.select_all(action='DESELECT')
-    for o in others: o.select_set(True)
-    bpy.context.view_layer.objects.active = others[0]
-    bpy.ops.object.bake(type=kind, use_clear=clear, margin=6, **extra)
-    for o in ups: o.hide_render = True
-    bpy.ops.object.select_all(action='DESELECT')
-    for o in caps: o.select_set(True)
-    bpy.context.view_layer.objects.active = caps[0]
-    bpy.ops.object.bake(type=kind, use_clear=False, margin=6, **extra)
-    for o in ups: o.hide_render = False
+    def run(selected, hidden, clear_now):
+        for n, o in objs.items(): o.hide_render = hidden(n)
+        bpy.ops.object.select_all(action='DESELECT')
+        chosen = [o for n, o in objs.items() if selected(n)]
+        for o in chosen: o.select_set(True)
+        bpy.context.view_layer.objects.active = chosen[0]
+        bpy.ops.object.bake(type=kind, use_clear=clear_now, margin=6, **extra)
+    run(lambda n: not F(n) and not n.endswith('_cap'), lambda n: F(n), clear)
+    run(lambda n: F(n) and not n.endswith('_cap'), lambda n: BC(n), False)
+    run(lambda n: not F(n) and n.endswith('_cap'), lambda n: F(n) or n.endswith('_up'), False)
+    run(lambda n: F(n) and n.endswith('_cap'), lambda n: BC(n) or n.endswith('_up'), False)
+    for o in objs.values(): o.hide_render = False
 
 def bake():
     setup_lighting()

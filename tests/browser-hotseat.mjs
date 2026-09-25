@@ -86,6 +86,9 @@ async function load(query) {
   await page.waitForFunction(() => window.__game && !document.getElementById('btn-begin').disabled, null, { timeout: 45000 });
   // Headless software rendering runs at a few frames a second; only the walking speed is raised.
   await game(() => { window.__game.cfg.player.speed = 16; window.__game.setPixelRatio(0.5); });
+  // The hotel is random and starts as just the lobby: put the two rooms the stagings below use on
+  // the board (the East Corridor through a lobby door), as if their doors had been opened.
+  await game(() => { window.__game.revealTile('corridorE', 'hall'); window.__game.revealTile('corridorW'); });
 }
 // Click through hand-over screens until the active guest's turn is running.
 async function intoTurn() {
@@ -138,13 +141,15 @@ const st = await game(() => ({
   pileLanterns: window.__game.state.drawPile.filter(c => c.type === 'lantern').length,
   four: window.__game.state.players.every(p => p.hand.filter(c => c.type !== 'possession').length === 4),
   locked: window.__game.lockedRooms(), pile: window.__game.state.drawPile.length,
+  rooms: window.__game.hotelRooms(), east: window.__game.floor.rooms.get('corridorE')?.neighbours.has('hall'),
   timer: window.__game.rules.turnTimerEnabled,
 }));
 check(st.mode === 'hotseat' && st.n === 6, 'six guests, hot-seat');
 check(st.poss.length === 1 && st.supply[st.poss[0]] === 3 && st.supply.filter(x => x > 0).length === 1, 'exactly one possessed guest, holding 3 Possession cards');
 check(st.lanterns && st.four, 'four cards each, and not one Lantern dealt');
 check(st.pileLanterns === 12 && st.pile === 16, 'all 12 Lanterns wait in the 16-card deck');
-check(st.locked.length === 2, 'two rooms locked');
+check(st.locked.length === 0, 'nothing is locked until a locked room is revealed');
+check(st.east && st.rooms.includes('corridorW'), 'the random hotel has grown the rooms these checks use');
 check(st.timer, 'the 45-second timer is on');
 
 console.log('\n2. secret roles, one guest at a time');
@@ -314,8 +319,10 @@ await game(() => {
   s.players[0].hand = [{ id: 'b1', type: 'lantern' }, { id: 'b2', type: 'lantern' }, { id: 'b3', type: 'lantern' }];
   g.refresh();
 });
+check(await game(() => window.__game.revealTile('exit')), 'the Fire Exit is revealed');
+await game(() => { window.__game.state.lockedRooms.clear(); window.__game.refresh(); });
 await place(1, await game(() => window.__game.floor.exitRoom));
-await put('stairs', 4);
+await put(await game(() => [...window.__game.floor.rooms.get(window.__game.floor.exitRoom).neighbours][0]), 4);
 await game(() => window.__game.moveToRoom(window.__game.floor.exitRoom));
 await settle();
 await page.waitForTimeout(300);
@@ -333,7 +340,8 @@ await game(() => {
   s.players[0].hand = [{ id: 'b1', type: 'lantern' }, { id: 'b2', type: 'lantern' }, { id: 'b3', type: 'lantern' }];
   window.__game.refresh();
 });
-await put('stairs', 4);
+await game(() => { window.__game.revealTile('exit'); window.__game.state.lockedRooms.clear(); window.__game.refresh(); });
+await put(await game(() => [...window.__game.floor.rooms.get(window.__game.floor.exitRoom).neighbours][0]), 4);
 await game(() => window.__game.moveToRoom(window.__game.floor.exitRoom));
 await settle();
 await page.waitForTimeout(200);

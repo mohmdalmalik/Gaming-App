@@ -1,97 +1,28 @@
 // Per-room "dressing" — how a room's greybox shell (floor + walls) is replaced with real
 // glTF pieces, plus decoration that has no collision (rugs, pillows) and where the lamp lights
 // sit. Keyed by room id, so dressing another room later is just another entry here; only rooms
-// listed are dressed, everything else stays greybox and untouched.
+// listed are dressed, everything else stays greybox and untouched. With the random hotel every
+// room is an 8 m tile; only the lobby is dressed for now (room art comes later), and the generic
+// Kenney shell dressing in src/render/roomDressing.js is kept for when it does.
 //
-// The furniture MODELS themselves live in the room data (src/data/floor1.js `furniture`), so
+// The furniture MODELS themselves live in the room data (`furniture`, with a `model`), so
 // collision and visuals come from one place. This file is only the shell + non-colliding extras.
 
 export const roomDressings = {
   // The starting room is one baked model (tools/lobby-pipeline/, loaded by
   // src/render/bakedRoom.js): walnut panelling cut at a consistent height, cream stone floor,
   // burgundy rugs, red velvet seating, brass lamps and sconces, with soft shadows and lamp light
-  // baked in. The collision footprints are still the furniture in floor1.js.
+  // baked in. The collision footprints are the lobby furniture in src/data/hotel.js.
   hall: {
     style: 'baked',
     model: 'lobby/lobby.glb',
     light: 'lobby/lobby-light.jpg',
     floorLight: 'lobby/lobby-floor-light.jpg',
     exposure: 0.62,
-    // Lamp lights: which of the room's mood-light indices (from mood.lights in floor1.js) sit
+    // Lamp lights: which of the room's mood-light indices (from mood.lights in hotel.js) sit
     // low by a lamp rather than up at the ceiling, and how warm/bright each is. Index 0 is the
     // ceiling fill and is left alone.
     lampLights: { indices: [1, 2, 3], height: 1.0, color: '#ffe6c0', intensityScale: 0.9 },
   },
 
-  // A few more rooms dressed by theme (same shell + a rug; the themed furniture is in floor1.js).
-  library: {
-    floor: { model: 'building/floor.glb', tile: 2.0, top: 0.1 },
-    wall: { model: 'building/wall.glb', natHeight: 2.4 },
-    decor: [
-      { model: 'furniture/rugRounded.glb', pos: [0, 0.7], yaw: 0, scale: 2.2,
-        overrides: { carpet: '#6d4636', carpetDarker: '#4a2f24' } },
-    ],
-  },
-  lounge: {
-    floor: { model: 'building/floor.glb', tile: 2.0, top: 0.1 },
-    wall: { model: 'building/wall.glb', natHeight: 2.4 },
-    decor: [
-      { model: 'furniture/rugRounded.glb', pos: [-1.6, -1.2], yaw: 0, scale: 2.7,
-        overrides: { carpet: '#7c4a39', carpetDarker: '#5a3327' } },
-    ],
-  },
-  dining: {
-    floor: { model: 'building/floor.glb', tile: 2.0, top: 0.1 },
-    wall: { model: 'building/wall.glb', natHeight: 2.4 },
-    decor: [
-      { model: 'furniture/rugRounded.glb', pos: [0, 0.6], yaw: 0, scale: 2.9,
-        overrides: { carpet: '#6d4636', carpetDarker: '#4a2f24' } },
-    ],
-  },
-
-  // The rooms added for the 18-room layout use the same floor/wall template, so the west and
-  // south wings read as finished hotel rather than greybox. Only the rug tone differs.
-  ballroom: {
-    floor: { model: 'building/floor.glb', tile: 2.0, top: 0.1 },
-    wall: { model: 'building/wall.glb', natHeight: 2.4 },
-    decor: [
-      { model: 'furniture/rugRounded.glb', pos: [1.2, 0], yaw: 0, scale: 3.4,
-        overrides: { carpet: '#7a4230', carpetDarker: '#532b20' } },
-    ],
-  },
-  cloakroom: {
-    floor: { model: 'building/floor.glb', tile: 2.0, top: 0.1 },
-    wall: { model: 'building/wall.glb', natHeight: 2.4 },
-    decor: [
-      { model: 'furniture/rugRounded.glb', pos: [0, 0.4], yaw: 0, scale: 2.2,
-        overrides: { carpet: '#5f4433', carpetDarker: '#412e23' } },
-    ],
-  },
-  suite414: {
-    floor: { model: 'building/floor.glb', tile: 2.0, top: 0.1 },
-    wall: { model: 'building/wall.glb', natHeight: 2.4 },
-    decor: [
-      { model: 'furniture/rugRounded.glb', pos: [0.4, 0.6], yaw: 0, scale: 2.5,
-        overrides: { carpet: '#6d4636', carpetDarker: '#4a2f24' } },
-    ],
-  },
-  suite412: {
-    floor: { model: 'building/floor.glb', tile: 2.0, top: 0.1 },
-    wall: { model: 'building/wall.glb', natHeight: 2.4 },
-    decor: [
-      { model: 'furniture/rugRounded.glb', pos: [0, 0.8], yaw: 0, scale: 2.5,
-        overrides: { carpet: '#6d4636', carpetDarker: '#4a2f24' } },
-    ],
-  },
-  // The storage room now runs the width of the service wing, so it gets the same shell as the
-  // rest rather than staying greybox at that size. No rug: it is back-of-house.
-  storage: {
-    floor: { model: 'building/floor.glb', tile: 2.0, top: 0.1 },
-    wall: { model: 'building/wall.glb', natHeight: 2.4 },
-  },
-  // The housekeeping store is a back-of-house cupboard: bare boards, no rug.
-  housekeeping: {
-    floor: { model: 'building/floor.glb', tile: 2.0, top: 0.1 },
-    wall: { model: 'building/wall.glb', natHeight: 2.4 },
-  },
 };

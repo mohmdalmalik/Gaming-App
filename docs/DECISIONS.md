@@ -538,3 +538,28 @@ Target: `docs/art-reference.jpg` (style, palette and finish; not its layout or i
   textures, 56k → 87k triangles (the bevels; trivial for an iPad GPU), CPU time to submit a frame
   2.6 → 2.3 ms. Download: `lobby.glb` ~2.5 MB (uncompressed geometry; Draco is not available
   in this Blender) + light maps ~1 MB.
+
+
+## Path to mobile apps
+- **The plan:** later, package this web game as iOS and Android apps with a wrapper such as
+  Capacitor, with the game files bundled inside the app (not loaded from the website). The browser
+  version on GitHub Pages stays the development and preview build.
+- **Until then, keep the game self-contained.** Everything it needs should be files in this repo,
+  loaded by relative paths (already the rule for the sub-path). The one exception today is Three.js,
+  loaded from the jsDelivr CDN by the import map in `index.html`; when packaging, that pinned version
+  gets copied into the repo and the import map points at the local copy. Don't add other CDNs,
+  web fonts or remote services the game needs in order to run.
+- **Compress assets and load rooms on demand.** Every megabyte is paid for in the app download.
+  Keep textures small and compressed (JPEG/KTX2), and compress geometry when the tooling allows
+  (the lobby `.glb` is uncompressed today: ~2.5 MB). Load a room's art when it is about to be seen,
+  not everything at start-up: the lobby's model already loads asynchronously, with the greybox
+  showing until it arrives, and other rooms should follow that pattern.
+- **Avoid browser-only features that wouldn't work inside an app:** new tabs/windows or links out to
+  other sites, the browser's back button or address bar as part of the game, fullscreen and
+  "add to home screen" prompts, hover-only interactions, service-worker tricks, and anything that
+  assumes a `https://…github.io` origin. The address parameters (`?mode=`, `?seed=`, `?stats=1`…)
+  and the start screen's reload into a mode work inside a wrapper, since it serves the files locally;
+  they should stay developer tools, not something a player must type. Anything that must survive
+  (saves, settings, accounts later) goes through one small storage module that can switch to the
+  wrapper's native storage, never scattered `localStorage` calls. Sound must start from a tap (iOS
+  rule, already noted under Input).

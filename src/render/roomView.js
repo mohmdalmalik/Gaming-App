@@ -126,6 +126,30 @@ function gradientTexture() {
   return t;
 }
 
+// A walnut door face (two raised panels and a thin brass line), painted once and shared by every
+// door leaf, so a closed door reads as a door like the lobby's lift and not as a flat dark slab.
+function doorTexture() {
+  const W = 128, H = 256;
+  const c = document.createElement('canvas');
+  c.width = W; c.height = H;
+  const g = c.getContext('2d');
+  g.fillStyle = '#5a3a24';
+  g.fillRect(0, 0, W, H);
+  const panel = (x, y, w, h) => {
+    g.fillStyle = '#3a2416'; g.fillRect(x - 3, y - 3, w + 6, h + 6);       // shadowed groove
+    g.fillStyle = '#6b4529'; g.fillRect(x, y, w, h);                      // raised panel
+    g.fillStyle = '#7a5231'; g.fillRect(x + 6, y + 6, w - 12, h - 12);    // its lit face
+    g.strokeStyle = '#c9a24e'; g.lineWidth = 2; g.strokeRect(x + 10.5, y + 10.5, w - 21, h - 21);
+  };
+  panel(18, 18, W - 36, 120);
+  panel(18, 158, W - 36, 80);
+  g.fillStyle = '#b8923f';
+  g.fillRect(0, H - 8, W, 8);                                               // brass kick plate
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+
 const INTO = { north: [0, 1], south: [0, -1], east: [-1, 0], west: [1, 0] };   // into the room from its wall
 
 // Doors and doorways. A CLOSED door (one that leads to a room not yet revealed) is a walnut door
@@ -146,8 +170,9 @@ export function createDoorwayViews(floor, cfg, scene) {
   const stripMat = lambert(cfg.palette.doorStrip);
   // Door leaves are unlit, a fixed dark walnut like the lobby's baked panelling: a lamp beside a
   // door would otherwise blow a lit leaf out to bright orange.
-  const leafMat = new THREE.MeshBasicMaterial({ color: new THREE.Color('#3a2417') });
-  const leafJammedMat = new THREE.MeshBasicMaterial({ color: new THREE.Color('#241710') });
+  const doorFace = doorTexture();
+  const leafMat = new THREE.MeshBasicMaterial({ map: doorFace, color: new THREE.Color('#ffffff') });
+  const leafJammedMat = new THREE.MeshBasicMaterial({ map: doorFace, color: new THREE.Color('#8a7a70') });
   const knobMat = new THREE.MeshBasicMaterial({ color: new THREE.Color('#b8923f') });
   const LEAF_H = 2.02;
 
@@ -171,11 +196,14 @@ export function createDoorwayViews(floor, cfg, scene) {
     return pivot;
   }
 
-  function makeCues(d) {
+  // `inside`: the side of a closed door (the room it belongs to); its glow then stays on that side,
+  // since nothing has been revealed beyond it yet. An open doorway's glow reaches into both rooms.
+  function makeCues(d, inside) {
     const along = d.axis === 'x';
     const glow = new THREE.Mesh(unitPlane, glowMat);
-    glow.scale.set(along ? d.width + 0.9 : 1.9, 1, along ? 1.9 : d.width + 0.9);
-    glow.position.set(d.center[0], 0.035, d.center[1]);
+    const deep = inside ? 1.2 : 1.9, [ix, iz] = inside ? INTO[inside] : [0, 0];
+    glow.scale.set(along ? d.width + 0.9 : deep, 1, along ? deep : d.width + 0.9);
+    glow.position.set(d.center[0] + ix * (t / 2 + deep / 2), 0.035, d.center[1] + iz * (t / 2 + deep / 2));
     glow.renderOrder = 2;
     glow.visible = false;
     scene.add(glow);
@@ -205,7 +233,7 @@ export function createDoorwayViews(floor, cfg, scene) {
   function addFrontier(d) {
     const room = floor.rooms.get(d.room);
     const leaf = makeLeaf(d, room);
-    const { glow, blink } = makeCues(d);
+    const { glow, blink } = makeCues(d, d.side);
     let usable = false;
     const view = {
       kind: 'closed', doorway: d, leaf, glow, blink,

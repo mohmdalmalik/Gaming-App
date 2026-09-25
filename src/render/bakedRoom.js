@@ -91,7 +91,10 @@ export async function dressBaked(view, spec, cfg) {
   // uses A B C D, a closed-off side A F D. Parts no segment claims stay hidden.
   const H = cfg.walls.height, stub = cfg.cutaway.stubHeight;
   const room = view.room, [cx, cz] = room.center;
-  for (const node of nodes.values()) if (/^W_/.test(node.name)) node.visible = false;
+  // (Only the part nodes themselves: a part made of several materials loads as a group whose child
+  // meshes carry the same W_ prefix, and those must stay visible inside it.)
+  const isPart = name => /^W_(north|south|east|west)_[A-F]_(lo|up)$/.test(name);
+  for (const node of nodes.values()) if (isPart(node.name)) node.visible = false;
   for (const w of view.walls) {
     const side = w.wall.side, axisX = side === 'north' || side === 'south';
     const a = axisX ? w.wall.min[0] - cx : w.wall.min[1] - cz, b = axisX ? w.wall.max[0] - cx : w.wall.max[1] - cz;

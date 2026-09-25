@@ -88,6 +88,9 @@ const m = await game(() => {
     doors: v.room.doorSides.size,
     // every model wall part is either on show for this match's layout or hidden
     shown: [...names].filter(n => /^W_.*_lo$/.test(n)).map(n => { let o; v.group.traverse(x => { if (x.name === n) o = x; }); return o.visible; }).filter(Boolean).length,
+    // every shown part really draws: all the meshes inside it are visible too (a part with several
+    // materials is a group of meshes; hiding those once left the lobby's upper walls missing)
+    partsDraw: v.walls.every(w => w.baked.every(p => [p.lo, p.up].every(n => { let ok = true; n.traverse(x => { if (x.isMesh && !x.visible) ok = false; }); return ok; }))),
     greyboxHidden: !v.floorMesh.visible && v.furniture.every(f => !f.mesh.visible),
     basic, lit, mats: [...mats],
     safe: (() => { const b = document.getElementById('safe-badge'); return !!b && b.offsetParent !== null && getComputedStyle(b).display !== 'none'; })(),
@@ -97,6 +100,7 @@ check(m.hasStatic && m.hasFloor, 'the lobby model is in the room (furniture/shel
 check(m.doors === 3 || m.doors === 4, `this match's lobby has ${m.doors} open doorways`);
 check(m.hooked === m.walls && m.walls === 4 + m.doors, `every wall segment has its model parts (${m.hooked}/${m.walls})`);
 check(m.shown === 4 * 3 + m.doors, `open sides show their doorway, the closed side a plain wall (${m.shown} wall parts on show)`);
+check(m.partsDraw, 'every wall part on show draws all of its pieces (no missing upper walls)');
 check(m.greyboxHidden, 'the greybox floor and furniture boxes are hidden');
 check(m.basic && m.lit, `unlit materials with baked light (${m.mats.join(', ')})`);
 check(m.safe, 'the lobby still says it is the safe zone');

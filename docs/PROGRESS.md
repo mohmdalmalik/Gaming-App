@@ -859,7 +859,7 @@ sub-path.
 5. Walk around the furniture and into every doorway: nothing should block where it did not before.
 
 
-# Approved rule changes — the random hotel map (current)
+# Approved rule changes — the random hotel map (current; Part 2 below adds rooms with jobs and cards)
 
 **Status: implemented, tested, committed.** One placeholder and the tile mix await the owner's
 approval (below). Room art for the new tiles comes after the system is approved; they are grey boxes.
@@ -965,3 +965,20 @@ With cautious bots the clean side wins 2%. Before this change (fixed map, same b
 5. Map: closed doors show a "?"; a locked room shows a padlock.
 6. Hot-seat: opening a door never starts a meeting; walking into a room where someone stands does.
 7. With many rooms open, add `?stats=1` and note the fps.
+
+
+# Approved rule changes — Part 2: rooms with jobs and new cards (current)
+
+**Status: in progress.** Done and committed: the rules engine, the data (room deck and 48-card deck) and
+docs/GAME_RULES.md (commit 94a38c3). In progress: the interface, the simulator bots and the 400-match
+simulation, and the automated tests. If work stops here, the next step is to finish those three and
+then review them against the approved list.
+
+## The approved list (applied exactly)
+1. Rooms with jobs, in place of ordinary tiles (the deck stays at 24): Linen Store ×2 (first search
+   draws 2 cards), Infirmary ×2 (1 AP: restore 2 health, max 3), Switchboard ×1 (1 AP, once per player
+   per turn: everyone learns how many guests are currently possessed, not who).
+2. New cards: Hand Mirror (1 AP: a guest in your room shows you their whole hand in private; used up)
+   and Espresso (free: +2 AP this turn; used up).
+3. Deck 40 → 48: Lantern 14, Bandage 7, Flashlight 5, Knife 4, Barricade 4, Lock Pick 4, Hand Mirror 3,
+   Espresso 3, Revolver 2, Master Key 2.

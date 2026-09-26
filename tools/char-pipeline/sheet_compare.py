@@ -18,7 +18,11 @@ def bg_fit(a):
     Hh, Ww, _ = a.shape; yy, xx = np.mgrid[0:Hh, 0:Ww]; X = xx / Ww; Y = yy / Hh
     A = np.stack([np.ones_like(X), X, Y, X*X, X*Y, Y*Y, Y**3, X**3], -1).reshape(-1, 8)
     px = a.reshape(-1, 3).astype(float); lum = px.mean(1); ch = px[:, 0] - px[:, 2]
-    ok = (lum > 85) & (lum < 180) & (ch > 3) & (ch < 35) & (np.abs(px[:, 1] - (px[:, 0] + px[:, 2]) / 2) < 12)
+    border = np.concatenate([a[:4].reshape(-1, 3), a[:, :4].reshape(-1, 3), a[:, -4:].reshape(-1, 3)]).astype(float)
+    if np.median(border.mean(1)) > 175:          # light neutral grey (Victor's sheet): seed from the border colour
+        ok = np.abs(px - np.median(border, axis=0)).sum(1) < 45
+    else:                                        # the guest sheets' warm mid-grey gradient
+        ok = (lum > 85) & (lum < 180) & (ch > 3) & (ch < 35) & (np.abs(px[:, 1] - (px[:, 0] + px[:, 2]) / 2) < 12)
     for _ in range(4):
         coef = np.linalg.lstsq(A[ok], px[ok], rcond=None)[0]; r = np.abs(px - A @ coef).sum(1); ok &= r < 30
     return (A @ coef).reshape(Hh, Ww, 3)
@@ -35,7 +39,7 @@ def largest(m, fill=150):
 def sheet_mask(a): return largest(np.abs(a - bg_fit(a)).sum(2) > 38)
 def render_mask(a):
     bg = np.median(np.concatenate([a[:4].reshape(-1, 3), a[:, :4].reshape(-1, 3), a[:, -4:].reshape(-1, 3)]), axis=0)
-    return largest(np.abs(a - bg).sum(2) > 30)
+    return largest(np.abs(a - bg).sum(2) > 12)          # renders have a perfectly flat background
 
 def eyes(a):
     """Centre (y, x) of the two eye ovals: the largest near-black blobs taller than wide in the panel's middle."""
@@ -55,15 +59,16 @@ def bbox(m):
 FACE_PPM = 1520 / (2 * 4.4 * np.tan(np.radians(10.5 / 2)))
 SHEET_HEAD_PPM = 198 / (0.30 * 1.66)        # sheet head close-ups: hair top -> chin = 198 px = 0.30 H
 
-def place(ref, ren, kind):
-    """Scale + position the render into a canvas the size of the sheet panel."""
+def place(ref, ren, kind, face_scale=None):
+    """Scale + position the render into a canvas the size of the sheet panel. face_scale: render->sheet scale for
+    face views (default: the guest sheets' known head scale); body views scale to the figure height."""
     A = np.asarray(ref.convert('RGB')).astype(float); B = np.asarray(ren.convert('RGB')).astype(float)
     ma, mb = sheet_mask(A), render_mask(B)
     ya0, ya1, xa0, xa1 = bbox(ma); yb0, yb1, xb0, xb1 = bbox(mb)
     if kind == 'body':
         s = (ya1 - ya0 + 1) / (yb1 - yb0 + 1)
     else:
-        s = SHEET_HEAD_PPM / FACE_PPM
+        s = face_scale or SHEET_HEAD_PPM / FACE_PPM
     im = ren.convert('RGB').resize((max(1, int(round(ren.width * s))), max(1, int(round(ren.height * s)))), Image.LANCZOS)
     mbs = np.asarray(Image.fromarray(mb.astype(np.uint8) * 255).resize(im.size, Image.BILINEAR)) > 127
     y0, y1, x0, x1 = bbox(mbs)
@@ -71,13 +76,29 @@ def place(ref, ren, kind):
         # bottom-align, centre on the silhouette's centroid
         cxa = np.where(ma)[1].mean(); cxb = np.where(mbs)[1].mean()
         dx = int(round(cxa - cxb)); dy = int(round(ya1 - y1))
+    elif kind == 'face-side':
+        # no two eyes in profile: align the head's top-front (topmost row, rightmost column in the upper third)
+        top_a = ya0; top_b = y0
+        ra = ma[:int(ref.height * 0.6)]; rb = mbs[:y0 + int(ref.height * 0.6)]
+        dx = int(round(np.where(ra.any(0))[0][-1] - np.where(rb.any(0))[0][-1])); dy = int(round(top_a - top_b))
     else:
-        # align the eyes (the sheet's hair top is cropped by its frame; the head there is also turned ~9 deg)
-        (ea_y, ea_x), (eb_y, eb_x) = eyes(A), eyes(np.asarray(im).astype(float))
+        # align the eyes (the sheet's hair top is cropped by its frame)
+        (ea_y, ea_x), (eb_y, eb_x) = eyes(A), tuple(c * s for c in eyes(B))    # detect on the full-size render (cleaner)
         dx = int(round(ea_x - eb_x)); dy = int(round(ea_y - eb_y))
     canvas = Image.new('RGB', ref.size, tuple(int(c) for c in np.median(A[:6].reshape(-1, 3), axis=0)))
     canvas.paste(im, (dx, dy))
     return canvas, ma
+
+def eye_gap(a):
+    """Horizontal distance between the two eye centres (px)."""
+    lum = a.mean(2); d = (lum < 42) & (np.abs(a[..., 0] - a[..., 2]) < 14)
+    Hh, Ww = d.shape; d[:int(Hh * 0.2)] = False; d[int(Hh * 0.8):] = False; d[:, :int(Ww * 0.15)] = False; d[:, int(Ww * 0.85):] = False
+    lab, n = nd.label(d); c = []
+    for i in range(1, n + 1):
+        ys, xs = np.where(lab == i)
+        if len(ys) > 20 and (np.ptp(ys) + 1) > 1.1 * (np.ptp(xs) + 1): c.append((len(ys), xs.mean()))
+    c = sorted(c)[-2:]
+    return abs(c[0][1] - c[1][1])
 
 def body_numbers(name, ref, canvas):
     A = sheet_mask(np.asarray(ref.convert('RGB')).astype(float)); B = render_mask(np.asarray(canvas).astype(float))
@@ -89,21 +110,34 @@ def body_numbers(name, ref, canvas):
     print(f'{name:10s} IoU={iou:.3f}  width render/sheet ' + ' '.join(out))
 
 if __name__ == '__main__':
+    # sheet_compare.py <guest> <render prefix> <out.png> [--old <old render prefix>]
     guest, prefix, out = sys.argv[1], sys.argv[2], sys.argv[3]
-    P = HERE / 'ref' / f'panels-{guest}'
+    old = sys.argv[sys.argv.index('--old') + 1] if '--old' in sys.argv else None
+    P = HERE / 'ref' / ('panels' if guest == 'victor' else f'panels-{guest}')
     views = [('front', 'body-0', 'body', 'FRONT'), ('tq', 'body-30', 'body', 'THREE-QUARTER'), ('side', 'body-90', 'body', 'SIDE'),
              ('back', 'body-180', 'body', 'BACK'), ('face-front', 'face-0', 'face', 'HEAD FRONT'), ('face-tq', 'face-30', 'face', 'HEAD 3/4')]
+    if guest == 'victor': views.append(('face-side', 'face-90', 'face-side', 'HEAD SIDE'))
+    rows = [('RENDER', prefix)] if not old else [('OLD', old), ('NEW', prefix)]
+    def fscale(pref):
+        """Victor's sheet has its own face-panel scale: match the eye spacing of the HEAD FRONT panel."""
+        if guest != 'victor': return None
+        ref = np.asarray(Image.open(P / 'face-front.png').convert('RGB')).astype(float)
+        ren = np.asarray(Image.open(f'{pref}-face-0.png').convert('RGB')).astype(float)
+        return eye_gap(ref) / eye_gap(ren)
     tiles = []
     for pan, ren, kind, label in views:
-        ref = Image.open(P / f'{pan}.png').convert('RGB'); rim = Image.open(f'{prefix}-{ren}.png')
-        cv, _ = place(ref, rim, kind)
-        if kind == 'body': body_numbers(pan, ref, cv)
-        k = 2 if kind == 'face' else 1
-        tiles.append((ref.resize((ref.width * k, ref.height * k), Image.LANCZOS), cv.resize((cv.width * k, cv.height * k), Image.LANCZOS), label))
-    W = sum(t[0].width for t in tiles) + 10 * (len(tiles) + 1); Hh = max(t[0].height for t in tiles)
-    img = Image.new('RGB', (W, 2 * Hh + 90), (40, 40, 44)); d = ImageDraw.Draw(img); x = 10
-    for a, b, label in tiles:
-        img.paste(a, (x, 30)); img.paste(b, (x, 60 + Hh))
-        d.text((x + 4, 8), f'SHEET  {label}', fill=(235, 235, 235)); d.text((x + 4, 38 + Hh), f'RENDER  {label}', fill=(235, 235, 235))
-        x += a.width + 10
+        ref = Image.open(P / f'{pan}.png').convert('RGB'); k = 2 if kind != 'body' else 1
+        col = [(f'SHEET  {label}', ref)]
+        for tag, pref in rows:
+            cv, _ = place(ref, Image.open(f'{pref}-{ren}.png'), kind, fscale(pref) if kind != 'body' else None)
+            if kind == 'body': print(tag, end=' '); body_numbers(pan, ref, cv)
+            col.append((f'{tag}  {label}', cv))
+        tiles.append([(t, im.resize((im.width * k, im.height * k), Image.LANCZOS)) for t, im in col])
+    W = sum(c[0][1].width for c in tiles) + 10 * (len(tiles) + 1); Hh = max(c[0][1].height for c in tiles)
+    nr = len(tiles[0])
+    img = Image.new('RGB', (W, nr * (Hh + 30) + 10), (40, 40, 44)); d = ImageDraw.Draw(img); x = 10
+    for col in tiles:
+        for r, (t, im) in enumerate(col):
+            y = 8 + r * (Hh + 30); d.text((x + 4, y), t, fill=(235, 235, 235)); img.paste(im, (x, y + 22))
+        x += col[0][1].width + 10
     img.save(out); print('->', out)

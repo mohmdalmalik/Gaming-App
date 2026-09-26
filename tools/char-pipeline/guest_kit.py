@@ -726,6 +726,13 @@ def shirt_front(g, S):
     pts = [(x, g.zp(p)) for x, p in S['v']]
     return slab(g, 'ShirtV', pts, lambda x, z: g.chest_y(x, min(z, g.jacket_top)), S.get('lift', 0.004), 0.002, 'shirt', g.jw, max_edge=S.get('max_edge', 0.034))
 
+def studs(g, S):
+    """Shirt studs (tuxedo) ON the shirt front: S['studs'] = [(x, pct)], S['stud_r'] radius; material 'button'."""
+    r = S.get('stud_r', 0.008); lift = S.get('lift', 0.004) + 0.002
+    for i, (x, p) in enumerate(S.get('studs', [])):
+        z = g.zp(p); y = g.chest_y(x, min(z, g.jacket_top)) - lift - r * 0.35
+        g.add_w(L.uvsphere(f'Stud{i}', r, (x, y, z), scale=(1, 0.6, 1), u=10, v=6), 'button', g.jw)
+
 def collar(g, S):
     """Shirt collar. With S['wrap'] (dict: top, v, tip, th_side, open, gap) ONE smooth wrapped surface (band + points,
     see wrap_collar); otherwise a band round the neck whose front opens in a V and two pointed leaf slabs."""
@@ -768,7 +775,10 @@ def bow_tie(g, T):
         (-0.015, 0.030, 0.024, 0.8), (-0.009, 0.036, 0.034, 0.9), (0.009, 0.036, 0.034, 0.9), (0.015, 0.030, 0.024, 0.8), (0.034, 0.054, 0.028, 0.7), (0.062, 0.046, 0.024, 0.7), (0.080, 0.020, 0.014, 0.8)]], n=16)
     L.rotate_verts(bow, (0, math.pi / 2, 0))
     for v in bow.data.vertices: v.co.y += 0.06 * (v.co.x / 0.08) ** 2
-    L.translate_verts(bow, (0, NY - R - 0.012, z)); g.add(bow, T.get('mat', 'tie'), 'spine')
+    y = NY - R - 0.012
+    if T.get('on_shirt'):                      # sit in front of the shirt front (a wrapped collar + lifted shirt V)
+        y = min(y, g.chest_y(0.0, min(z, g.jacket_top)) - T.get('front', 0.024))
+    L.translate_verts(bow, (0, y, z)); g.add(bow, T.get('mat', 'tie'), 'spine')
 
 # =============================================================================================
 # ARMS — one lofted sleeve per arm (shoulder cap -> elbow -> wrist), cuffs, hands with a thumb and four
@@ -866,7 +876,7 @@ def hands(g, A):
 def trousers(g, P):
     zp = g.zp; LX = P['leg_x']; TW, TD, SW, SD = P['thigh_w'], P['thigh_d'], P['shin_w'], P['shin_d']
     ZH, ZK = zp(P['hip']), zp(P['knee']); ZC = zp(P['crotch']); ZT = zp(P['top']); ZB = zp(P['hem'])
-    LY = P.get('leg_y', 0.0); NL = P.get('nl', 24); PW = 2 * LX + TW
+    LY_OUT = P.get('leg_y', 0.0); LY = 0.0; NL = P.get('nl', 24); PW = 2 * LX + TW   # built about y=0, shifted by leg_y at the end
     PR = [(zp(p), PW * fw, TD + dd, r) for p, fw, dd, r in P['pelvis']]
     PR.sort()
     LEG = sorted((zp(q), w, d) for q, w, d in P['leg_profile']) + [(ZC, TW, TD)] if P.get('leg_profile') else None   # optional explicit (pct, w, d)
@@ -927,6 +937,8 @@ def trousers(g, P):
             pv = vs
         bm.faces.new(list(reversed(pv)))
     bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+    if LY_OUT:
+        for v in bm.verts: v.co.y += LY_OUT
     ob = L.new_object('Trousers', bm, smooth=True)
     def tw(co):
         x, z = co.x, co.z; fL = sm((x + 0.03) / 0.06)
@@ -1085,10 +1097,10 @@ def rig(g, R):
         bone(f'upperarm.{tag}', (s * SX, A.get('shoulder_y', 0.0), ZJ), (ex, ey, ZE), f'shoulder.{tag}')
         bone(f'forearm.{tag}', (ex, ey, ZE), (hx, hy, ZW), f'upperarm.{tag}')
         bone(f'hand.{tag}', (hx, hy, ZW), (hx, hy - 0.005, zp(R['hand_end'])), f'forearm.{tag}')
-        lx = s * R['leg_x']
-        bone(f'thigh.{tag}', (lx, 0, HIPJ), (lx, 0, KNEE), 'hips')
-        bone(f'shin.{tag}', (lx, 0, KNEE), (lx, 0, ANKLE), f'thigh.{tag}')
-        bone(f'foot.{tag}', (lx, 0, ANKLE), (lx, -0.18, 0.02), f'shin.{tag}')
+        lx = s * R['leg_x']; ly = R.get('leg_y', 0.0)           # leg_y: legs set forward/back of the body axis
+        bone(f'thigh.{tag}', (lx, ly, HIPJ), (lx, ly, KNEE), 'hips')
+        bone(f'shin.{tag}', (lx, ly, KNEE), (lx, ly, ANKLE), f'thigh.{tag}')
+        bone(f'foot.{tag}', (lx, ly, ANKLE), (lx, ly - 0.18, 0.02), f'shin.{tag}')
     bpy.ops.object.mode_set(mode='OBJECT')
     amod = mesh.modifiers.new('Armature', 'ARMATURE'); amod.object = arm; mesh.parent = arm
     g.arm = arm; return arm

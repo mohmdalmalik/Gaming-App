@@ -88,3 +88,42 @@ node tools/char-pipeline/capture.mjs --out tools/char-pipeline/shots/v5g --w 119
 node tools/char-pipeline/portrait.mjs                            # interface portraits from the model
 ```
 
+
+## Guest kit (Marcus and later guests)
+`guest_kit.py` is the shared, parameterised builder extracted from `make_victor.py`; each guest is a spec in
+`guests/<name>.py` (CFG numbers, colours, skull/hair tables, jacket/shirt/tie/arm/trouser/shoe dicts, `RIG`, and a
+`build(g)` that calls the builders). Victor's own script is unchanged.
+```bash
+python3 tools/char-pipeline/make_guest.py marcus                 # -> assets/characters/marcus.glb (REPORT lines: tris by part, stride, bytes)
+GUEST_OUT=tools/char-pipeline/shots/x.glb python3 tools/char-pipeline/make_guest.py marcus   # build elsewhere
+node tools/char-pipeline/preview_glb.mjs --glb assets/characters/marcus.glb --out tools/char-pipeline/shots/mx \
+     --views body@0,body@30,body@90,body@180,face@0,face@30 --bg 7b716a --key left   # the guest sheets' grey + left key light
+python3 tools/char-pipeline/sheet_compare.py marcus tools/char-pipeline/shots/mx tools/char-pipeline/shots/marcus-vs-sheet.png
+```
+`sheet_compare.py` puts the six sheet panels (`ref/panels-<name>/`, cut by `make_panels_guests.py`) over the six renders at
+the same scale (body: figure height; faces: known camera scale, aligned on the eyes) and prints silhouette IoU/widths.
+Its sheet mask fits a smooth background field, so the sheets' gradient and floor shadow are handled.
+The sheets' three-quarter panels match yaw 30 (both body and head), and the SIDE panel matches yaw 90.
+
+Kit API (`g = Guest(name, CFG, COLOURS)`; heights in CFG/specs are % of standing height from the top, `g.zp(pct)` -> metres):
+- context: `g.H, g.zp, g.C, g.M` (materials named after the colour keys, e.g. `skin` -> `Skin`), `g.add(ob, mat, bone)`,
+  `g.add_w(ob, mat, fn(co)->{bone: w})`, `g.add_split(...)`; `g.set_head(W, DF, DB, E, bulges)` then `g.skull_at / skull_pt /
+  face_y / face_normal / on_face / flatten_to_face / inside_skull`. `CFG['head_y']` moves the head back from the chest.
+- head: `head(g, cull_in=g.hair_covers)`, `ears`, `eyes` (glossy black `eye`), `brows` (`CFG['brow']`), `nose`, `mouth`
+  (`CFG['mouth']`), optional `moustache` (`CFG['moustache']`, Victor-style), `neck`.
+- hair: `hair_shell(g, wr, wl, front, back, expo, hairline, edge, slope, grooves, thin_below, ...)`: one smooth radial shell
+  whose silhouette comes from measured extents per height (PCHIP-smoothed, no facets), thickness clamped near the hairline
+  (short sides, full top), soft grooves along curves (darkened by the bake via `CFG['groove_dark']`); then
+  `hair_lock(g, name, keys)` for rounded locks lying on it (uses `g.hair_surface`). For long/curly hair write extra
+  locks or a `disp(u, v, p)` callback; the hairline/edge functions are per-guest callbacks.
+- suit body: `jacket(g, J)` (profiles, opening, rounded fronts; sets `g.chest_y/back_y` from the actual mesh and `g.jw`
+  weights), `lapels` (notch: `outline`+`collar` leaves; a peak/shawl lapel is just a different outline), `pockets`
+  (flaps + chest welt + optional `shade` line), `buttons`, `back_seam` (seam + vent), `shirt_front`, `collar`,
+  `tie` or `bow_tie`, `arms` (`A['sleeve']` = material, or None for bare skin arms), `cuffs`, `hands` (palm + 4 curled
+  fingers + thumb), `trousers` (one surface with crotch, soft break), `shoes` (derby: sole edge, toe cap, facing, laces).
+  A dress guest skips jacket/lapels/pockets/shirt/tie/trousers and adds her own bodice/skirt builder; `slab()` and
+  `ring_wall()` are the generic helpers for raised panels and upright bands.
+- finish: `finish(g, RIG, out)` = join (prints tris by part) -> AO + skin tint + material sheen baked into COLOR_0 ->
+  rig (Victor's bone names/hierarchy) -> `guest_anim` Walk/Idle (`RIG['walk_kw']`, e.g. `skirt=True`) -> extras
+  (`strideLength`, `contactStride`, `walkClipSeconds`) -> the same glTF export settings as Victor.
+Budgets: <= 32k triangles, GLB <= 1.2 MB (Marcus: ~31.7k tris, ~1.2 MB).

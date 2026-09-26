@@ -37,7 +37,7 @@ const NEUTRAL = (['body', 'face', 'elev', 'elev30', 'shoe', 'shoeside', 'hips'].
 const hemi = new THREE.HemisphereLight(new THREE.Color('#ffffff').lerp(new THREE.Color('#ffd9a8'), 0.5), new THREE.Color('#3a3438'), 0.6);
 scene.add(hemi);
 // Neutral = albedo-faithful: a front-facing Lambert surface renders at about its base colour (Lambert divides by pi)
-  if (NEUTRAL) { hemi.color.set('#ffffff'); hemi.groundColor.set('#9a9a9a'); hemi.intensity = 1.5; const dl = new THREE.DirectionalLight('#ffffff', 2.3); dl.position.set(1.5, 3, 4); scene.add(dl); }
+  if (NEUTRAL) { hemi.color.set('#ffffff'); hemi.groundColor.set('#9a9a9a'); hemi.intensity = 1.5; const dl = new THREE.DirectionalLight('#ffffff', 2.3); dl.position.set(q.get('key') === 'left' ? -1.5 : 1.5, 3, 4); scene.add(dl); }   // key=left: key light from the viewer's left (the guest sheets' studio key)
 const pt = new THREE.PointLight(new THREE.Color('#ffd9a8'), 22, 9, 2); pt.position.set(1.2, 2.6, 1.6); if (!NEUTRAL) scene.add(pt);
 const pt2 = new THREE.PointLight(new THREE.Color('#ffd9a8'), 10, 9, 2); pt2.position.set(-2.0, 2.4, -1.0); if (!NEUTRAL) scene.add(pt2);
 if (!isPortrait) {
@@ -116,6 +116,7 @@ new GLTFLoader().load(src, (gltf) => {
     const pitch = THREE.MathUtils.degToRad(56), D = d;
     cam.position.set(0, Math.sin(pitch) * D, Math.cos(pitch) * D); cam.lookAt(0, 0.0, 0); cam.fov = 42;
   }
+  if (q.get('bg')) scene.background = new THREE.Color('#' + q.get('bg'));   // e.g. bg=7a716b: the guest sheets' grey
   cam.updateProjectionMatrix();
   mixer = new THREE.AnimationMixer(root);
   const clip = gltf.animations.find(a => a.name === clipName) || gltf.animations[0];

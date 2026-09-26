@@ -413,7 +413,7 @@ def normalise(size=2.0):
     bpy.context.view_layer.update()
     return bbox_world(obs)
 
-def camera(az, el, target, fill=0.8, lens=70, center=(0.5, 0.5)):
+def camera(az, el, target, fill=0.8, lens=70, center=(0.5, 0.5), fill_w=None):
     """A camera looking at `target` from azimuth/elevation, moved in/out and shifted so the object
     fills `fill` of the frame and its projected box is centred at `center` (0..1 image coords)."""
     from bpy_extras.object_utils import world_to_camera_view
@@ -432,8 +432,8 @@ def camera(az, el, target, fill=0.8, lens=70, center=(0.5, 0.5)):
         P2 = [world_to_camera_view(sc, cam, v) for v in verts]
         x0 = min(p.x for p in P2); x1 = max(p.x for p in P2)
         y0 = min(p.y for p in P2); y1 = max(p.y for p in P2)
-        ext = max(x1 - x0, y1 - y0)
-        d *= ext / fill
+        fw = fill_w if fill_w is not None else fill
+        d *= max((x1 - x0) / fw, (y1 - y0) / fill)
     cam.location = sph(az, el, d, target); look(cam, target); bpy.context.view_layer.update()
     P2 = [world_to_camera_view(sc, cam, v) for v in verts]
     x0 = min(p.x for p in P2); x1 = max(p.x for p in P2)

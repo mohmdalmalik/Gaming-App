@@ -9,6 +9,17 @@ import { cardIcon } from './cardIcons.js';
 // `bandage: 'assets/cards/bandage.png'` once the files exist and the art appears automatically.
 export const CARD_ART = {
   lantern: 'assets/cards/lantern.jpg',
+  // Rendered in Blender to match the Lantern (tools/card-pipeline/make_cards.py).
+  bandage: 'assets/cards/bandage.jpg',
+  flashlight: 'assets/cards/flashlight.jpg',
+  knife: 'assets/cards/knife.jpg',
+  revolver: 'assets/cards/revolver.jpg',
+  barricade: 'assets/cards/barricade.jpg',
+  lockPick: 'assets/cards/lockPick.jpg',
+  masterKey: 'assets/cards/masterKey.jpg',
+  handMirror: 'assets/cards/handMirror.jpg',
+  espresso: 'assets/cards/espresso.jpg',
+  possession: 'assets/cards/possession.jpg',
 };
 
 // The art panel for a card type: a real illustration if one is registered, else a big glyph.

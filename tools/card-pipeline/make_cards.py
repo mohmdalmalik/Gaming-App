@@ -71,12 +71,12 @@ def build_espresso():
     v = L.tex_coord(nt, 'Object')
     grad = nt.add('ShaderNodeTexGradient'); grad.gradient_type = 'SPHERICAL'
     mp = nt.add('ShaderNodeMapping'); mp.inputs['Scale'].default_value = (2.5, 2.5, 2.5)
-    mp.inputs['Location'].default_value = (0, 0, 0)
+    mp.inputs['Location'].default_value = (0, 0, -(0.075 + 0.54) * 2.5)
     nt.link(v, mp.inputs['Vector']); nt.link(mp.outputs[0], grad.inputs[0])
     n = L.noise(nt, v, 14, 6, 0.6)
     mx = nt.add('ShaderNodeMix'); mx.data_type = 'FLOAT'; mx.inputs['Factor'].default_value = 0.3
     nt.link(grad.outputs['Fac'], mx.inputs[2]); nt.link(n.outputs['Fac'], mx.inputs[3])
-    r = L.ramp(nt, mx.outputs[0], [(0.05, lin('#8a5a2e')), (0.3, lin('#5e3418')), (0.6, lin('#2e160a'))])
+    r = L.ramp(nt, mx.outputs[0], [(0.08, lin('#a06c38')), (0.2, lin('#6a3a1a')), (0.45, lin('#301406')), (0.8, lin('#1e0a03'))])
     nt.link(r.outputs['Color'], b.inputs['Base Color']); L.P(b, Roughness=0.25)
     coffee = m
     bean = L.plastic('bean', '#4a2512', 0.3, '#120804', 0.6, 0.5, coat=0.4, var=0.3)
@@ -97,22 +97,22 @@ def build_espresso():
     zc = z0 + 0.54
     L.lathe('coffee', [(0, zc), (0.393, zc), (0.399, zc - 0.02), (0, zc - 0.03)], coffee, 96, None)
     # handle: an ear-shaped loop on +X
-    L.tube('handle', [(0.37, 0, z0 + 0.5), (0.55, 0, z0 + 0.53), (0.63, 0, z0 + 0.42), (0.57, 0, z0 + 0.27), (0.43, 0, z0 + 0.22), (0.31, 0, z0 + 0.2)], 0.036, cupm, bevres=6)
+    L.tube('handle', [(0.37, 0, z0 + 0.5), (0.55, 0, z0 + 0.53), (0.63, 0, z0 + 0.42), (0.57, 0, z0 + 0.27), (0.43, 0, z0 + 0.22), (0.31, 0, z0 + 0.2)], 0.036, porc, bevres=6)
     # a small spoon resting on the saucer
     sp = steel('spoon', 0.18, '#d8d6d0')
     bowl = L.sphere('spoonbowl', 0.12, sp, loc=(0, 0, 0), scale=(1.0, 0.62, 0.22))
     bowl.location = (-0.30, -0.56, 0.105); bowl.rotation_euler = (0.1, 0.0, math.radians(-20))
     L.tube('spoonstem', [(-0.22, -0.53, 0.11), (-0.02, -0.46, 0.14), (0.25, -0.42, 0.155), (0.45, -0.38, 0.16)], 0.015, sp, bevres=3)
     # two coffee beans on the ground in front
-    for i, (x, y, rz) in enumerate([(0.72, -0.72, 0.6), (0.95, -0.52, -0.9)]):
+    for i, (x, y, rz) in enumerate([(0.42, -0.98, 0.6), (0.68, -0.9, -0.9)]):
         be = L.sphere(f'bean{i}', 0.1, bean, loc=(x, y, 0.045), scale=(1.0, 0.72, 0.48), rot=(0, 0, rz))
         cut = L.box(f'crease{i}', (0.26, 0.012, 0.06), None, loc=(x, y, 0.09), rot=(0, 0, rz))
         L.boolean(be, cut, sharp=None)
     ANCHORS['steam'] = [Vector((0, 0, z0 + 0.66)), 0.4]
-    return dict(az=22, el=30, fill=0.78, lens=70, center=(0.5, 0.56), steam=True)
+    return dict(az=22, el=30, fill=0.72, fill_w=0.72, lens=70, center=(0.5, 0.6), steam=True)
 
 def build_knife():
-    blade_m = L.metal('blade', '#cfd1d4', 0.14, 0.05, '#2a2a2a', 14, 0.6)
+    blade_m = L.metal('blade', '#c4c7cc', 0.2, 0.06, '#2a2a2a', 14, 0.6)
     br = brass('bolster', 0.28)
     wd = walnut('handle', 'X', 2.5)
     L.root()
@@ -137,14 +137,14 @@ def build_knife():
     L.extrude2d('bolster', [(-0.19, 0.155), (-0.1, 0.155), (-0.1, -0.2), (-0.12, -0.265), (-0.17, -0.285), (-0.2, -0.24)], 0.2, br, bev=0.018, seg=3, rot=(PI / 2, 0, 0))
     for x in (-0.42, -0.8, -1.12):
         L.cyl('rivet', 0.036, 0.19, br, 32, 0.008, loc=(x, 0, -0.02), rot=(PI / 2, 0, 0))
-    L.ROOT.rotation_euler = (math.radians(12), math.radians(-38), math.radians(18))
+    L.ROOT.rotation_euler = (math.radians(12), math.radians(-56), math.radians(18))
     return dict(az=0, el=8, fill=0.86, lens=70, floor=False, wall=1.6, floor_glow=False,
-                refl=[((0, -1, 0), (0.6, 0, 0), 900, 2.5, (0.25, 0, 0.15))])
+                refl=[((0, -1, 0), (0.6, 0, 0), 300, 3.0, (0.3, 0, 0.2))])
 
 def build_revolver():
     gun = L.metal('gunmetal', '#9a9ea6', 0.24, 0.08, '#16161a', 10.0, 0.9)
     dark = L.metal('darksteel', '#4a4d55', 0.3, 0.06, '#101012', 10.0, 0.6)
-    grip = L.wood('grip', '#1a0a05', '#8a4a24', 0.42, 3.0, 10.0, 'Z', 0.3, 0.8, 0.1)
+    grip = L.wood('grip', '#140703', '#6e3818', 0.4, 5.0, 14.0, 'Z', 0.35, 0.9, 0.1)
     nt = L.NT(grip); bsdf = grip.node_tree.nodes['Principled BSDF']
     v = L.tex_coord(nt, 'Object')
     w1 = nt.add('ShaderNodeTexWave'); w1.bands_direction = 'DIAGONAL'; w1.inputs['Scale'].default_value = 28; nt.link(v, w1.inputs['Vector'])
@@ -192,7 +192,7 @@ def build_revolver():
     L.cyl('gripscrew', 0.04, 0.29, gun, 32, 0.012, loc=(-0.84, 0, -0.36), rot=(PI / 2, 0, 0))
     L.torus('lanyard', 0.06, 0.016, gun, loc=(-1.1, 0, -0.8), rot=(PI / 2, 0, 0), seg=32)
     L.cyl('pin', 0.03, 0.22, dark, 24, 0.008, loc=(0.12, 0, 0.36), rot=(PI / 2, 0, 0))
-    L.ROOT.rotation_euler = (math.radians(4), math.radians(-3), math.radians(-24))
+    L.ROOT.rotation_euler = (math.radians(4), math.radians(-16), math.radians(-44))
     return dict(az=0, el=10, fill=0.86, lens=70, floor=False, wall=1.8, floor_glow=False,
                 refl=[((0, -1, 0), (-0.2, 0, 0.2), 700, 3.0, (0.2, 0, 0.25))])
 
@@ -223,7 +223,7 @@ def build_barricade():
         L.cyl('nail', 0.032, 0.02, iron, 20, 0.006, loc=(x, y, z), rot=(PI / 2, 0, 0))
     L.tube('bent', [(0.25, -0.2, 0.05), (0.25, -0.3, 0.06), (0.3, -0.36, 0.12), (0.38, -0.36, 0.14)], 0.012, iron, bevres=2)
     L.cyl('nailb', 0.03, 0.015, iron, 20, 0.005, loc=(0.385, -0.36, 0.14), rot=(0, PI / 2, 0))
-    return dict(az=22, el=10, fill=0.84, lens=70, floor=False, wall=0.9, floor_glow=False)
+    return dict(az=22, el=10, fill=0.84, fill_w=0.84, lens=70, floor=False, wall=0.9, floor_glow=False)
 
 def build_lockPick():
     br = brass('lockbrass', 0.32, '#b3935a')
@@ -282,7 +282,7 @@ def build_masterKey():
            (0.66, -0.29), (0.6, -0.29), (0.6, -0.36), (0.52, -0.36)]
     parts.append(L.extrude2d('bit', bit, 0.08, br, bev=0.014, seg=2, rot=(PI / 2, 0, 0)))
     for p in parts: p.parent = key
-    key.rotation_euler = (math.radians(10), math.radians(-32), math.radians(14))
+    key.rotation_euler = (math.radians(10), math.radians(-52), math.radians(14))
     bpy.context.view_layer.update()
     # split ring through the left lobe, and a hotel fob hanging from it (world-vertical)
     lobe = key.matrix_world @ Vector((bx - 0.36 - 0.12, 0, 0))
@@ -305,7 +305,22 @@ def build_masterKey():
 
 def build_handMirror():
     silver = L.metal('silver', '#cfc9bf', 0.26, 0.1, '#241c14', 9.0, 1.0)
-    glass = L.metal('mirror', '#e9edf0', 0.02, 0.0, '#e9edf0', 3.0, 0.0)
+    # mirror glass: a dark, cool reflection with two soft diagonal highlight streaks
+    glass, nt, b = L.new_mat('mirror')
+    tc = nt.add('ShaderNodeTexCoord'); sep = nt.add('ShaderNodeSeparateXYZ'); nt.link(tc.outputs['Object'], sep.inputs[0])
+    f = nt.add('ShaderNodeMath', operation='MULTIPLY_ADD'); nt.link(sep.outputs['X'], f.inputs[0]); f.inputs[1].default_value = 0.8
+    nt.link(sep.outputs['Y'], f.inputs[2])
+    st = L.ramp(nt, f.outputs[0], [(0.0, (0, 0, 0, 1)), (0.08, (0, 0, 0, 1)), (0.16, (1, 1, 1, 1)), (0.3, (1, 1, 1, 1)), (0.36, (0, 0, 0, 1)),
+                                   (0.42, (0, 0, 0, 1)), (0.45, (0.7, 0.7, 0.7, 1)), (0.5, (0.7, 0.7, 0.7, 1)), (0.53, (0, 0, 0, 1)), (1.0, (0, 0, 0, 1))])
+    st.color_ramp.interpolation = 'EASE'
+    mp = nt.add('ShaderNodeMapping'); mp.inputs['Location'].default_value = (0.55, 0, 0); nt.link(f.outputs[0], mp.inputs['Vector'])
+    nt.link(mp.outputs[0], st.inputs['Fac'])
+    gr = L.ramp(nt, sep.outputs['Y'], [(0.0, lin('#2c3a3a')), (1.0, lin('#7d8a86'))])
+    mx = nt.add('ShaderNodeMix'); mx.data_type = 'RGBA'; mx.blend_type = 'SCREEN'; mx.inputs['Factor'].default_value = 0.85
+    nt.link(gr.outputs['Color'], mx.inputs[6]); nt.link(st.outputs['Color'], mx.inputs[7])
+    nt.link(mx.outputs[2], b.inputs['Base Color'])
+    nt.link(st.outputs['Color'], b.inputs['Emission Color']); b.inputs['Emission Strength'].default_value = 0.35
+    L.P(b, Roughness=0.08, Metallic=0.0, **{'Coat Weight': 1.0, 'Coat Roughness': 0.02})
     L.root()
     rx, rz, cz = 0.5, 0.64, 0.55
     ell = lambda sx, sz, n=96: [(sx * math.cos(2 * PI * i / n), sz * math.sin(2 * PI * i / n)) for i in range(n)]
@@ -320,12 +335,13 @@ def build_handMirror():
     for sgn in (-1, 1):
         L.tube('scroll', [(0, -0.03, cz + rz + 0.1), (sgn * 0.12, -0.03, cz + rz + 0.16), (sgn * 0.22, -0.03, cz + rz + 0.1), (sgn * 0.2, -0.03, cz + rz + 0.04)], 0.025, silver, bevres=3)
     L.sphere('neck', 0.12, silver, loc=(0, 0.0, cz - rz - 0.02), scale=(1.2, 0.55, 0.9))
-    hp = [(0, 0), (0.05, 0), (0.07, 0.03), (0.07, 0.06), (0.05, 0.09), (0.045, 0.3), (0.06, 0.38), (0.075, 0.42), (0.06, 0.46),
-          (0.04, 0.5), (0.04, 0.62), (0.055, 0.66), (0.08, 0.7), (0.055, 0.74), (0.045, 0.78), (0.06, 0.82), (0, 0.84)]
+    hp = [(0, 0), (0.07, 0), (0.095, 0.03), (0.095, 0.06), (0.07, 0.09), (0.062, 0.3), (0.08, 0.38), (0.1, 0.42), (0.08, 0.46),
+          (0.058, 0.5), (0.058, 0.62), (0.075, 0.66), (0.105, 0.7), (0.075, 0.74), (0.062, 0.78), (0.08, 0.82), (0, 0.84)]
+    hp = [(r, z * 0.9) for r, z in hp]
     L.lathe('handle', [(r, -z) for r, z in hp][::-1] if False else hp, silver, 48, 40, loc=(0, 0, cz - rz - 0.08), rot=(PI, 0, 0))
     L.ROOT.rotation_euler = (math.radians(-6), math.radians(24), math.radians(22))
     return dict(az=0, el=10, fill=0.86, lens=70, floor=False, wall=1.5, floor_glow=False,
-                refl=[((0, -1, 0), (0, 0, 0.55), 350, 1.4, (-0.35, 0, 0.25)), ((0, -1, 0), (0, 0, 0.55), 120, 5.0, (0.1, 0, -0.1))])
+                refl=[((0, -1, 0), (0, 0, 0.55), 300, 3.0, (0.25, 0, 0.3), True)])
 
 def build_bandage():
     m, nt, b = L.new_mat('gauze')
@@ -401,7 +417,7 @@ def build_bandage():
     L.tube('wire2', [(px - 0.2, py, 0.015), (px, py, 0.03), (px + 0.2, py, 0.045)], 0.008, pin, bevres=2)
     L.box('clasp', (0.07, 0.03, 0.06), pin, 0.012, loc=(px + 0.21, py, 0.055))
     L.ROOT.rotation_euler = (0, 0, math.radians(-30))
-    return dict(az=0, el=24, fill=0.8, lens=70, floor=True, center=(0.5, 0.54))
+    return dict(az=0, el=24, fill=0.8, fill_w=0.66, lens=70, floor=True, center=(0.5, 0.54))
 
 def build_flashlight():
     nick = L.metal('nickel', '#c2c0ba', 0.2, 0.08, '#1c1a16', 10.0, 0.9)
@@ -422,10 +438,10 @@ def build_flashlight():
     L.box('switchbase', (0.3, 0.1, 0.03), br, 0.01, loc=(-0.3, 0, 0.13))
     L.box('switch', (0.08, 0.07, 0.05), br, 0.012, loc=(-0.22, 0, 0.16))
     L.torus('lanyard', 0.07, 0.014, br, loc=(-1.1, 0, 0), rot=(0, 0, 0), scale=(1, 1, 1), seg=40)
-    L.ROOT.rotation_euler = (math.radians(-6), math.radians(-30), math.radians(-40))
+    L.ROOT.rotation_euler = (math.radians(-6), math.radians(-50), math.radians(-40))
     ANCHORS['lens'] = [Vector((0.745, 0, 0)), 0.2]
     ANCHORS['lens_dir'] = [Vector((1.745, 0, 0)), 0.2]
-    return dict(az=0, el=12, fill=0.84, lens=70, floor=False, wall=1.8, floor_glow=False, beam=True, center=(0.44, 0.56),
+    return dict(az=0, el=12, fill=0.84, lens=70, floor=False, wall=1.8, floor_glow=False, beam=True, center=(0.5, 0.54),
                 refl=[((0, 0, 1), (-0.3, 0, 0.13), 300, 2.5, (0, 0, 0))])
 
 def build_possession():
@@ -486,7 +502,7 @@ def build_possession():
         L.torus('link', 0.07, 0.018, pewter, loc=(0, 0, z), rot=((0, PI / 2, 0) if k % 2 else (PI / 2, 0, 0)), scale=(1, 1, 1.6) if False else (1, 1, 1), seg=32)
         z += 0.12
     L.ROOT.rotation_euler = (math.radians(4), math.radians(-8), math.radians(-14))
-    return dict(az=0, el=6, fill=0.84, lens=70, floor=False, wall=1.2, floor_glow=False, backdrop='purple', evil=True,
+    return dict(az=0, el=6, fill=0.84, fill_w=0.7, lens=70, floor=False, wall=1.2, floor_glow=False, backdrop='purple', evil=True,
                 refl=[((0, -1, 0), (0, 0, 0), 250, 3.0, (0.25, 0, 0.3))])
 
 # ================================================================================================
@@ -545,7 +561,8 @@ def make(name):
             wc = L.catcher(loc=tgt - dirc * cfg['wall'])
             wc.rotation_euler = dirc.to_track_quat('Z', 'Y').to_euler()
         L.render_setup(RES, SAMPLES, cfg.get('exposure', 0.0))
-        cam, d = L.camera(cfg['az'], cfg['el'], tgt, cfg.get('fill', 0.8), cfg.get('lens', 70), cfg.get('center', (0.5, 0.5)))
+        cam, d = L.camera(cfg['az'], cfg['el'], tgt, cfg.get('fill', 0.8), cfg.get('lens', 70), cfg.get('center', (0.5, 0.5)),
+                          cfg.get('fill_w', 0.62))
         for i, rf in enumerate(cfg.get('refl', [])):
             # a soft light placed exactly where a flat metal face reflects the camera, so the face
             # shows a bright sheen instead of mirroring the dark room
@@ -578,7 +595,9 @@ def make(name):
     if meta.get('evil'): extra = aura_fx()
     post.composite(raw, os.path.join(OUT, name + '.jpg'), meta.get('backdrop', 'green'), seed=meta.get('seed', 7),
                    glow_amt=meta.get('glow_amt', 26.0), bloom=meta.get('bloom', 1.0), extra=extra,
-                   floor_glow=meta.get('floor_glow', True))
+                   floor_glow=meta.get('floor_glow', True),
+                   glow=(0.7, 0.42, 1.0) if meta.get('evil') else (1.0, 0.72, 0.38),
+                   tint=(1.0, 0.97, 1.04) if meta.get('evil') else (1.03, 1.0, 0.95))
     print(f'[{name}] {time.time() - t0:.0f}s  ->  assets/cards/{name}.jpg', flush=True)
 
 def beam_fx(lens, ahead):

@@ -49,7 +49,8 @@ def load_render(path):
     return a[..., :3] * 255.0, a[..., 3]
 
 def composite(render_path, out_path, kind='green', seed=7, glow=(1.0, 0.72, 0.38), glow_amt=26.0,
-              bloom=1.0, floor_glow=True, glow_center=(0.5, 0.44), extra=None, quality=88, pool=None):
+              bloom=1.0, floor_glow=True, glow_center=(0.5, 0.44), extra=None, quality=88, pool=None,
+              sat=1.12, gamma=1.08, tint=(1.03, 1.0, 0.95)):
     rgb, a = load_render(render_path)
     size = rgb.shape[0]
     bg = backdrop(kind, size, seed, glow_center)
@@ -68,6 +69,12 @@ def composite(render_path, out_path, kind='green', seed=7, glow=(1.0, 0.72, 0.38
         # and a soft halo behind the object
         e2 = np.exp(-(((xx - cx) / (w * 1.1)) ** 2 + ((yy - (ys.min() + ys.max()) / 2) / (w * 1.1)) ** 2))
         bg += e2[..., None] * np.array(glow) * glow_amt * 0.35
+    # a painter's grade on the object: a little more contrast and warmth, richer colour
+    g = rgb / 255.0
+    lum = g.mean(-1, keepdims=True)
+    g = lum + (g - lum) * sat
+    g = np.clip(g, 0, None) ** gamma
+    rgb = np.clip(g, 0, 1.2) * 255.0 * np.array(tint)
     out = bg * (1 - a[..., None]) + rgb * a[..., None]
     if extra is not None:
         out = extra(out, a, size)
@@ -79,7 +86,7 @@ def composite(render_path, out_path, kind='green', seed=7, glow=(1.0, 0.72, 0.38
         out = out + bloom * (0.35 * b1 + 0.3 * b2)
     # gentle painterly softening of the render's CG crispness, then a light sharpen for detail
     soft = ndimage.gaussian_filter(out, (0.7, 0.7, 0))
-    out = soft + 0.6 * (soft - ndimage.gaussian_filter(soft, (2.0, 2.0, 0)))
+    out = soft + 0.35 * (soft - ndimage.gaussian_filter(soft, (2.0, 2.0, 0)))
     # vignette
     r = np.hypot(xx / size - 0.5, yy / size - 0.5)
     out *= (1 - 0.42 * smooth(0.32, 0.78, r))[..., None]

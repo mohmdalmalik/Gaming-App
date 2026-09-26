@@ -37,15 +37,13 @@ CFG = dict(
     sheen={'Shoe': (0.34, [((0.2, -0.45, 0.87), 14.0, 1.0), ((0.0, -1.0, 0.3), 16.0, 0.8), ((0.9, 0.0, 0.45), 16.0, 0.5), ((-0.9, 0.0, 0.45), 16.0, 0.5)]), 'Hair': (0.50, (-0.2, -0.40, 0.89), 2.0)},
 )
 COLOURS = dict(
-    # Two lightings pull in opposite directions: the preview's neutral light + the game's Neutral tone mapping
-    # (which subtracts up to 0.04 linear from every channel and so re-saturates dark colours) wants greyish bases
-    # to land on the sheet's measured medians (skin #c26b39, hair #342520, suit #232a3e, tie #7a282d); the hall's
-    # warm light halves blue and would turn such a navy brown-black. These bases are the compromise: the suit
-    # renders close to the sheet in the neutral preview (median ~#1c2a4e) and a very dark navy in the hall.
-    skin='#dc8a5e', hair='#705c57', brow='#2e2019', mouth='#3a2218', eye='#0b0b0d',
-    jacket='#3f4764', trouser='#3b425d', button='#1b1e28', shade='#191c28',
+    # Skin and tie keep the neutral-preview tuning (they read right in the lobby: skin median ~#b15a1a, tie ~#680d0d).
+    # Cloth, hair and shoes now use the lobby-measured in-game palette (guest_kit.PALETTE): under the hotel's warm
+    # lamps the suit stays navy (never lavender), the hair dark brown (not orange/taupe), the shoes black leather.
+    skin='#dc8a5e', hair=GK.PALETTE['hair_dark_brown'], brow='#2e2019', mouth='#3a2218', eye='#0b0b0d',
+    jacket=GK.PALETTE['navy'], trouser=GK.PALETTE['navy_trouser'], button='#1b1e28', shade='#191c28',
     shirt='#f8f0e4', tie='#843c48',
-    shoe='#5f5a58', sole='#1a1818',  # shoe base is lighter: the bake's sheen darkens all but the toe/heel highlights
+    shoe=GK.PALETTE['shoe_black'], sole='#1a1818',  # the bake's shoe sheen adds the toe/heel highlights
 )
 
 # ---- skull tables by f (0 chin .. 1 skull top); face: broad U jaw, full cheeks, rounded-square

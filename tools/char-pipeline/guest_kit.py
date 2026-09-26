@@ -60,6 +60,35 @@ class Table:
         return self.ys[i] * (1 - f) + self.ys[i + 1] * f
 
 # =============================================================================================
+# IN-GAME PALETTE — base colours measured to read right in the REAL lobby (lineup_measure.mjs + line_colours.py)
+# The hotel light is strongly warm and uneven: per channel it multiplies a base colour by about (1.85, 1.45, 1.0)
+# relative to blue, and its strength varies ~2.4x between a guest standing by the lamps and one in the middle of the
+# room (the game then applies Neutral tone mapping, which subtracts up to 0.04 linear from every channel). So:
+#   * greyish, light bases (tuned for the neutral preview) turn lavender / taupe / brown-grey under the lamps;
+#   * a darker, more SATURATED base keeps its hue at every light level (dim spots just read deeper).
+# The defaults below were solved for the geometric mean of the two measured spots and checked at both. They read a
+# little cooler / bluer than the sheets in the neutral preview (preview_glb.mjs without --light game): expected.
+#   LOBBY_LIGHT: effective per-channel light at a mid spot (base -> linear radiance before tone mapping), for
+#   lobby_base(target) = the base that renders as `target` there (use it to author new colours).
+# =============================================================================================
+LOBBY_LIGHT = (1.04, 0.83, 0.58)
+PALETTE = dict(
+    navy='#36436a',          # midnight-navy suit cloth: lamps -> ~#283558 navy, room middle -> ~#0c1a38 deep navy
+    navy_trouser='#333f64',  # a shade darker than the jacket
+    satin_black='#2f3544',   # black satin lapels / facings: lamps -> ~#1e1d24 charcoal-black (darker than the navy)
+    shoe_black='#3c414d',    # black leather (with the bake's shoe sheen): ~#1d1b1b in the lobby
+    hair_dark_brown='#5e5a62',  # dark brown hair: ~#3e2e26 in the lobby (reads cool grey-brown in the neutral preview)
+)
+def lobby_base(target_hex, light=LOBBY_LIGHT):
+    """Base colour (hex) that renders as target_hex under `light` in the game (inverse of the Neutral tone mapping's
+    dark offset, divided by the per-channel light). Valid for mid/dark colours (below ~#e0 per channel)."""
+    t = [L._s2l(int(target_hex.lstrip('#')[i:i + 2], 16)) for i in (0, 2, 4)]
+    om = min(t); m = math.sqrt(om / 6.25) if om < 0.04 else om + 0.04
+    lin = [min(1.0, (c + (m - om)) / e) for c, e in zip(t, light)]
+    def l2s(c): return 255 * (c * 12.92 if c <= 0.0031308 else 1.055 * c ** (1 / 2.4) - 0.055)
+    return '#' + ''.join('%02x' % int(round(l2s(c))) for c in lin)
+
+# =============================================================================================
 # CONTEXT
 # =============================================================================================
 class Guest:

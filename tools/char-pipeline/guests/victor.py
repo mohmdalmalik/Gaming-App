@@ -40,15 +40,16 @@ CFG = dict(
     tint=dict(spots=[(0.115, 22.0, 0.045, 0.035, 1.0), (0.0, 20.5, 0.03, 0.025, 0.55)], g=0.08, b=0.14),
     groove_dark=(0.008, 0.45),
     sheen={'Shoe': (0.34, [((0.2, -0.45, 0.87), 14.0, 1.0), ((0.0, -1.0, 0.3), 16.0, 0.8), ((0.9, 0.0, 0.45), 16.0, 0.5), ((-0.9, 0.0, 0.45), 16.0, 0.5)]),
-           'Hair': (0.50, (-0.2, -0.40, 0.89), 2.0), 'Lapel': (0.70, (0.1, -0.6, 0.8), 6.0)},
+           'Hair': (0.50, (-0.2, -0.40, 0.89), 2.0), 'Lapel': (0.80, (0.1, -0.6, 0.8), 6.0)},
 )
 COLOURS = dict(
-    # neutral-preview bases tuned like Marcus's (see his notes on the two lightings); lighter / less saturated than
-    # the sheet so the warm hall light lands near it (make_victor.py's material notes)
-    skin='#fcc49a', hair='#6b625f', brow='#2a211c', mouth='#3a2218', eye='#0b0b0d', stache='#1c1a1c',
-    jacket='#474e68', lapel='#686874', trouser='#434a63', button='#16161a', shade='#191c28',
+    # In-game palette (guest_kit.PALETTE): the cloth, satin, hair and shoes are the lobby-measured bases, so under
+    # the hotel's warm lamps the tuxedo reads deep midnight navy, the satin lapels charcoal-black (darker than the
+    # cloth) and the shoes black leather. They read a little bluer than the sheet in the neutral preview.
+    skin='#fcc49a', hair=GK.PALETTE['hair_dark_brown'], brow='#2a211c', mouth='#3a2218', eye='#0b0b0d', stache='#1c1a1c',
+    jacket=GK.PALETTE['navy'], lapel=GK.PALETTE['satin_black'], trouser=GK.PALETTE['navy_trouser'], button='#16161a', shade='#191c28',
     shirt='#f6f0e6', tie='#1a1a1e',
-    shoe='#5f5a58', sole='#1a1818',
+    shoe=GK.PALETTE['shoe_black'], sole='#1a1818',
 )
 
 # ---- skull tables by f (0 chin .. 1 skull top); face: broad U jaw, full cheeks, rounded-square

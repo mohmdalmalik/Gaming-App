@@ -144,3 +144,14 @@ rolls + carved grooves, polygonised with dress_kit's surface nets) and `bend_nor
 normals bent forward so the chin does not go brown under the key light). Henry's spec installs a bake wrapper for its own
 build only (dress_kit.lift_ao for fair skin + the normal bend). Scratch iteration renders: `shots/h/` (run.sh, overlay/
 facepair/headpair helpers); final six-up: `shots/henry-vs-sheet.png`.
+
+## In-game colour check (lobby lineup)
+`lineup.mjs` puts all six guests in the real lobby. To tune colours for the game's warm, uneven hotel light:
+```bash
+node tools/char-pipeline/lineup_measure.mjs tools/char-pipeline/shots/lm    # lit shot + material-ID shot, same pinned camera
+python3 tools/char-pipeline/line_colours.py tools/char-pipeline/shots/lm    # median lit colour of every guest material
+```
+The measured light is warm (red ~1.85x, green ~1.45x blue) and ~2.4x brighter by the lamps than mid-room, so greyish
+bases wash out to lavender/taupe there. `guest_kit.PALETTE` holds the lobby-solved bases (navy cloth, satin black,
+black leather shoes, dark-brown hair) and `guest_kit.lobby_base('#rrggbb')` solves a base for any target colour.
+They read a little bluer than the sheets in the neutral preview (preview_glb.mjs without --light game): by design.

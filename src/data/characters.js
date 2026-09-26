@@ -31,7 +31,8 @@ export const outfits = {
   dinnerJacket: { name: 'White dinner jacket', body: 'male', jacket: '#ece5d4', trousers: '#15151a', shirt: '#f7f5ef', neckwear: 'bow', neckwearColor: '#15151a', lapels: '#d5ccb8',
     model: 'assets/characters/henry.glb', modelHeight: 1.66, strideLength: 1.169 },   // Henry (tools/char-pipeline/guests/henry.py)
   // Women: elegant, modest period dresses (silhouette: aline / column / full).
-  dressEmerald: { name: 'Emerald A-line gown', body: 'female', bodice: '#1f6b4a', skirt: '#1f6b4a', skirtStyle: 'aline', sleeves: 'long', sash: '#c9a86a' },
+  dressEmerald: { name: 'Emerald A-line gown', body: 'female', bodice: '#1f6b4a', skirt: '#1f6b4a', skirtStyle: 'aline', sleeves: 'long', sash: '#c9a86a',
+    model: 'assets/characters/beatrice.glb', modelHeight: 1.66, strideLength: 1.032 },   // Beatrice (tools/char-pipeline/guests/beatrice.py)
   dressBurgundy: { name: 'Burgundy column dress', body: 'female', bodice: '#6b1f30', skirt: '#6b1f30', skirtStyle: 'column', sleeves: 'short', sash: '#2a1418',
     model: 'assets/characters/clara.glb', modelHeight: 1.66, strideLength: 1.069 },   // Clara (tools/char-pipeline/guests/clara.py)
   dressMidnight: { name: 'Midnight blue ballgown', body: 'female', bodice: '#1d2a5e', skirt: '#24357a', skirtStyle: 'full', sleeves: 'cap', sash: '#d9c27a' },

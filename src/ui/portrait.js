@@ -16,6 +16,7 @@ export const PORTRAIT_ART = {
   suit: { normal: 'assets/portraits/marcus.jpg', possessed: 'assets/portraits/marcus-possessed.jpg' },
   dinnerJacket: { normal: 'assets/portraits/henry.jpg', possessed: 'assets/portraits/henry-possessed.jpg' },
   dressBurgundy: { normal: 'assets/portraits/clara.jpg', possessed: 'assets/portraits/clara-possessed.jpg' },
+  dressEmerald: { normal: 'assets/portraits/beatrice.jpg', possessed: 'assets/portraits/beatrice-possessed.jpg' },
 };
 
 export function makePortrait(doc, player, { possessed = false } = {}) {

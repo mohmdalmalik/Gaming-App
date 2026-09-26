@@ -342,12 +342,13 @@ def pumps(g, S):
     for i in range(15):
         a = -HEEL + (L0) * (i / 14) ** 1.0
         f = (a + HEEL) / L0
-        w = W0 * (0.62 + 0.38 * math.sin(math.pi * min(1.0, f / 0.72) * 0.5) ** 0.8) if f < 0.72 else W0 * (1.0 - 0.75 * ((f - 0.72) / 0.28) ** 2)
+        toe = S.get('toe_round', 2.6)                     # larger = a rounder, blunter toe
+        w = W0 * (0.66 + 0.34 * math.sin(math.pi * min(1.0, f / 0.70) * 0.5) ** 0.8) if f < 0.70 else W0 * (1.0 - 0.72 * ((f - 0.70) / 0.30) ** toe)
         top = top_line(a)
-        if f > 0.80: top = sole_z(a) + (top - sole_z(a)) * (1.0 - 0.85 * ((f - 0.80) / 0.20) ** 1.6)
-        stations.append(st(a, max(0.012, w), top, 0.72 if f < 0.9 else 0.9))
+        if f > 0.78: top = sole_z(a) + (top - sole_z(a)) * (1.0 - 0.70 * ((f - 0.78) / 0.22) ** 1.8)
+        stations.append(st(a, max(0.012, w), top, 0.70 if f < 0.9 else 0.85))
     stations[0]['w'] *= 0.85; stations[-1]['w'] = max(0.01, stations[-1]['w'])
-    shoe = L.loft('Pump', stations, n=20)
+    shoe = L.loft('Pump', stations, n=S.get('n', 18))
     # sole plate: a thin darker slab under the forefoot + the block heel
     heel_len = S.get('heel_len', 0.042)
     hb = L.loft('PumpHeel', [dict(z=-HEEL + 0.004, w=W0 * 0.50, d=hh + 0.006, r=0.6, y=(hh + 0.006) / 2),
@@ -361,9 +362,10 @@ def pumps(g, S):
     fst = []
     for i in range(9):
         a = -HEEL * 0.8 + (ball + 0.01 + HEEL * 0.8) * i / 8; f = i / 8
-        top = ft + (vamp + 0.004 - ft) * sm(f ** 0.9)
+        ie = S.get('instep_end', 0.80)                   # the instep dips under the vamp (only its top shows); the heel stays under the collar
+        top = (col - 0.010) + (ft - col + 0.010) * sm(f / 0.28) if f < 0.28 else ft + (vamp - 0.008 - ft) * sm((f - 0.28) / (ie - 0.28))
         b = sole_z(a) + 0.006
-        fst.append(dict(z=a, w=W0 * (0.80 + 0.1 * math.sin(math.pi * f)), d=max(0.01, top - b), r=0.95, y=(top + b) / 2))
+        fst.append(dict(z=a, w=W0 * S.get('foot_w', 0.72) * (0.92 + 0.08 * math.sin(math.pi * f)), d=max(0.01, top - b), r=0.95, y=(top + b) / 2))
     foot = L.loft('Foot', fst, n=16)
     parts = [(shoe, S.get('mat', 'shoe')), (hb, S.get('heel_mat', S.get('mat', 'shoe'))), (foot, 'skin')]
     for s, tag in ((1, 'L'), (-1, 'R')):
@@ -400,7 +402,7 @@ def earrings(g, E):
     z (pct), mat ('pearl' / 'gold'), drop=dict(len, r) for a hanging bead below."""
     for s in (1, -1):
         c = Vector((s * E['x'], g.Y0 + E.get('dy', 0.0), g.zp(E['z'])))
-        g.add(L.uvsphere(f'Earring{s}', E['r'], c, u=14, v=10), E.get('mat', 'pearl'), 'head')
+        g.add(L.uvsphere(f'Earring{s}', E['r'], c, u=12, v=8), E.get('mat', 'pearl'), 'head')
         if E.get('kind') == 'drop':
             D = E['drop']; g.add(L.uvsphere(f'EarDrop{s}', D['r'], c - Vector((0, 0, D['len'])), u=12, v=8), E.get('mat', 'pearl'), 'head')
 

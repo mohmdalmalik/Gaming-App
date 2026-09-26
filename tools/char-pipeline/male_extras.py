@@ -171,3 +171,202 @@ def stepped_hair(g, hair, hairline, edge, thin_below=None, steps=(), crease_dark
         return (hg(p) if hg else 0.0) + crease_dark * cr * 4.0
     g.hair_groove = groove
     return ob
+
+# =============================================================================================
+# SCULPTED HAIR from a MEASURED ENVELOPE (signed-distance volume, polygonised with dress_kit's surface nets):
+#   base   = the envelope (per-height superellipse slices from four measured extents, like guest_kit.hair_shell)
+#            shrunk by `inset`, united with a thin skin-tight layer over the skull (t_min), limited to
+#            skull + edge(u) + slope * (height above the hairline) (short sides, full top), cut at the hairline
+#            with a rounded edge (edge_k)
+#   rolls  = rounded locks lying ON the envelope along (u, pct, radius) keys (sink: how much of the radius hides)
+#   grooves= channels carved along (u, pct, radius) keys on the envelope (between the locks)
+# =============================================================================================
+def env_tables(g, E):
+    import numpy as np
+    import dress_kit as DK
+    zp = g.zp
+    T = {k: DK._np_table(GK.Table([(zp(p), v) for p, v in E[k]])) for k in ('wr', 'wl', 'front', 'back', 'expo')}
+    return T
+
+def env_point(g, T, u, pct, inset=0.0):
+    """Point on the envelope at longitude u (0 front, 0.25 his right, 0.5 back, 0.75 his left) and height pct,
+    moved `inset` inward along the slice normal; also returns the outward normal (horizontal-ish)."""
+    import numpy as np
+    z = g.zp(pct); x0, x1 = -float(T['wr'](z)), float(T['wl'](z)); yf, yb = g.Y0 - float(T['front'](z)), g.Y0 + float(T['back'](z))
+    a, b = max(1e-4, (x1 - x0) / 2), max(1e-4, (yb - yf) / 2); cx, cy = (x0 + x1) / 2, (yf + yb) / 2; e = float(T['expo'](z))
+    t = 2 * math.pi * u + math.pi / 2; dx, dy = math.cos(t), -math.sin(t)            # direction from the slice centre
+    # superellipse radius along (dx, dy)
+    r = 1.0 / ((abs(dx) / a) ** e + (abs(dy) / b) ** e) ** (1.0 / e)
+    px, py = cx + dx * r, cy + dy * r
+    nx = e * abs((px - cx) / a) ** (e - 1) * math.copysign(1, px - cx) / a; ny = e * abs((py - cy) / b) ** (e - 1) * math.copysign(1, py - cy) / b
+    n = Vector((nx, ny, 0.0)).normalized()
+    p = Vector((px, py, z)) - n * inset
+    return p, n
+
+def env_sdf(g, T):
+    import numpy as np
+    def sdf(P):
+        z = P[:, 2]
+        x0, x1 = -T['wr'](z), T['wl'](z); yf, yb = g.Y0 - T['front'](z), g.Y0 + T['back'](z)
+        a = np.maximum((x1 - x0) / 2, 2e-3); b = np.maximum((yb - yf) / 2, 2e-3); cx = (x0 + x1) / 2; cy = (yf + yb) / 2; e = T['expo'](z)
+        ax = np.abs(P[:, 0] - cx) / a + 1e-9; ay = np.abs(P[:, 1] - cy) / b + 1e-9
+        f = (ax ** e + ay ** e) ** (1.0 / e)
+        gx = f ** (1 - e) * ax ** (e - 1) / a; gy = f ** (1 - e) * ay ** (e - 1) / b
+        return (f - 1.0) / np.maximum(np.sqrt(gx * gx + gy * gy), 1e-6)
+    return sdf
+
+def env_hair(g, Hs):
+    """Hs: env (wr/wl/front/back/expo tables, like hair_shell), top (pct of the crown), hairline(u) -> pct, edge(u) -> m,
+    slope (m per m above the hairline), t_min, inset, edge_k, rolls [dict(keys=[(u, pct, r)], sink, k, n)],
+    grooves [dict(keys=[(u, pct, r)], k, lift, n)], voxel, tris, smooth, box_pad, name, mat.
+    Sets g.hair_covers (for the skull cull), g.hair_groove (bake darkening), g.hair_env (T), g.hair_sdf."""
+    import numpy as np
+    import dress_kit as DK
+    zp = g.zp; T = env_tables(g, Hs['env']); T['_top'] = Hs.get('top', 0.0)
+    c0r = np.array([0.0, g.Y0 + Hs.get('centre', (0.0, 0.02, 14.5))[1], zp(Hs.get('centre', (0.0, 0.02, 14.5))[2])])
+    R_at = radial_env(g, T, c0r, blur=Hs.get('blur', 1.5))
+    Rs_at = radial_skull(g, c0r)
+    def base_env(P):
+        u, v, r = radial_uv(c0r, P); return (r - R_at(u, v)) * 0.9
+    def skull_rad(P):
+        u, v, r = radial_uv(c0r, P); return (r - Rs_at(u, v)) * 0.9
+    hl = Hs['hairline']; hl_u = np.linspace(0, 1, 721); hl_z = np.array([zp(hl(u)) for u in hl_u])
+    ed = Hs['edge']; ed_v = np.array([ed(u) for u in hl_u])
+    tb = Hs.get('thin_below'); tb_z = np.array([zp(tb(u)) for u in hl_u]) if tb else hl_z
+    c0 = np.array([0.0, g.Y0 + 0.02, zp(14.0)])
+    def u_of(P): return (np.arctan2(-(P[:, 1] - c0[1]), P[:, 0] - c0[0]) - math.pi / 2) / (2 * math.pi) % 1.0
+    z_top = zp(Hs.get('top', 0.0)); inset = Hs.get('inset', 0.0); t_min = Hs.get('t_min', 0.008); slope = Hs.get('slope', 0.9)
+    def curve(keys, n, lift_fn):
+        ks = [list(k) for k in keys]
+        for i in range(1, len(ks)):
+            while ks[i][0] - ks[i - 1][0] > 0.5: ks[i][0] -= 1.0
+            while ks[i][0] - ks[i - 1][0] < -0.5: ks[i][0] += 1.0
+        d = L.catmull_rom([tuple(k) for k in ks], n); pts, rad = [], []
+        for u, p, r in d:
+            q, nn = radial_point(g, R_at, c0r, u % 1.0, p)
+            pts.append(tuple(q - nn * lift_fn(r))); rad.append(max(1e-3, r))
+        return np.array(pts), np.array(rad)
+    rolls = [(curve(R_['keys'], R_.get('n', 40), lambda r, s=R_.get('sink', 0.5): r * s), R_.get('k', 0.008)) for R_ in Hs.get('rolls', [])]
+    grooves = [(curve(G_['keys'], G_.get('n', 30), lambda r, l=G_.get('lift', 0.0): -l), G_.get('k', 0.004)) for G_ in Hs.get('grooves', [])]
+    def sdf(P):
+        sk = skull_rad(P)
+        s = base_env(P) + inset
+        s = DK.smin(s, sk - t_min, 0.004)
+        for (pts, rad), k in rolls: s = DK.smin(s, DK.sd_tube(P, pts, rad), k)
+        for (pts, rad), k in grooves: s = DK.smax(s, -DK.sd_tube(P, pts, rad), k)
+        u = u_of(P); zl = np.interp(u, hl_u, hl_z); allow = np.interp(u, hl_u, ed_v) + slope * np.maximum(0.0, P[:, 2] - np.interp(u, hl_u, tb_z))
+        s = DK.smax(s, sk - allow, 0.006)                                   # short sides / thin sideburns
+        s = DK.smax(s, zl - P[:, 2], Hs.get('edge_k', 0.010))               # the hairline cut (rounded)
+        return s
+    # box from the envelope
+    pad = Hs.get('box_pad', 0.03)
+    zs = np.linspace(zp(Hs.get('bottom', 30.0)), z_top, 40)
+    xl = min(-float(T['wr'](z)) for z in zs) - pad; xh = max(float(T['wl'](z)) for z in zs) + pad
+    yl = g.Y0 - max(float(T['front'](z)) for z in zs) - pad; yh = g.Y0 + max(float(T['back'](z)) for z in zs) + pad
+    lo = (xl, yl, zp(Hs.get('bottom', 30.0))); hi = (xh, yh, z_top + pad)
+    drop = lambda p: g.inside_skull(p, -0.004)
+    ob = DK.sdf_object(g, Hs.get('name', 'Hair'), sdf, lo, hi, Hs.get('voxel', 0.005), drop=drop, smooth=Hs.get('smooth', 3), target_tris=Hs.get('tris', 8000))
+    def covered(p, margin=0.02):
+        P = np.array([[p.x, p.y, p.z]]); return bool(p.z > np.interp(u_of(P), hl_u, hl_z)[0] + margin)
+    g.hair_covers = covered; g.hair_sdf = sdf; g.hair_env = T
+    if grooves:
+        def gam(p):
+            P = np.array([[p.x, p.y, p.z]]); best = 0.0
+            for (pts, rad), k in grooves:
+                d = DK.sd_tube(P, pts, rad)[0]; best = max(best, float(np.clip(1.0 - d / 0.008, 0.0, 1.0)))
+            return best * 0.010
+        g.hair_groove = gam
+    return g.add(ob, Hs.get('mat', 'hair'), 'head')
+
+def radial_env(g, T, c0, nu=192, nv=96, blur=1.5):
+    """The envelope as a RADIUS FIELD R(u, v) about c0 (u longitude as in hair_shell, v polar angle from the top),
+    sampled on a grid and softly blurred: a smooth, crease-free base whose top is round (the per-height slices
+    alone give a knife-edge ridge at the crown)."""
+    import numpy as np
+    from scipy import ndimage as nd
+    us = np.arange(nu) / nu; vs = np.linspace(0.0, math.pi, nv)
+    U, V = np.meshgrid(us, vs, indexing='ij'); t = 2 * math.pi * U + math.pi / 2
+    D = np.stack([np.sin(V) * np.cos(t), -np.sin(V) * np.sin(t), np.cos(V)], -1)          # (nu, nv, 3)
+    rs = np.arange(0.02, 0.45, 0.002); R = np.zeros((nu, nv))
+    for i, r in enumerate(rs):
+        P = c0 + D * r; z = P[..., 2]
+        x0, x1 = -T['wr'](z), T['wl'](z); yf, yb = g.Y0 - T['front'](z), g.Y0 + T['back'](z)
+        a = (x1 - x0) / 2; b = (yb - yf) / 2; e = T['expo'](z); ok = (a > 1e-4) & (b > 1e-4) & (z < g.zp(T['_top']))
+        f = (np.abs(P[..., 0] - (x0 + x1) / 2) / np.maximum(a, 1e-4)) ** e + (np.abs(P[..., 1] - (yf + yb) / 2) / np.maximum(b, 1e-4)) ** e
+        R = np.where(ok & (f < 1.0), r, R)
+    R = np.where(R <= 0, 0.03, R)
+    if blur: R = nd.gaussian_filter(R, blur, mode=('wrap', 'nearest'))
+    def R_at(u, v):
+        fu = (np.asarray(u) % 1.0) * nu; fv = np.clip(np.asarray(v) / math.pi * (nv - 1), 0, nv - 1.001)
+        i0 = np.floor(fu).astype(int) % nu; i1 = (i0 + 1) % nu; j0 = np.floor(fv).astype(int); j1 = j0 + 1; au = fu - np.floor(fu); av = fv - j0
+        return (R[i0, j0] * (1 - au) * (1 - av) + R[i1, j0] * au * (1 - av) + R[i0, j1] * (1 - au) * av + R[i1, j1] * au * av)
+    return R_at
+
+def radial_uv(c0, P):
+    import numpy as np
+    d = P - c0; r = np.linalg.norm(d, axis=-1); v = np.arccos(np.clip(d[..., 2] / np.maximum(r, 1e-9), -1, 1))
+    u = ((np.arctan2(-d[..., 1], d[..., 0]) - math.pi / 2) / (2 * math.pi)) % 1.0
+    return u, v, r
+
+def radial_point(g, R_at, c0, u, pct, inset=0.0):
+    """Point on the radial envelope at longitude u and height pct (bisection on the polar angle) + outward normal."""
+    import numpy as np
+    zt = g.zp(pct); lo, hi = 0.0, math.pi * 0.98
+    def pt(v):
+        t = 2 * math.pi * u + math.pi / 2; d = np.array([math.sin(v) * math.cos(t), -math.sin(v) * math.sin(t), math.cos(v)])
+        return c0 + d * float(R_at(u, v)), d
+    for _ in range(30):
+        m = 0.5 * (lo + hi)
+        if pt(m)[0][2] > zt: lo = m
+        else: hi = m
+    v = 0.5 * (lo + hi); p, d = pt(v)
+    e = 1e-3; pu = pt(v)[0]; a = np.array(pt(v)[0])
+    # normal from the local surface tangents
+    t1 = radial_pt_uv(R_at, c0, (u + e) % 1.0, v) - radial_pt_uv(R_at, c0, (u - e) % 1.0, v)
+    t2 = radial_pt_uv(R_at, c0, u, v + e) - radial_pt_uv(R_at, c0, u, v - e)
+    n = np.cross(t1, t2); n = n / max(1e-12, np.linalg.norm(n))
+    if np.dot(n, d) < 0: n = -n
+    return Vector(tuple(p - n * inset)), Vector(tuple(n))
+
+def radial_pt_uv(R_at, c0, u, v):
+    import numpy as np
+    t = 2 * math.pi * u + math.pi / 2; d = np.array([math.sin(v) * math.cos(t), -math.sin(v) * math.sin(t), math.cos(v)])
+    return c0 + d * float(R_at(u, v))
+
+def radial_skull(g, c0, nu=192, nv=96):
+    """The skull as a radius field about c0 (inside test = dress_kit.sd_skull < 0): an accurate, smooth distance to use
+    for the hair's thickness limits (sd_skull's horizontal slices misjudge points above the crown)."""
+    import numpy as np
+    import dress_kit as DK
+    from scipy import ndimage as nd
+    us = np.arange(nu) / nu; vs = np.linspace(0.0, math.pi, nv)
+    U, V = np.meshgrid(us, vs, indexing='ij'); t = 2 * math.pi * U + math.pi / 2
+    D = np.stack([np.sin(V) * np.cos(t), -np.sin(V) * np.sin(t), np.cos(V)], -1).reshape(-1, 3)
+    R = np.zeros(len(D))
+    for r in np.arange(0.01, 0.40, 0.002):
+        ins = DK.sd_skull(g, c0 + D * r) < 0; R = np.where(ins, r, R)
+    R = nd.gaussian_filter(R.reshape(nu, nv), 0.8, mode=('wrap', 'nearest'))
+    def R_at(u, v):
+        fu = (np.asarray(u) % 1.0) * nu; fv = np.clip(np.asarray(v) / math.pi * (nv - 1), 0, nv - 1.001)
+        i0 = np.floor(fu).astype(int) % nu; i1 = (i0 + 1) % nu; j0 = np.floor(fv).astype(int); j1 = j0 + 1; au = fu - np.floor(fu); av = fv - j0
+        return (R[i0, j0] * (1 - au) * (1 - av) + R[i1, j0] * au * (1 - av) + R[i0, j1] * (1 - au) * av + R[i1, j1] * au * av)
+    return R_at
+
+def bend_normals(g, mat_name, weight, target, amount=1.0):
+    """Stylised lighting help: bend the shading normals of `mat_name` vertices toward `target` (a direction) by
+    weight(co) * amount (0..1), e.g. to keep a round lower face lit like the sheets' soft studio light (the chin's
+    downward normals otherwise go brown under a key light from above). Writes custom split normals (exported)."""
+    me = g.mesh.data; T = Vector(target).normalized()
+    slot = {i for i, m in enumerate(me.materials) if m and m.name == mat_name}
+    me.update()
+    normals = [Vector(l.normal) for l in me.loops] if hasattr(me.loops[0], 'normal') else None
+    cn = me.corner_normals if hasattr(me, 'corner_normals') else None
+    out = []
+    for poly in me.polygons:
+        for li in poly.loop_indices:
+            n = Vector(cn[li].vector) if cn is not None else normals[li]
+            if poly.material_index in slot:
+                co = me.vertices[me.loops[li].vertex_index].co; w = max(0.0, min(1.0, weight(co) * amount))
+                if w > 0: n = (n * (1 - w) + T * w).normalized()
+            out.append(n)
+    me.normals_split_custom_set([tuple(n) for n in out])

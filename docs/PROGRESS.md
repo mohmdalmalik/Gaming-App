@@ -970,9 +970,10 @@ With cautious bots the clean side wins 2%. Before this change (fixed map, same b
 # Approved rule changes — Part 2: rooms with jobs and new cards (current)
 
 **Status: in progress.** Done and committed: the rules engine, the data (room deck and 48-card deck) and
-docs/GAME_RULES.md (commit 94a38c3). In progress: the interface, the simulator bots and the 400-match
-simulation, and the automated tests. If work stops here, the next step is to finish those three and
-then review them against the approved list.
+docs/GAME_RULES.md (commit 94a38c3); the interface (commit 0a24f8c). In progress: the simulator bots
+(`tools/balance/hotseat-sim.mjs`) and the 400-match simulation, the rule tests (`tests/rules-check.mjs`)
+and the browser tests (the hot-seat and practice suites still expect the old 40-card deck). If work stops
+here, the next step is to finish those three and then review everything against the approved list.
 
 ## The approved list (applied exactly)
 1. Rooms with jobs, in place of ordinary tiles (the deck stays at 24): Linen Store ×2 (first search

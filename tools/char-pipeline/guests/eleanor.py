@@ -31,10 +31,10 @@ CFG = dict(
     head_y=0.02, z_shoulder_top=31.5,
     ear_style='round', ear_h=0.074, ear_w=0.052, ear_out=0.002, ear_y=0.004, ear_tilt=0.30, ear_thick=0.026, ear_rim=0.007, ear_bowl=0.010, ear_sink=0.020,
     eye_x=0.063, eye_w=0.040, eye_h=0.067, eye_lift=0.003,
-    brow=dict(x0=0.030, x1=0.104, z=12.7, thick=0.024, arch=0.005, drop_in=0.002, drop_out=0.022,
-              profile=[(0.0, 0.60), (0.05, 0.95), (0.20, 1.0), (0.60, 0.88), (0.90, 0.55), (1.0, 0.25)], flat=0.5),
+    brow=dict(x0=0.031, x1=0.102, z=12.6, thick=0.019, arch=0.012, drop_in=-0.014, drop_out=0.006,     # inner ends raised: soft friendly arcs from the game camera too
+              profile=[(0.0, 0.55), (0.05, 0.90), (0.25, 1.0), (0.60, 0.88), (0.90, 0.55), (1.0, 0.25)], flat=0.5),
     nose_w=0.056, nose_h=0.042, nose_d=0.030, nose_out=0.012, nose_top=1.3,
-    lips=dict(z=22.4, w=0.090, rise=0.010, upper=0.010, lower=0.015, bow=0.002, flat=0.45),
+    lips=dict(z=22.4, w=0.094, rise=0.015, upper=0.010, lower=0.015, bow=0.002, flat=0.45),
     tint=dict(spots=[(0.080, 20.9, 0.024, 0.020, 1.0), (0.0, 19.3, 0.018, 0.016, 0.3)], g=0.36, b=0.28),       # soft rosy blush discs
     soft_normals=dict(centre=(0.0, 0.03, 25.0), radii=(0.20, 0.24, 0.55), amount=1.0, z_top=12.5, z_bot=30.0, fade=0.03, front=0.04,
                       keep=[(0.0, -0.215, 19.3, 0.034)]),
@@ -109,14 +109,14 @@ SCULPT = dict(
             dict(c=(-0.010, 0.120, 17.5), r=(0.150, 0.100, 0.075), k=0.03),          # nape: side hair sweeping into the chignon
             dict(c=(-0.125, 0.120, 19.0), r=(0.065, 0.070, 0.075), k=0.03, cut=False),  # behind her right ear, into the chignon
             dict(c=(0.110, 0.120, 18.5), r=(0.055, 0.065, 0.065), k=0.03, cut=False)],  # behind her left ear
-    rolls=[dict(keys=[(x * (1 + 0.04 * (abs(x) > 0.12)), dy, p, r, fl) for x, dy, p, r in k], k=0.020)
-           for k, fl in ((WAVE1, 0.80), (WAVE2, 0.78), (WAVE3, 0.78), (WAVE4, 0.78), (LEFT1, 0.80), (LEFT2, 0.78), (LEFT3, 0.78))] + [
+    rolls=[dict(keys=[(x * (1 + 0.04 * (abs(x) > 0.12)), dy, p, r * (0.45 if i == 0 else 0.75 if i == 1 else 1.0), fl) for i, (x, dy, p, r) in enumerate(k)], k=0.028)
+           for k, fl in ((WAVE1, 0.80), (WAVE2, 0.78), (WAVE3, 0.78), (WAVE4, 0.78), (LEFT1, 0.80), (LEFT2, 0.78))] + [
         # wisps in front of the ears
         dict(keys=[(-0.148, -0.080, 13.8, 0.010), (-0.150, -0.082, 15.8, 0.010), (-0.145, -0.080, 17.2, 0.006), (-0.139, -0.080, 17.9, 0.003)], k=0.004, n=16),
         dict(keys=[(0.140, -0.080, 13.0, 0.009), (0.146, -0.072, 15.5, 0.009), (0.140, -0.066, 17.2, 0.004)], k=0.004, n=16),
     ],
     grooves=[dict(keys=[(0.072, -0.165, 3.2, 0.002), (0.072, -0.12, 1.6, 0.005), (0.068, -0.04, 0.9, 0.005), (0.060, 0.05, 1.4, 0.004), (0.050, 0.11, 3.0, 0.002)], depth=0.004, k=0.003)] +      # the side part
-            [dict(keys=DK.valley(p, q, 0.006, t0=0.2), depth=0.0045, k=0.003) for p, q in ((WAVE1, WAVE2), (WAVE2, WAVE3), (WAVE3, WAVE4), (LEFT1, LEFT2), (LEFT2, LEFT3))] +
+            [dict(keys=DK.valley(p, q, 0.006, t0=0.30, t1=0.85), depth=0.0045, k=0.003) for p, q in ((WAVE1, WAVE2), (WAVE2, WAVE3), (LEFT1, LEFT2))] +
             [dict(keys=[(0.02, 0.07, 0.6, 0.006), (-0.07, 0.07, 1.8, 0.008), (-0.12, 0.12, 5.0, 0.009), (-0.12, 0.17, 9.0, 0.009), (-0.07, 0.20, 12.0, 0.007)], depth=0.007, k=0.004),
              dict(keys=[(0.05, 0.03, 0.8, 0.006), (0.10, 0.02, 3.5, 0.008), (0.13, 0.08, 7.5, 0.009), (0.11, 0.15, 11.0, 0.008), (0.06, 0.19, 13.5, 0.006)], depth=0.007, k=0.004)] +
             [dict(keys=[(x * 0.6, 0.12, 3.0, 0.003), (x * 0.9, 0.175, 6.0, 0.009), (x, 0.197, 9.5, 0.010), (x * 0.8, 0.195, 12.5, 0.008), (x * 0.55, 0.18, 14.5, 0.003)],

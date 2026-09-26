@@ -34,10 +34,10 @@ CFG = dict(
     head_y=0.046, z_shoulder_top=32.0,
     ear_style='round', ear_seg=(20, 14), ear_h=0.118, ear_w=0.086, ear_out=0.010, ear_y=0.010, ear_tilt=0.60, ear_thick=0.028, ear_rim=0.008, ear_bowl=0.011, ear_sink=0.020,
     eye_x=0.065, eye_w=0.033, eye_h=0.052, eye_lift=0.003,
-    brow=dict(x0=0.041, x1=0.110, z=13.0, thick=0.036, arch=0.014, drop_in=0.004, drop_out=0.012,
-              profile=[(0.0, 0.55), (0.06, 0.95), (0.30, 1.0), (0.75, 0.88), (0.94, 0.62), (1.0, 0.35)], flat=0.5),
+    brow=dict(x0=0.041, x1=0.110, z=13.0, thick=0.034, arch=0.016, drop_in=-0.016, drop_out=0.020,
+              profile=[(0.0, 0.45), (0.08, 0.90), (0.30, 1.0), (0.70, 0.90), (0.93, 0.60), (1.0, 0.30)], flat=0.5),
     nose_w=0.074, nose_h=0.058, nose_d=0.040, nose_out=0.016, nose_top=1.25,
-    lips=dict(z=23.1, w=0.122, rise=0.012, upper=0.012, lower=0.020, bow=0.003, flat=0.5, mat='lips'),
+    lips=dict(z=23.1, w=0.122, rise=0.017, upper=0.012, lower=0.020, bow=0.003, flat=0.5, mat='lips'),
     tint=dict(spots=[(0.100, 21.4, 0.042, 0.034, 1.0), (0.0, 19.6, 0.020, 0.020, 0.4)], g=0.10, b=0.08),
     groove_dark=(0.010, 0.60),
     ao_skip=('Brow', 'Eye', 'Lips', 'Gold', 'Shine'), ao_scale={'Skin': 0.30, 'Dress': 0.85},
@@ -106,7 +106,7 @@ def hairline(u):
     z = 5.8 + (3.0 if right else 0.6) * ss(a / 0.08)
     z += (15.5 - z) * ss((a - 0.045) / 0.065)                 # arched: down past the temples to the ear's top
     z += (15.0 - z) * ss((a - 0.205) / 0.02)                  # over the ear
-    z += (27.5 - z) * ss((a - 0.27) / 0.05)                   # the curtain behind the ear
+    z += (27.0 - z) * ss((a - 0.27) / 0.05)                   # the curtain behind the ear (the curl ends hang lower)
     return z
 
 def band_keys(th0, p0, p1, sweep, wig, half, k=1.0, n=9):
@@ -116,8 +116,8 @@ def band_keys(th0, p0, p1, sweep, wig, half, k=1.0, n=9):
         t = i / (n - 1); th = th0 + sweep * t + wig * math.sin(2 * math.pi * t * 0.9)
         x, dy, pp = env(th, p0 + (p1 - p0) * t, k); keys.append((x, dy, pp, half * (0.45 + 0.55 * sm(t / 0.45))))
     return keys
-def curl_end(th, p=24.8, k=0.93, r=(0.052, 0.048, 0.036)):
-    x, dy, pp = env(th, p, k); return dict(c=(x, dy, pp), r=r, k=0.03)
+def curl_end(th, p=26.0, k=0.86, r=(0.050, 0.046, 0.040)):
+    x, dy, pp = env(th, p, k); return dict(c=(x, dy, pp), r=r, k=0.035, cut=False)
 # back/sides: 8 locks between the old crease lines, alternately taller / lower (each stands proud of its neighbours)
 def s_band(th0, p0, p1, sweep, amp, half, n=11):
     """One big S: the path drifts `sweep` rad and swings +-amp rad once (a single full wave over its length)."""
@@ -135,23 +135,22 @@ def sweep_band(p_part, half, dx=0.0):
     return [(0.055 + dx, -0.15 + 0.03 * p_part, p_part, half * 0.5), (-0.02, -0.205, p_part + 2.5, half), (-0.10, -0.19, p_part + 5.0, half),
             (-0.17, -0.14, p_part + 8.0, half), (-0.225, -0.07, p_part + 11.5, half), (-0.255, 0.005, p_part + 15.5, half),
             (-0.255, 0.07, p_part + 20.0, half)]
-FRONT_BANDS = [dict(keys=sweep_band(4.6, 0.050), height=0.026, soft=0.012, taper=(0.10, 0.12)),
-               dict(keys=sweep_band(1.2, 0.046), height=0.024, soft=0.012, taper=(0.10, 0.20)),
+FRONT_BANDS = [dict(keys=sweep_band(3.0, 0.050), height=0.026, soft=0.012, taper=(0.10, 0.12)),
+               dict(keys=sweep_band(0.3, 0.046), height=0.024, soft=0.012, taper=(0.10, 0.20)),
                dict(keys=[(0.07, -0.13, 2.0, 0.030), (0.13, -0.17, 4.8, 0.050), (0.19, -0.13, 8.5, 0.055), (0.24, -0.07, 13.0, 0.058),
                           (0.26, 0.00, 17.5, 0.058), (0.255, 0.07, 22.5, 0.055)], height=0.030, soft=0.012, taper=(0.10, 0.15))]
 
 SCULPT = dict(
     cap=dict(thick=[(0, 0.024), (3, 0.034), (6, 0.040), (10, 0.032), (14, 0.024), (18, 0.020), (24, 0.016), (28, 0.012)], hairline=hairline, edge_k=0.030),
-    masses=[dict(c=(-0.010, 0.030, 6.0), r=(0.195, 0.186, 0.100), k=0.05),            # the round crown (reaches the hair top)
-            dict(c=(-0.012, 0.070, 16.0), r=(0.285, 0.232, 0.112), k=0.05),           # the bob's body
-            dict(c=(-0.180, 0.065, 22.0), r=(0.110, 0.150, 0.072), k=0.04),           # her right side, down toward the chin
-            dict(c=(0.170, 0.065, 22.0), r=(0.105, 0.150, 0.072), k=0.04),            # her left side
-            dict(c=(0.0, 0.180, 22.5), r=(0.170, 0.110, 0.070), k=0.04)] +             # the full round back, low
-           [curl_end(math.radians(a + sw)) for a, sw in BACK_ANGLES] + [
-            dict(c=(-0.195, 0.000, 12.5), r=(0.095, 0.160, 0.072), k=0.05),           # fullness hugging the temples (her right)
-            dict(c=(0.185, 0.000, 12.5), r=(0.090, 0.160, 0.072), k=0.05),            # (her left)
-            dict(c=(-0.010, -0.080, 2.8), r=(0.130, 0.110, 0.045), k=0.05),           # the front of the crown rolling forward
-            ],
+    # a rounded cloud: a tall round crown, the body widest low (~20 %), rounded side bulges, and a scalloped rim of
+    # curl ends round the jaw and the nape (not cut by the hairline: they hang below it as separate rounded ends)
+    masses=[dict(c=(-0.010, 0.040, 8.5), r=(0.185, 0.190, 0.140), k=0.05),            # the round crown (top at 0 %)
+            dict(c=(-0.010, 0.068, 15.5), r=(0.285, 0.232, 0.140), k=0.05),           # the bob's body: a round cloud
+            dict(c=(-0.205, 0.045, 20.5), r=(0.098, 0.150, 0.080), k=0.04),           # her right side bulge
+            dict(c=(0.195, 0.045, 20.5), r=(0.094, 0.150, 0.080), k=0.04),            # her left side bulge
+            dict(c=(0.0, 0.180, 22.0), r=(0.175, 0.110, 0.078), k=0.04),              # the full round back, low
+            dict(c=(-0.010, -0.070, 3.2), r=(0.120, 0.100, 0.042), k=0.05)] +         # the front of the crown rolling forward
+           [curl_end(math.radians(a)) for a in (84, 106, 128, 150, 172, -166, -144, -122, -100, -78)],
     bands=BACK_BANDS + FRONT_BANDS, lock_base=0.020,
     box=((-0.36, 0.046 - 0.25, zp(30.0)), (0.34, 0.046 + 0.36, zp(-1.0))), voxel=0.0045, tris=12000, smooth=6, post_smooth=3,
 )

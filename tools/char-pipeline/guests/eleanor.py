@@ -31,7 +31,7 @@ CFG = dict(
     head_y=0.02, z_shoulder_top=31.5,
     ear_style='round', ear_h=0.074, ear_w=0.052, ear_out=0.002, ear_y=0.004, ear_tilt=0.30, ear_thick=0.026, ear_rim=0.007, ear_bowl=0.010, ear_sink=0.020,
     eye_x=0.063, eye_w=0.040, eye_h=0.067, eye_lift=0.003,
-    brow=dict(x0=0.031, x1=0.102, z=12.6, thick=0.019, arch=0.012, drop_in=-0.014, drop_out=0.006,     # inner ends raised: soft friendly arcs from the game camera too
+    brow=dict(x0=0.030, x1=0.096, z=12.6, thick=0.019, arch=0.014, drop_in=-0.020, drop_out=0.000,     # inner ends raised: soft friendly arcs from the game camera too
               profile=[(0.0, 0.55), (0.05, 0.90), (0.25, 1.0), (0.60, 0.88), (0.90, 0.55), (1.0, 0.25)], flat=0.5),
     nose_w=0.056, nose_h=0.042, nose_d=0.030, nose_out=0.012, nose_top=1.3,
     lips=dict(z=22.4, w=0.094, rise=0.015, upper=0.010, lower=0.015, bow=0.002, flat=0.45),
@@ -105,6 +105,7 @@ SCULPT = dict(
             dict(c=(-0.130, 0.02, 11.5), r=(0.090, 0.140, 0.060), k=0.03),          # fill under the wave, her right
             dict(c=(0.110, 0.02, 11.5), r=(0.070, 0.130, 0.060), k=0.03),           # fill, her left
             dict(c=(-0.030, -0.100, 3.2), r=(0.120, 0.090, 0.050), k=0.04),          # the sweep's crest: a fuller, higher top-front
+            dict(c=(0.005, 0.030, 2.6), r=(0.130, 0.160, 0.052), k=0.035),          # a smooth crown dome over the rolls' seams (no 'turban' wraps from above)
             dict(c=(0.125, -0.010, 11.0), r=(0.080, 0.130, 0.075), k=0.04),          # her left side: fuller, rounder
             dict(c=(-0.010, 0.120, 17.5), r=(0.150, 0.100, 0.075), k=0.03),          # nape: side hair sweeping into the chignon
             dict(c=(-0.125, 0.120, 19.0), r=(0.065, 0.070, 0.075), k=0.03, cut=False),  # behind her right ear, into the chignon

@@ -591,7 +591,7 @@ def surface_nets(F, lo, v):
         quads.append(q[(q >= 0).all(1)])
     return verts, np.concatenate(quads)
 
-def sdf_object(g, name, sdf, lo, hi, voxel, drop=None, smooth=4, target_tris=None, chunk=400000, post_smooth=2, keep=None, keep_factor=4.0):
+def sdf_object(g, name, sdf, lo, hi, voxel, drop=None, smooth=4, target_tris=None, chunk=400000, post_smooth=2, keep=None, keep_factor=1.0, keep_max=0.4):
     """Polygonise sdf(P (N,3)) -> (N,) over the box lo..hi; drop(p) -> True removes hidden faces (inside the skull);
     Taubin-smooth `smooth` passes; decimate to target_tris. Returns the Blender object (not yet added to g)."""
     lo = np.asarray(lo, float); hi = np.asarray(hi, float)
@@ -628,11 +628,18 @@ def sdf_object(g, name, sdf, lo, hi, voxel, drop=None, smooth=4, target_tris=Non
             mod = ob.modifiers.new('Dec', 'DECIMATE'); mod.ratio = target_tris / tris; mod.use_collapse_triangulate = True
             if keep:                                   # protect detail (e.g. near grooves): weight 1 = keep more triangles there
                 vg = ob.vertex_groups.new(name='keep')
-                for v in ob.data.vertices: vg.add([v.index], float(max(0.0, min(1.0, keep(v.co)))), 'REPLACE')
-                mod.vertex_group = 'keep'; mod.vertex_group_factor = keep_factor
+                V = np.array([tuple(v.co) for v in ob.data.vertices]); W = np.clip(keep(V), 0.0, 1.0) * keep_max
+                for i, w in enumerate(W): vg.add([i], float(w), 'REPLACE')
+                mod.vertex_group = 'keep'; mod.invert_vertex_group = True; mod.vertex_group_factor = keep_factor
             bpy.ops.object.select_all(action='DESELECT'); ob.select_set(True); bpy.context.view_layer.objects.active = ob
             bpy.ops.object.modifier_apply(modifier=mod.name)
-            if keep: ob.vertex_groups.remove(ob.vertex_groups['keep'])
+            if keep:
+                ob.vertex_groups.remove(ob.vertex_groups['keep'])
+                t2 = L.tri_count(ob)
+                if t2 > target_tris * 1.03:            # the spared regions leave it over budget: a plain pass to the target
+                    mod = ob.modifiers.new('Dec2', 'DECIMATE'); mod.ratio = target_tris / t2; mod.use_collapse_triangulate = True
+                    bpy.ops.object.select_all(action='DESELECT'); ob.select_set(True); bpy.context.view_layer.objects.active = ob
+                    bpy.ops.object.modifier_apply(modifier=mod.name)
             if post_smooth: _taubin(ob, post_smooth)
     return ob
 
@@ -718,11 +725,10 @@ def sculpt_hair(g, Hs):
         return s
     lo, hi = Hs['box']
     drop = lambda p: g.inside_skull(p, -0.004)
-    def keep(p):                                       # decimation keeps more triangles near the grooves (crisp channels)
-        if not snapped: return 0.0
-        P = np.array([[p.x, p.y, p.z]])
-        d = min(float(sd_tube(P, pts, rad)[0]) for pts, rad, k in snapped)
-        return 1.0 - min(1.0, max(0.0, d) / 0.012)
+    def keep(P):                                       # (N,3) -> weight 1 near the grooves: decimation spares them (crisp channels)
+        if not snapped: return np.zeros(len(P))
+        d = np.min(np.stack([sd_tube(P, pts, rad) for pts, rad, k in snapped]), axis=0)
+        return 1.0 - np.clip(d, 0.0, 0.012) / 0.012
     ob = sdf_object(g, Hs.get('name', 'Hair'), sdf, lo, hi, Hs.get('voxel', 0.005), drop=drop, smooth=Hs.get('smooth', 3), target_tris=Hs.get('tris', 7000),
                     post_smooth=Hs.get('post_smooth', 2), keep=keep if Hs.get('keep_grooves', True) else None)
     def covered(p, margin=0.02):

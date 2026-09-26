@@ -40,7 +40,7 @@ CFG = dict(
     mouth=dict(w=0.132, z=26.3, rise=0.020, sag=0.004, thick=0.008),
     neck_r=0.094, neck_y=0.020,
     tint=dict(spots=[(0.100, 24.0, 0.050, 0.035, 1.0), (0.0, 22.9, 0.028, 0.024, 0.7)], g=0.20, b=0.20),
-    groove_dark=(0.010, 0.55), smooth_angle=80.0,
+    groove_dark=(0.008, 0.45), smooth_angle=80.0,
     sheen={'Shoe': (0.34, [((0.2, -0.45, 0.87), 14.0, 1.0), ((0.0, -1.0, 0.3), 16.0, 0.8), ((0.9, 0.0, 0.45), 16.0, 0.5), ((-0.9, 0.0, 0.45), 16.0, 0.5)]),
            'Hair': (0.70, (-0.2, -0.40, 0.89), 2.0)},
     ao_skip=('Brow', 'Eye', 'Mouth', 'Glasses'), ao_scale={'Skin': 0.45, 'Jacket': 0.65, 'Hair': 0.95},
@@ -69,27 +69,32 @@ BULGES = [dict(x=0.105, z=24.8, sx=0.060, sz=0.050, a=0.040),      # full rosy c
 HAIR = dict(
     wr=[(0.0, -0.010), (0.5, 0.010), (1.0, 0.035), (1.5, 0.060), (2.0, 0.085), (3.0, 0.130), (4.0, 0.168), (5.0, 0.197), (6.0, 0.215),
         (7.0, 0.227), (8.0, 0.238), (9.0, 0.245), (10.0, 0.252), (11.0, 0.259), (12.0, 0.264), (13.0, 0.265), (14.0, 0.262), (15.0, 0.255),
-        (16.0, 0.258), (17.0, 0.260), (18.0, 0.260), (19.5, 0.255), (21.0, 0.240), (22.0, 0.215), (23.0, 0.185), (24.5, 0.170), (26.0, 0.145), (27.5, 0.100)],
+        (16.0, 0.245), (17.0, 0.232), (18.0, 0.218), (19.5, 0.198), (21.0, 0.184), (22.0, 0.172), (23.0, 0.160), (24.5, 0.140), (26.0, 0.110)],
     wl=[(0.0, 0.070), (0.5, 0.080), (1.0, 0.090), (1.5, 0.101), (2.0, 0.106), (3.0, 0.118), (4.0, 0.135), (5.0, 0.155), (6.0, 0.174),
         (7.0, 0.183), (8.0, 0.191), (9.0, 0.195), (10.0, 0.196), (12.0, 0.193), (13.0, 0.188), (14.0, 0.184), (15.0, 0.180), (16.0, 0.176),
-        (17.0, 0.172), (19.0, 0.180), (22.0, 0.180), (24.5, 0.165), (26.0, 0.140), (27.5, 0.100)],
-    front=[(0.0, 0.160), (0.5, 0.180), (1.0, 0.190), (2.0, 0.193), (3.0, 0.190), (4.0, 0.178), (5.0, 0.166), (6.0, 0.170), (8.0, 0.188),
+        (17.0, 0.172), (19.0, 0.180), (21.0, 0.176), (22.0, 0.170), (23.0, 0.160), (24.5, 0.140), (26.0, 0.110)],
+    front=[(0.0, 0.160), (0.5, 0.180), (1.0, 0.190), (2.0, 0.193), (3.0, 0.190), (4.0, 0.184), (5.0, 0.179), (6.0, 0.179), (8.0, 0.188),
            (10.0, 0.200), (14.0, 0.205), (20.0, 0.19), (27.5, 0.08)],
-    back=[(0.0, 0.000), (0.5, 0.010), (1.0, 0.030), (1.5, 0.048), (2.0, 0.066), (3.0, 0.100), (4.0, 0.125), (5.0, 0.142), (6.0, 0.157),
+    back=[(0.0, -0.040), (0.5, -0.015), (1.0, 0.012), (1.5, 0.035), (2.0, 0.056), (3.0, 0.094), (4.0, 0.125), (5.0, 0.142), (6.0, 0.157),
           (7.0, 0.169), (8.0, 0.181), (9.0, 0.196), (10.0, 0.210), (11.0, 0.222), (12.0, 0.231), (13.0, 0.236), (14.0, 0.238), (15.0, 0.237),
-          (16.0, 0.234), (18.0, 0.225), (20.0, 0.210), (22.0, 0.200), (24.0, 0.172), (26.0, 0.135), (27.0, 0.110), (28.0, 0.080)],
+          (16.0, 0.230), (18.0, 0.212), (20.0, 0.186), (22.0, 0.160), (24.0, 0.136), (26.0, 0.110)],
     expo=[(0.0, 2.1), (2, 2.2), (6, 2.35), (12, 2.5), (20, 2.5), (28, 2.4)],
-    # sculpted lock PLANES (guest_kit lock_fields), back to front: later locks stand higher, so each steps down onto the
-    # one behind it with its own rounded edge. The quiff's bands sweep from his right temple diagonally up over the
-    # forehead into the crest over his left temple; the sides sweep back and down; the back converges to the nape.
-    lock_fields=[dict(keys=[(0.50, 3.0), (0.50, 8.0), (0.50, 14.0), (0.50, 20.0), (0.50, 25.0)], half=0.060, height=0.008, soft=0.014),
-                 dict(keys=[(0.30, 5.5), (0.37, 9.0), (0.43, 14.0), (0.47, 19.5), (0.49, 24.0)], half=0.048, height=0.016, soft=0.013),
-                 dict(keys=[(0.78, 5.0), (0.69, 8.5), (0.62, 13.0), (0.56, 18.5), (0.52, 23.5)], half=0.048, height=0.016, soft=0.013),
-                 dict(keys=[(0.33, 3.0), (0.22, 2.0), (0.10, 1.0), (0.98, 0.6), (0.88, 1.0), (0.78, 2.6), (0.70, 5.0)], half=0.040, height=0.024, soft=0.013),
-                 dict(keys=[(0.28, 7.0), (0.18, 5.2), (0.07, 3.6), (0.97, 2.4), (0.90, 1.6), (0.84, 2.4), (0.80, 4.0)], half=0.034, height=0.034, soft=0.013),
-                 dict(keys=[(0.23, 10.8), (0.15, 9.0), (0.06, 7.2), (0.98, 5.8), (0.92, 4.4), (0.87, 2.8), (0.85, 1.4)], half=0.032, height=0.044, soft=0.013)],
-    lock_base=0.028,
-    slope=0.9, t_min=0.010, centre=(0.0, 0.02, 14.5), nlon=80, nrows=38, top=0.2, lip=0.6,
+    # sculpted lock PLANES (guest_kit lock_fields), like Marcus's: the part is on his LEFT (u ~0.85); the hair sweeps from
+    # it up into the crest over his left temple and over the top / forehead down to his right side and back. Later
+    # (front) locks stand higher, so each steps down onto the one behind it with its own rounded edge.
+    lock_fields=[dict(keys=[(0.60, 2.0), (0.55, 7.0), (0.51, 12.0), (0.50, 17.0), (0.50, 21.5)], half=0.060, height=0.014, soft=0.016),       # back
+                 dict(keys=[(0.44, 2.0), (0.39, 6.5), (0.35, 12.0), (0.33, 16.0), (0.32, 19.5)], half=0.050, height=0.022, soft=0.016),       # his right side
+                 dict(keys=[(0.70, 3.5), (0.67, 8.5), (0.63, 14.0), (0.61, 17.0), (0.60, 20.0)], half=0.050, height=0.022, soft=0.016),       # his left side
+                 dict(keys=[(0.25, 8.0), (0.14, 4.6), (0.04, 2.6), (0.94, 1.6), (0.84, 1.4), (0.75, 2.8), (0.68, 5.5)], half=0.048, height=0.036, soft=0.014),  # top band
+                 dict(keys=[(0.215, 11.0), (0.13, 8.2), (0.04, 6.2), (0.95, 4.4), (0.88, 2.6), (0.83, 1.0)], half=0.034, height=0.052, soft=0.013)],   # the quiff edge
+    lock_base=0.030,
+    grooves=[dict(keys=[(0.20, 8.4), (0.13, 6.4), (0.04, 4.6), (0.95, 3.6), (0.90, 3.0)], depth=0.008, width=0.013, n=40),     # quiff / top band
+             dict(keys=[(0.33, 6.5), (0.27, 4.8), (0.21, 3.6)], depth=0.008, width=0.013, n=30),                                   # top band / his right side
+             dict(keys=[(0.78, 3.5), (0.70, 5.5), (0.64, 9.5), (0.60, 14.5)], depth=0.008, width=0.013, n=30),                     # top band / his left side
+             dict(keys=[(0.28, 9.5), (0.34, 12.5), (0.39, 16.5)], depth=0.007, width=0.013, n=30),                                  # lock line, his right side
+             dict(keys=[(0.45, 6.0), (0.47, 12.0), (0.49, 18.5)], depth=0.008, width=0.013, n=30),                                 # the back: planes converging
+             dict(keys=[(0.55, 6.0), (0.53, 12.0), (0.51, 18.5)], depth=0.008, width=0.013, n=30)],
+    slope=1.6, t_min=0.010, centre=(0.0, 0.02, 14.5), nlon=92, nrows=42, top=0.2, lip=0.6,
 )
 # sculpted locks (male_extras.env_hair): rounded locks lying on the measured envelope, keys (u, pct, radius); u 0 front,
 # 0.25 his right, 0.5 back, 0.75 his left (radius 0.04+ with sink 0.85 = a broad flat lock plane, not a tube).
@@ -128,19 +133,19 @@ def hairline(u):
     of the ear, over the ear, then down behind it to the nape."""
     u %= 1.0; a = _a(u)
     if u < 0.5:
-        return _keys(a, [(0.0, 6.4), (0.05, 7.6), (0.10, 9.0), (0.16, 11.0), (0.185, 12.0), (0.20, 19.0), (0.222, 20.0), (0.238, 21.0), (0.30, 21.0),
-                         (0.34, 22.5), (0.41, 26.0), (0.5, 27.4)])
+        return _keys(a, [(0.0, 6.4), (0.05, 7.6), (0.10, 9.0), (0.16, 11.2), (0.19, 13.8), (0.212, 18.6), (0.225, 19.2), (0.238, 17.4), (0.30, 17.4),
+                         (0.35, 19.2), (0.43, 21.8), (0.5, 24.0)])
     return _keys(a, [(0.0, 6.4), (0.05, 5.9), (0.10, 5.8), (0.13, 6.6), (0.165, 10.5), (0.19, 13.0), (0.205, 17.0), (0.225, 17.8), (0.238, 17.0), (0.30, 17.0),
-                     (0.34, 21.5), (0.41, 26.0), (0.5, 27.4)])
+                     (0.35, 19.2), (0.43, 21.8), (0.5, 24.0)])
 def thin_below(u):
     """The sideburns stay flat up to the temple; the full side hair starts above 12 %."""
-    a = _a(u); w = sm((a - 0.180) / 0.012) * sm((0.228 - a) / 0.010)
+    a = _a(u); w = sm((a - 0.170) / 0.030) * sm((0.240 - a) / 0.025)
     return hairline(u) * (1 - w) + 13.0 * w
 def edge(u):
     """Hair thickness allowed at the hairline (it grows by `slope` per metre above thin_below)."""
     a = _a(u); right = (u % 1.0) < 0.5
-    over_ear = 0.070 * sm((a - 0.232) / 0.012) * sm((0.33 - a) / 0.03) if right else 0.0     # his right: the side mass sits over the ear top
-    return 0.008 + 0.022 * sm((0.17 - a) / 0.05) + 0.006 * sm((a - 0.26) / 0.03) + over_ear   # a thick rounded quiff edge, thin sideburns
+    over_ear = 0.0 * sm((a - 0.232) / 0.012) * sm((0.33 - a) / 0.03) if right else 0.0     # his right: the side mass sits over the ear top
+    return 0.008 + 0.022 * sm((0.17 - a) / 0.05) + 0.002 * sm((a - 0.26) / 0.03) + over_ear   # a thick rounded quiff edge, thin sideburns
 
 # ---- glasses (male_extras.glasses)
 GL = dict(x=0.083, z=19.8, r=0.063, rz=0.065, wire=0.0050, gap=0.012, wrap=0.10, tilt=0.06, bridge_z=19.0, bridge_rise=0.004,
@@ -152,7 +157,7 @@ J = dict(
               (55.0, 0.446, 0.366, 0.70, -0.006), (50.0, 0.448, 0.360, 0.70, -0.005), (45.0, 0.456, 0.346, 0.72, -0.002),
               (41.0, 0.474, 0.318, 0.76, 0.004), (38.5, 0.492, 0.284, 0.76, 0.010), (36.8, 0.506, 0.248, 0.74, 0.014),
               (35.3, 0.470, 0.218, 0.80, 0.018), (34.0, 0.300, 0.200, 0.96, 0.024), (33.0, 0.200, 0.180, 1.0, 0.028)],
-    waist=55.0, hem_hips=0.5, nj=48, ring_dz=0.020, open_apex=59.5, open_hem=0.030, corner=0.050,
+    waist=55.0, hem_hips=0.5, nj=44, ring_dz=0.020, open_apex=59.5, open_hem=0.030, corner=0.050,
     lapel=dict(outline=[(0.004, 55.2), (0.034, 54.0), (0.066, 52.0), (0.103, 48.0), (0.128, 44.0), (0.148, 40.0), (0.160, 37.0), (0.164, 35.4),
                         (0.155, 34.4), (0.130, 34.1), (0.106, 34.6), (0.092, 35.8), (0.082, 37.5), (0.070, 40.5), (0.057, 44.0), (0.040, 48.0), (0.020, 52.0), (0.010, 53.8)],
                wrap=dict(top=30.0, front=32.8, open=0.95, v_width=1.2, tip=(0.135, 35.2), th_side=1.55, gap=0.020, gap_neck=0.022, thick=0.008),
@@ -179,10 +184,10 @@ A = dict(
               thumb=(-0.057, 0.017, 0.026, 0.0235, 0.074, 0.55)),
 )
 P = dict(leg_x=0.106, leg_x_hem=0.118, leg_y=0.015, thigh_w=0.180, thigh_d=0.225, shin_w=0.138, shin_d=0.190, hip=72.5, knee=84.5, crotch=70.5,
-         top=58.0, hem=93.0, break_dip=0.012, nl=18,
+         top=58.0, hem=93.0, break_dip=0.012, nl=16,
          leg_profile=[(93.0, 0.142, 0.196), (91.0, 0.138, 0.190), (88.0, 0.142, 0.192), (84.5, 0.152, 0.198), (80.0, 0.163, 0.208), (76.0, 0.173, 0.220), (73.0, 0.178, 0.226)],
          pelvis=[(69.0, 0.95, 0.01, 0.85), (66.5, 1.0, 0.03, 0.78), (63.0, 1.0, 0.05, 0.75), (60.0, 0.97, 0.06, 0.75), (58.0, 0.93, 0.05, 0.8)])
-S = dict(n=18, leg_x=0.121, len=0.305, w=0.150, h=0.098, heel=0.070, splay=0.28, out=0.002, y=0.022, laces=3)
+S = dict(n=16, leg_x=0.121, len=0.305, w=0.150, h=0.098, heel=0.070, splay=0.28, out=0.002, y=0.022, laces=3)
 RIG = dict(hip=72.5, knee=84.5, ankle=95.8, waist=55.0, shoulder_top=35.3, neck_y=0.020, hand_end=72.6, leg_x=0.112,
            heel=0.070, ball=0.16, arm=A)
 
@@ -201,8 +206,9 @@ _BAKE = GK.bake
 def build(g):
     GK.bake = _bake_soft                                  # finish() looks bake up on the module: soften the AO for Henry
     g.set_head(W, DF, DB, E, BULGES)
-    GK.hair_shell(g, hairline=hairline, edge=edge, thin_below=thin_below, **HAIR)
-    GK.head(g, nlon=48, nlat=34, cull_in=g.hair_covers)
+    MX.taubin(GK.hair_shell(g, hairline=hairline, edge=edge, thin_below=thin_below, **HAIR), iters=6)   # iron out small bumps
+    MX.radial_grooves(g, HAIR['grooves'])      # the bake darkens the lock lines even where raised locks cover them
+    GK.head(g, nlon=44, nlat=32, cull_in=g.hair_covers)
     GK.ears(g); GK.eyes(g); GK.brows(g); GK.nose(g); GK.mouth(g)
     MX.glasses(g, GL)
     GK.neck(g)

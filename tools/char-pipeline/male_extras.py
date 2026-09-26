@@ -291,3 +291,46 @@ def bend_normals(g, mat_name, weight, target, amount=1.0):
                 if w > 0: n = (n * (1 - w) + T * w).normalized()
             out.append(n)
     me.normals_split_custom_set([tuple(n) for n in out])
+
+def taubin(ob, iters=6, lam=0.5, mu=-0.53, pin=None):
+    """Taubin smoothing (no shrink) of a mesh object in place: irons out small bumps a displaced shell picks up.
+    pin(v) -> True keeps a vertex fixed (e.g. an open rim)."""
+    import bmesh
+    bm = bmesh.new(); bm.from_mesh(ob.data)
+    fixed = {v.index for v in bm.verts if v.is_boundary or (pin and pin(v.co))}
+    for _ in range(iters):
+        for k in (lam, mu):
+            new = {}
+            for v in bm.verts:
+                if v.index in fixed or not v.link_edges: continue
+                avg = sum((e.other_vert(v).co for e in v.link_edges), Vector()) / len(v.link_edges)
+                new[v] = v.co + (avg - v.co) * k
+            for v, co in new.items(): v.co = co
+    bm.to_mesh(ob.data); bm.free(); ob.data.update()
+
+def radial_grooves(g, grooves, centre=(0.0, 0.02, 14.5), R=0.2):
+    """Replace g.hair_groove (the bake's groove darkening) with a version that measures the distance to each groove
+    curve by DIRECTION from the hair centre (x R metres), so raised lock planes over a groove do not hide it (the
+    kit measures true 3-D distance to the undisplaced envelope). grooves: the same dicts as hair_shell's."""
+    c0 = Vector((centre[0], g.Y0 + centre[1], g.zp(centre[2])))
+    G = []
+    for gr in grooves:
+        keys = [list(k) for k in gr['keys']]
+        for i in range(1, len(keys)):
+            while keys[i][0] - keys[i - 1][0] > 0.5: keys[i][0] -= 1.0
+            while keys[i][0] - keys[i - 1][0] < -0.5: keys[i][0] += 1.0
+        pts = [(g.hair_surface(u % 1.0, p)[0] - c0).normalized() * R for u, p, *_ in L.catmull_rom([tuple(k) for k in keys], gr.get('n', 30))]
+        G.append((pts, gr['depth'], gr['width']))
+    def amt(p):
+        q = (p - c0); q = q.normalized() * R if q.length > 1e-9 else q; off = 0.0
+        for pts, depth, width in G:
+            best, bi = 1e9, 0
+            for i in range(len(pts) - 1):
+                a, b = pts[i], pts[i + 1]; ab = b - a; L2 = ab.length_squared
+                t = 0.0 if L2 < 1e-12 else max(0.0, min(1.0, (q - a).dot(ab) / L2))
+                dd = (a + ab * t - q).length
+                if dd < best: best, bi = dd, i + t
+            if best < 3 * width:
+                s = bi / (len(pts) - 1); off += depth * math.sin(math.pi * s) ** 0.6 * GK.gauss(best, width)
+        return off
+    g.hair_groove = amt

@@ -536,6 +536,11 @@ def sd_tube(P, pts, rad, flat=None, centre=None, margin=0.06):
 
 def _sd_tube(P, pts, rad, flat=None, centre=None):
     best = np.full(len(P), 1e9)
+    if flat is not None and centre is not None:
+        # per-vertex outward frames (perpendicular to the local tangent), interpolated along each segment so the
+        # ribbon's cross-section turns smoothly (per-segment frames left a crease at every joint)
+        Tn = np.gradient(pts, axis=0); Tn /= np.maximum(1e-9, np.linalg.norm(Tn, axis=1))[:, None]
+        Nv = pts - centre; Nv -= Tn * np.sum(Nv * Tn, axis=1)[:, None]; Nv /= np.maximum(1e-9, np.linalg.norm(Nv, axis=1))[:, None]
     for i in range(len(pts) - 1):
         a, b = pts[i], pts[i + 1]; ab = b - a; L2 = max(1e-12, ab @ ab)
         t = np.clip(((P - a) @ ab) / L2, 0.0, 1.0)
@@ -543,9 +548,10 @@ def _sd_tube(P, pts, rad, flat=None, centre=None):
         if flat is None or centre is None:
             dist = np.linalg.norm(v, axis=1) - r
         else:
-            T = ab / math.sqrt(L2); N = 0.5 * (a + b) - centre; N = N - T * (N @ T); N /= max(1e-9, np.linalg.norm(N))
+            N = Nv[i][None, :] * (1 - t)[:, None] + Nv[i + 1][None, :] * t[:, None]
+            N /= np.maximum(1e-9, np.linalg.norm(N, axis=1))[:, None]
             fl = flat[i] + (flat[i + 1] - flat[i]) * t
-            vn = v @ N; vt = v - vn[:, None] * N
+            vn = np.sum(v * N, axis=1); vt = v - vn[:, None] * N
             q = np.sqrt((np.linalg.norm(vt, axis=1) / r) ** 2 + (vn / (r * fl)) ** 2)
             dist = (q - 1.0) * r * fl
         np.minimum(best, dist, out=best)
@@ -585,7 +591,7 @@ def surface_nets(F, lo, v):
         quads.append(q[(q >= 0).all(1)])
     return verts, np.concatenate(quads)
 
-def sdf_object(g, name, sdf, lo, hi, voxel, drop=None, smooth=4, target_tris=None, chunk=400000):
+def sdf_object(g, name, sdf, lo, hi, voxel, drop=None, smooth=4, target_tris=None, chunk=400000, post_smooth=2, keep=None, keep_factor=4.0):
     """Polygonise sdf(P (N,3)) -> (N,) over the box lo..hi; drop(p) -> True removes hidden faces (inside the skull);
     Taubin-smooth `smooth` passes; decimate to target_tris. Returns the Blender object (not yet added to g)."""
     lo = np.asarray(lo, float); hi = np.asarray(hi, float)
@@ -620,9 +626,36 @@ def sdf_object(g, name, sdf, lo, hi, voxel, drop=None, smooth=4, target_tris=Non
         tris = L.tri_count(ob)
         if tris > target_tris:
             mod = ob.modifiers.new('Dec', 'DECIMATE'); mod.ratio = target_tris / tris; mod.use_collapse_triangulate = True
+            if keep:                                   # protect detail (e.g. near grooves): weight 1 = keep more triangles there
+                vg = ob.vertex_groups.new(name='keep')
+                for v in ob.data.vertices: vg.add([v.index], float(max(0.0, min(1.0, keep(v.co)))), 'REPLACE')
+                mod.vertex_group = 'keep'; mod.vertex_group_factor = keep_factor
             bpy.ops.object.select_all(action='DESELECT'); ob.select_set(True); bpy.context.view_layer.objects.active = ob
             bpy.ops.object.modifier_apply(modifier=mod.name)
+            if keep: ob.vertex_groups.remove(ob.vertex_groups['keep'])
+            if post_smooth: _taubin(ob, post_smooth)
     return ob
+
+def decimate_parts(g, prefix, ratio):
+    """Collapse-decimate the parts whose names start with `prefix` (e.g. the kit's dense ear spheres) to save triangles."""
+    for ob in g.parts:
+        if ob.name.startswith(prefix):
+            mod = ob.modifiers.new('Dec', 'DECIMATE'); mod.ratio = ratio
+            bpy.ops.object.select_all(action='DESELECT'); ob.select_set(True); bpy.context.view_layer.objects.active = ob
+            bpy.ops.object.modifier_apply(modifier=mod.name)
+
+def _taubin(ob, passes, lam=0.5, mu=-0.53):
+    """Volume-preserving smoothing of an object's mesh (irons out the crumples a heavy decimation leaves)."""
+    bm = bmesh.new(); bm.from_mesh(ob.data)
+    for _ in range(passes):
+        for f in (lam, mu):
+            new = {}
+            for vt in bm.verts:
+                if not vt.link_edges or vt.is_boundary: continue
+                avg = sum((e.other_vert(vt).co for e in vt.link_edges), Vector()) / len(vt.link_edges)
+                new[vt] = vt.co + (avg - vt.co) * f
+            for vt, co in new.items(): vt.co = co
+    bm.to_mesh(ob.data); bm.free(); ob.data.update()
 
 def valley(a, b, radius, lift=0.0, t0=0.08, t1=0.92, n=9):
     """Groove keys running in the valley between two roll key lists (same direction): midpoints of the two
@@ -685,7 +718,13 @@ def sculpt_hair(g, Hs):
         return s
     lo, hi = Hs['box']
     drop = lambda p: g.inside_skull(p, -0.004)
-    ob = sdf_object(g, Hs.get('name', 'Hair'), sdf, lo, hi, Hs.get('voxel', 0.005), drop=drop, smooth=Hs.get('smooth', 3), target_tris=Hs.get('tris', 7000))
+    def keep(p):                                       # decimation keeps more triangles near the grooves (crisp channels)
+        if not snapped: return 0.0
+        P = np.array([[p.x, p.y, p.z]])
+        d = min(float(sd_tube(P, pts, rad)[0]) for pts, rad, k in snapped)
+        return 1.0 - min(1.0, max(0.0, d) / 0.012)
+    ob = sdf_object(g, Hs.get('name', 'Hair'), sdf, lo, hi, Hs.get('voxel', 0.005), drop=drop, smooth=Hs.get('smooth', 3), target_tris=Hs.get('tris', 7000),
+                    post_smooth=Hs.get('post_smooth', 2), keep=keep if Hs.get('keep_grooves', True) else None)
     def covered(p, margin=0.02):
         P = np.array([[p.x, p.y, p.z]]); return bool(p.z > np.interp(u_of(P), hl_u, hl_z)[0] + margin)
     g.hair_covers = covered; g.hair_sdf = sdf

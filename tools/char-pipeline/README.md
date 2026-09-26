@@ -143,3 +143,21 @@ bumps and `male_extras.radial_grooves` makes the bake darken the lock lines even
 lower face's shading normals bent forward), plus `env_hair` (an SDF hair sculpt, not used by Henry now). Henry's spec
 installs a bake wrapper for its own build only (dress_kit.lift_ao for fair skin + the normal bend). Scratch iteration
 renders: `shots/h/`; final six-up: `shots/henry-vs-sheet.png`.
+
+## Dress kit (Eleanor, then Clara / Beatrice)
+`dress_kit.py` adds dress-guest parts on top of `guest_kit.py` (which it imports and never changes); specs live in
+`guests/<name>.py` and are built by the thin driver `make_dress_guest.py` (same as `make_guest.py`, but finishes with
+`dress_kit.finish`, which also writes ONE eye centre as `eyeCentre` for `portrait.mjs`).
+```bash
+python3 tools/char-pipeline/make_dress_guest.py eleanor          # -> assets/characters/eleanor.glb
+node tools/char-pipeline/preview_glb.mjs --glb assets/characters/eleanor.glb --out tools/char-pipeline/shots/el \
+     --views body@0,body@30,body@90,body@180,face@9,face@30 --bg 7b716a
+```
+Parts: `neck_yoke`, `bodice` (bateau / crew / scoop / v neckline), `sleeves` (cap / short / long + puff + cuff; never
+narrower than the arm under it), `belt` (metal + buckle / sash + knot + tails), `skirt` (bell / a-line / column or a
+measured profile; soft folds, wavy hem, walk-safe weights `sway` / `follow`), `legs`, `pumps`, `lips`, `earrings`,
+`eye_shine`, `jaw_lift`, `coil_bun`, and `sculpt_hair` — hair as a signed-distance volume (cap + ellipsoid masses +
+ribbon "rolls" along curves + grooves projected onto the surface) meshed by surface nets, smoothed and decimated with
+the grooves protected. Build time ~2 min (the hair volume). Eleanor: 31.8k tris, 1.17 MB.
+Eleanor's head close-up on the sheet is turned ~9 deg: compare it with `face@9`, and at 423 px/m (her head is smaller
+than 0.30 H).

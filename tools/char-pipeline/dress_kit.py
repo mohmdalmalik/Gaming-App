@@ -141,6 +141,34 @@ def sleeves(g, A, S):
             if z > ZJ: x -= s * S.get('cap_in', 0.012) * (z - ZJ) / 0.05
             prof.append(dict(z=z, w=w, d=d, r=1.0, x=x, y=y))
         prof.sort(key=lambda p: p['z'])
+        # densify below the shoulder so the rings follow the bent arm path (a long sleeve crosses the elbow)
+        dense = [prof[0]]
+        for p0, p1 in zip(prof[:-1], prof[1:]):
+            k = max(1, int(math.ceil((p1['z'] - p0['z']) / S.get('ring_dz', 0.03))))
+            for i in range(1, k + 1):
+                t = i / k; z = p0['z'] + (p1['z'] - p0['z']) * t
+                q = dict(z=z, w=p0['w'] + (p1['w'] - p0['w']) * t, d=p0['d'] + (p1['d'] - p0['d']) * t, r=1.0)
+                if z <= ZJ: q['x'], q['y'] = xy(z)
+                else: q['x'], q['y'] = p0['x'] + (p1['x'] - p0['x']) * t, p0['y'] + (p1['y'] - p0['y']) * t
+                dense.append(q)
+        prof = dense
+        # never narrower than the arm underneath (+ clearance): a bare-skin arm (guest_kit.arms) stays hidden
+        ast = []
+        for zspec, w, d in A.get('stations', []):
+            if zspec == 'end': z = zp(A['sleeve_end'])
+            elif isinstance(zspec, tuple): z = ZJ + zspec[1]
+            else: z = zp(zspec)
+            ast.append((z, w, d))
+        if ast and S.get('clear', 0.008) is not None:
+            ast.sort(); cl = S.get('clear', 0.008)
+            def arm_wd(z):
+                if z <= ast[0][0]: return ast[0][1:]
+                if z >= ast[-1][0]: return None                      # above the arm's cap: the sleeve's own shape
+                for (z0, w0, d0), (z1, w1, d1) in zip(ast, ast[1:]):
+                    if z0 <= z <= z1: t = (z - z0) / max(1e-9, z1 - z0); return (w0 + (w1 - w0) * t, d0 + (d1 - d0) * t)
+            for q in prof:
+                wd = arm_wd(q['z'])
+                if wd and q['z'] <= ZJ: q['w'] = max(q['w'], wd[0] + 2 * cl); q['d'] = max(q['d'], wd[1] + 2 * cl)
         sl = L.loft(f'Sleeve{tag}', prof, n=S.get('n', 20), cap_bottom=False)
         # hem: slanted (outer side higher, the inner side toward the armpit lower) and turned in (a lip)
         slant = S.get('slant', 0.0); lip = S.get('lip', 0.005)

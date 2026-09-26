@@ -31,19 +31,10 @@ export const roomDressings = {
 // (src/render/bakedRoom.js, dressBakedTile). All tiles share one albedo texture; each has its own two
 // light maps. `exposure` scales the baked light (the dark rooms are baked dim and stay dim).
 export const BAKED_TILES = {
-  lounge: 0.62,
-  ballroom: 0.6,
-  grandCorridor: 0.62,
-  switchboard: 0.62,
-  dining: 0.62,
-  library: 0.64,
-  kitchen: 0.6,
-  serviceCorridor: 0.8,
-  storage: 0.8,
-  corridorE: 0.62,
-  corridorW: 0.62,
-  corridorN: 0.62,
-  corridorS: 0.62,
+  lounge: 0.62, ballroom: 0.6, grandCorridor: 0.62, switchboard: 0.62, dining: 0.62, library: 0.64,
+  kitchen: 0.6, serviceCorridor: 0.8, storage: 0.8, corridorE: 0.62, corridorW: 0.62, corridorN: 0.62,
+  corridorS: 0.62, stairs: 0.8, backCorridor: 0.8, cloakroom: 0.62, cornerCorridor: 0.62, infirmary1: 0.6,
+  infirmary2: 0.6, linenStore1: 0.62, linenStore2: 0.62, suite416: 0.62, housekeeping: 0.8, exit: 0.62,
 };
 for (const [id, exposure] of Object.entries(BAKED_TILES)) {
   roomDressings[id] = {

@@ -1085,22 +1085,42 @@ rounds, exit median round 4, 13 tiles, 15 meetings (5.37 a round), never closed 
    closes (nobody else should ever see your cards).
 
 
-# Part 3 — escape rule, locked doors, every room in the reference style, card art (in progress)
+# Part 3 — escape rule, locked doors, every room in the reference style, card art (current)
 
-**Status: in progress.** The owner asked for: locked doors that look different, escaping to cost an action
-(approved before/after: walk into the Fire Exit, then Escape costs 1 AP), the interface bug after a
-possession, every room designed to match `docs/art-reference.jpg` as well as the lobby, card art, and
-QA. Work continues until all rooms are done; if it pauses, pick up from the checklist below.
+**Status: done, tested, committed.**
 
-- [x] Escape costs 1 AP (engine `escape()`, Escape button in the Fire Exit, rules doc, bots, tests)
-- [x] Locked rooms keep a shut, padlocked oxblood door with a red glow until opened (browser-lobby 7b)
-- [x] After a voluntary lobby trade the device goes back to the guest whose turn it is (it stayed with the
-      other guest); a guest converted mid-trade reads it once
-- [ ] Rooms: `tools/room-pipeline/` builds every tile like the lobby (walnut/wallpaper/tile/plaster walls
-      cut at 2.4 m, baked light + AO, furniture on the game's footprints, shared albedo atlas). Loader:
-      `dressBakedTile` in `src/render/bakedRoom.js` (turns the model with the tile, cutaway per wall).
-      Steps: `node tools/room-pipeline/dump_rooms.mjs > tools/room-pipeline/rooms.json`,
-      `python3 tools/room-pipeline/textures_rooms.py`, `tools/room-pipeline/build_all.sh 1024 48`,
-      then `node tools/room-pipeline/shoot.mjs --rooms <ids>` to look at them in the game.
-- [ ] Card art for every card (a helper renders them in Blender into `assets/cards/`)
-- [ ] QA: every room from four angles, performance with many rooms, all test suites, docs
+## What changed
+- **Escape costs 1 AP** (approved before/after): walking into the Fire Exit is a normal move; a clean guest
+  with three Lanterns then taps **Escape** (1 AP). Arrive with nothing left and you escape on your next turn;
+  the exit stays a safe zone; dawn can still win first. Engine `escape()`, rules doc, button, bots, tests.
+- **Locked rooms look locked:** a doorway into a locked room keeps a shut oxblood door with iron straps, a
+  brass lock plate and a padlock on each face, and a red glow on the floor. Opened with a key or a pick, it
+  swings open like any other door.
+- **The interface after a possession:** after a voluntary trade in the lobby the device ended with the other
+  guest while the game carried on as the active guest's turn. It now asks for the device back first. A guest
+  converted mid-trade reads it once (no duplicate line, no second role screen).
+- **Every room built like the lobby** (`tools/room-pipeline/`): 24 tiles baked in Blender in the reference's
+  style — walnut panelling, wallpaper, glazed tile or painted plaster walls cut at 2.4 m; parquet, stone,
+  checker, clinic tile, carpet, planks or linoleum floors; rugs and runners; paintings, sconces, lamps,
+  windows, mirrors, clocks; a furniture builder for every footprint (sofas, round tables, bookcases,
+  kitchen counters, shelving, crates, trolleys, stairs, beds, wardrobes, coat rails, the switchboard, iron
+  beds, medicine cabinets, linen shelves…). Dark rooms are lit by caged bulbs; the two flickering corridors
+  flicker. Furniture stands on the game's own footprints, so collision and pathfinding are unchanged.
+- **Card art for every card** (`tools/card-pipeline/`), in the style of the painted Lantern; Possession on
+  violet.
+
+## Tests and performance
+rules-check, logic-check, browser-lobby (incl. locked doors), browser-practice (incl. Escape), browser-hotseat
+(incl. Escape and the lobby-trade hand-back), also from the `/Gaming-App/` sub-path — all passing.
+Whole hotel revealed (24 rooms + lobby): 130 draw calls (186 zoomed out), ~180–220k triangles, ~1.3 ms to
+prepare a frame. Rooms load when first revealed: 18 MB for all of them, ~0.6–0.9 MB each.
+
+## What to test on the iPad
+1. Open doors: each new room appears in its own style (lounge, library with green armchair and bookcases,
+   kitchen, infirmary, suite with a bed, linen store, dark service rooms with caged bulbs…). Rotate: the near
+   wall still folds down.
+2. Find a locked room (Cloakroom or Guest Suite 416): its door stays shut, red with a padlock, until opened.
+3. Reach the Fire Exit with three Lanterns: walking in does not end the game; tap **Escape**.
+4. Hot-seat, lobby: trade with another guest — at the end the device goes back to the guest whose turn it is.
+5. Open your hand: every card has its illustration.
+6. With many rooms open, add `?stats=1` and note the fps.

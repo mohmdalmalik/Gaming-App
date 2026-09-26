@@ -35,7 +35,8 @@ export const outfits = {
     model: 'assets/characters/beatrice.glb', modelHeight: 1.66, strideLength: 1.032 },   // Beatrice (tools/char-pipeline/guests/beatrice.py)
   dressBurgundy: { name: 'Burgundy column dress', body: 'female', bodice: '#6b1f30', skirt: '#6b1f30', skirtStyle: 'column', sleeves: 'short', sash: '#2a1418',
     model: 'assets/characters/clara.glb', modelHeight: 1.66, strideLength: 1.069 },   // Clara (tools/char-pipeline/guests/clara.py)
-  dressMidnight: { name: 'Midnight blue ballgown', body: 'female', bodice: '#1d2a5e', skirt: '#24357a', skirtStyle: 'full', sleeves: 'cap', sash: '#d9c27a' },
+  dressMidnight: { name: 'Midnight blue ballgown', body: 'female', bodice: '#1d2a5e', skirt: '#24357a', skirtStyle: 'full', sleeves: 'cap', sash: '#d9c27a',
+    model: 'assets/characters/eleanor.glb', modelHeight: 1.66, strideLength: 1.0344 },   // Eleanor (tools/char-pipeline/guests/eleanor.py)
 };
 
 // The guests in turn order. `color` is the marker ring / interface colour. A hot-seat match uses

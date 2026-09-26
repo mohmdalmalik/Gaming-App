@@ -31,14 +31,14 @@ CFG = dict(
     head_y=0.02, z_shoulder_top=31.5,
     ear_style='round', ear_h=0.074, ear_w=0.052, ear_out=0.002, ear_y=0.004, ear_tilt=0.30, ear_thick=0.026, ear_rim=0.007, ear_bowl=0.010, ear_sink=0.020,
     eye_x=0.063, eye_w=0.040, eye_h=0.067, eye_lift=0.003,
-    brow=dict(x0=0.030, x1=0.096, z=12.6, thick=0.019, arch=0.014, drop_in=-0.020, drop_out=0.000,     # inner ends raised: soft friendly arcs from the game camera too
+    brow=dict(x0=0.030, x1=0.092, z=12.6, thick=0.018, arch=0.016, drop_in=-0.018, drop_out=0.012,     # inner ends raised: soft friendly arcs from the game camera too
               profile=[(0.0, 0.55), (0.05, 0.90), (0.25, 1.0), (0.60, 0.88), (0.90, 0.55), (1.0, 0.25)], flat=0.5),
     nose_w=0.056, nose_h=0.042, nose_d=0.030, nose_out=0.012, nose_top=1.3,
     lips=dict(z=22.4, w=0.094, rise=0.015, upper=0.010, lower=0.015, bow=0.002, flat=0.45),
     tint=dict(spots=[(0.080, 20.9, 0.024, 0.020, 1.0), (0.0, 19.3, 0.018, 0.016, 0.3)], g=0.36, b=0.28),       # soft rosy blush discs
     soft_normals=dict(centre=(0.0, 0.03, 25.0), radii=(0.20, 0.24, 0.55), amount=1.0, z_top=12.5, z_bot=30.0, fade=0.03, front=0.04,
                       keep=[(0.0, -0.215, 19.3, 0.034)]),
-    groove_dark=(0.010, 0.65),
+    groove_dark=(0.010, 0.35),
     ao_skip=('Brow', 'Eye', 'Lips', 'Pearl', 'Shine'), ao_scale={'Skin': 0.20, 'Dress': 0.85},
     sheen={'Shoe': (0.34, [((0.2, -0.45, 0.87), 14.0, 1.0), ((0.0, -1.0, 0.3), 16.0, 0.8), ((0.9, 0.0, 0.45), 16.0, 0.5), ((-0.9, 0.0, 0.45), 16.0, 0.5)]),
            'Hair': (0.38, [((-0.1, -0.45, 0.89), 2.2, 1.0), ((0.5, -0.6, 0.6), 5.0, 0.45)]),
@@ -117,10 +117,10 @@ SCULPT = dict(
         dict(keys=[(0.140, -0.080, 13.0, 0.009), (0.146, -0.072, 15.5, 0.009), (0.140, -0.066, 17.2, 0.004)], k=0.004, n=16),
     ],
     grooves=[dict(keys=[(0.072, -0.165, 3.2, 0.002), (0.072, -0.12, 1.6, 0.005), (0.068, -0.04, 0.9, 0.005), (0.060, 0.05, 1.4, 0.004), (0.050, 0.11, 3.0, 0.002)], depth=0.004, k=0.003)] +      # the side part
-            [dict(keys=DK.valley(p, q, 0.006, t0=0.30, t1=0.85), depth=0.0045, k=0.003) for p, q in ((WAVE1, WAVE2), (WAVE2, WAVE3), (LEFT1, LEFT2))] +
+            [dict(keys=DK.valley(p, q, 0.005, t0=0.10, t1=0.40), depth=0.0035, k=0.003) for p, q in ((WAVE1, WAVE2), (WAVE2, WAVE3), (LEFT1, LEFT2))] +
             [dict(keys=[(0.02, 0.07, 0.6, 0.006), (-0.07, 0.07, 1.8, 0.008), (-0.12, 0.12, 5.0, 0.009), (-0.12, 0.17, 9.0, 0.009), (-0.07, 0.20, 12.0, 0.007)], depth=0.007, k=0.004),
              dict(keys=[(0.05, 0.03, 0.8, 0.006), (0.10, 0.02, 3.5, 0.008), (0.13, 0.08, 7.5, 0.009), (0.11, 0.15, 11.0, 0.008), (0.06, 0.19, 13.5, 0.006)], depth=0.007, k=0.004)] +
-            [dict(keys=[(x * 0.6, 0.12, 3.0, 0.003), (x * 0.9, 0.175, 6.0, 0.009), (x, 0.197, 9.5, 0.010), (x * 0.8, 0.195, 12.5, 0.008), (x * 0.55, 0.18, 14.5, 0.003)],
+            [dict(keys=[(x * 0.95, 0.185, 8.0, 0.003), (x, 0.197, 10.0, 0.009), (x * 0.8, 0.195, 12.5, 0.008), (x * 0.55, 0.18, 14.5, 0.003)],     # low on the back only (a smooth crown from above)
                   depth=0.0035, k=0.004) for x in (-0.15, -0.09, -0.03, 0.03, 0.09, 0.15)],
     box=((-0.30, 0.02 - 0.27, zp(30.0)), (0.27, 0.02 + 0.33, zp(-1.0))), voxel=0.004, tris=11700, smooth=5, post_smooth=3,
 )

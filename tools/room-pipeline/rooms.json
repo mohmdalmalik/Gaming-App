@@ -1,0 +1,4208 @@
+{
+ "wallThickness": 0.15,
+ "tileSize": 8,
+ "rooms": {
+  "lounge": {
+   "id": "lounge",
+   "name": "Lounge",
+   "center": [
+    0,
+    0
+   ],
+   "size": [
+    8,
+    8
+   ],
+   "min": [
+    -4,
+    -4
+   ],
+   "max": [
+    4,
+    4
+   ],
+   "dark": false,
+   "locked": false,
+   "job": null,
+   "isExit": false,
+   "safe": false,
+   "searchPoint": "the writing bureau",
+   "mood": {
+    "color": "#ffd8a8",
+    "intensity": 1.1,
+    "ambient": 0.85
+   },
+   "doors": [
+    "north",
+    "east",
+    "south",
+    "west"
+   ],
+   "walls": [
+    {
+     "id": "lounge:north:0",
+     "side": "north",
+     "min": [
+      -4,
+      -4
+     ],
+     "max": [
+      -0.6,
+      -3.85
+     ]
+    },
+    {
+     "id": "lounge:north:1",
+     "side": "north",
+     "min": [
+      0.6,
+      -4
+     ],
+     "max": [
+      4,
+      -3.85
+     ]
+    },
+    {
+     "id": "lounge:east:2",
+     "side": "east",
+     "min": [
+      3.85,
+      -3.85
+     ],
+     "max": [
+      4,
+      -0.6
+     ]
+    },
+    {
+     "id": "lounge:east:3",
+     "side": "east",
+     "min": [
+      3.85,
+      0.6
+     ],
+     "max": [
+      4,
+      3.85
+     ]
+    },
+    {
+     "id": "lounge:south:4",
+     "side": "south",
+     "min": [
+      -4,
+      3.85
+     ],
+     "max": [
+      -0.6,
+      4
+     ]
+    },
+    {
+     "id": "lounge:south:5",
+     "side": "south",
+     "min": [
+      0.6,
+      3.85
+     ],
+     "max": [
+      4,
+      4
+     ]
+    },
+    {
+     "id": "lounge:west:6",
+     "side": "west",
+     "min": [
+      -4,
+      -3.85
+     ],
+     "max": [
+      -3.85,
+      -0.6
+     ]
+    },
+    {
+     "id": "lounge:west:7",
+     "side": "west",
+     "min": [
+      -4,
+      0.6
+     ],
+     "max": [
+      -3.85,
+      3.85
+     ]
+    }
+   ],
+   "doorways": [
+    {
+     "side": "north",
+     "axis": "x",
+     "center": [
+      0,
+      -4
+     ],
+     "width": 1.2
+    },
+    {
+     "side": "east",
+     "axis": "z",
+     "center": [
+      4,
+      0
+     ],
+     "width": 1.2
+    },
+    {
+     "side": "south",
+     "axis": "x",
+     "center": [
+      0,
+      4
+     ],
+     "width": 1.2
+    },
+    {
+     "side": "west",
+     "axis": "z",
+     "center": [
+      -4,
+      0
+     ],
+     "width": 1.2
+    }
+   ],
+   "furniture": [
+    {
+     "kind": "sofa",
+     "center": [
+      -3.1,
+      -3.1
+     ],
+     "size": [
+      1.3,
+      0.9,
+      0.9
+     ]
+    },
+    {
+     "kind": "armchair",
+     "center": [
+      3.1,
+      -3.1
+     ],
+     "size": [
+      0.9,
+      0.9,
+      0.9
+     ]
+    },
+    {
+     "kind": "table",
+     "center": [
+      -3.1,
+      3.1
+     ],
+     "size": [
+      1,
+      0.75,
+      1
+     ]
+    },
+    {
+     "kind": "plant",
+     "center": [
+      3.1,
+      3.1
+     ],
+     "size": [
+      0.6,
+      1.3,
+      0.6
+     ]
+    }
+   ]
+  },
+  "ballroom": {
+   "id": "ballroom",
+   "name": "Ballroom",
+   "center": [
+    0,
+    0
+   ],
+   "size": [
+    8,
+    8
+   ],
+   "min": [
+    -4,
+    -4
+   ],
+   "max": [
+    4,
+    4
+   ],
+   "dark": false,
+   "locked": false,
+   "job": null,
+   "isExit": false,
+   "safe": false,
+   "searchPoint": "the band stand",
+   "mood": {
+    "color": "#ffd8a8",
+    "intensity": 1.1,
+    "ambient": 0.85
+   },
+   "doors": [
+    "north",
+    "east",
+    "south",
+    "west"
+   ],
+   "walls": [
+    {
+     "id": "ballroom:north:0",
+     "side": "north",
+     "min": [
+      -4,
+      -4
+     ],
+     "max": [
+      -0.6,
+      -3.85
+     ]
+    },
+    {
+     "id": "ballroom:north:1",
+     "side": "north",
+     "min": [
+      0.6,
+      -4
+     ],
+     "max": [
+      4,
+      -3.85
+     ]
+    },
+    {
+     "id": "ballroom:east:2",
+     "side": "east",
+     "min": [
+      3.85,
+      -3.85
+     ],
+     "max": [
+      4,
+      -0.6
+     ]
+    },
+    {
+     "id": "ballroom:east:3",
+     "side": "east",
+     "min": [
+      3.85,
+      0.6
+     ],
+     "max": [
+      4,
+      3.85
+     ]
+    },
+    {
+     "id": "ballroom:south:4",
+     "side": "south",
+     "min": [
+      -4,
+      3.85
+     ],
+     "max": [
+      -0.6,
+      4
+     ]
+    },
+    {
+     "id": "ballroom:south:5",
+     "side": "south",
+     "min": [
+      0.6,
+      3.85
+     ],
+     "max": [
+      4,
+      4
+     ]
+    },
+    {
+     "id": "ballroom:west:6",
+     "side": "west",
+     "min": [
+      -4,
+      -3.85
+     ],
+     "max": [
+      -3.85,
+      -0.6
+     ]
+    },
+    {
+     "id": "ballroom:west:7",
+     "side": "west",
+     "min": [
+      -4,
+      0.6
+     ],
+     "max": [
+      -3.85,
+      3.85
+     ]
+    }
+   ],
+   "doorways": [
+    {
+     "side": "north",
+     "axis": "x",
+     "center": [
+      0,
+      -4
+     ],
+     "width": 1.2
+    },
+    {
+     "side": "east",
+     "axis": "z",
+     "center": [
+      4,
+      0
+     ],
+     "width": 1.2
+    },
+    {
+     "side": "south",
+     "axis": "x",
+     "center": [
+      0,
+      4
+     ],
+     "width": 1.2
+    },
+    {
+     "side": "west",
+     "axis": "z",
+     "center": [
+      -4,
+      0
+     ],
+     "width": 1.2
+    }
+   ],
+   "furniture": [
+    {
+     "kind": "bandstand",
+     "center": [
+      -3.1,
+      -3.1
+     ],
+     "size": [
+      1.3,
+      0.5,
+      1.3
+     ]
+    },
+    {
+     "kind": "table",
+     "center": [
+      3.1,
+      -3.1
+     ],
+     "size": [
+      0.9,
+      0.9,
+      0.9
+     ]
+    },
+    {
+     "kind": "table",
+     "center": [
+      -3.1,
+      3.1
+     ],
+     "size": [
+      0.9,
+      0.9,
+      0.9
+     ]
+    },
+    {
+     "kind": "table",
+     "center": [
+      3.1,
+      3.1
+     ],
+     "size": [
+      0.9,
+      0.9,
+      0.9
+     ]
+    }
+   ]
+  },
+  "grandCorridor": {
+   "id": "grandCorridor",
+   "name": "Grand Corridor",
+   "center": [
+    0,
+    0
+   ],
+   "size": [
+    8,
+    8
+   ],
+   "min": [
+    -4,
+    -4
+   ],
+   "max": [
+    4,
+    4
+   ],
+   "dark": false,
+   "locked": false,
+   "job": null,
+   "isExit": false,
+   "safe": false,
+   "searchPoint": "the umbrella stand",
+   "mood": {
+    "color": "#ffd8b0",
+    "intensity": 0.9,
+    "ambient": 0.75
+   },
+   "doors": [
+    "north",
+    "east",
+    "south",
+    "west"
+   ],
+   "walls": [
+    {
+     "id": "grandCorridor:north:0",
+     "side": "north",
+     "min": [
+      -4,
+      -4
+     ],
+     "max": [
+      -0.6,
+      -3.85
+     ]
+    },
+    {
+     "id": "grandCorridor:north:1",
+     "side": "north",
+     "min": [
+      0.6,
+      -4
+     ],
+     "max": [
+      4,
+      -3.85
+     ]
+    },
+    {
+     "id": "grandCorridor:east:2",
+     "side": "east",
+     "min": [
+      3.85,
+      -3.85
+     ],
+     "max": [
+      4,
+      -0.6
+     ]
+    },
+    {
+     "id": "grandCorridor:east:3",
+     "side": "east",
+     "min": [
+      3.85,
+      0.6
+     ],
+     "max": [
+      4,
+      3.85
+     ]
+    },
+    {
+     "id": "grandCorridor:south:4",
+     "side": "south",
+     "min": [
+      -4,
+      3.85
+     ],
+     "max": [
+      -0.6,
+      4
+     ]
+    },
+    {
+     "id": "grandCorridor:south:5",
+     "side": "south",
+     "min": [
+      0.6,
+      3.85
+     ],
+     "max": [
+      4,
+      4
+     ]
+    },
+    {
+     "id": "grandCorridor:west:6",
+     "side": "west",
+     "min": [
+      -4,
+      -3.85
+     ],
+     "max": [
+      -3.85,
+      -0.6
+     ]
+    },
+    {
+     "id": "grandCorridor:west:7",
+     "side": "west",
+     "min": [
+      -4,
+      0.6
+     ],
+     "max": [
+      -3.85,
+      3.85
+     ]
+    }
+   ],
+   "doorways": [
+    {
+     "side": "north",
+     "axis": "x",
+     "center": [
+      0,
+      -4
+     ],
+     "width": 1.2
+    },
+    {
+     "side": "east",
+     "axis": "z",
+     "center": [
+      4,
+      0
+     ],
+     "width": 1.2
+    },
+    {
+     "side": "south",
+     "axis": "x",
+     "center": [
+      0,
+      4
+     ],
+     "width": 1.2
+    },
+    {
+     "side": "west",
+     "axis": "z",
+     "center": [
+      -4,
+      0
+     ],
+     "width": 1.2
+    }
+   ],
+   "furniture": [
+    {
+     "kind": "plant",
+     "center": [
+      -3.1,
+      -3.1
+     ],
+     "size": [
+      0.6,
+      1.3,
+      0.6
+     ]
+    },
+    {
+     "kind": "plant",
+     "center": [
+      3.1,
+      3.1
+     ],
+     "size": [
+      0.6,
+      1.3,
+      0.6
+     ]
+    },
+    {
+     "kind": "bench",
+     "center": [
+      3.1,
+      -3.1
+     ],
+     "size": [
+      1.2,
+      0.5,
+      0.5
+     ]
+    }
+   ]
+  },
+  "switchboard": {
+   "id": "switchboard",
+   "name": "Switchboard",
+   "center": [
+    0,
+    0
+   ],
+   "size": [
+    8,
+    8
+   ],
+   "min": [
+    -4,
+    -4
+   ],
+   "max": [
+    4,
+    4
+   ],
+   "dark": false,
+   "locked": false,
+   "job": "switchboard",
+   "isExit": false,
+   "safe": false,
+   "searchPoint": "the operator's desk",
+   "mood": {
+    "color": "#ffd8a8",
+    "intensity": 1.1,
+    "ambient": 0.85
+   },
+   "doors": [
+    "north",
+    "east",
+    "south",
+    "west"
+   ],
+   "walls": [
+    {
+     "id": "switchboard:north:0",
+     "side": "north",
+     "min": [
+      -4,
+      -4
+     ],
+     "max": [
+      -0.6,
+      -3.85
+     ]
+    },
+    {
+     "id": "switchboard:north:1",
+     "side": "north",
+     "min": [
+      0.6,
+      -4
+     ],
+     "max": [
+      4,
+      -3.85
+     ]
+    },
+    {
+     "id": "switchboard:east:2",
+     "side": "east",
+     "min": [
+      3.85,
+      -3.85
+     ],
+     "max": [
+      4,
+      -0.6
+     ]
+    },
+    {
+     "id": "switchboard:east:3",
+     "side": "east",
+     "min": [
+      3.85,
+      0.6
+     ],
+     "max": [
+      4,
+      3.85
+     ]
+    },
+    {
+     "id": "switchboard:south:4",
+     "side": "south",
+     "min": [
+      -4,
+      3.85
+     ],
+     "max": [
+      -0.6,
+      4
+     ]
+    },
+    {
+     "id": "switchboard:south:5",
+     "side": "south",
+     "min": [
+      0.6,
+      3.85
+     ],
+     "max": [
+      4,
+      4
+     ]
+    },
+    {
+     "id": "switchboard:west:6",
+     "side": "west",
+     "min": [
+      -4,
+      -3.85
+     ],
+     "max": [
+      -3.85,
+      -0.6
+     ]
+    },
+    {
+     "id": "switchboard:west:7",
+     "side": "west",
+     "min": [
+      -4,
+      0.6
+     ],
+     "max": [
+      -3.85,
+      3.85
+     ]
+    }
+   ],
+   "doorways": [
+    {
+     "side": "north",
+     "axis": "x",
+     "center": [
+      0,
+      -4
+     ],
+     "width": 1.2
+    },
+    {
+     "side": "east",
+     "axis": "z",
+     "center": [
+      4,
+      0
+     ],
+     "width": 1.2
+    },
+    {
+     "side": "south",
+     "axis": "x",
+     "center": [
+      0,
+      4
+     ],
+     "width": 1.2
+    },
+    {
+     "side": "west",
+     "axis": "z",
+     "center": [
+      -4,
+      0
+     ],
+     "width": 1.2
+    }
+   ],
+   "furniture": [
+    {
+     "kind": "switchboard",
+     "center": [
+      -3.1,
+      -3.1
+     ],
+     "size": [
+      1.3,
+      1.5,
+      0.9
+     ]
+    },
+    {
+     "kind": "switchboard",
+     "center": [
+      3.1,
+      -3.1
+     ],
+     "size": [
+      1.3,
+      1.5,
+      0.9
+     ]
+    },
+    {
+     "kind": "chair",
+     "center": [
+      -3.1,
+      3.1
+     ],
+     "size": [
+      0.7,
+      0.9,
+      0.7
+     ]
+    },
+    {
+     "kind": "filingCabinet",
+     "center": [
+      3.1,
+      3.1
+     ],
+     "size": [
+      0.7,
+      1.3,
+      0.7
+     ]
+    }
+   ]
+  },
+  "dining": {
+   "id": "dining",
+   "name": "Dining Room",
+   "center": [
+    0,
+    0
+   ],
+   "size": [
+    8,
+    8
+   ],
+   "min": [
+    -4,
+    -4
+   ],
+   "max": [
+    4,
+    4
+   ],
+   "dark": false,
+   "locked": false,
+   "job": null,
+   "isExit": false,
+   "safe": false,
+   "searchPoint": "the sideboard",
+   "mood": {
+    "color": "#ffd8a8",
+    "intensity": 1.1,
+    "ambient": 0.85
+   },
+   "doors": [
+    "west",
+    "south",
+    "east"
+   ],
+   "walls": [
+    {
+     "id": "dining:north:0",
+     "side": "north",
+     "min": [
+      -4,
+      -4
+     ],
+     "max": [
+      4,
+      -3.85
+     ]
+    },
+    {
+     "id": "dining:east:1",
+     "side": "east",
+     "min": [
+      3.85,
+      -3.85
+     ],
+     "max": [
+      4,
+      -0.6
+     ]
+    },
+    {
+     "id": "dining:east:2",
+     "side": "east",
+     "min": [
+      3.85,
+      0.6
+     ],
+     "max": [
+      4,
+      3.85
+     ]
+    },
+    {
+     "id": "dining:south:3",
+     "side": "south",
+     "min": [
+      -4,
+      3.85
+     ],
+     "max": [
+      -0.6,
+      4
+     ]
+    },
+    {
+     "id": "dining:south:4",
+     "side": "south",
+     "min": [
+      0.6,
+      3.85
+     ],
+     "max": [
+      4,
+      4
+     ]
+    },
+    {
+     "id": "dining:west:5",
+     "side": "west",
+     "min": [
+      -4,
+      -3.85
+     ],
+     "max": [
+      -3.85,
+      -0.6
+     ]
+    },
+    {
+     "id": "dining:west:6",
+     "side": "west",
+     "min": [
+      -4,
+      0.6
+     ],
+     "max": [
+      -3.85,
+      3.85
+     ]
+    }
+   ],
+   "doorways": [
+    {
+     "side": "east",
+     "axis": "z",
+     "center": [
+      4,
+      0
+     ],
+     "width": 1.2
+    },
+    {
+     "side": "south",
+     "axis": "x",
+     "center": [
+      0,
+      4
+     ],
+     "width": 1.2
+    },
+    {
+     "side": "west",
+     "axis": "z",
+     "center": [
+      -4,
+      0
+     ],
+     "width": 1.2
+    }
+   ],
+   "furniture": [
+    {
+     "kind": "sideboard",
+     "center": [
+      0,
+      -3.5000000000000004
+     ],
+     "size": [
+      2.4,
+      0.9,
+      0.6
+     ]
+    },
+    {
+     "kind": "table",
+     "center": [
+      -3.1,
+      3.1
+     ],
+     "size": [
+      1.2,
+      0.75,
+      1.2
+     ]
+    },
+    {
+     "kind": "table",
+     "center": [
+      3.1,
+      3.1
+     ],
+     "size": [
+      1.2,
+      0.75,
+      1.2
+     ]
+    },
+    {
+     "kind": "chair",
+     "center": [
+      -3.1,
+      -3.1
+     ],
+     "size": [
+      0.6,
+      0.9,
+      0.6
+     ]
+    }
+   ]
+  },
+  "library": {
+   "id": "library",
+   "name": "Library",
+   "center": [
+    0,
+    0
+   ],
+   "size": [
+    8,
+    8
+   ],
+   "min": [
+    -4,
+    -4
+   ],
+   "max": [
+    4,
+    4
+   ],
+   "dark": false,
+   "locked": false,
+   "job": null,
+   "isExit": false,
+   "safe": false,
+   "searchPoint": "the bookcases",
+   "mood": {
+    "color": "#e8d8b8",
+    "intensity": 0.8,
+    "ambient": 0.6
+   },
+   "doors": [
+    "west",
+    "south",
+    "east"
+   ],
+   "walls": [
+    {
+     "id": "library:north:0",
+     "side": "north",
+     "min": [
+      -4,
+      -4
+     ],
+     "max": [
+      4,
+      -3.85
+     ]
+    },
+    {
+     "id": "library:east:1",
+     "side": "east",
+     "min": [
+      3.85,
+      -3.85
+     ],
+     "max": [
+      4,
+      -0.6
+     ]
+    },
+    {
+     "id": "library:east:2",
+     "side": "east",
+     "min": [
+      3.85,
+      0.6
+     ],
+     "max": [
+      4,
+      3.85
+     ]
+    },
+    {
+     "id": "library:south:3",
+     "side": "south",
+     "min": [
+      -4,
+      3.85
+     ],
+     "max": [
+      -0.6,
+      4
+     ]
+    },
+    {
+     "id": "library:south:4",
+     "side": "south",
+     "min": [
+      0.6,
+      3.85
+     ],
+     "max": [
+      4,
+      4
+     ]
+    },
+    {
+     "id": "library:west:5",
+     "side": "west",
+     "min": [
+      -4,
+      -3.85
+     ],
+     "max": [
+      -3.85,
+      -0.6
+     ]
+    },
+    {
+     "id": "library:west:6",
+     "side": "west",
+     "min": [
+      -4,
+      0.6
+     ],
+     "max": [
+      -3.85,
+      3.85
+     ]
+    }
+   ],
+   "doorways": [
+    {
+     "side": "east",
+     "axis": "z",
+     "center": [
+      4,
+      0
+     ],
+     "width": 1.2
+    },
+    {
+     "side": "south",
+     "axis": "x",
+     "center": [
+      0,
+      4
+     ],
+     "width": 1.2
+    },
+    {
+     "side": "west",
+     "axis": "z",
+     "center": [
+      -4,
+      0
+     ],
+     "width": 1.2
+    }
+   ],
+   "furniture": [
+    {
+     "kind": "bookcase",
+     "center": [
+      0,
+      -3.5500000000000003
+     ],
+     "size": [
+      3,
+      2,
+      0.5
+     ]
+    },
+    {
+     "kind": "bookcase",
+     "center": [
+      -3.1,
+      -3.1
+     ],
+     "size": [
+      1.3,
+      2,
+      0.5
+     ]
+    },
+    {
+     "kind": "bookcase",
+     "center": [
+      3.1,
+      -3.1
+     ],
+     "size": [
+      1.3,
+      2,
+      0.5
+     ]
+    },
+    {
+     "kind": "armchair",
+     "center": [
+      3.1,
+      3.1
+     ],
+     "size": [
+      0.9,
+      0.9,
+      0.9
+     ]
+    }
+   ]
+  },
+  "kitchen": {
+   "id": "kitchen",
+   "name": "Kitchen",
+   "center": [
+    0,
+    0
+   ],
+   "size": [
+    8,
+    8
+   ],
+   "min": [
+    -4,
+    -4
+   ],
+   "max": [
+    4,
+    4
+   ],
+   "dark": false,
+   "locked": false,
+   "job": null,
+   "isExit": false,
+   "safe": false,
+   "searchPoint": "the kitchen counter",
+   "mood": {
+    "color": "#c0ccd8",
+    "intensity": 0.7,
+    "ambient": 0.45
+   },
+   "doors": [
+    "west",
+    "south",
+    "east"
+   ],
+   "walls": [
+    {
+     "id": "kitchen:north:0",
+     "side": "north",
+     "min": [
+      -4,
+      -4
+     ],
+     "max": [
+      4,
+      -3.85
+     ]
+    },
+    {
+     "id": "kitchen:east:1",
+     "side": "east",
+     "min": [
+      3.85,
+      -3.85
+     ],
+     "max": [
+      4,
+      -0.6
+     ]
+    },
+    {
+     "id": "kitchen:east:2",
+     "side": "east",
+     "min": [
+      3.85,
+      0.6
+     ],
+     "max": [
+      4,
+      3.85
+     ]
+    },
+    {
+     "id": "kitchen:south:3",
+     "side": "south",
+     "min": [
+      -4,
+      3.85
+     ],
+     "max": [
+      -0.6,
+      4
+     ]
+    },
+    {
+     "id": "kitchen:south:4",
+     "side": "south",
+     "min": [
+      0.6,
+      3.85
+     ],
+     "max": [
+      4,
+      4
+     ]
+    },
+    {
+     "id": "kitchen:west:5",
+     "side": "west",
+     "min": [
+      -4,
+      -3.85
+     ],
+     "max": [
+      -3.85,
+      -0.6
+     ]
+    },
+    {
+     "id": "kitchen:west:6",
+     "side": "west",
+     "min": [
+      -4,
+      0.6
+     ],
+     "max": [
+      -3.85,
+      3.85
+     ]
+    }
+   ],
+   "doorways": [
+    {
+     "side": "east",
+     "axis": "z",
+     "center": [
+      4,
+      0
+     ],
+     "width": 1.2
+    },
+    {
+     "side": "south",
+     "axis": "x",
+     "center": [
+      0,
+      4
+     ],
+     "width": 1.2
+    },
+    {
+     "side": "west",
+     "axis": "z",
+     "center": [
+      -4,
+      0
+     ],
+     "width": 1.2
+    }
+   ],
+   "furniture": [
+    {
+     "kind": "counter",
+     "center": [
+      0,
+      -3.45
+     ],
+     "size": [
+      3.2,
+      0.95,
+      0.7
+     ]
+    },
+    {
+     "kind": "counter",
+     "center": [
+      -3.1,
+      -3.1
+     ],
+     "size": [
+      1.3,
+      0.95,
+      0.7
+     ]
+    },
+    {
+     "kind": "shelf",
+     "center": [
+      -3.1,
+      3.1
+     ],
+     "size": [
+      1,
+      1.8,
+      0.5
+     ]
+    }
+   ]
+  },
+  "serviceCorridor": {
+   "id": "serviceCorridor",
+   "name": "Service Corridor",
+   "center": [
+    0,
+    0
+   ],
+   "size": [
+    8,
+    8
+   ],
+   "min": [
+    -4,
+    -4
+   ],
+   "max": [
+    4,
+    4
+   ],
+   "dark": true,
+   "locked": false,
+   "job": null,
+   "isExit": false,
+   "safe": false,
+   "searchPoint": "the laundry cart",
+   "mood": {
+    "color": "#c4c8d4",
+    "intensity": 0.55,
+    "ambient": 0.38,
+    "flicker": {
+     "min": 0.3,
+     "max": 1,
+     "speed": 10
+    }
+   },
+   "doors": [
+    "west",
+    "south",
+    "east"
+   ],
+   "walls": [
+    {
+     "id": "serviceCorridor:north:0",
+     "side": "north",
+     "min": [
+      -4,
+      -4
+     ],
+     "max": [
+      4,
+      -3.85
+     ]
+    },
+    {
+     "id": "serviceCorridor:east:1",
+     "side": "east",
+     "min": [
+      3.85,
+      -3.85
+     ],
+     "max": [
+      4,
+      -0.6
+     ]
+    },
+    {
+     "id": "serviceCorridor:east:2",
+     "side": "east",
+     "min": [
+      3.85,
+      0.6
+     ],
+     "max": [
+      4,
+      3.85
+     ]
+    },
+    {
+     "id": "serviceCorridor:south:3",
+     "side": "south",
+     "min": [
+      -4,
+      3.85
+     ],
+     "max": [
+      -0.6,
+      4
+     ]
+    },
+    {
+     "id": "serviceCorridor:south:4",
+     "side": "south",
+     "min": [
+      0.6,
+      3.85
+     ],
+     "max": [
+      4,
+      4
+     ]
+    },
+    {
+     "id": "serviceCorridor:west:5",
+     "side": "west",
+     "min": [
+      -4,
+      -3.85
+     ],
+     "max": [
+      -3.85,
+      -0.6
+     ]
+    },
+    {
+     "id": "serviceCorridor:west:6",
+     "side": "west",
+     "min": [
+      -4,
+      0.6
+     ],
+     "max": [
+      -3.85,
+      3.85
+     ]
+    }
+   ],
+   "doorways": [
+    {
+     "side": "east",
+     "axis": "z",
+     "center": [
+      4,
+      0
+     ],
+     "width": 1.2
+    },
+    {
+     "side": "south",
+     "axis": "x",
+     "center": [
+      0,
+      4
+     ],
+     "width": 1.2
+    },
+    {
+     "side": "west",
+     "axis": "z",
+     "center": [
+      -4,
+      0
+     ],
+     "width": 1.2
+    }
+   ],
+   "furniture": [
+    {
+     "kind": "cart",
+     "center": [
+      0,
+      -3.4000000000000004
+     ],
+     "size": [
+      1.2,
+      1,
+      0.8
+     ]
+    },
+    {
+     "kind": "crate",
+     "center": [
+      3.1,
+      3.1
+     ],
+     "size": [
+      0.9,
+      0.9,
+      0.9
+     ]
+    }
+   ]
+  },
+  "storage": {
+   "id": "storage",
+   "name": "Storage Room",
+   "center": [
+    0,
+    0
+   ],
+   "size": [
+    8,
+    8
+   ],
+   "min": [
+    -4,
+    -4
+   ],
+   "max": [
+    4,
+    4
+   ],
+   "dark": true,
+   "locked": false,
+   "job": null,
+   "isExit": false,
+   "safe": false,
+   "searchPoint": "the storage shelves",
+   "mood": {
+    "color": "#b8c2d0",
+    "intensity": 0.45,
+    "ambient": 0.32
+   },
+   "doors": [
+    "west",
+    "south",
+    "east"
+   ],
+   "walls": [
+    {
+     "id": "storage:north:0",
+     "side": "north",
+     "min": [
+      -4,
+      -4
+     ],
+     "max": [
+      4,
+      -3.85
+     ]
+    },
+    {
+     "id": "storage:east:1",
+     "side": "east",
+     "min": [
+      3.85,
+      -3.85
+     ],
+     "max": [
+      4,
+      -0.6
+     ]
+    },
+    {
+     "id": "storage:east:2",
+     "side": "east",
+     "min": [
+      3.85,
+      0.6
+     ],
+     "max": [
+      4,
+      3.85
+     ]
+    },
+    {
+     "id": "storage:south:3",
+     "side": "south",
+     "min": [
+      -4,
+      3.85
+     ],
+     "max": [
+      -0.6,
+      4
+     ]
+    },
+    {
+     "id": "storage:south:4",
+     "side": "south",
+     "min": [
+      0.6,
+      3.85
+     ],
+     "max": [
+      4,
+      4
+     ]
+    },
+    {
+     "id": "storage:west:5",
+     "side": "west",
+     "min": [
+      -4,
+      -3.85
+     ],
+     "max": [
+      -3.85,
+      -0.6
+     ]
+    },
+    {
+     "id": "storage:west:6",
+     "side": "west",
+     "min": [
+      -4,
+      0.6
+     ],
+     "max": [
+      -3.85,
+      3.85
+     ]
+    }
+   ],
+   "doorways": [
+    {
+     "side": "east",
+     "axis": "z",
+     "center": [
+      4,
+      0
+     ],
+     "width": 1.2
+    },
+    {
+     "side": "south",
+     "axis": "x",
+     "center": [
+      0,
+      4
+     ],
+     "width": 1.2
+    },
+    {
+     "side": "west",
+     "axis": "z",
+     "center": [
+      -4,
+      0
+     ],
+     "width": 1.2
+    }
+   ],
+   "furniture": [
+    {
+     "kind": "shelf",
+     "center": [
+      0,
+      -3.5500000000000003
+     ],
+     "size": [
+      3,
+      1.8,
+      0.5
+     ]
+    },
+    {
+     "kind": "crate",
+     "center": [
+      -3.1,
+      -3.1
+     ],
+     "size": [
+      0.9,
+      0.9,
+      0.9
+     ]
+    },
+    {
+     "kind": "crate",
+     "center": [
+      3.1,
+      -3.1
+     ],
+     "size": [
+      0.9,
+      0.9,
+      0.9
+     ]
+    },
+    {
+     "kind": "crate",
+     "center": [
+      -3.1,
+      3.1
+     ],
+     "size": [
+      0.8,
+      0.6,
+      0.8
+     ]
+    }
+   ]
+  },
+  "corridorE": {
+   "id": "corridorE",
+   "name": "East Corridor",
+   "center": [
+    0,
+    0
+   ],
+   "size": [
+    8,
+    8
+   ],
+   "min": [
+    -4,
+    -4
+   ],
+   "max": [
+    4,
+    4
+   ],
+   "dark": false,
+   "locked": false,
+   "job": null,
+   "isExit": false,
+   "safe": false,
+   "searchPoint": "the room-service trolley",
+   "mood": {
+    "color": "#ffd8b0",
+    "intensity": 0.9,
+    "ambient": 0.75
+   },
+   "doors": [
+    "west",
+    "south",
+    "east"
+   ],
+   "walls": [
+    {
+     "id": "corridorE:north:0",
+     "side": "north",
+     "min": [
+      -4,
+      -4
+     ],
+     "max": [
+      4,
+      -3.85
+     ]
+    },
+    {
+     "id": "corridorE:east:1",
+     "side": "east",
+     "min": [
+      3.85,
+      -3.85
+     ],
+     "max": [
+      4,
+      -0.6
+     ]
+    },
+    {
+     "id": "corridorE:east:2",
+     "side": "east",
+     "min": [
+      3.85,
+      0.6
+     ],
+     "max": [
+      4,
+      3.85
+     ]
+    },
+    {
+     "id": "corridorE:south:3",
+     "side": "south",
+     "min": [
+      -4,
+      3.85
+     ],
+     "max": [
+      -0.6,
+      4
+     ]
+    },
+    {
+     "id": "corridorE:south:4",
+     "side": "south",
+     "min": [
+      0.6,
+      3.85
+     ],
+     "max": [
+      4,
+      4
+     ]
+    },
+    {
+     "id": "corridorE:west:5",
+     "side": "west",
+     "min": [
+      -4,
+      -3.85
+     ],
+     "max": [
+      -3.85,
+      -0.6
+     ]
+    },
+    {
+     "id": "corridorE:west:6",
+     "side": "west",
+     "min": [
+      -4,
+      0.6
+     ],
+     "max": [
+      -3.85,
+      3.85
+     ]
+    }
+   ],
+   "doorways": [
+    {
+     "side": "east",
+     "axis": "z",
+     "center": [
+      4,
+      0
+     ],
+     "width": 1.2
+    },
+    {
+     "side": "south",
+     "axis": "x",
+     "center": [
+      0,
+      4
+     ],
+     "width": 1.2
+    },
+    {
+     "side": "west",
+     "axis": "z",
+     "center": [
+      -4,
+      0
+     ],
+     "width": 1.2
+    }
+   ],
+   "furniture": [
+    {
+     "kind": "console",
+     "center": [
+      0,
+      -3.6
+     ],
+     "size": [
+      1.4,
+      0.8,
+      0.4
+     ]
+    },
+    {
+     "kind": "trolley",
+     "center": [
+      -3.1,
+      3.1
+     ],
+     "size": [
+      0.8,
+      1,
+      1.1
+     ]
+    }
+   ]
+  },
+  "corridorW": {
+   "id": "corridorW",
+   "name": "West Corridor",
+   "center": [
+    0,
+    0
+   ],
+   "size": [
+    8,
+    8
+   ],
+   "min": [
+    -4,
+    -4
+   ],
+   "max": [
+    4,
+    4
+   ],
+   "dark": false,
+   "locked": false,
+   "job": null,
+   "isExit": false,
+   "safe": false,
+   "searchPoint": "the console table",
+   "mood": {
+    "color": "#ffd8b0",
+    "intensity": 0.9,
+    "ambient": 0.75
+   },
+   "doors": [
+    "west",
+    "south",
+    "east"
+   ],
+   "walls": [
+    {
+     "id": "corridorW:north:0",
+     "side": "north",
+     "min": [
+      -4,
+      -4
+     ],
+     "max": [
+      4,
+      -3.85
+     ]
+    },
+    {
+     "id": "corridorW:east:1",
+     "side": "east",
+     "min": [
+      3.85,
+      -3.85
+     ],
+     "max": [
+      4,
+      -0.6
+     ]
+    },
+    {
+     "id": "corridorW:east:2",
+     "side": "east",
+     "min": [
+      3.85,
+      0.6
+     ],
+     "max": [
+      4,
+      3.85
+     ]
+    },
+    {
+     "id": "corridorW:south:3",
+     "side": "south",
+     "min": [
+      -4,
+      3.85
+     ],
+     "max": [
+      -0.6,
+      4
+     ]
+    },
+    {
+     "id": "corridorW:south:4",
+     "side": "south",
+     "min": [
+      0.6,
+      3.85
+     ],
+     "max": [
+      4,
+      4
+     ]
+    },
+    {
+     "id": "corridorW:west:5",
+     "side": "west",
+     "min": [
+      -4,
+      -3.85
+     ],
+     "max": [
+      -3.85,
+      -0.6
+     ]
+    },
+    {
+     "id": "corridorW:west:6",
+     "side": "west",
+     "min": [
+      -4,
+      0.6
+     ],
+     "max": [
+      -3.85,
+      3.85
+     ]
+    }
+   ],
+   "doorways": [
+    {
+     "side": "east",
+     "axis": "z",
+     "center": [
+      4,
+      0
+     ],
+     "width": 1.2
+    },
+    {
+     "side": "south",
+     "axis": "x",
+     "center": [
+      0,
+      4
+     ],
+     "width": 1.2
+    },
+    {
+     "side": "west",
+     "axis": "z",
+     "center": [
+      -4,
+      0
+     ],
+     "width": 1.2
+    }
+   ],
+   "furniture": [
+    {
+     "kind": "console",
+     "center": [
+      0,
+      -3.6
+     ],
+     "size": [
+      1.4,
+      0.8,
+      0.4
+     ]
+    },
+    {
+     "kind": "plant",
+     "center": [
+      3.1,
+      3.1
+     ],
+     "size": [
+      0.6,
+      1.3,
+      0.6
+     ]
+    }
+   ]
+  },
+  "corridorN": {
+   "id": "corridorN",
+   "name": "North Corridor",
+   "center": [
+    0,
+    0
+   ],
+   "size": [
+    8,
+    8
+   ],
+   "min": [
+    -4,
+    -4
+   ],
+   "max": [
+    4,
+    4
+   ],
+   "dark": false,
+   "locked": false,
+   "job": null,
+   "isExit": false,
+   "safe": false,
+   "searchPoint": "the hall console",
+   "mood": {
+    "color": "#ffd8b0",
+    "intensity": 0.9,
+    "ambient": 0.75
+   },
+   "doors": [
+    "north",
+    "south"
+   ],
+   "walls": [
+    {
+     "id": "corridorN:north:0",
+     "side": "north",
+     "min": [
+      -4,
+      -4
+     ],
+     "max": [
+      -0.6,
+      -3.85
+     ]
+    },
+    {
+     "id": "corridorN:north:1",
+     "side": "north",
+     "min": [
+      0.6,
+      -4
+     ],
+     "max": [
+      4,
+      -3.85
+     ]
+    },
+    {
+     "id": "corridorN:east:2",
+     "side": "east",
+     "min": [
+      3.85,
+      -3.85
+     ],
+     "max": [
+      4,
+      3.85
+     ]
+    },
+    {
+     "id": "corridorN:south:3",
+     "side": "south",
+     "min": [
+      -4,
+      3.85
+     ],
+     "max": [
+      -0.6,
+      4
+     ]
+    },
+    {
+     "id": "corridorN:south:4",
+     "side": "south",
+     "min": [
+      0.6,
+      3.85
+     ],
+     "max": [
+      4,
+      4
+     ]
+    },
+    {
+     "id": "corridorN:west:5",
+     "side": "west",
+     "min": [
+      -4,
+      -3.85
+     ],
+     "max": [
+      -3.85,
+      3.85
+     ]
+    }
+   ],
+   "doorways": [
+    {
+     "side": "north",
+     "axis": "x",
+     "center": [
+      0,
+      -4
+     ],
+     "width": 1.2
+    },
+    {
+     "side": "south",
+     "axis": "x",
+     "center": [
+      0,
+      4
+     ],
+     "width": 1.2
+    }
+   ],
+   "furniture": [
+    {
+     "kind": "console",
+     "center": [
+      3.6,
+      0
+     ],
+     "size": [
+      0.4,
+      0.8,
+      1.4
+     ]
+    },
+    {
+     "kind": "plant",
+     "center": [
+      -3.1,
+      3.1
+     ],
+     "size": [
+      0.6,
+      1.3,
+      0.6
+     ]
+    }
+   ]
+  },
+  "corridorS": {
+   "id": "corridorS",
+   "name": "South Corridor",
+   "center": [
+    0,
+    0
+   ],
+   "size": [
+    8,
+    8
+   ],
+   "min": [
+    -4,
+    -4
+   ],
+   "max": [
+    4,
+    4
+   ],
+   "dark": false,
+   "locked": false,
+   "job": null,
+   "isExit": false,
+   "safe": false,
+   "searchPoint": "the luggage trolley",
+   "mood": {
+    "color": "#ffd8b0",
+    "intensity": 0.9,
+    "ambient": 0.75
+   },
+   "doors": [
+    "north",
+    "south"
+   ],
+   "walls": [
+    {
+     "id": "corridorS:north:0",
+     "side": "north",
+     "min": [
+      -4,
+      -4
+     ],
+     "max": [
+      -0.6,
+      -3.85
+     ]
+    },
+    {
+     "id": "corridorS:north:1",
+     "side": "north",
+     "min": [
+      0.6,
+      -4
+     ],
+     "max": [
+      4,
+      -3.85
+     ]
+    },
+    {
+     "id": "corridorS:east:2",
+     "side": "east",
+     "min": [
+      3.85,
+      -3.85
+     ],
+     "max": [
+      4,
+      3.85
+     ]
+    },
+    {
+     "id": "corridorS:south:3",
+     "side": "south",
+     "min": [
+      -4,
+      3.85
+     ],
+     "max": [
+      -0.6,
+      4
+     ]
+    },
+    {
+     "id": "corridorS:south:4",
+     "side": "south",
+     "min": [
+      0.6,
+      3.85
+     ],
+     "max": [
+      4,
+      4
+     ]
+    },
+    {
+     "id": "corridorS:west:5",
+     "side": "west",
+     "min": [
+      -4,
+      -3.85
+     ],
+     "max": [
+      -3.85,
+      3.85
+     ]
+    }
+   ],
+   "doorways": [
+    {
+     "side": "north",
+     "axis": "x",
+     "center": [
+      0,
+      -4
+     ],
+     "width": 1.2
+    },
+    {
+     "side": "south",
+     "axis": "x",
+     "center": [
+      0,
+      4
+     ],
+     "width": 1.2
+    }
+   ],
+   "furniture": [
+    {
+     "kind": "trolley",
+     "center": [
+      -3.4000000000000004,
+      0
+     ],
+     "size": [
+      0.8,
+      1,
+      1.2
+     ]
+    },
+    {
+     "kind": "bench",
+     "center": [
+      3.1,
+      -3.1
+     ],
+     "size": [
+      0.5,
+      0.5,
+      1.2
+     ]
+    }
+   ]
+  },
+  "stairs": {
+   "id": "stairs",
+   "name": "Service Stairs",
+   "center": [
+    0,
+    0
+   ],
+   "size": [
+    8,
+    8
+   ],
+   "min": [
+    -4,
+    -4
+   ],
+   "max": [
+    4,
+    4
+   ],
+   "dark": true,
+   "locked": false,
+   "job": null,
+   "isExit": false,
+   "safe": false,
+   "searchPoint": "the stairwell bench",
+   "mood": {
+    "color": "#b8c2d0",
+    "intensity": 0.45,
+    "ambient": 0.32
+   },
+   "doors": [
+    "north",
+    "south"
+   ],
+   "walls": [
+    {
+     "id": "stairs:north:0",
+     "side": "north",
+     "min": [
+      -4,
+      -4
+     ],
+     "max": [
+      -0.6,
+      -3.85
+     ]
+    },
+    {
+     "id": "stairs:north:1",
+     "side": "north",
+     "min": [
+      0.6,
+      -4
+     ],
+     "max": [
+      4,
+      -3.85
+     ]
+    },
+    {
+     "id": "stairs:east:2",
+     "side": "east",
+     "min": [
+      3.85,
+      -3.85
+     ],
+     "max": [
+      4,
+      3.85
+     ]
+    },
+    {
+     "id": "stairs:south:3",
+     "side": "south",
+     "min": [
+      -4,
+      3.85
+     ],
+     "max": [
+      -0.6,
+      4
+     ]
+    },
+    {
+     "id": "stairs:south:4",
+     "side": "south",
+     "min": [
+      0.6,
+      3.85
+     ],
+     "max": [
+      4,
+      4
+     ]
+    },
+    {
+     "id": "stairs:west:5",
+     "side": "west",
+     "min": [
+      -4,
+      -3.85
+     ],
+     "max": [
+      -3.85,
+      3.85
+     ]
+    }
+   ],
+   "doorways": [
+    {
+     "side": "north",
+     "axis": "x",
+     "center": [
+      0,
+      -4
+     ],
+     "width": 1.2
+    },
+    {
+     "side": "south",
+     "axis": "x",
+     "center": [
+      0,
+      4
+     ],
+     "width": 1.2
+    }
+   ],
+   "furniture": [
+    {
+     "kind": "stairs",
+     "center": [
+      3,
+      0
+     ],
+     "size": [
+      1.6,
+      0.9,
+      3
+     ]
+    },
+    {
+     "kind": "bench",
+     "center": [
+      -3.5500000000000003,
+      0
+     ],
+     "size": [
+      0.5,
+      0.5,
+      1.4
+     ]
+    }
+   ]
+  },
+  "infirmary2": {
+   "id": "infirmary2",
+   "name": "Infirmary",
+   "center": [
+    0,
+    0
+   ],
+   "size": [
+    8,
+    8
+   ],
+   "min": [
+    -4,
+    -4
+   ],
+   "max": [
+    4,
+    4
+   ],
+   "dark": false,
+   "locked": false,
+   "job": "infirmary",
+   "isExit": false,
+   "safe": false,
+   "searchPoint": "the medicine cabinet",
+   "mood": {
+    "color": "#e6eeff",
+    "intensity": 1,
+    "ambient": 0.8
+   },
+   "doors": [
+    "north",
+    "south"
+   ],
+   "walls": [
+    {
+     "id": "infirmary2:north:0",
+     "side": "north",
+     "min": [
+      -4,
+      -4
+     ],
+     "max": [
+      -0.6,
+      -3.85
+     ]
+    },
+    {
+     "id": "infirmary2:north:1",
+     "side": "north",
+     "min": [
+      0.6,
+      -4
+     ],
+     "max": [
+      4,
+      -3.85
+     ]
+    },
+    {
+     "id": "infirmary2:east:2",
+     "side": "east",
+     "min": [
+      3.85,
+      -3.85
+     ],
+     "max": [
+      4,
+      3.85
+     ]
+    },
+    {
+     "id": "infirmary2:south:3",
+     "side": "south",
+     "min": [
+      -4,
+      3.85
+     ],
+     "max": [
+      -0.6,
+      4
+     ]
+    },
+    {
+     "id": "infirmary2:south:4",
+     "side": "south",
+     "min": [
+      0.6,
+      3.85
+     ],
+     "max": [
+      4,
+      4
+     ]
+    },
+    {
+     "id": "infirmary2:west:5",
+     "side": "west",
+     "min": [
+      -4,
+      -3.85
+     ],
+     "max": [
+      -3.85,
+      3.85
+     ]
+    }
+   ],
+   "doorways": [
+    {
+     "side": "north",
+     "axis": "x",
+     "center": [
+      0,
+      -4
+     ],
+     "width": 1.2
+    },
+    {
+     "side": "south",
+     "axis": "x",
+     "center": [
+      0,
+      4
+     ],
+     "width": 1.2
+    }
+   ],
+   "furniture": [
+    {
+     "kind": "infirmaryBed",
+     "center": [
+      -2.9000000000000004,
+      0
+     ],
+     "size": [
+      1.8,
+      0.6,
+      2
+     ]
+    },
+    {
+     "kind": "medicineCabinet",
+     "center": [
+      3.5500000000000003,
+      0
+     ],
+     "size": [
+      0.5,
+      1.9,
+      1.4
+     ]
+    },
+    {
+     "kind": "stool",
+     "center": [
+      3.1,
+      -3.1
+     ],
+     "size": [
+      0.7,
+      0.9,
+      0.7
+     ]
+    }
+   ]
+  },
+  "backCorridor": {
+   "id": "backCorridor",
+   "name": "Back Stairs Passage",
+   "center": [
+    0,
+    0
+   ],
+   "size": [
+    8,
+    8
+   ],
+   "min": [
+    -4,
+    -4
+   ],
+   "max": [
+    4,
+    4
+   ],
+   "dark": true,
+   "locked": false,
+   "job": null,
+   "isExit": false,
+   "safe": false,
+   "searchPoint": "the stacked crates",
+   "mood": {
+    "color": "#c4c8d4",
+    "intensity": 0.55,
+    "ambient": 0.38,
+    "flicker": {
+     "min": 0.3,
+     "max": 1,
+     "speed": 10
+    }
+   },
+   "doors": [
+    "south",
+    "east"
+   ],
+   "walls": [
+    {
+     "id": "backCorridor:north:0",
+     "side": "north",
+     "min": [
+      -4,
+      -4
+     ],
+     "max": [
+      4,
+      -3.85
+     ]
+    },
+    {
+     "id": "backCorridor:east:1",
+     "side": "east",
+     "min": [
+      3.85,
+      -3.85
+     ],
+     "max": [
+      4,
+      -0.6
+     ]
+    },
+    {
+     "id": "backCorridor:east:2",
+     "side": "east",
+     "min": [
+      3.85,
+      0.6
+     ],
+     "max": [
+      4,
+      3.85
+     ]
+    },
+    {
+     "id": "backCorridor:south:3",
+     "side": "south",
+     "min": [
+      -4,
+      3.85
+     ],
+     "max": [
+      -0.6,
+      4
+     ]
+    },
+    {
+     "id": "backCorridor:south:4",
+     "side": "south",
+     "min": [
+      0.6,
+      3.85
+     ],
+     "max": [
+      4,
+      4
+     ]
+    },
+    {
+     "id": "backCorridor:west:5",
+     "side": "west",
+     "min": [
+      -4,
+      -3.85
+     ],
+     "max": [
+      -3.85,
+      3.85
+     ]
+    }
+   ],
+   "doorways": [
+    {
+     "side": "east",
+     "axis": "z",
+     "center": [
+      4,
+      0
+     ],
+     "width": 1.2
+    },
+    {
+     "side": "south",
+     "axis": "x",
+     "center": [
+      0,
+      4
+     ],
+     "width": 1.2
+    }
+   ],
+   "furniture": [
+    {
+     "kind": "crate",
+     "center": [
+      -3.1,
+      -3.1
+     ],
+     "size": [
+      0.9,
+      0.9,
+      0.9
+     ]
+    },
+    {
+     "kind": "crate",
+     "center": [
+      0,
+      -3.35
+     ],
+     "size": [
+      1,
+      0.8,
+      0.9
+     ]
+    }
+   ]
+  },
+  "cloakroom": {
+   "id": "cloakroom",
+   "name": "Cloakroom",
+   "center": [
+    0,
+    0
+   ],
+   "size": [
+    8,
+    8
+   ],
+   "min": [
+    -4,
+    -4
+   ],
+   "max": [
+    4,
+    4
+   ],
+   "dark": false,
+   "locked": true,
+   "job": null,
+   "isExit": false,
+   "safe": false,
+   "searchPoint": "the coat rail",
+   "mood": {
+    "color": "#e8d8b8",
+    "intensity": 0.8,
+    "ambient": 0.6
+   },
+   "doors": [
+    "south",
+    "east"
+   ],
+   "walls": [
+    {
+     "id": "cloakroom:north:0",
+     "side": "north",
+     "min": [
+      -4,
+      -4
+     ],
+     "max": [
+      4,
+      -3.85
+     ]
+    },
+    {
+     "id": "cloakroom:east:1",
+     "side": "east",
+     "min": [
+      3.85,
+      -3.85
+     ],
+     "max": [
+      4,
+      -0.6
+     ]
+    },
+    {
+     "id": "cloakroom:east:2",
+     "side": "east",
+     "min": [
+      3.85,
+      0.6
+     ],
+     "max": [
+      4,
+      3.85
+     ]
+    },
+    {
+     "id": "cloakroom:south:3",
+     "side": "south",
+     "min": [
+      -4,
+      3.85
+     ],
+     "max": [
+      -0.6,
+      4
+     ]
+    },
+    {
+     "id": "cloakroom:south:4",
+     "side": "south",
+     "min": [
+      0.6,
+      3.85
+     ],
+     "max": [
+      4,
+      4
+     ]
+    },
+    {
+     "id": "cloakroom:west:5",
+     "side": "west",
+     "min": [
+      -4,
+      -3.85
+     ],
+     "max": [
+      -3.85,
+      3.85
+     ]
+    }
+   ],
+   "doorways": [
+    {
+     "side": "east",
+     "axis": "z",
+     "center": [
+      4,
+      0
+     ],
+     "width": 1.2
+    },
+    {
+     "side": "south",
+     "axis": "x",
+     "center": [
+      0,
+      4
+     ],
+     "width": 1.2
+    }
+   ],
+   "furniture": [
+    {
+     "kind": "rail",
+     "center": [
+      0,
+      -3.5000000000000004
+     ],
+     "size": [
+      3,
+      1.7,
+      0.6
+     ]
+    },
+    {
+     "kind": "rail",
+     "center": [
+      -3.5000000000000004,
+      0
+     ],
+     "size": [
+      0.6,
+      1.7,
+      3
+     ]
+    },
+    {
+     "kind": "bench",
+     "center": [
+      3.1,
+      3.1
+     ],
+     "size": [
+      1.2,
+      0.5,
+      0.5
+     ]
+    }
+   ]
+  },
+  "cornerCorridor": {
+   "id": "cornerCorridor",
+   "name": "Corner Corridor",
+   "center": [
+    0,
+    0
+   ],
+   "size": [
+    8,
+    8
+   ],
+   "min": [
+    -4,
+    -4
+   ],
+   "max": [
+    4,
+    4
+   ],
+   "dark": false,
+   "locked": false,
+   "job": null,
+   "isExit": false,
+   "safe": false,
+   "searchPoint": "the window seat",
+   "mood": {
+    "color": "#ffd8b0",
+    "intensity": 0.9,
+    "ambient": 0.75
+   },
+   "doors": [
+    "south",
+    "east"
+   ],
+   "walls": [
+    {
+     "id": "cornerCorridor:north:0",
+     "side": "north",
+     "min": [
+      -4,
+      -4
+     ],
+     "max": [
+      4,
+      -3.85
+     ]
+    },
+    {
+     "id": "cornerCorridor:east:1",
+     "side": "east",
+     "min": [
+      3.85,
+      -3.85
+     ],
+     "max": [
+      4,
+      -0.6
+     ]
+    },
+    {
+     "id": "cornerCorridor:east:2",
+     "side": "east",
+     "min": [
+      3.85,
+      0.6
+     ],
+     "max": [
+      4,
+      3.85
+     ]
+    },
+    {
+     "id": "cornerCorridor:south:3",
+     "side": "south",
+     "min": [
+      -4,
+      3.85
+     ],
+     "max": [
+      -0.6,
+      4
+     ]
+    },
+    {
+     "id": "cornerCorridor:south:4",
+     "side": "south",
+     "min": [
+      0.6,
+      3.85
+     ],
+     "max": [
+      4,
+      4
+     ]
+    },
+    {
+     "id": "cornerCorridor:west:5",
+     "side": "west",
+     "min": [
+      -4,
+      -3.85
+     ],
+     "max": [
+      -3.85,
+      3.85
+     ]
+    }
+   ],
+   "doorways": [
+    {
+     "side": "east",
+     "axis": "z",
+     "center": [
+      4,
+      0
+     ],
+     "width": 1.2
+    },
+    {
+     "side": "south",
+     "axis": "x",
+     "center": [
+      0,
+      4
+     ],
+     "width": 1.2
+    }
+   ],
+   "furniture": [
+    {
+     "kind": "windowSeat",
+     "center": [
+      -3.1,
+      -3.1
+     ],
+     "size": [
+      1.3,
+      0.5,
+      1.3
+     ]
+    },
+    {
+     "kind": "plant",
+     "center": [
+      -3.1,
+      3.1
+     ],
+     "size": [
+      0.6,
+      1.3,
+      0.6
+     ]
+    }
+   ]
+  },
+  "infirmary1": {
+   "id": "infirmary1",
+   "name": "Infirmary",
+   "center": [
+    0,
+    0
+   ],
+   "size": [
+    8,
+    8
+   ],
+   "min": [
+    -4,
+    -4
+   ],
+   "max": [
+    4,
+    4
+   ],
+   "dark": false,
+   "locked": false,
+   "job": "infirmary",
+   "isExit": false,
+   "safe": false,
+   "searchPoint": "the medicine cabinet",
+   "mood": {
+    "color": "#e6eeff",
+    "intensity": 1,
+    "ambient": 0.8
+   },
+   "doors": [
+    "south",
+    "east"
+   ],
+   "walls": [
+    {
+     "id": "infirmary1:north:0",
+     "side": "north",
+     "min": [
+      -4,
+      -4
+     ],
+     "max": [
+      4,
+      -3.85
+     ]
+    },
+    {
+     "id": "infirmary1:east:1",
+     "side": "east",
+     "min": [
+      3.85,
+      -3.85
+     ],
+     "max": [
+      4,
+      -0.6
+     ]
+    },
+    {
+     "id": "infirmary1:east:2",
+     "side": "east",
+     "min": [
+      3.85,
+      0.6
+     ],
+     "max": [
+      4,
+      3.85
+     ]
+    },
+    {
+     "id": "infirmary1:south:3",
+     "side": "south",
+     "min": [
+      -4,
+      3.85
+     ],
+     "max": [
+      -0.6,
+      4
+     ]
+    },
+    {
+     "id": "infirmary1:south:4",
+     "side": "south",
+     "min": [
+      0.6,
+      3.85
+     ],
+     "max": [
+      4,
+      4
+     ]
+    },
+    {
+     "id": "infirmary1:west:5",
+     "side": "west",
+     "min": [
+      -4,
+      -3.85
+     ],
+     "max": [
+      -3.85,
+      3.85
+     ]
+    }
+   ],
+   "doorways": [
+    {
+     "side": "east",
+     "axis": "z",
+     "center": [
+      4,
+      0
+     ],
+     "width": 1.2
+    },
+    {
+     "side": "south",
+     "axis": "x",
+     "center": [
+      0,
+      4
+     ],
+     "width": 1.2
+    }
+   ],
+   "furniture": [
+    {
+     "kind": "infirmaryBed",
+     "center": [
+      0,
+      -2.9000000000000004
+     ],
+     "size": [
+      2,
+      0.6,
+      1.8
+     ]
+    },
+    {
+     "kind": "medicineCabinet",
+     "center": [
+      -3.5500000000000003,
+      0
+     ],
+     "size": [
+      0.5,
+      1.9,
+      1.4
+     ]
+    },
+    {
+     "kind": "stool",
+     "center": [
+      3.1,
+      3.1
+     ],
+     "size": [
+      0.7,
+      0.9,
+      0.7
+     ]
+    }
+   ]
+  },
+  "linenStore1": {
+   "id": "linenStore1",
+   "name": "Linen Store",
+   "center": [
+    0,
+    0
+   ],
+   "size": [
+    8,
+    8
+   ],
+   "min": [
+    -4,
+    -4
+   ],
+   "max": [
+    4,
+    4
+   ],
+   "dark": false,
+   "locked": false,
+   "job": "linenStore",
+   "isExit": false,
+   "safe": false,
+   "searchPoint": "the linen shelves",
+   "mood": {
+    "color": "#e8d8b8",
+    "intensity": 0.8,
+    "ambient": 0.6
+   },
+   "doors": [
+    "south"
+   ],
+   "walls": [
+    {
+     "id": "linenStore1:north:0",
+     "side": "north",
+     "min": [
+      -4,
+      -4
+     ],
+     "max": [
+      4,
+      -3.85
+     ]
+    },
+    {
+     "id": "linenStore1:east:1",
+     "side": "east",
+     "min": [
+      3.85,
+      -3.85
+     ],
+     "max": [
+      4,
+      3.85
+     ]
+    },
+    {
+     "id": "linenStore1:south:2",
+     "side": "south",
+     "min": [
+      -4,
+      3.85
+     ],
+     "max": [
+      -0.6,
+      4
+     ]
+    },
+    {
+     "id": "linenStore1:south:3",
+     "side": "south",
+     "min": [
+      0.6,
+      3.85
+     ],
+     "max": [
+      4,
+      4
+     ]
+    },
+    {
+     "id": "linenStore1:west:4",
+     "side": "west",
+     "min": [
+      -4,
+      -3.85
+     ],
+     "max": [
+      -3.85,
+      3.85
+     ]
+    }
+   ],
+   "doorways": [
+    {
+     "side": "south",
+     "axis": "x",
+     "center": [
+      0,
+      4
+     ],
+     "width": 1.2
+    }
+   ],
+   "furniture": [
+    {
+     "kind": "linenShelf",
+     "center": [
+      0,
+      -3.5500000000000003
+     ],
+     "size": [
+      3,
+      1.8,
+      0.5
+     ]
+    },
+    {
+     "kind": "linenShelf",
+     "center": [
+      -3.5500000000000003,
+      0
+     ],
+     "size": [
+      0.5,
+      1.8,
+      3
+     ]
+    },
+    {
+     "kind": "laundryBasket",
+     "center": [
+      3.1,
+      3.1
+     ],
+     "size": [
+      0.7,
+      0.7,
+      0.7
+     ]
+    }
+   ]
+  },
+  "linenStore2": {
+   "id": "linenStore2",
+   "name": "Linen Store",
+   "center": [
+    0,
+    0
+   ],
+   "size": [
+    8,
+    8
+   ],
+   "min": [
+    -4,
+    -4
+   ],
+   "max": [
+    4,
+    4
+   ],
+   "dark": false,
+   "locked": false,
+   "job": "linenStore",
+   "isExit": false,
+   "safe": false,
+   "searchPoint": "the linen press",
+   "mood": {
+    "color": "#e8d8b8",
+    "intensity": 0.8,
+    "ambient": 0.6
+   },
+   "doors": [
+    "south"
+   ],
+   "walls": [
+    {
+     "id": "linenStore2:north:0",
+     "side": "north",
+     "min": [
+      -4,
+      -4
+     ],
+     "max": [
+      4,
+      -3.85
+     ]
+    },
+    {
+     "id": "linenStore2:east:1",
+     "side": "east",
+     "min": [
+      3.85,
+      -3.85
+     ],
+     "max": [
+      4,
+      3.85
+     ]
+    },
+    {
+     "id": "linenStore2:south:2",
+     "side": "south",
+     "min": [
+      -4,
+      3.85
+     ],
+     "max": [
+      -0.6,
+      4
+     ]
+    },
+    {
+     "id": "linenStore2:south:3",
+     "side": "south",
+     "min": [
+      0.6,
+      3.85
+     ],
+     "max": [
+      4,
+      4
+     ]
+    },
+    {
+     "id": "linenStore2:west:4",
+     "side": "west",
+     "min": [
+      -4,
+      -3.85
+     ],
+     "max": [
+      -3.85,
+      3.85
+     ]
+    }
+   ],
+   "doorways": [
+    {
+     "side": "south",
+     "axis": "x",
+     "center": [
+      0,
+      4
+     ],
+     "width": 1.2
+    }
+   ],
+   "furniture": [
+    {
+     "kind": "linenPress",
+     "center": [
+      0,
+      -3.5000000000000004
+     ],
+     "size": [
+      2.4,
+      1.6,
+      0.6
+     ]
+    },
+    {
+     "kind": "linenShelf",
+     "center": [
+      3.5500000000000003,
+      0
+     ],
+     "size": [
+      0.5,
+      1.8,
+      3
+     ]
+    },
+    {
+     "kind": "foldingTable",
+     "center": [
+      -3.1,
+      3.1
+     ],
+     "size": [
+      0.9,
+      0.8,
+      1
+     ]
+    }
+   ]
+  },
+  "suite416": {
+   "id": "suite416",
+   "name": "Guest Suite 416",
+   "center": [
+    0,
+    0
+   ],
+   "size": [
+    8,
+    8
+   ],
+   "min": [
+    -4,
+    -4
+   ],
+   "max": [
+    4,
+    4
+   ],
+   "dark": false,
+   "locked": true,
+   "job": null,
+   "isExit": false,
+   "safe": false,
+   "searchPoint": "the bedside table",
+   "mood": {
+    "color": "#ffd8a8",
+    "intensity": 1.1,
+    "ambient": 0.85
+   },
+   "doors": [
+    "south"
+   ],
+   "walls": [
+    {
+     "id": "suite416:north:0",
+     "side": "north",
+     "min": [
+      -4,
+      -4
+     ],
+     "max": [
+      4,
+      -3.85
+     ]
+    },
+    {
+     "id": "suite416:east:1",
+     "side": "east",
+     "min": [
+      3.85,
+      -3.85
+     ],
+     "max": [
+      4,
+      3.85
+     ]
+    },
+    {
+     "id": "suite416:south:2",
+     "side": "south",
+     "min": [
+      -4,
+      3.85
+     ],
+     "max": [
+      -0.6,
+      4
+     ]
+    },
+    {
+     "id": "suite416:south:3",
+     "side": "south",
+     "min": [
+      0.6,
+      3.85
+     ],
+     "max": [
+      4,
+      4
+     ]
+    },
+    {
+     "id": "suite416:west:4",
+     "side": "west",
+     "min": [
+      -4,
+      -3.85
+     ],
+     "max": [
+      -3.85,
+      3.85
+     ]
+    }
+   ],
+   "doorways": [
+    {
+     "side": "south",
+     "axis": "x",
+     "center": [
+      0,
+      4
+     ],
+     "width": 1.2
+    }
+   ],
+   "furniture": [
+    {
+     "kind": "bed",
+     "center": [
+      0,
+      -2.9000000000000004
+     ],
+     "size": [
+      2,
+      0.6,
+      1.8
+     ]
+    },
+    {
+     "kind": "wardrobe",
+     "center": [
+      3.5000000000000004,
+      0
+     ],
+     "size": [
+      0.6,
+      2.1,
+      1.4
+     ]
+    },
+    {
+     "kind": "chair",
+     "center": [
+      -3.1,
+      3.1
+     ],
+     "size": [
+      0.7,
+      0.9,
+      0.7
+     ]
+    }
+   ]
+  },
+  "housekeeping": {
+   "id": "housekeeping",
+   "name": "Housekeeping Store",
+   "center": [
+    0,
+    0
+   ],
+   "size": [
+    8,
+    8
+   ],
+   "min": [
+    -4,
+    -4
+   ],
+   "max": [
+    4,
+    4
+   ],
+   "dark": true,
+   "locked": false,
+   "job": null,
+   "isExit": false,
+   "safe": false,
+   "searchPoint": "the linen shelves",
+   "mood": {
+    "color": "#b8c2d0",
+    "intensity": 0.45,
+    "ambient": 0.32
+   },
+   "doors": [
+    "south"
+   ],
+   "walls": [
+    {
+     "id": "housekeeping:north:0",
+     "side": "north",
+     "min": [
+      -4,
+      -4
+     ],
+     "max": [
+      4,
+      -3.85
+     ]
+    },
+    {
+     "id": "housekeeping:east:1",
+     "side": "east",
+     "min": [
+      3.85,
+      -3.85
+     ],
+     "max": [
+      4,
+      3.85
+     ]
+    },
+    {
+     "id": "housekeeping:south:2",
+     "side": "south",
+     "min": [
+      -4,
+      3.85
+     ],
+     "max": [
+      -0.6,
+      4
+     ]
+    },
+    {
+     "id": "housekeeping:south:3",
+     "side": "south",
+     "min": [
+      0.6,
+      3.85
+     ],
+     "max": [
+      4,
+      4
+     ]
+    },
+    {
+     "id": "housekeeping:west:4",
+     "side": "west",
+     "min": [
+      -4,
+      -3.85
+     ],
+     "max": [
+      -3.85,
+      3.85
+     ]
+    }
+   ],
+   "doorways": [
+    {
+     "side": "south",
+     "axis": "x",
+     "center": [
+      0,
+      4
+     ],
+     "width": 1.2
+    }
+   ],
+   "furniture": [
+    {
+     "kind": "shelf",
+     "center": [
+      0,
+      -3.5500000000000003
+     ],
+     "size": [
+      3,
+      1.8,
+      0.5
+     ]
+    },
+    {
+     "kind": "shelf",
+     "center": [
+      3.5500000000000003,
+      0
+     ],
+     "size": [
+      0.5,
+      1.8,
+      3
+     ]
+    },
+    {
+     "kind": "cart",
+     "center": [
+      -3.1,
+      3.1
+     ],
+     "size": [
+      0.8,
+      1,
+      1.1
+     ]
+    }
+   ]
+  },
+  "exit": {
+   "id": "exit",
+   "name": "Fire Exit",
+   "center": [
+    0,
+    0
+   ],
+   "size": [
+    8,
+    8
+   ],
+   "min": [
+    -4,
+    -4
+   ],
+   "max": [
+    4,
+    4
+   ],
+   "dark": false,
+   "locked": false,
+   "job": null,
+   "isExit": true,
+   "safe": true,
+   "searchPoint": null,
+   "mood": {
+    "color": "#d7ebff",
+    "intensity": 1.2,
+    "ambient": 0.7
+   },
+   "doors": [
+    "south"
+   ],
+   "walls": [
+    {
+     "id": "exit:north:0",
+     "side": "north",
+     "min": [
+      -4,
+      -4
+     ],
+     "max": [
+      4,
+      -3.85
+     ]
+    },
+    {
+     "id": "exit:east:1",
+     "side": "east",
+     "min": [
+      3.85,
+      -3.85
+     ],
+     "max": [
+      4,
+      3.85
+     ]
+    },
+    {
+     "id": "exit:south:2",
+     "side": "south",
+     "min": [
+      -4,
+      3.85
+     ],
+     "max": [
+      -0.6,
+      4
+     ]
+    },
+    {
+     "id": "exit:south:3",
+     "side": "south",
+     "min": [
+      0.6,
+      3.85
+     ],
+     "max": [
+      4,
+      4
+     ]
+    },
+    {
+     "id": "exit:west:4",
+     "side": "west",
+     "min": [
+      -4,
+      -3.85
+     ],
+     "max": [
+      -3.85,
+      3.85
+     ]
+    }
+   ],
+   "doorways": [
+    {
+     "side": "south",
+     "axis": "x",
+     "center": [
+      0,
+      4
+     ],
+     "width": 1.2
+    }
+   ],
+   "furniture": [
+    {
+     "kind": "exitDoor",
+     "center": [
+      0,
+      -3.6500000000000004
+     ],
+     "size": [
+      1.6,
+      2.4,
+      0.3
+     ]
+    },
+    {
+     "kind": "crate",
+     "center": [
+      -3.1,
+      -3.1
+     ],
+     "size": [
+      0.8,
+      0.8,
+      0.8
+     ]
+    }
+   ]
+  }
+ }
+}

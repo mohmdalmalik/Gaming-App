@@ -1083,3 +1083,24 @@ rounds, exit median round 4, 13 tiles, 15 meetings (5.37 a round), never closed 
    keep-or-leave prompts in a row.
 6. Open your hand while walking into a room where someone stands: when the meeting starts, the hand
    closes (nobody else should ever see your cards).
+
+
+# Part 3 — escape rule, locked doors, every room in the reference style, card art (in progress)
+
+**Status: in progress.** The owner asked for: locked doors that look different, escaping to cost an action
+(approved before/after: walk into the Fire Exit, then Escape costs 1 AP), the interface bug after a
+possession, every room designed to match `docs/art-reference.jpg` as well as the lobby, card art, and
+QA. Work continues until all rooms are done; if it pauses, pick up from the checklist below.
+
+- [x] Escape costs 1 AP (engine `escape()`, Escape button in the Fire Exit, rules doc, bots, tests)
+- [x] Locked rooms keep a shut, padlocked oxblood door with a red glow until opened (browser-lobby 7b)
+- [x] After a voluntary lobby trade the device goes back to the guest whose turn it is (it stayed with the
+      other guest); a guest converted mid-trade reads it once
+- [ ] Rooms: `tools/room-pipeline/` builds every tile like the lobby (walnut/wallpaper/tile/plaster walls
+      cut at 2.4 m, baked light + AO, furniture on the game's footprints, shared albedo atlas). Loader:
+      `dressBakedTile` in `src/render/bakedRoom.js` (turns the model with the tile, cutaway per wall).
+      Steps: `node tools/room-pipeline/dump_rooms.mjs > tools/room-pipeline/rooms.json`,
+      `python3 tools/room-pipeline/textures_rooms.py`, `tools/room-pipeline/build_all.sh 1024 48`,
+      then `node tools/room-pipeline/shoot.mjs --rooms <ids>` to look at them in the game.
+- [ ] Card art for every card (a helper renders them in Blender into `assets/cards/`)
+- [ ] QA: every room from four angles, performance with many rooms, all test suites, docs

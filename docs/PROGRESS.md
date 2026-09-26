@@ -1085,6 +1085,17 @@ rounds, exit median round 4, 13 tiles, 15 meetings (5.37 a round), never closed 
    closes (nobody else should ever see your cards).
 
 
+# The six guests, modelled to the owner's sheets (2026-09-27) — current
+
+**Status: all six guests are in the game with their own models and portraits; polish rounds continue.**
+- Walk: heel-to-toe steps by IK, calmer pace (~3.5 steps/s instead of ~5.7), looser arm swing (all guests).
+- Victor rebuilt with the shared kit; Marcus, Henry (suited) and Eleanor, Clara, Beatrice (dress) new.
+- Honest similarity to the sheets ~80–88% per view; hair gloss is the common remaining gap (matte
+  materials by design). Colours solved for the lobby light (`lineup.mjs` checks all six in the real game).
+- In progress when this was written: Eleanor/Beatrice brows from the game camera, Beatrice's hair
+  silhouette (rounder curls, scalloped edge).
+- How to rebuild / compare: README "Character pipeline", `tools/char-pipeline/README.md`.
+
 # Fix — stuck in front of a locked door (2026-09-26)
 
 **Status: fixed, tested, committed.** Owner report: walked up to a closed door, opened it, the room

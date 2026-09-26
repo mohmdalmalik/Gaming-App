@@ -26,7 +26,7 @@ list). Two ways to play the same rules, chosen on the start screen:
   wins. A testing tool for the real online game.
 
 **Online multiplayer is not implemented.** There is no server, no networking, no accounts and no
-database in this project. No real art beyond the lobby and Victor (the other rooms are grey boxes),
+database in this project. No real art beyond the baked rooms and the six guests,
 no sound, no menu yet.
 
 ## Open the preview
@@ -128,16 +128,21 @@ tests/                Node checks (rules-check, logic-check) + a headless browse
 ```
 
 ## Character pipeline (Blender → glTF → game)
-Characters are built headless with Blender as a Python module and exported as `.glb`:
+All six guests (Victor, Eleanor, Marcus, Beatrice, Henry, Clara) are built headless with Blender as a
+Python module from the owner's reference sheets (`tools/char-pipeline/ref/*-sheet.png`) and exported as
+`.glb` to `assets/characters/`. One shared builder and rig: `guest_kit.py` (heads, faces, hair, suits,
+hands, shoes, rig, bake, export), `dress_kit.py` (bodices, sleeves, skirts, belts, pumps, updos/long hair),
+`guest_anim.py` + `gait.py` (the shared Idle and heel-to-toe Walk). Each guest is a spec in `guests/`.
 ```bash
 python3 -m pip install "bpy==4.2.0" pillow
-python3 tools/char-pipeline/make_victor.py          # rebuilds assets/characters/victor.glb
-node tools/char-pipeline/preview_glb.mjs --glb assets/characters/victor.glb --out tools/char-pipeline/shots/v
-node tools/char-pipeline/capture.mjs --out tools/char-pipeline/shots/g --rot 4   # real-game screenshots
-node tools/char-pipeline/portrait.mjs                 # interface portraits from the model
+python3 tools/char-pipeline/make_guest.py victor          # suited guests: victor, marcus, henry
+python3 tools/char-pipeline/make_dress_guest.py eleanor   # dress guests: eleanor, clara, beatrice
+python3 tools/char-pipeline/sheet_compare.py ...          # sheet panels vs renders (see its header)
+node tools/char-pipeline/lineup.mjs                       # all six in the real lobby light (+ scene cost)
+node tools/char-pipeline/portrait.mjs <name>              # interface portraits from the model
 ```
-(`tools/char-pipeline/README.md` lists every tool; `docs/CHARACTER_GUI_CHECKPOINT.md` is the
-working checkpoint for the character + interface phase.)
+(`tools/char-pipeline/README.md` lists every tool. `make_victor.py` is Victor's older builder, kept for
+reference.)
 
 ## Starting-room pipeline (Blender → baked glTF → game)
 The starting room is one model with its light baked in (soft sky light, contact shadows, lamp and

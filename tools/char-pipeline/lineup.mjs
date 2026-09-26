@@ -39,5 +39,9 @@ await page.waitForTimeout(800);
 await page.evaluate(z => window.__game.rig && window.__game.rig.zoomBy ? window.__game.rig.zoomBy(z) : null, ZOOM);
 await page.waitForTimeout(1500);
 await page.screenshot({ path: OUT });
+// scene cost with all six guests on screen (one frame's render info)
+const stats = await page.evaluate(() => { const r = window.__game.view.renderer; const t0 = performance.now(); r.render(window.__game.view.scene, window.__game.view.camera); const ms = performance.now() - t0;
+  return { calls: r.info.render.calls, triangles: r.info.render.triangles, programs: r.info.programs.length, geometries: r.info.memory.geometries, textures: r.info.memory.textures, renderMs: +ms.toFixed(1) }; });
+console.log(JSON.stringify({ stats }));
 console.log(JSON.stringify({ out: OUT, errors: errs.length ? errs : 'none' }));
 await browser.close();

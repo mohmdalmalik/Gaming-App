@@ -646,3 +646,24 @@ Target: `docs/art-reference.jpg` (style, palette and finish; not its layout or i
 - **Loaded when revealed.** A room's files are fetched the first time its door is opened (and cached for
   the next match), in keeping with "load rooms on demand" in the path to mobile apps.
 - **Flicker on a baked room** dims its whole light map with the bulb (mood.js), since the light is baked.
+
+## All six guests modelled to the owner's sheets (tools/char-pipeline/guest_kit.py, dress_kit.py)
+- **One builder, many guests.** Victor's hand-written builder was generalised into `guest_kit.py` (suited
+  guests) and `dress_kit.py` (dress guests); each guest is a spec in `tools/char-pipeline/guests/`. Same
+  rig and bone names for everyone, so the game loads any guest the same way (`outfit.model` in
+  `src/data/characters.js`, portraits in `src/ui/portrait.js`). Each GLB ≈ 28–32k triangles, ≈1.1 MB.
+- **Measured against the sheets.** Every guest was iterated against sheet panels (`sheet_compare.py`:
+  silhouette overlap per view + side-by-side) and checked in the real lobby (`lineup.mjs`). Honest
+  similarity is ~80–88% per view (silhouette overlap 0.85–0.93); the main remaining gap everywhere is
+  hair gloss — the sheets are glossy studio renders, the game uses matte Lambert materials on purpose
+  (a specular hotspot made Victor's hair read as a bald shiny dome, see earlier sections).
+- **Colours are solved for the hotel light, not the preview.** The lobby lamps are strongly warm; light
+  base colours washed out (navy → lavender, black shoes → brown). `guest_kit.PALETTE` / `lobby_base()`
+  pick bases that land on the sheet's colour under the measured lobby light, so the neutral preview reads
+  slightly more saturated than the sheets. The game view wins.
+- **Walk cadence.** At 2 m/s these short-legged guests would need ~5.7 steps/s for a fully planted walk,
+  which read as frantic. The walk is authored by foot placement + IK (`gait.py`: heel strike, foot flat,
+  heel rise, toe-off, swing) and the game uses 1.5× the planted-foot stride (`guest_anim.WALK_STRIDE_SCALE`),
+  giving ~3.5 steps/s with a slight foot glide that is hard to see from the game camera. Dress guests take
+  shorter steps (`walk_kw=dict(skirt=True)`) and their skirts are weighted to follow the legs.
+- **Scene cost** with all six on screen in the lobby: 144 draw calls, ~237k triangles, 11 shader programs.

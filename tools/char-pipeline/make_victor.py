@@ -761,51 +761,20 @@ def key(bname, frame, rx=0.0, ry=0.0, rz=0.0, loc=None):
     if loc is not None: pb.location = loc; pb.keyframe_insert('location', frame=frame)
 def new_action(name):
     arm.animation_data_create(); act = bpy.data.actions.new(name); act.use_fake_user = True; arm.animation_data.action = act; return act
-def fwd(a): return -a
-def stance_knee(phi): return max(0.0, math.sin(2 * math.pi * phi)) * 0.16 if phi < 0.5 else 0.0
-def swing_knee(phi): return 0.0 if phi < 0.5 else max(0.0, math.sin(2 * math.pi * (phi - 0.5))) * 1.05
-
-new_action('Walk'); WALK_N = 24; A_LEG = 0.50; A_ARM = 0.40
-def thigh_angle(phi):
-    c = math.cos(2 * math.pi * phi); return A_LEG * math.copysign(abs(c) ** 0.85, c)
-for f in range(WALK_N + 1):
-    t = f / WALK_N
-    for tag, phi in (('L', t), ('R', (t + 0.5) % 1.0)):
-        th = thigh_angle(phi); kn = stance_knee(phi) + swing_knee(phi)
-        ft = -(fwd(th) + kn) * 0.9 if phi < 0.5 else -(fwd(th) + kn) * 0.45 + 0.10 * math.sin(2 * math.pi * (phi - 0.5))
-        key(f'thigh.{tag}', f, rx=fwd(th)); key(f'shin.{tag}', f, rx=kn); key(f'foot.{tag}', f, rx=ft)
-        arm_ph = (phi + 0.5) % 1.0; ua = A_ARM * math.cos(2 * math.pi * arm_ph)
-        key(f'upperarm.{tag}', f, rx=fwd(ua), rz=-0.06 * (1 if tag == 'L' else -1))
-        key(f'forearm.{tag}', f, rx=fwd(0.16 + 0.28 * (0.5 + 0.5 * math.cos(2 * math.pi * arm_ph))))
-        key(f'hand.{tag}', f, rx=fwd(0.05))
-    bob = -0.020 * (0.5 + 0.5 * math.cos(4 * math.pi * t)); sway = 0.010 * math.sin(2 * math.pi * t)
-    key('hips', f, rz=0.06 * math.cos(2 * math.pi * t), loc=(sway, bob, 0.0))
-    key('spine', f, rx=0.05, rz=-0.045 * math.cos(2 * math.pi * t))
-    key('neck', f, rx=-0.03); key('head', f, rz=0.02 * math.cos(2 * math.pi * t), rx=0.01 * math.cos(4 * math.pi * t))
-    key('shoulder.L', f, ry=0.0); key('shoulder.R', f, ry=0.0)
-scene.frame_set(0); bpy.context.view_layer.update()
-def world(pb_name, tail=False):
-    pb = arm.pose.bones[pb_name]; return arm.matrix_world @ (pb.tail if tail else pb.head)
-STEP = abs(world('foot.L').y - world('foot.R').y); STRIDE = 2 * STEP
-toe_min = 9; toe_max = -9
-for f in range(WALK_N + 1):
-    scene.frame_set(f); bpy.context.view_layer.update()
-    for tag in ('L', 'R'):
-        tz = world(f'foot.{tag}', tail=True).z; toe_min = min(toe_min, tz); toe_max = max(toe_max, tz)
-print(f'REPORT step={STEP:.3f} stride={STRIDE:.3f} toe_z=[{toe_min:.3f},{toe_max:.3f}]')
-
-new_action('Idle'); IDLE_N = 72
-for f in range(IDLE_N + 1):
-    t = f / IDLE_N; br = math.sin(2 * math.pi * t); sw = math.sin(2 * math.pi * t * 0.5 + 0.8)
-    key('hips', f, rz=0.010 * sw, loc=(0.005 * sw, 0.004 * br, 0.0))
-    key('spine', f, rx=0.035 + 0.016 * br, rz=-0.007 * sw); key('neck', f, rx=-0.015)
-    key('head', f, rx=0.010 * math.sin(2 * math.pi * t + 0.9), rz=0.012 * math.sin(2 * math.pi * t * 0.5))
-    for tag, s in (('L', 1), ('R', -1)):
-        key(f'thigh.{tag}', f, rx=0.0); key(f'shin.{tag}', f, rx=0.0); key(f'foot.{tag}', f, rx=0.0)
-        key(f'upperarm.{tag}', f, rx=fwd(0.03 * br + 0.02), rz=-s * 0.06, ry=0.0)
-        key(f'forearm.{tag}', f, rx=fwd(0.14 + 0.03 * br)); key(f'hand.{tag}', f, rx=fwd(0.04)); key(f'shoulder.{tag}', f, ry=0.0)
+import guest_anim as GA
+HEEL_BACK, BALL_FWD = 0.062, 0.165                     # shoe: heel behind / ball of the foot ahead of the ankle
+CONTACT, STRIDE = GA.build_walk(bpy, arm, dict(hip=C['z_hip_joint'], knee=C['z_knee'], ankle=C['z_ankle'], heel=HEEL_BACK, ball=BALL_FWD))
+WALK_N = GA.WALK_N
+print(f'REPORT contact_stride={CONTACT:.3f} stride={STRIDE:.3f}')
+# planted-foot check: during flat-foot stance the left ankle must move back by CONTACT per cycle and keep its height
+_ys = []
+for f in range(4, 11):
+    scene.frame_set(f); bpy.context.view_layer.update(); pb = arm.pose.bones['foot.L']; w = arm.matrix_world @ pb.head; _ys.append((f, w.y, w.z))
+_sl = (_ys[-1][1] - _ys[0][1]) / ((_ys[-1][0] - _ys[0][0]) / WALK_N)
+print(f'REPORT planted ankle: moves {_sl:+.3f} m/cycle (expect +{CONTACT:.3f}: backward is +Y), height {min(z for _, _, z in _ys):.3f}..{max(z for _, _, z in _ys):.3f}')
+GA.build_idle(bpy, arm)
 bpy.ops.object.mode_set(mode='OBJECT')
-arm['strideLength'] = round(STRIDE, 4); arm['walkClipSeconds'] = round(WALK_N / FPS, 4); mesh['strideLength'] = round(STRIDE, 4)
+arm['strideLength'] = round(STRIDE, 4); arm['contactStride'] = round(CONTACT, 4); arm['walkClipSeconds'] = round(WALK_N / FPS, 4); mesh['strideLength'] = round(STRIDE, 4)
 
 tris = L.tri_count(mesh)
 print(f'REPORT tris={tris} materials={len(mesh.data.materials)} verts={len(mesh.data.vertices)} height={H}')

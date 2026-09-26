@@ -26,7 +26,7 @@ export const outfits = {
     // instead of building the placeholder box figure. Only Victor has one for this first review.
     // modelHeight places the active marker; strideLength is a fallback — the GLB carries the
     // measured value in its extras (tools/char-pipeline/make_victor.py prints it).
-    model: 'assets/characters/victor.glb', modelHeight: 1.66, strideLength: 1.083 },
+    model: 'assets/characters/victor.glb', modelHeight: 1.66, strideLength: 1.125 },
   dinnerJacket: { name: 'White dinner jacket', body: 'male', jacket: '#ece5d4', trousers: '#15151a', shirt: '#f7f5ef', neckwear: 'bow', neckwearColor: '#15151a', lapels: '#d5ccb8' },
   // Women: elegant, modest period dresses (silhouette: aline / column / full).
   dressEmerald: { name: 'Emerald A-line gown', body: 'female', bodice: '#1f6b4a', skirt: '#1f6b4a', skirtStyle: 'aline', sleeves: 'long', sash: '#c9a86a' },

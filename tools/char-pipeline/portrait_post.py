@@ -8,6 +8,7 @@ import sys, json, math
 from PIL import Image, ImageDraw, ImageFilter, ImageEnhance, ImageOps
 
 src, eyes_json, out_dir = sys.argv[1], sys.argv[2], sys.argv[3]
+name = sys.argv[4] if len(sys.argv) > 4 else 'victor'
 eyes = json.loads(eyes_json)
 im = Image.open(src).convert('RGB')
 W, H = im.size
@@ -20,8 +21,8 @@ cx0 = int(ex - cw / 2); cy0 = int(ey - ch * 0.37)
 cx0 = max(0, min(W - cw, cx0)); cy0 = max(0, min(H - ch, cy0))
 box = (cx0, cy0, cx0 + cw, cy0 + ch)
 bust = im.crop(box).resize((576, 768), Image.LANCZOS)
-bust.save(f'{out_dir}/victor.jpg', quality=90)
-print(f'portrait normal: crop={box} -> {out_dir}/victor.jpg')
+bust.save(f'{out_dir}/{name}.jpg', quality=90)
+print(f'portrait normal: crop={box} -> {out_dir}/{name}.jpg')
 
 # --- possessed variant ----------------------------------------------------------------------
 p = bust.copy()
@@ -54,5 +55,5 @@ gd = ImageDraw.Draw(glow)
 gd.ellipse((exr - rad * 2.4, eyr - rad * 2.4, exr + rad * 2.4, eyr + rad * 2.4), fill=(180, 107, 255, 110))
 glow = glow.filter(ImageFilter.GaussianBlur(rad * 0.9))
 p = Image.alpha_composite(p.convert('RGBA'), glow).convert('RGB')
-p.save(f'{out_dir}/victor-possessed.jpg', quality=90)
-print(f'portrait possessed: eye at ({exr:.0f},{eyr:.0f}) r={rad:.0f} -> {out_dir}/victor-possessed.jpg')
+p.save(f'{out_dir}/{name}-possessed.jpg', quality=90)
+print(f'portrait possessed: eye at ({exr:.0f},{eyr:.0f}) r={rad:.0f} -> {out_dir}/{name}-possessed.jpg')

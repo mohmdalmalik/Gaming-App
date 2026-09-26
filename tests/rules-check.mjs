@@ -9,13 +9,15 @@ import { lanternCount, countType, countableCount, hasEscapeLanterns } from '../s
 import {
   createState, activePlayer, nextPlayer, endTurn, enterRoom, checkWin, canEscape, openableDoors,
   usableDoorways, pendingEncounters, lockEncounter, hasEncounterLock, playersInRoom, canAffordRoute,
-  isLocked, isBarricaded, doorwayPassable, adjacentLockedRooms, convertToPossessed, dawnHasBroken, isFinalRound,
+  isLocked, isBarricaded, doorwayPassable, placeBarricade, adjacentLockedRooms, convertToPossessed, dawnHasBroken, isFinalRound,
 } from '../src/game/state.js';
 import {
   search, canSearch, useBandage, useUnlock, useBarricade, resolveFullHand, discardCard, overHandLimit,
   resolveTrade, resolveAttack, tradeableCards, drawCard, dropEverything, openDoor, escape,
   canUseRoom, useInfirmary, useSwitchboard, useHandMirror, useEspresso,
 } from '../src/game/actions.js';
+import { buildGrid, nearestWalkable } from '../src/game/grid.js';
+import { buildAllowed, planMove } from '../src/game/moves.js';
 
 let failures = 0;
 const check = (cond, msg) => { console.log((cond ? '  ok   ' : '  FAIL ') + msg); if (!cond) failures++; };
@@ -969,6 +971,47 @@ console.log('\nEspresso');
   check(useEspresso(s, A, 'es4').reason === 'finished' && A.hand.some(c => c.id === 'es4') && A.actionPoints === 4, 'refused once the match is over');
   s.finished = false; A.alive = false;
   check(useEspresso(s, A, 'es4').reason === 'dead', 'the dead cannot use one');
+}
+
+console.log('\nnever stuck beside a door that cannot be used');
+{
+  // A guest standing right at a closed door opens it and the room behind is locked (or a barricade
+  // goes up in front of them): the floor round that doorway is closed off, yet they must always be
+  // able to walk back into their room — and never through the doorway.
+  let cases = 0, free = 0, through = 0, freeCost = true;
+  for (let seed = 1; seed <= 120; seed++) {
+    const s = createState(floor, SIX, seed, { mode: 'hotseat' });
+    const p = activePlayer(s);
+    for (let step = 0; step < 40; step++) {
+      const doors = openDoors(floor); if (!doors.length) break;
+      const d = doors[(seed * 31 + step * 7) % doors.length];
+      p.currentRoom = d.room; p.actionPoints = 4; s.discovered.add(d.room);
+      let grid = buildGrid(floor, config);
+      const at = nearestWalkable(grid, d.center[0], d.center[1], 3, buildAllowed(s, floor, grid));
+      if (at < 0) continue;
+      const pos = grid.center(at);
+      const r = openDoor(s, floor, p, d.id);
+      if (!r.ok) continue;
+      if (!r.locked) {
+        if (step % 3) continue;
+        placeBarricade(s, p, r.doorway.id);   // the barricade case
+      }
+      cases++;
+      grid = buildGrid(floor, config);
+      const allowed = buildAllowed(s, floor, grid);
+      const back = planMove(s, floor, grid, config, p, pos, floor.rooms.get(d.room).center, allowed);
+      if (back.ok) free++;
+      if (back.ok && (back.cost !== 0 || back.rooms.some(id => id !== d.room))) freeCost = false;
+      const beyond = planMove(s, floor, grid, config, p, pos, r.room.center, allowed);
+      const farSide = new Set(grid.landings.get(r.doorway.id)[r.room.id]);
+      if (back.ok && back.cells.some(c => farSide.has(c))) through++;
+      if (beyond.ok && beyond.cells.some(c => farSide.has(c))) through++;
+      s.barricades.clear();
+    }
+  }
+  check(cases > 100 && free === cases, `standing at the door, the guest can always walk back into the room (${free}/${cases})`);
+  check(freeCost, 'and that walk stays in the room and costs nothing');
+  check(through === 0, 'but the route never goes through the locked or barricaded doorway');
 }
 
 console.log(failures ? `\n${failures} FAILED` : '\nALL RULES CHECKS PASSED');

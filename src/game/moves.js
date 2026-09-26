@@ -59,6 +59,29 @@ function throughDoorwayTarget(state, floor, grid, cfg, player, to, allowed) {
   return -1;
 }
 
+// A guest can end up standing on cells that are closed off — right in front of a door that
+// turned out to open onto a locked room, or where a barricade has just gone up. They may always
+// walk back out: the closed-off patch they stand in (on their own room's side only) is usable as
+// a way out, never as a destination and never into the room beyond.
+function escapeAllowed(grid, player, start, allowed) {
+  if (allowed(start)) return allowed;
+  const pocket = new Set([start]);
+  const stack = [start];
+  const { cols, rows, walkable } = grid;
+  while (stack.length) {
+    const idx = stack.pop();
+    const i = idx % cols, j = (idx - i) / cols;
+    for (const [di, dj] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const ni = i + di, nj = j + dj;
+      if (ni < 0 || nj < 0 || ni >= cols || nj >= rows) continue;
+      const n = nj * cols + ni;
+      if (pocket.has(n) || !walkable[n] || allowed(n) || grid.roomIdOf(n) !== player.currentRoom) continue;
+      pocket.add(n); stack.push(n);
+    }
+  }
+  return idx => allowed(idx) || pocket.has(idx);
+}
+
 // Plan a walk for `player` (a rules player from state.players) from `from` to the tap `to`.
 export function planMove(state, floor, grid, cfg, player, from, to, allowed) {
   if (state.finished) return { ok: false, reason: 'finished' };
@@ -68,7 +91,8 @@ export function planMove(state, floor, grid, cfg, player, from, to, allowed) {
   if (target < 0) return { ok: false, reason: 'noFloor' };
   const start = nearestWalkable(grid, from[0], from[1], 1.5, () => true);
   if (start < 0) return { ok: false, reason: 'noFloor' };
-  const cells = findPath(grid, start, target, allowed);
+  const walk = escapeAllowed(grid, player, start, allowed);
+  const cells = findPath(grid, start, target, walk);
   if (!cells) return { ok: false, reason: 'noPath' };
   // The room the player is actually standing in comes first, so a pending doorway crossing
   // (player half a cell short of the boundary) is counted too.
@@ -76,7 +100,7 @@ export function planMove(state, floor, grid, cfg, player, from, to, allowed) {
   if (rooms[0] !== player.currentRoom) rooms.unshift(player.currentRoom);
   const verdict = canAffordRoute(state, floor, player, rooms);
   if (!verdict.ok) return { ok: false, ...verdict, rooms };
-  const waypoints = smoothPath(grid, cells, allowed, cfg.player.clearance * 0.5);
+  const waypoints = smoothPath(grid, cells, walk, cfg.player.clearance * 0.5);
   waypoints[0] = [from[0], from[1]];
   return { ok: true, ...verdict, rooms, cells, waypoints };
 }

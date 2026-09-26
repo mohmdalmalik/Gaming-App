@@ -207,6 +207,57 @@ await game(l => window.__game.moveToRoom(l), locked);
 await settle();
 check(await game(() => window.__game.activePlayer().currentRoom) === locked, 'and can now be entered');
 
+console.log('\n5b. standing at a door that opens onto a locked room (never stuck)');
+{
+  // The owner's report: walk up to a closed door, open it, the room behind is locked — then the
+  // guest could not move at all. Replayed here with real taps on the screen.
+  const setup = await page.evaluate(async () => {
+    const g = window.__game;
+    const { tileFits } = await import('./src/game/hotel.js');
+    const def = g.floor.deck.find(t => t.id === 'suite416');
+    if (!def) return null;
+    const locked = id => g.state.lockedRooms.has(id);
+    for (const d of g.floor.frontier) {
+      const room = g.floor.rooms.get(d.room);
+      if (d.jammed || locked(d.room) || room.isExit || d.room === 'hall') continue;
+      if ([0, 1, 2, 3].some(r => tileFits(g.floor, def, d.cell, r, { isLocked: locked }))) return { room: d.room, door: d.id, center: d.center };
+    }
+    return null;
+  });
+  check(!!setup, 'found a closed door where a locked room can appear');
+  if (setup) {
+    await put(setup.room, 4);
+    await settle();
+    await page.waitForTimeout(1500);   // let the camera follow the guest to the room
+    // 1) tap the floor right in front of the door: the guest walks up to it
+    const inward = await game(s => { const c = window.__game.roomCenter(s.room); const dx = c[0] - s.center[0], dz = c[1] - s.center[1]; const l = Math.hypot(dx, dz); return [dx / l, dz / l]; }, setup);
+    const front = [setup.center[0] + inward[0] * 1.0, setup.center[1] + inward[1] * 1.0];   // just outside the "tap the door" zone
+    const tapGround = async ([x, z]) => { const sp = await game(([x, z]) => window.__game.groundToScreen(x, z), [x, z]); await page.touchscreen.tap(sp.x, sp.y); await page.waitForTimeout(120); };
+    await tapGround(front);
+    await settle();
+    const nearDoor = await game(s => { const m = window.__game.activeMover(); return Math.hypot(m.x - s.center[0], m.z - s.center[1]); }, setup);
+    check(nearDoor < 1.8, `the guest walks up to the closed door (${nearDoor.toFixed(2)} m away)`);
+    // 2) tap the door and confirm: it opens onto a locked room
+    await game(() => window.__game.stackDeck('suite416'));
+    await tapGround(setup.center);
+    check(await visible('#confirm-bar'), 'tapping the door offers to open it');
+    await tap('#btn-confirm-move');
+    await page.waitForTimeout(300);
+    check(await game(() => window.__game.lockedRooms().includes('suite416')), 'the door opens onto a locked room');
+    // 3) tapping the door again only explains; then tapping the room's floor walks away
+    await tapGround(setup.center);
+    check(/locked/i.test(await page.textContent('#toast')), 'tapping the locked door explains it');
+    const start = await game(() => { const m = window.__game.activeMover(); return [m.x, m.z]; });
+    const c = await game(r => window.__game.roomCenter(r), setup.room);
+    await tapGround([c[0] + 0.6, c[1] + 0.6]);
+    await settle();
+    const after = await game(() => { const g = window.__game, m = g.activeMover(); return { x: m.x, z: m.z, room: g.activePlayer().currentRoom, ap: g.activePlayer().actionPoints }; });
+    check(Math.hypot(after.x - start[0], after.z - start[1]) > 1.5 && after.room === setup.room, 'the guest can walk away from the locked door, back into the room');
+    check(after.ap === 3, 'and that walk is free (only the door cost 1)');
+    await game(() => { window.__game.state.lockedRooms.delete('suite416'); window.__game.discovery.refresh(); window.__game.refresh(); });
+  }
+}
+
 console.log('\n6. barricade');
 await put(opened, 4);
 await give(0, [{ id: 'bar', type: 'barricade' }]);

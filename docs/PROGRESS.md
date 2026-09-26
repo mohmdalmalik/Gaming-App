@@ -1085,7 +1085,18 @@ rounds, exit median round 4, 13 tiles, 15 meetings (5.37 a round), never closed 
    closes (nobody else should ever see your cards).
 
 
-# Part 3 — escape rule, locked doors, every room in the reference style, card art (current)
+# Fix — stuck in front of a locked door (2026-09-26)
+
+**Status: fixed, tested, committed.** Owner report: walked up to a closed door, opened it, the room
+behind was locked, and then the guest could not move at all. Cause: the floor just inside a doorway that
+cannot be used (a locked room, a barricade) is closed off so no route threads through it — and that
+included the spot the guest was already standing on, so every route from there failed (it happened
+every time the guest stood within about 1.2 m of the door). Fix (`src/game/moves.js`): a guest standing
+on closed-off floor may always walk back out into their own room — never through the doorway, and the
+walk stays free. Tests: `rules-check` (1,146 locked/barricaded doors opened from right in front) and
+`browser-practice` 5b (the owner's steps with real taps); both fail on the old code.
+
+# Part 3 — escape rule, locked doors, every room in the reference style, card art
 
 **Status: done, tested, committed.**
 

@@ -123,3 +123,91 @@ export async function dressBaked(view, spec, cfg) {
   for (const w of view.walls) view.setWallHeight(w, w.height);
   return root;
 }
+
+// ---- Room tiles --------------------------------------------------------------------------------
+// Every other room is a tile built the same way (tools/room-pipeline/make_room.py), in the tile's
+// DEFAULT orientation: the model is turned with the tile here. Walls are simpler than the lobby's:
+// each game wall segment has ONE upper part, W_<side>_<k>_up (k = 0 for a plain side; 0 / 1 for the
+// two halves of a side with a doorway, along the side's axis), named in the model's own sides. The
+// lower walls, the floor and the furniture never fold, so they are merged into "static" and "floor".
+// All tiles share ONE albedo texture (rooms/albedo.jpg: floors, rugs, paintings, wallpaper…).
+const SIDES = ['north', 'east', 'south', 'west'];
+let albedo = null;
+function sharedAlbedo(path) {
+  if (!albedo) {
+    albedo = loadTexture(BASE + path).then(t => {
+      t.flipY = false; t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4;
+      t.wrapS = t.wrapT = THREE.ClampToEdgeWrapping;
+      return t;
+    });
+  }
+  return albedo;
+}
+
+export async function dressBakedTile(view, spec, cfg) {
+  const [{ gltf, light, floorLight }, map] = await Promise.all([loadAssets(spec), sharedAlbedo(spec.albedo)]);
+  const intensity = LM_SCALE * Math.PI * (spec.exposure ?? 1);
+  const mats = new Map();
+  const convert = (src, isFloor) => {
+    const key = `${src.name}|${isFloor}`;
+    let m = mats.get(key);
+    if (m) return m;
+    const lm = isFloor ? floorLight : light;
+    if (src.name === 'glow') m = new THREE.MeshBasicMaterial({ vertexColors: true });
+    else if (src.name === 'tex') m = new THREE.MeshBasicMaterial({ map, lightMap: lm, lightMapIntensity: intensity });
+    else m = new THREE.MeshBasicMaterial({ vertexColors: true, lightMap: lm, lightMapIntensity: intensity });
+    m.name = src.name;
+    mats.set(key, m);
+    if (m.lightMap) (view.bakedMats ||= []).push({ mat: m, base: intensity });   // (mood.js flickers these)
+    return m;
+  };
+  const root = gltf.scene.clone(true);
+  const nodes = new Map();
+  root.traverse(o => {
+    if (o.name) nodes.set(o.name, o);
+  });
+  for (const [name, node] of nodes) {
+    const isFloor = name === 'floor' || name.startsWith('floor');
+    node.traverse(o => {
+      if (o.isMesh) o.material = Array.isArray(o.material) ? o.material.map(m => convert(m, isFloor)) : convert(o.material, isFloor);
+    });
+  }
+  for (const child of view.group.children) child.visible = false;
+  // The tile turns about its centre: a quarter turn clockwise (seen from above) per step of
+  // `room.rotation`, exactly as src/game/hotel.js turns the tile's doorways and furniture.
+  const room = view.room, rot = room.rotation || 0, [cx, cz] = room.center;
+  const wrapper = new THREE.Group();
+  wrapper.name = `tile:${room.tile || room.id}`;
+  wrapper.position.set(cx, 0, cz);
+  wrapper.rotation.y = -rot * Math.PI / 2;
+  wrapper.add(root);
+  view.group.add(wrapper);
+
+  // Hook each game wall segment up to its model part.
+  const back = (4 - rot) % 4;
+  for (const w of view.walls) {
+    let x = w.wall.center[0] - cx, z = w.wall.center[1] - cz;
+    for (let k = 0; k < back; k++) [x, z] = [-z, x];                        // world -> model
+    const side = SIDES[(SIDES.indexOf(w.wall.side) + back) % 4];
+    const hasDoor = room.doorSides.has(SIDES[(SIDES.indexOf(side) + rot) % 4]);
+    const along = side === 'north' || side === 'south' ? x : z;
+    const up = nodes.get(`W_${side}_${hasDoor ? (along < 0 ? 0 : 1) : 0}_up`);
+    w.baked = up ? [{ up }] : null;
+    if (!up) console.warn(`baked tile ${room.id}: no model part for wall ${w.wall.id}`);
+  }
+  const H = cfg.walls.height, stub = cfg.cutaway.stubHeight;
+  const plain = view.setWallHeight.bind(view);
+  view.setWallHeight = (w, height) => {
+    if (!w.baked) { plain(w, height); return; }
+    w.height = height;
+    const k = easeOutCubic(view.revealT);
+    const t = THREE.MathUtils.clamp((height - stub) / (H - stub), 0, 1) * k;
+    for (const part of w.baked) {
+      part.up.scale.y = Math.max(0.001, t);
+      part.up.visible = t > 0.02;
+    }
+    wrapper.scale.y = Math.max(0.02, k);        // the room rises into view as it is revealed
+  };
+  for (const w of view.walls) view.setWallHeight(w, w.height);
+  return root;
+}

@@ -46,6 +46,10 @@ export function createMood(roomViews, hemi, cfg, scene) {
         if (!view.group.visible) continue;
         const reveal = easeOutCubic(view.revealT);
         const fl = view.room.mood.flicker ? flickerLevel(time, view.room.mood.flicker, view.seed) : 1;
+        // A baked room's light is in its light map: a flickering room dims the whole map with the bulb.
+        if (view.bakedMats && view.room.mood.flicker) {
+          for (const b of view.bakedMats) b.mat.lightMapIntensity = b.base * (0.45 + 0.55 * fl);
+        }
         for (const L of view.lights) {
           const d = focus ? Math.hypot(L.pos.x - focus.x, L.pos.z - focus.z) : 0;
           candidates.push({ L, d, intensity: L.base * reveal * fl });

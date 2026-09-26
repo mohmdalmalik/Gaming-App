@@ -11,7 +11,7 @@
 import * as THREE from 'three';
 import { loadModel, instancedFromModel } from './models.js';
 import { roomDressings } from '../data/dressing.js';
-import { dressBaked } from './bakedRoom.js';
+import { dressBaked, dressBakedTile } from './bakedRoom.js';
 
 const rad = deg => (deg || 0) * Math.PI / 180;
 
@@ -73,6 +73,7 @@ async function dressOne(view, floor, cfg, spec) {
 
   // A baked room (the starting room): one model built and lit offline replaces the shell, the
   // furniture and the decoration. Only the lamp lights below still apply (they light the guests).
+  if (spec.style === 'baked' && spec.tile) { await dressBakedTile(view, spec, cfg); return; }
   if (spec.style === 'baked') {
     await dressBaked(view, spec, cfg);
     applyLampLights(view, spec);

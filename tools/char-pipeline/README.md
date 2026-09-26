@@ -109,7 +109,9 @@ Kit API (`g = Guest(name, CFG, COLOURS)`; heights in CFG/specs are % of standing
 - context: `g.H, g.zp, g.C, g.M` (materials named after the colour keys, e.g. `skin` -> `Skin`), `g.add(ob, mat, bone)`,
   `g.add_w(ob, mat, fn(co)->{bone: w})`, `g.add_split(...)`; `g.set_head(W, DF, DB, E, bulges)` then `g.skull_at / skull_pt /
   face_y / face_normal / on_face / flatten_to_face / inside_skull`. `CFG['head_y']` moves the head back from the chest.
-- head: `head(g, cull_in=g.hair_covers)`, `ears`, `eyes` (glossy black `eye`), `brows` (`CFG['brow']`), `nose`, `mouth`
+- head: `head(g, nlon, nlat, cull_in=g.hair_covers)`, `ears` (`CFG['ear_style']`: `'round'` = the sheets' thick-rimmed
+  C-shaped ear: ear_h/ear_w/ear_out/ear_y/ear_tilt (flare)/ear_thick/ear_rim/ear_bowl/ear_sink/ear_seg; `'shell'` = the
+  older thin ear), `eyes` (glossy black `eye`; their centre is written to the armature extras as `eyeCentre` in glTF space), `brows` (`CFG['brow']`), `nose`, `mouth`
   (`CFG['mouth']`), optional `moustache` (`CFG['moustache']`, Victor-style), `neck`.
 - hair: `hair_shell(g, wr, wl, front, back, expo, hairline, edge, slope, grooves, thin_below, ...)`: one smooth radial shell
   whose silhouette comes from measured extents per height (PCHIP-smoothed, no facets), thickness clamped near the hairline
@@ -118,12 +120,15 @@ Kit API (`g = Guest(name, CFG, COLOURS)`; heights in CFG/specs are % of standing
   locks or a `disp(u, v, p)` callback; the hairline/edge functions are per-guest callbacks.
 - suit body: `jacket(g, J)` (profiles, opening, rounded fronts; sets `g.chest_y/back_y` from the actual mesh and `g.jw`
   weights), `lapels` (notch: `outline`+`collar` leaves; a peak/shawl lapel is just a different outline), `pockets`
-  (flaps + chest welt + optional `shade` line), `buttons`, `back_seam` (seam + vent), `shirt_front`, `collar`,
-  `tie` or `bow_tie`, `arms` (`A['sleeve']` = material, or None for bare skin arms), `cuffs`, `hands` (palm + 4 curled
-  fingers + thumb), `trousers` (one surface with crotch, soft break), `shoes` (derby: sole edge, toe cap, facing, laces).
+  (flaps + chest welt + optional `shade` line; `lapel['edge_shade']` draws a shadow line along the lapel's outer edge;
+  `lapel['wrap']` builds the jacket collar as ONE smooth surface round the neck turning down into the collar leaves), `buttons`, `back_seam` (seam + vent), `shirt_front`, `collar` (`S['wrap']`: ONE smooth band + points
+  surface via `wrap_collar()`, which follows the real jacket surface: no shards where parts meet), `tie` or `bow_tie`, `arms` (`A['sleeve']` = material, or None for bare skin arms), `cuffs`, `hands` (palm + 4 curled
+  fingers + thumb), `trousers` (one surface with crotch, soft break; optional `leg_profile` [(pct, w, d)] and `leg_x_hem` for a straight
+  outer line with a taper to the ankle), `shoes` (derby: sole edge, toe cap, facing, laces).
   A dress guest skips jacket/lapels/pockets/shirt/tie/trousers and adds her own bodice/skirt builder; `slab()` and
   `ring_wall()` are the generic helpers for raised panels and upright bands.
 - finish: `finish(g, RIG, out)` = join (prints tris by part) -> AO + skin tint + material sheen baked into COLOR_0 ->
   rig (Victor's bone names/hierarchy) -> `guest_anim` Walk/Idle (`RIG['walk_kw']`, e.g. `skirt=True`) -> extras
   (`strideLength`, `contactStride`, `walkClipSeconds`) -> the same glTF export settings as Victor.
-Budgets: <= 32k triangles, GLB <= 1.2 MB (Marcus: ~31.7k tris, ~1.2 MB).
+Budgets: <= 32k triangles, GLB <= 1.2 MB (Marcus: 31.4k tris, 1.19 MB). Hair: prefer wide soft `grooves` (width >= 2x the
+shell's vertex spacing) over narrow ribbon locks, which crinkle the surface.

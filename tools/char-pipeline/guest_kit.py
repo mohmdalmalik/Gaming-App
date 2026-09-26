@@ -171,7 +171,46 @@ def neck(g):
     return g.add(L.loft('Neck', [dict(z=g.z('z_shoulder_top') - 0.04, w=2*r, d=2*r*0.94, r=1.0, y=ny),
                                  dict(z=g.zc + 0.06, w=2*r*0.94, d=2*r*0.88, r=1.0, y=ny)], n=18), 'skin', 'neck')
 
-def ears(g):
+def ears(g, style=None):
+    """Ears. style (or CFG['ear_style']): 'round' (default) = the sheets' round C-shaped vinyl-toy ear: a thick disc
+    whose edge stays full (a rolled rim all round), a recessed bowl opening at the front-bottom, a soft round lobe;
+    'shell' = the earlier thin deformed-sphere ear (kept for compatibility)."""
+    style = style or g.C.get('ear_style', 'round')
+    if style == 'round': return ears_round(g)
+    return ears_shell(g)
+
+def ears_round(g):
+    """CFG: ear_h / ear_w (outline), ear_out (how far the ear centre sits beyond the skull side), ear_y (front/back),
+    z_ear (pct, centre), ear_tilt (flare: rad the back edge swings out from the head side), ear_thick (disc),
+    ear_rim (rolled rim height), ear_bowl (bowl depth), ear_sink (front edge sunk into the head)."""
+    C = g.C; ze = g.z('z_ear')
+    for s_ in (1, -1):
+        fl = C.get('ear_tilt', 0.6)
+        A = Vector((s_ * math.sin(fl), math.cos(fl), 0.0))                  # in-plane, toward the back edge
+        N = Vector((s_ * math.cos(fl), -math.sin(fl), 0.0))                 # out of the dish (out + forward)
+        U = Vector((0, 0, 1))
+        Cc = Vector((s_ * (g.W(ze) + C['ear_out']), g.Y0 + C['ear_y'], ze))
+        aw, bh = C['ear_w'] * 0.5, C['ear_h'] * 0.5
+        T = C.get('ear_thick', 0.030) * 0.5; rim, bowl_d = C.get('ear_rim', 0.008), C.get('ear_bowl', 0.012)
+        sink = C.get('ear_sink', 0.022)
+        eu, ev = C.get('ear_seg', (28, 20)); ear = L.uvsphere(f'Ear{s_}', 1.0, (0, 0, 0), u=eu, v=ev)
+        for v in ear.data.vertices:
+            px, py, pz = v.co.x, v.co.y, v.co.z                             # px: front(-)/back(+), pz: up, py: out of the dish
+            rho = min(1.0, math.sqrt(px * px + pz * pz)); ang = math.atan2(pz, px)   # 0 back, pi/2 top, +-pi front
+            full = (max(0.0, 1.0 - rho ** 4)) ** 0.25                       # squarish profile: the edge stays thick (rolled)
+            front = sm((-px - 0.30) / 0.55)                                  # the attachment side
+            lobe = sm((-pz - 0.35) / 0.45) * sm((0.5 - px) / 0.8)
+            c_open = sm((ang - 2.3) / 0.5) if ang > 0 else sm((-ang - 2.0) / 0.6)   # the C opens at the front-bottom
+            ridge = rim * math.exp(-((rho - 0.80) / 0.13) ** 2) * (1.0 - 0.8 * c_open)
+            bowl = bowl_d * sm((0.66 - rho) / 0.28) * (1.0 - 0.8 * lobe) * (1.0 - 0.6 * front)
+            if py >= 0: d = T * full + ridge * full - bowl
+            else:       d = -T * full * 0.8
+            # round outline (a slightly wider top, rounder lobe), the front edge tucked into the head
+            wx = aw * (1.0 + 0.10 * pz)
+            v.co = Cc + A * (px * wx) + U * (pz * bh) + N * d - N * sink * front + A * (-0.35 * sink * front)
+        g.add(ear, 'skin', 'head')
+
+def ears_shell(g):
     """ONE shaped shell per ear from a deformed sphere in the ear's own frame: rounded helix rim round the top
     and back, recessed bowl, full lobe, convex back, front edge sunk into the head. The ear plane is turned
     forward (ear_tilt) so the dish shows from the front, as on every sheet."""
@@ -214,6 +253,7 @@ def eyes(g, mat='eye'):
         n = g.face_normal(s_ * C['eye_x'], g.z('z_eye'))            # sit the oval in the local face plane
         rot = Vector((0, -1, 0)).rotation_difference(n).to_matrix().to_4x4()
         eye.data.transform(rot); L.translate_verts(eye, p); g.add(eye, mat, 'head')
+        g.eye_pts = getattr(g, 'eye_pts', []) + [p.copy()]
 
 def brows(g, mat='brow'):
     """One tube per brow along a cubic through the inner end, two arch points and the outer end, lying on the
@@ -482,6 +522,7 @@ def jacket(g, J):
         o = Vector((x, 1.0 if back else -1.0, z)); hit = tree.ray_cast(o, Vector((0, -1.0 if back else 1.0, 0)), 2.0)
         return hit[0].y if hit[0] is not None else surf_y(x, z, back)
     g.chest_y = lambda x, z: mesh_y(x, z); g.back_y = lambda x, z: mesh_y(x, z, True)
+    g.jacket_tree = tree
     return g.add_w(ob, J.get('mat', 'jacket'), jw)
 
 def frange(a, b, step):
@@ -495,10 +536,30 @@ def lapels(g, J):
     La = J['lapel']; zp = g.zp; surf = g.chest_y
     for s_ in (1, -1):
         for key, nm in (('outline', 'Lapel'), ('collar', 'CollarLeaf')):
-            if key not in La: continue
+            if key not in La or (key == 'collar' and La.get('wrap')): continue
             pts = [(s_ * x, zp(p)) for x, p in La[key]]
             slab(g, f'{nm}{s_}', pts, lambda x, z: surf(x, min(z, g.jacket_top)), La.get('lift', 0.0) + (La.get('collar_lift', 0.0015) if key == 'collar' else 0.0), La['thick'],
                  La.get('mat', 'jacket'), g.jw, max_edge=La.get('max_edge', 0.05))
+    if La.get('edge_shade') and 'shade' in g.M:   # a shadow line just outside the lapel's outer edge: reads as a raised lapel
+        idx = La['edge_shade']; wdt = La.get('shade_w', 0.007)
+        for s_ in (1, -1):
+            P_ = [Vector((s_ * La['outline'][i][0], 0, zp(La['outline'][i][1]))) for i in idx]
+            ln = sum((b - a).length for a, b in zip(P_[:-1], P_[1:])); P_ = L.resample_polyline(P_, max(3, int(ln / 0.012)))
+            strip_o, strip_i = [], []
+            for k, p_ in enumerate(P_):
+                a = P_[max(0, k - 1)]; b = P_[min(len(P_) - 1, k + 1)]; t = (b - a).normalized()
+                nrm = Vector((t.z, 0, -t.x)) * s_                             # in-plane normal, away from the chest centre
+                if nrm.x * s_ < 0: nrm = -nrm
+                strip_i.append((p_.x, p_.z)); strip_o.append((p_.x + nrm.x * wdt, p_.z + nrm.z * wdt))
+            slab(g, f'LapelShade{s_}', strip_i + list(reversed(strip_o)), lambda x, z: g.chest_y(x, min(z, g.jacket_top)), 0.0, 0.0015,
+                 'shade', g.jw, cuts=0)
+    if La.get('wrap'):                        # ONE smooth jacket collar: round the back of the neck, down onto the chest as the leaves
+        W_ = La['wrap']; C = g.C; R = C['neck_r'] + W_.get('gap_neck', 0.030); zt, zf = zp(W_['top']), zp(W_['front'])
+        op = W_.get('open', 0.55)
+        ztop = lambda f: zf + (zt - zf) * sm((f - op) / W_.get('v_width', 1.0))
+        return wrap_collar(g, 'JacketCollar', La.get('mat', 'jacket'), R, C['neck_y'] + W_.get('dy', 0.0), op, ztop, g.jacket_top - 0.03,
+                           W_['tip'], W_.get('th_side', 1.6), thick=W_.get('thick', 0.008), gap=W_.get('gap', 0.010),
+                           wfn=lambda co: {'spine': 1.0})
     # jacket collar round the back of the neck, stepping down at the front to meet the collar leaves
     C = g.C; NY = C['neck_y']; R = C['neck_r'] + La.get('collar_gap', 0.028)
     zt_b, zt_f = zp(La['collar_top']), zp(La.get('collar_front', 34.0)); op = La.get('collar_open', 0.75)
@@ -528,6 +589,59 @@ def ring_wall(name, cy, R, thick, z_bot, z_top, open_=0.0, n=40):
     if not closed: bm.faces.new(st[0]); bm.faces.new(list(reversed(st[-1])))
     bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
     return L.new_object(name, bm, smooth=True)
+
+def wrap_collar(g, name, mat, R, cy, open_, z_top, z_bot_side, tip, th_side, thick=0.006, gap=0.003, wfn=None,
+                nth=30, nt=7, tip_round=0.35):
+    """ONE smooth collar surface (no slabs meeting at angles): it wraps round the back of the neck on a cylinder
+    (radius R about (0, cy)) and, at the front, turns down onto the chest as a point / leaf. Columns run from the
+    front gap (angle open_ from the front, toward +X) round the back to the other side. Each column goes from its
+    bottom point to its top point z_top(theta) (theta measured from the front, folded to 0..pi); bottom points sit
+    at z_bot_side behind theta >= th_side (hidden in the jacket) and sweep forward and down to tip = (x, pct) at the
+    front edge. Every point is pushed radially out to lie on the cylinder above the jacket top, or `gap` above the
+    real jacket surface below it (ray cast), so it follows the chest exactly. thick: shell thickness (inward)."""
+    from mathutils.bvhtree import BVHTree
+    tree = getattr(g, 'jacket_tree', None); zj = g.jacket_top
+    tip_x, tip_z = tip[0], g.zp(tip[1])
+    def on_cyl(th, z, r): return Vector((r * math.sin(th), cy - r * math.cos(th), z))
+    def surf_r(d, z, extra, wing=1.0):
+        """Radius from the axis at height z along the horizontal direction d where the collar lies (wing: 1 on the
+        front wing, which follows the chest; 0 round the sides/back, which stay on the cylinder inside the jacket)."""
+        r = R + extra
+        if tree is not None and z < zj + 0.002 and wing > 1e-3:
+            hit = tree.ray_cast(Vector((0.0, cy, min(z, zj - 0.005))), d, 1.0)   # below the jacket's top cap: side wall hits only
+            if hit[0] is not None:
+                rj = (Vector((hit[0].x, hit[0].y - cy, 0))).length + gap + extra
+                w = sm((zj + 0.002 - z) / 0.025)                          # blend from the cylinder onto the chest
+                r = max(r, R + extra + (rj - R) * w * wing) if rj > R else r
+        return r
+    ths = [open_ + (2 * math.pi - 2 * open_) * i / (nth - 1) for i in range(nth)]
+    def column(th, extra):
+        f = th if th <= math.pi else 2 * math.pi - th; sgn = 1 if th <= math.pi else -1
+        top = on_cyl(th, z_top(f), R)
+        u = sm((th_side - f) / max(1e-6, th_side - open_))                  # 1 at the front edge -> 0 at th_side
+        bside = on_cyl(th, z_bot_side, R)
+        btip = Vector((sgn * tip_x, cy - R, tip_z))
+        bot = bside.lerp(btip, u)
+        pts = []
+        for k in range(nt + 1):
+            t = k / nt; p = bot.lerp(top, t)
+            d = Vector((p.x, p.y - cy, 0.0)); d = d.normalized() if d.length > 1e-6 else Vector((0, -1, 0))
+            r = surf_r(d, p.z, extra, sm((th_side + 0.15 - f) / 0.35)); pts.append(Vector((d.x * r, cy + d.y * r, p.z)))
+        return pts
+    bm = bmesh.new()
+    O = [[bm.verts.new(p) for p in column(th, 0.0)] for th in ths]
+    I = [[bm.verts.new(p) for p in column(th, -thick)] for th in ths]
+    for i in range(nth - 1):
+        for k in range(nt):
+            bm.faces.new((O[i][k], O[i + 1][k], O[i + 1][k + 1], O[i][k + 1]))
+            bm.faces.new((I[i][k + 1], I[i + 1][k + 1], I[i + 1][k], I[i][k]))
+        bm.faces.new((O[i][nt], O[i + 1][nt], I[i + 1][nt], I[i][nt]))       # top edge
+        bm.faces.new((I[i][0], I[i + 1][0], O[i + 1][0], O[i][0]))           # bottom edge
+    for i in (0, nth - 1):
+        for k in range(nt): bm.faces.new((O[i][k], O[i][k + 1], I[i][k + 1], I[i][k]))
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+    ob = L.new_object(name, bm, smooth=True)
+    return g.add_w(ob, mat, wfn) if wfn else g.add(ob, mat, 'neck')
 
 def rounded_rect_xz(x0, x1, z0, z1, r_bot, r_top=0.004, n=4):
     """Outline of a rectangle (x0<x1, z0 bottom < z1 top) with rounded corners, counter-clockwise."""
@@ -576,8 +690,17 @@ def shirt_front(g, S):
     return slab(g, 'ShirtV', pts, lambda x, z: g.chest_y(x, min(z, g.jacket_top)), 0.004, 0.002, 'shirt', g.jw, max_edge=S.get('max_edge', 0.034))
 
 def collar(g, S):
-    """Shirt collar: a band round the neck whose front opens in a V (the knot sits in it) and two pointed
-    leaves spreading from the V over the top of the shirt front."""
+    """Shirt collar. With S['wrap'] (dict: top, v, tip, th_side, open, gap) ONE smooth wrapped surface (band + points,
+    see wrap_collar); otherwise a band round the neck whose front opens in a V and two pointed leaf slabs."""
+    if S.get('wrap'):
+        W_ = S['wrap']; C = g.C; R = C['neck_r'] + W_.get('gap_neck', 0.010); zt, zv = g.zp(W_['top']), g.zp(W_['v'])
+        op = W_.get('open', 0.10)
+        ztop = lambda f: zv + (zt - zv) * sm((f - op) / W_.get('v_width', 0.8))
+        zj = g.jacket_top
+        def wfn(co):
+            a = sm((co.z - (zj - 0.03)) / 0.05); return {'neck': 0.3 + 0.5 * a, 'spine': 0.7 - 0.5 * a}
+        return wrap_collar(g, 'ShirtCollar', 'shirt', R, C['neck_y'], op, ztop, zj - W_.get('below', 0.03), W_['tip'], W_.get('th_side', 1.5),
+                           thick=W_.get('thick', 0.005), gap=W_.get('gap', 0.004), wfn=wfn)
     C = g.C; NY = C['neck_y']; R = C['neck_r'] + 0.012; zt = g.zp(S['collar_top']); zv = g.zp(S.get('collar_v', 33.6))
     band = ring_wall('CollarBand', NY, R, 0.007, lambda th: g.jacket_top - 0.02,
                      lambda th: zv + (zt - zv) * sm((math.pi - abs(math.pi - th)) / S.get('v_width', 0.9)), open_=S.get('v_open', 0.16), n=40)
@@ -689,7 +812,7 @@ def hands(g, A):
             rad = [r * (1.0 - 0.12 * k / 10) for k in range(11)]
             pts.append(tip); rad.append(r * 0.55)
             pts.append(tip + (pts[-1] - pts[-2]).normalized() * r * 0.35); rad.append(r * 0.18)
-            g.add(L.tube(f'Finger{tag}{i}', [tuple(p) for p in pts], rad, n=8), 'skin', f'hand.{tag}')
+            g.add(L.tube(f'Finger{tag}{i}', [tuple(p) for p in pts], rad, n=Hd.get('finger_n', 8)), 'skin', f'hand.{tag}')
         T = Hd['thumb']                                                         # (y offset, x in, z below palm top, radius, length, bend)
         p0 = Vector((base.x - s * T[1], hy + T[0], z0 - T[2]))
         dirn = (down * 0.85 + fwd * 0.30 - out * 0.20).normalized(); inw = (-out * 0.8 + fwd * -0.2).normalized()
@@ -709,7 +832,8 @@ def trousers(g, P):
     LY = P.get('leg_y', 0.0); NL = P.get('nl', 24); PW = 2 * LX + TW
     PR = [(zp(p), PW * fw, TD + dd, r) for p, fw, dd, r in P['pelvis']]
     PR.sort()
-    LEG = [(ZB, SW * 1.03, SD * 1.02), (ZB + 0.05, SW * 0.97, SD * 0.96), (ZK - 0.10, SW, SD), (ZK - 0.03, SW * 1.0, SD * 1.01),
+    LEG = sorted((zp(q), w, d) for q, w, d in P['leg_profile']) + [(ZC, TW, TD)] if P.get('leg_profile') else None   # optional explicit (pct, w, d)
+    LEG = LEG or [(ZB, SW * 1.03, SD * 1.02), (ZB + 0.05, SW * 0.97, SD * 0.96), (ZK - 0.10, SW, SD), (ZK - 0.03, SW * 1.0, SD * 1.01),
            (ZK + 0.03, TW * 0.97, TD * 0.94), ((ZK + ZH) / 2, TW, TD), (ZH + 0.03, TW, TD), (ZC, TW, TD)]
     def lst(table, z):
         if z <= table[0][0]: return table[0][1:]
@@ -721,10 +845,12 @@ def trousers(g, P):
         if z <= ZC:
             u = max(0.0, min(1.0, (z - (ZC - 0.09)) / 0.09)); return (LX - TW / 2) * u * u
         return (LX - TW / 2) + 0.9 * (z - ZC)
+    LXH = P.get('leg_x_hem', LX)                  # leg centre at the hem: > leg_x keeps the outer edge straight while the leg tapers
     def lobe(z, s):
         w, d = lst(LEG, min(z, ZC)); gw = widen(z)
         if z > ZC: d += (lst(PR, z)[1] - d) * sm((z - ZC) / 0.06)
-        return (s * (LX - gw / 2), LY, w + gw, d, 1.0)
+        lx = LX + (LXH - LX) * max(0.0, min(1.0, (ZC - z) / max(1e-6, ZC - ZB)))
+        return (s * (lx - gw / 2), LY, w + gw, d, 1.0)
     def mirror(left): m = [Vector((-p.x, p.y, p.z)) for p in left]; return [m[0]] + list(reversed(m[1:]))
     def leg_ring(z):
         cx, cy, w, d, r = lobe(z, 1); pts = L.rounded_rect_ring(w, d, r, 360); pts = pts[180:] + pts[:180]
@@ -795,7 +921,7 @@ def shoes(g, S):
               st(0.045, W0*0.99, H0*0.90, 0.78), st(0.080, W0*1.0, H0*0.74, 0.80), st(0.115, W0*1.0, H0*0.62, 0.82), st(TOE - 0.095, W0*0.99, H0*0.60, 0.84),
               st(TOE - 0.078, W0*0.98, H0*0.60, 0.85), st(TOE - 0.072, W0*0.975, H0*0.595, 0.85), st(TOE - 0.066, W0*0.97, H0*0.595, 0.86),
               st(TOE - 0.040, W0*0.92, H0*0.57, 0.88), st(TOE - 0.020, W0*0.80, H0*0.50, 0.92), st(TOE - 0.008, W0*0.60, H0*0.34, 0.96), st(TOE - 0.001, W0*0.28, H0*0.16, 1.0)]
-        shoe = L.loft(f'Shoe{tag}', up, n=24)
+        shoe = L.loft(f'Shoe{tag}', up, n=S.get('n', 24))
         # toe-cap line: a shallow crease across the top of the toe box
         zc = TOE - 0.074
         for v in shoe.data.vertices:
@@ -947,6 +1073,10 @@ def animate(g, R):
     GA.build_idle(bpy, arm, **R.get('idle_kw', {}))
     bpy.ops.object.mode_set(mode='OBJECT')
     arm['strideLength'] = round(STRIDE, 4); arm['contactStride'] = round(CONTACT, 4); arm['walkClipSeconds'] = round(GA.WALK_N / FPS, 4)
+    # eye centre for the portrait tool, in glTF space (Y up, the face toward +Z): Blender (x, y, z) -> (x, z, -y)
+    pts = getattr(g, 'eye_pts', None)
+    e = sum(pts, Vector()) / len(pts) if pts else g.on_face(0.0, g.z('z_eye'))
+    arm['eyeCentre'] = [round(e.x, 4), round(e.z, 4), round(-e.y, 4)]
     g.mesh['strideLength'] = round(STRIDE, 4)
     return CONTACT, STRIDE
 

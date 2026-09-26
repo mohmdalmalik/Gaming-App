@@ -14,6 +14,7 @@ import {
 import {
   search, canSearch, useBandage, useUnlock, useBarricade, resolveFullHand, discardCard, overHandLimit,
   resolveTrade, resolveAttack, tradeableCards, drawCard, dropEverything, openDoor,
+  canUseRoom, useInfirmary, useSwitchboard, useHandMirror, useEspresso,
 } from '../src/game/actions.js';
 
 let failures = 0;
@@ -580,6 +581,356 @@ console.log('\nfull hand');
   const take = resolveFullHand(s, p, r.card, 'take', dropId);
   check(take.ok && p.hand.some(c => c.id === r.card.id) && !p.hand.some(c => c.id === dropId) && countableCount(p.hand) === 6, 'take it and drop one');
   check(s.discardPile.some(c => c.id === dropId), 'the dropped card goes to the discard pile');
+}
+
+// ================================================================================================
+// Part 2 (approved): rooms with jobs, the Hand Mirror and the Espresso.
+// ================================================================================================
+// Put guest `p` in tile `id` (placed on the board first if need be) with a fresh 4 action points.
+function standIn(s, p, id) {
+  const ok = ensureRoom(s, id);
+  if (ok) { p.currentRoom = id; s.discovered.add(id); p.actionPoints = 4; }
+  return ok;
+}
+// Everyone clean except the guests at these seat numbers (so a check never depends on the seed).
+function setRoles(s, ...possessedSeats) {
+  s.players.forEach((p, i) => { p.possessed = possessedSeats.includes(i); });
+}
+const ids = hand => hand.map(c => c.id).join();
+const filler = (n, tag = 'h') => Array.from({ length: n }, (_, i) => ({ id: `${tag}${i}`, type: 'bandage' }));
+
+console.log('\nconfiguration: rooms with jobs and the new cards');
+{
+  check(rules.linenStoreDraws === 2, 'a Linen Store draw gives 2 cards');
+  check(rules.infirmaryCost === 1 && rules.actionCost.infirmary === 1, 'the Infirmary costs 1 action point');
+  check(rules.infirmaryHeal === 2, 'the Infirmary restores 2 health');
+  check(rules.switchboardCost === 1 && rules.actionCost.switchboard === 1, 'the Switchboard costs 1 action point');
+  check(rules.espressoCost === 0 && rules.actionCost.espresso === 0, 'an Espresso is free (no action point)');
+  check(rules.cards.espresso?.extraActions === 2, 'an Espresso gives 2 extra action points');
+  check(rules.playCardCost === 1 && rules.actionCost.useCard === 1, 'a Hand Mirror costs 1 action point, like any other card');
+  check(!!rules.cards.handMirror && rules.cards.handMirror.name === 'Hand Mirror', 'the Hand Mirror is in the card catalogue');
+  check(!!rules.cards.espresso && rules.cards.espresso.name === 'Espresso', 'the Espresso is in the card catalogue');
+  check(!rules.cards.handMirror.evil && !rules.cards.espresso.evil && !rules.cards.handMirror.weapon && !rules.cards.espresso.weapon,
+    'neither new card is a weapon or a possession card');
+  let mirrors = 0, espressos = 0, lanterns = 0, deckOk = true;
+  for (let seed = 1; seed <= 200; seed++) {
+    const s = createState(floor, SIX, seed, { mode: 'hotseat' });
+    for (const p of s.players) { mirrors += countType(p.hand, 'handMirror'); espressos += countType(p.hand, 'espresso'); lanterns += lanternCount(p.hand); }
+    const all = [...s.drawPile, ...s.players.flatMap(p => p.hand.filter(c => c.type !== 'possession'))];
+    if (all.length !== 48 || countType(all, 'handMirror') !== 3 || countType(all, 'espresso') !== 3) deckOk = false;
+  }
+  check(deckOk, 'every match: 48 cards in all, 3 of them Hand Mirrors and 3 Espressos');
+  check(mirrors > 0, `Hand Mirrors turn up in starting hands (${mirrors} over 200 six-player deals)`);
+  check(espressos > 0, `Espressos turn up in starting hands (${espressos} over 200 six-player deals)`);
+  check(lanterns === 0, 'and still not one Lantern was dealt');
+}
+
+console.log('\nthe room deck: rooms with jobs');
+{
+  const tiles = hotel.tiles, jobs = j => tiles.filter(t => t.job === j);
+  const others = tiles.filter(t => !t.isExit);
+  const opposite = { north: 'south', south: 'north', east: 'west', west: 'east' };
+  const straight = others.filter(t => t.doors.length === 2 && opposite[t.doors[0]] === t.doors[1]).length;
+  const bend = others.filter(t => t.doors.length === 2 && opposite[t.doors[0]] !== t.doors[1]).length;
+  const n = k => others.filter(t => t.doors.length === k).length;
+  check(tiles.length === 24, 'the room deck still has 24 tiles');
+  check(jobs('linenStore').length === 2 && jobs('infirmary').length === 2 && jobs('switchboard').length === 1,
+    'exactly 2 Linen Stores, 2 Infirmaries and 1 Switchboard');
+  check(tiles.filter(t => t.job).length === 5 && tiles.every(t => !t.job || ['linenStore', 'infirmary', 'switchboard'].includes(t.job)),
+    'five rooms with jobs, and no other kind of job');
+  check(['linenStore1', 'linenStore2'].every(id => tiles.find(t => t.id === id)?.job === 'linenStore')
+    && ['infirmary1', 'infirmary2'].every(id => tiles.find(t => t.id === id)?.job === 'infirmary')
+    && tiles.find(t => t.id === 'switchboard')?.job === 'switchboard', 'the job rooms are the tiles linenStore1/2, infirmary1/2 and switchboard');
+  check(!['suite410', 'suite412', 'suite414', 'suite418', 'gardenLounge'].some(id => tiles.some(t => t.id === id)),
+    'Suites 410, 412, 414, 418 and the Garden Lounge are gone');
+  check(n(4) === 4 && n(3) === 7 && straight === 4 && bend === 4 && n(1) === 4,
+    `doorways unchanged: 4 four-way, 7 T, 4 straight, 4 corner, 4 dead ends (${n(4)}/${n(3)}/${straight}/${bend}/${n(1)})`);
+  check(tiles.find(t => t.isExit)?.doors.length === 1, '...plus the Fire Exit (a dead end)');
+  check(tiles.filter(t => t.dark).length === 5 && tiles.filter(t => t.locked).length === 2, 'still 5 dark rooms and 2 locked rooms');
+  check(tiles.filter(t => t.job).every(t => t.searchable !== false && !t.dark && !t.locked && !t.isExit && !t.safe),
+    'every job room can be searched, and none is dark, locked or safe');
+  // On the board, each one carries its job.
+  let placedOk = true, placedAll = true;
+  for (let seed = 1; seed <= 30; seed++) {
+    const s = createState(floor, SIX, seed, { mode: 'hotseat' });
+    for (const t of tiles.filter(x => x.job)) {
+      if (!ensureRoom(s, t.id)) { placedAll = false; continue; }
+      const room = floor.rooms.get(t.id);
+      if (room.job !== t.job || !room.searchable || room.dark || isLocked(s, t.id)) placedOk = false;
+    }
+    const plain = floor.roomList.filter(r => !tiles.find(t => t.id === r.id)?.job);
+    if (plain.some(r => r.job)) placedOk = false;
+  }
+  check(placedAll, 'over 30 hotels, all five job rooms could be placed every time');
+  check(placedOk, 'a placed job room carries its job (searchable, not dark, not locked); no other room has one');
+}
+
+console.log('\nLinen Store');
+{
+  const s = hs(201), p = cleanOnes(s)[0];
+  check(standIn(s, p, 'linenStore1'), 'a Linen Store is on the board');
+  p.hand = filler(2);
+  const pile = s.drawPile.length, top = s.drawPile.slice(0, 2).map(c => c.id);
+  const r = search(s, floor, p);
+  check(r.ok && r.kind === 'cards' && r.cards.length === 2 && p.actionPoints === 3, 'the first search draws 2 cards for 1 action point');
+  check(r.cards.every(c => p.hand.includes(c)) && countableCount(p.hand) === 4 && s.drawPile.length === pile - 2,
+    'both cards go into the hand, and 2 leave the draw pile');
+  check(ids(r.cards) === top.join() && r.card === r.cards[0], 'they are the top two cards of the draw pile');
+  check(!r.full && r.overflow.length === 0, 'nothing overflows with room in the hand');
+  check(canSearch(s, floor, p).reason === 'searched' && search(s, floor, p).reason === 'searched' && p.actionPoints === 3,
+    'a second search is refused ("searched"), costing nothing');
+  check(s.log.at(-1).text === `${p.name} searched Linen Store.`, 'the public log says only that a search happened');
+  check(!s.log.some(l => /Lantern|Bandage|Knife|Flashlight|Revolver|Barricade|Lock Pick|Master Key|Hand Mirror|Espresso/.test(l.text)),
+    'it never names what was found');
+  // The other Linen Store has its own 2-card draw.
+  check(standIn(s, p, 'linenStore2'), 'the second Linen Store is on the board');
+  p.hand = filler(1);
+  const r2 = search(s, floor, p);
+  check(r2.ok && r2.kind === 'cards' && r2.cards.length === 2 && countableCount(p.hand) === 3, 'the second Linen Store also gives 2 cards');
+}
+{
+  // Five cards in hand: one fits, the other goes to the take-or-leave prompt.
+  const s = hs(202), p = cleanOnes(s)[0];
+  standIn(s, p, 'linenStore1');
+  p.hand = filler(5);
+  const r = search(s, floor, p);
+  check(r.ok && r.cards.length === 2 && r.full && r.overflow.length === 1, 'with 5 cards in hand: 1 kept, 1 overflows');
+  check(p.hand.includes(r.cards[0]) && !p.hand.includes(r.cards[1]) && r.overflow[0] === r.cards[1] && countableCount(p.hand) === 6,
+    'the first card is kept, the second is not added (the hand is at 6)');
+  const leave = resolveFullHand(s, p, r.overflow[0], 'leave');
+  check(leave.ok && s.discardPile.includes(r.overflow[0]) && countableCount(p.hand) === 6, 'leaving the overflow card puts it on the discard pile');
+}
+{
+  // Six cards in hand: both overflow; each goes through take-or-leave.
+  const s = hs(203), p = cleanOnes(s)[0];
+  standIn(s, p, 'linenStore1');
+  p.hand = filler(6);
+  const before = ids(p.hand);
+  const r = search(s, floor, p);
+  check(r.ok && r.full && r.overflow.length === 2 && ids(r.overflow) === ids(r.cards), 'with 6 cards in hand: both cards overflow');
+  check(ids(p.hand) === before, 'neither is added to the hand');
+  check(s.searchedRooms.has('linenStore1'), 'the room counts as searched anyway');
+  const take = resolveFullHand(s, p, r.overflow[0], 'take', 'h0');
+  check(take.ok && p.hand.includes(r.overflow[0]) && !p.hand.some(c => c.id === 'h0') && countableCount(p.hand) === 6,
+    'the first can be taken by dropping a card');
+  const take2 = resolveFullHand(s, p, r.overflow[1], 'take', 'h1');
+  check(take2.ok && p.hand.includes(r.overflow[1]) && countableCount(p.hand) === 6 && s.discardPile.some(c => c.id === 'h1'),
+    'and the second too — each overflow card has its own take-or-leave');
+}
+{
+  // Possession cards don't count toward the hand limit here either.
+  const s = hs(204); setRoles(s, 0);
+  const V = s.players[0];
+  standIn(s, V, 'linenStore1');
+  V.hand = [...filler(4), { id: 'pz1', type: 'possession' }, { id: 'pz2', type: 'possession' }, { id: 'pz3', type: 'possession' }];
+  const r = search(s, floor, V);
+  check(r.ok && r.cards.length === 2 && !r.full && r.cards.every(c => V.hand.includes(c)),
+    'a possessed guest with 4 ordinary cards + 3 Possession cards keeps both (Possession cards do not count)');
+}
+{
+  // Only one card left anywhere: the Linen Store gives just that one.
+  const s = hs(205), p = cleanOnes(s)[0];
+  standIn(s, p, 'linenStore1');
+  p.hand = filler(2);
+  s.drawPile = [s.drawPile[0]]; s.discardPile = [];
+  const last = s.drawPile[0];
+  const r = search(s, floor, p);
+  check(r.ok && r.kind === 'cards' && r.cards.length === 1 && r.cards[0] === last && p.hand.includes(last) && !r.full,
+    'with only 1 card left in the deck, the Linen Store gives that 1');
+  const s2 = hs(206), q = cleanOnes(s2)[0];
+  standIn(s2, q, 'linenStore1');
+  q.hand = filler(2);
+  const lone = s2.drawPile[0];
+  s2.drawPile = []; s2.discardPile = [lone];
+  const r2 = search(s2, floor, q);
+  check(r2.ok && r2.cards?.length === 1 && q.hand.includes(lone) && !s2.drawPile.length && !s2.discardPile.length,
+    'with the deck empty and 1 card in the discard pile, it is reshuffled and that 1 is given');
+  const s3 = hs(207), u = cleanOnes(s3)[0];
+  standIn(s3, u, 'linenStore1');
+  s3.drawPile = []; s3.discardPile = [];
+  check(canSearch(s3, floor, u).reason === 'empty' && search(s3, floor, u).reason === 'empty' && u.actionPoints === 4,
+    'with no cards left at all, there is nothing to search (no action point spent)');
+}
+{
+  // Cards dropped in a Linen Store are picked up first; the 2-card draw is still there after.
+  const s = hs(208), p = cleanOnes(s)[0];
+  standIn(s, p, 'linenStore1');
+  p.hand = filler(1);
+  s.roomDrops.set('linenStore1', [{ id: 'dz1', type: 'knife' }]);
+  const f = search(s, floor, p);
+  check(f.ok && f.kind === 'found' && p.hand.some(c => c.id === 'dz1') && !s.roomDrops.has('linenStore1'),
+    'cards lying in a Linen Store are picked up first');
+  check(!s.searchedRooms.has('linenStore1') && canSearch(s, floor, p).ok, 'picking them up does not use the room’s draw');
+  const r = search(s, floor, p);
+  check(r.ok && r.kind === 'cards' && r.cards.length === 2 && countableCount(p.hand) === 4, 'the 2-card draw is still available afterwards');
+}
+{
+  // An ordinary room still draws exactly one.
+  const s = hs(209), p = cleanOnes(s)[0];
+  standIn(s, p, 'corridorE');
+  p.hand = filler(2);
+  const pile = s.drawPile.length;
+  const r = search(s, floor, p);
+  check(r.ok && r.kind === 'card' && !r.cards && countableCount(p.hand) === 3 && s.drawPile.length === pile - 1,
+    'an ordinary room still draws exactly 1 card');
+}
+
+console.log('\nInfirmary');
+{
+  const s = hs(210); setRoles(s, 5);
+  const p = s.players[0];
+  check(standIn(s, p, 'infirmary1'), 'an Infirmary is on the board');
+  p.health = 1;
+  const g = canUseRoom(s, floor, p);
+  check(g.ok && g.job === 'infirmary', 'a hurt guest can use it');
+  const r = useInfirmary(s, floor, p);
+  check(r.ok && p.health === 3 && r.health === 3 && r.healed === 2 && p.actionPoints === 3, '1 action point: health 1 -> 3');
+  check(s.log.at(-1).text.includes(p.name) && !/possess/i.test(s.log.at(-1).text), 'the public log says who was treated, nothing more');
+  // Usable again in the same turn while hurt (no once-per-turn limit).
+  p.health = 2;
+  const r2 = useInfirmary(s, floor, p);
+  check(r2.ok && p.health === 3 && r2.healed === 1 && p.actionPoints === 2, 'used again the same turn: 2 -> 3 (never above the maximum)');
+  check(canUseRoom(s, floor, p).reason === 'full' && useInfirmary(s, floor, p).reason === 'full' && p.actionPoints === 2,
+    'at full health it is refused and no action point is spent');
+  p.health = 1; p.actionPoints = 0;
+  check(useInfirmary(s, floor, p).reason === 'ap' && p.health === 1, 'with no action points it is refused');
+  p.actionPoints = 4;
+  standIn(s, p, 'corridorE'); p.health = 1;
+  check(canUseRoom(s, floor, p).reason === 'noJob' && useInfirmary(s, floor, p).reason === 'noJob' && p.health === 1 && p.actionPoints === 4,
+    'outside an Infirmary there is nothing to use ("noJob")');
+  const V = s.players[5];
+  standIn(s, V, 'infirmary1'); V.health = 1;
+  const rv = useInfirmary(s, floor, V);
+  check(rv.ok && V.health === 3, 'a possessed guest can use it too');
+  check(standIn(s, p, 'infirmary2'), 'the other Infirmary is on the board');
+  p.health = 1;
+  check(useInfirmary(s, floor, p).ok && p.health === 3, 'the other Infirmary works the same way');
+  p.health = 1; p.alive = false;
+  check(useInfirmary(s, floor, p).reason === 'dead', 'the dead cannot use it');
+  p.alive = true; s.finished = true;
+  check(useInfirmary(s, floor, p).reason === 'finished', 'nor can anyone once the match is over');
+}
+
+console.log('\nSwitchboard');
+{
+  const s = hs(211); setRoles(s, 4);
+  check(ensureRoom(s, 'switchboard'), 'the Switchboard is on the board');
+  for (const q of s.players) { q.currentRoom = 'switchboard'; }
+  s.discovered.add('switchboard');
+  const [A, B, C, D, E, F] = s.players;
+  check(activePlayer(s) === A && canUseRoom(s, floor, A).ok && canUseRoom(s, floor, A).job === 'switchboard', 'the active guest can ring it');
+  const r = useSwitchboard(s, floor, A);
+  check(r.ok && r.count === 1 && A.actionPoints === 3, '1 action point: one guest is possessed');
+  check(s.switchboardCalls.get(A.id) === s.turn, 'the ring is recorded for this turn');
+  const line = s.log.at(-1).text;
+  check(line.includes(A.name) && /\b1\b/.test(line), `the public log gives the number ("${line}")`);
+  check(!line.includes(E.name), 'and never the possessed guest’s name');
+  check(canUseRoom(s, floor, A).reason === 'usedThisTurn' && useSwitchboard(s, floor, A).reason === 'usedThisTurn' && A.actionPoints === 3,
+    'a second ring in the same turn is refused, with no action point spent');
+  convertToPossessed(s, C, E.id);
+  endTurn(s, floor);
+  const r2 = useSwitchboard(s, floor, B);
+  check(activePlayer(s) === B && s.round === 1 && r2.ok && r2.count === 2, 'another guest rings in the same round: 2, after a conversion');
+  const line2 = s.log.at(-1).text;
+  check(/\b2\b/.test(line2) && !line2.includes(C.name) && !line2.includes(E.name), 'again the number and no possessed guest’s name');
+  E.alive = false;
+  endTurn(s, floor); endTurn(s, floor);                // C, then D
+  const r3 = useSwitchboard(s, floor, D);
+  check(activePlayer(s) === D && r3.ok && r3.count === 1, 'a dead possessed guest is not counted');
+  endTurn(s, floor);                                    // E is dead: F
+  F.actionPoints = 0;
+  check(activePlayer(s) === F && useSwitchboard(s, floor, F).reason === 'ap', 'with no action points it is refused');
+  endTurn(s, floor);
+  check(activePlayer(s) === A && s.round === 2, 'round 2: back to the first guest');
+  const r4 = useSwitchboard(s, floor, A);
+  check(r4.ok && r4.count === 1 && A.actionPoints === 3, 'the same guest can ring again on their next turn');
+  A.currentRoom = 'corridorE'; A.actionPoints = 4;
+  check(canUseRoom(s, floor, A).reason === 'noJob' && useSwitchboard(s, floor, A).reason === 'noJob' && A.actionPoints === 4,
+    'outside the Switchboard there is nothing to ring ("noJob")');
+  check(!s.log.some(l => l.text.includes('Switchboard') && [C, E].some(q => l.text.includes(q.name))),
+    'no Switchboard line ever names a possessed guest');
+}
+
+console.log('\nHand Mirror');
+{
+  const s = hs(212); setRoles(s, 1);
+  const A = s.players[0], V = s.players[1], K = s.players[2];
+  for (const q of [A, V, K]) standIn(s, q, 'corridorE');
+  V.hand = [{ id: 'vk', type: 'knife' }, { id: 'vl', type: 'lantern' }, { id: 'vp1', type: 'possession' }, { id: 'vp2', type: 'possession' }];
+  A.hand = [{ id: 'hm1', type: 'handMirror' }, { id: 'hm2', type: 'handMirror' }, { id: 'hm3', type: 'handMirror' }];
+  const vBefore = ids(V.hand);
+  const r = useHandMirror(s, floor, A, 'hm1', V.id);
+  check(r.ok && A.actionPoints === 3, 'a Hand Mirror costs 1 action point');
+  check(!A.hand.some(c => c.id === 'hm1') && s.discardPile.some(c => c.id === 'hm1'), 'and is used up (on the discard pile)');
+  check(r.target === V.id && ids(r.hand) === vBefore, 'it shows the target’s whole hand');
+  check(r.hand.filter(c => c.type === 'possession').length === 2 && r.unmasked, 'Possession cards included');
+  check(ids(V.hand) === vBefore, 'the target keeps every card');
+  check(A.knows.has(V.id), 'a clean guest who sees a Possession card now knows the target is possessed');
+  const line = s.log.at(-1).text;
+  const others = Object.values(rules.cards).map(c => c.name).filter(nm => nm !== 'Hand Mirror');
+  check(line.includes(A.name) && line.includes(V.name), `the public log names who used it and on whom ("${line}")`);
+  check(!others.some(nm => line.includes(nm)) && !/possess/i.test(line), 'and never what it showed');
+  // A clean target.
+  K.hand = [{ id: 'kb', type: 'bandage' }];
+  const knew = [...A.knows].join();
+  const r2 = useHandMirror(s, floor, A, 'hm2', K.id);
+  check(r2.ok && !r2.unmasked && ids(r2.hand) === 'kb' && [...A.knows].join() === knew, 'a clean target: nothing new is learned about roles');
+  // Refusals: the card is kept and no action point is spent.
+  A.actionPoints = 4;
+  const refused = (res, why) => res.reason === why && A.actionPoints === 4 && A.hand.some(c => c.id === 'hm3');
+  check(refused(useHandMirror(s, floor, A, 'hm3', A.id), 'noTarget'), 'refused on yourself');
+  check(refused(useHandMirror(s, floor, A, 'hm3', 'nobody'), 'noTarget'), 'refused on nobody');
+  K.alive = false;
+  check(refused(useHandMirror(s, floor, A, 'hm3', K.id), 'targetDead'), 'refused on a dead guest');
+  K.alive = true;
+  standIn(s, K, 'kitchen'); A.actionPoints = 4;
+  check(refused(useHandMirror(s, floor, A, 'hm3', K.id), 'notTogether'), 'refused on a guest in another room');
+  A.actionPoints = 0;
+  check(useHandMirror(s, floor, A, 'hm3', V.id).reason === 'ap' && A.hand.some(c => c.id === 'hm3'), 'refused with no action points');
+  A.actionPoints = 4;
+  check(refused(useHandMirror(s, floor, A, 'hm1', V.id), 'noCard'), 'refused without a Hand Mirror in hand');
+  // In the lobby (a safe zone) it still works.
+  A.currentRoom = K.currentRoom = lobby;
+  const r3 = useHandMirror(s, floor, A, 'hm3', K.id);
+  check(r3.ok && A.actionPoints === 3, 'it works in the lobby too');
+  check(countType(A.hand, 'handMirror') === 0 && s.discardPile.filter(c => c.type === 'handMirror').length === 3, 'all three mirrors are used up');
+}
+
+console.log('\nEspresso');
+{
+  const s = hs(213);
+  const A = activePlayer(s);
+  A.hand = [{ id: 'es1', type: 'espresso' }, { id: 'es2', type: 'espresso' }, { id: 'es3', type: 'espresso' }];
+  A.actionPoints = 0;
+  const r = useEspresso(s, A, 'es1');
+  check(r.ok && A.actionPoints === 2 && r.actionPoints === 2 && r.gained === 2, 'free: it works with 0 action points and gives 2');
+  check(!A.hand.some(c => c.id === 'es1') && s.discardPile.some(c => c.id === 'es1'), 'used up (on the discard pile)');
+  A.actionPoints = 4;
+  check(useEspresso(s, A, 'es2').ok && A.actionPoints === 6, 'it can take you past 4: 4 -> 6');
+  check(useEspresso(s, A, 'es3').ok && A.actionPoints === 8, 'two in one turn: 8');
+  check(useEspresso(s, A, 'es3').reason === 'noCard' && A.actionPoints === 8, 'no Espresso left: refused');
+  // The extra points can really be spent.
+  standIn(s, A, 'corridorE'); A.actionPoints = 6;
+  let moves = 0;
+  const other = () => (A.currentRoom === 'corridorE' ? lobby : 'corridorE');
+  for (let i = 0; i < 6; i++) {
+    if (!canAffordRoute(s, floor, A, [A.currentRoom, other()]).ok) break;
+    if (enterRoom(s, floor, A, other()).cost === 1) moves++;
+  }
+  check(moves === 6 && A.actionPoints === 0 && canAffordRoute(s, floor, A, [A.currentRoom, other()]).reason === 'notEnoughActionPoints',
+    'six action points buy exactly six moves');
+  A.actionPoints = 8;
+  const living = s.players.filter(q => q.alive).length;
+  const nextUp = nextPlayer(s);
+  endTurn(s, floor);
+  check(nextUp.actionPoints === 4, 'the next guest starts with the usual 4');
+  for (let i = 1; i < living; i++) endTurn(s, floor);
+  check(activePlayer(s) === A && A.actionPoints === 4, 'round the table and back: exactly 4 again (never carried over)');
+  A.hand.push({ id: 'es4', type: 'espresso' });
+  s.finished = true;
+  check(useEspresso(s, A, 'es4').reason === 'finished' && A.hand.some(c => c.id === 'es4') && A.actionPoints === 4, 'refused once the match is over');
+  s.finished = false; A.alive = false;
+  check(useEspresso(s, A, 'es4').reason === 'dead', 'the dead cannot use one');
 }
 
 console.log(failures ? `\n${failures} FAILED` : '\nALL RULES CHECKS PASSED');

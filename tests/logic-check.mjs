@@ -52,6 +52,27 @@ for (const def of hotel.tiles) {
 }
 check(tileProblems.length === 0, `every tile in every orientation keeps its centre and doorways clear (${tileProblems.slice(0, 4).join('; ') || 'all 96 fine'})`);
 
+console.log('\nrooms with jobs (tiles)');
+const JOBS = { linenStore1: 'linenStore', linenStore2: 'linenStore', infirmary1: 'infirmary', infirmary2: 'infirmary', switchboard: 'switchboard' };
+check(hotel.tiles.filter(x => x.job).map(x => x.id).sort().join() === Object.keys(JOBS).sort().join()
+  && hotel.tiles.every(x => !x.job || JOBS[x.id] === x.job), 'five job tiles: linenStore1/2, infirmary1/2, switchboard');
+check(!['suite410', 'suite412', 'suite414', 'suite418', 'gardenLounge'].some(id => hotel.tiles.some(x => x.id === id)),
+  'the five tiles they replaced are gone');
+{
+  // Same doorway shapes as the tiles they replaced: 2 dead ends, 1 corner, 1 straight, 1 four-way.
+  const shape = x => x.doors.length === 2 ? (SIDES.indexOf(x.doors[0]) % 2 === SIDES.indexOf(x.doors[1]) % 2 ? 'straight' : 'corner') : `${x.doors.length}`;
+  const got = Object.keys(JOBS).map(id => shape(hotel.tiles.find(x => x.id === id))).sort().join();
+  check(got === ['1', '1', 'corner', 'straight', '4'].sort().join(), `their doorway shapes: 2 dead ends, 1 corner, 1 straight, 1 four-way (${got})`);
+  let jobOk = true;
+  for (const def of hotel.tiles) for (let rot = 0; rot < 4; rot++) {
+    resetHotel(floor, 1);
+    const room = placeTile(floor, def, [3, 3], rot);
+    if (room.job !== (def.job || null)) jobOk = false;
+    if (def.job && (!room.searchable || room.dark || room.locked || room.safe)) jobOk = false;
+  }
+  check(jobOk, 'placed in any orientation, a tile keeps its job (and a job room stays searchable, lit, unlocked)');
+}
+
 console.log('\nthe lobby');
 const layouts = [['north', 'east', 'south', 'west'], ...SIDES.map(c => SIDES.filter(s => s !== c))];
 for (const doors of layouts) {
@@ -66,7 +87,7 @@ for (const doors of layouts) {
 }
 
 console.log('\n400 generated hotels, opened door by door');
-let problems = [], closed = 0, walkOk = 0, exitWalk = 0, slowest = 0, placed = [];
+let problems = [], closed = 0, walkOk = 0, exitWalk = 0, slowest = 0, placed = [], jobRooms = true, jobsSeen = 0;
 for (let seed = 1; seed <= 400; seed++) {
   resetHotel(floor, seed);
   const rng = makeRng(seed * 13 + 5);
@@ -88,11 +109,14 @@ for (let seed = 1; seed <= 400; seed++) {
   const exit = floor.rooms.get(floor.exitRoom);
   const path = exit && findPath(grid, start, nearestWalkable(grid, exit.center[0], exit.center[1], 1.5));
   if (path && roomSequence(grid, path).at(-1) === exit.id) exitWalk++;
+  for (const r of floor.roomList) if (r.job !== (JOBS[r.id] || null)) jobRooms = false;
+  jobsSeen += floor.roomList.filter(r => r.job).length;
 }
 check(closed === 0, 'the hotel never closed itself off before the Fire Exit was placed');
 check(problems.length === 0, `no overlaps, every doorway has floor on both sides (${problems.slice(0, 3).join('; ') || 'none'})`);
 check(walkOk === 400, `every room of every hotel can be walked to from the lobby (${walkOk}/400)`);
 check(exitWalk === 400, `the Fire Exit can be walked to in every hotel (${exitWalk}/400)`);
+check(jobRooms && jobsSeen > 400 * 3, `every job room placed carries its job, and no other room has one (${jobsSeen} job rooms placed in 400 hotels)`);
 const avg = placed.reduce((a, b) => a + b, 0) / placed.length;
 console.log(`       tiles placed when every door had been tried: average ${avg.toFixed(1)}, fewest ${Math.min(...placed)}; slowest walkable-grid rebuild ${slowest.toFixed(1)} ms`);
 check(slowest < 150, 'rebuilding the walkable grid after a door opens stays quick');

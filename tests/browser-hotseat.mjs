@@ -5,8 +5,9 @@
 //
 // Four to six guests passing one device under docs/GAME_RULES.md: secret roles, the pass-the-
 // device flow, the timer, private trades, possession and the Lantern, attacks and death, private
-// search results, escaping with three Lanterns, and the two ways the hotel wins. And that the
-// public screen never leaks a role, a trade result or a search result.
+// search results, escaping with three Lanterns, and the two ways the hotel wins; the rooms with
+// jobs (Infirmary, Switchboard) and the Hand Mirror and Espresso cards. And that the public screen
+// never leaks a role, a trade result, a search result or what a Hand Mirror showed.
 import { chromium } from 'playwright-core';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -147,7 +148,7 @@ const st = await game(() => ({
 check(st.mode === 'hotseat' && st.n === 6, 'six guests, hot-seat');
 check(st.poss.length === 1 && st.supply[st.poss[0]] === 3 && st.supply.filter(x => x > 0).length === 1, 'exactly one possessed guest, holding 3 Possession cards');
 check(st.lanterns && st.four, 'four cards each, and not one Lantern dealt');
-check(st.pileLanterns === 12 && st.pile === 16, 'all 12 Lanterns wait in the 16-card deck');
+check(st.pileLanterns === 14 && st.pile === 24, `all 14 Lanterns wait in the ${st.pile}-card deck (48 less six hands of 4)`);
 check(st.locked.length === 0, 'nothing is locked until a locked room is revealed');
 check(st.east && st.rooms.includes('corridorW'), 'the random hotel has grown the rooms these checks use');
 check(st.timer, 'the 45-second timer is on');
@@ -299,13 +300,13 @@ console.log('\n6b. search results are private');
   await page.waitForTimeout(120);
   check(await kind() === 'note', 'the result goes on a private card for the searcher');
   const note = await page.textContent('#handoff-notes');
-  check(/You search .* find a /.test(note), `it says what they found ("${note.trim().slice(0, 60)}")`);
+  check(/You search .* find an? /.test(note), `it says what they found ("${note.trim().slice(0, 60)}")`);
   await next();
   const toast = await page.textContent('#toast');
-  check(/searched\.$/.test(toast.trim()) && !/find|Lantern|Bandage|Knife|Flashlight|Revolver|Barricade|Lock Pick|Master Key/.test(toast),
+  check(/searched\.$/.test(toast.trim()) && !/find|Lantern|Bandage|Knife|Flashlight|Revolver|Barricade|Lock Pick|Master Key|Hand Mirror|Espresso/.test(toast),
     `the shared screen only says that someone searched ("${toast.trim()}")`);
   const log = await game(() => window.__game.publicLog());
-  check(log.length === logBefore + 1 && /searched/.test(log.at(-1)) && !/Lantern|Bandage|Knife|Flashlight|Revolver/.test(log.at(-1)),
+  check(log.length === logBefore + 1 && /searched/.test(log.at(-1)) && !/Lantern|Bandage|Knife|Flashlight|Revolver|Barricade|Lock Pick|Master Key|Hand Mirror|Espresso/.test(log.at(-1)),
     'the public log records the search, not the result');
 }
 
@@ -417,6 +418,213 @@ await game(() => window.__game.forceTimeUp());
 await page.waitForFunction(() => window.__game.state.activeIndex === 1, null, { timeout: 20000 }).catch(() => {});
 check(await game(() => window.__game.state.activeIndex) === 1 && await kind() === 'pass', 'when the clock runs out the turn ends and the device is passed');
 check(await game(() => window.__game.timeLeft()) === 0, 'the clock does not run on the hand-over screen');
+
+// Part 2 stagings run with ?timer=off: headless software rendering is slow, and a turn that ran out
+// of time half-way would hand the device on in the middle of a check.
+const JOBS = 'mode=hotseat&players=6&seed=4242&timer=off';
+const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+const names = () => game(() => window.__game.state.players.map(p => p.name));
+const pips = () => page.evaluate(() => {
+  const all = [...document.querySelectorAll('#ap-pips .pip')];
+  return { n: all.length, full: all.filter(p => p.classList.contains('full')).length, bonus: all.filter(p => p.classList.contains('bonus')).length,
+    label: document.getElementById('action-points').textContent.trim() };
+});
+const roomBtn = () => page.evaluate(() => {
+  const b = document.getElementById('btn-room');
+  return { shown: !!b && !b.hidden && b.offsetParent !== null, disabled: b.disabled,
+    main: b.querySelector('.btn-main').textContent.trim(), sub: document.getElementById('room-sub').textContent.trim() };
+});
+// Open the hand sheet the way a player does (tap the fanned cards) and select one card.
+async function handCard(id) {
+  if (!(await game(() => !document.getElementById('hand-overlay').hidden))) await tap('#hand-strip');
+  await page.click(`#hand-cards .card-tile[data-card-id="${id}"]`); await page.waitForTimeout(80);
+}
+const detailButtons = () => page.evaluate(() => [...document.querySelectorAll('#hand-detail .btn')].map(b => ({ text: b.textContent.trim(), disabled: b.disabled })));
+
+console.log('\n10b. the Infirmary');
+{
+  await load(JOBS);
+  await tap('#btn-begin'); await throughRoles(); await intoTurn();
+  check(!(await roomBtn()).shown, 'in the lobby there is no room button');
+  check(await game(() => window.__game.revealTile('infirmary1')) && await game(() => window.__game.floor.rooms.get('infirmary1').job) === 'infirmary', 'an Infirmary is revealed');
+  await game(() => { window.__game.state.lockedRooms.clear(); window.__game.activePlayer().health = 1; });
+  await put('infirmary1', 4);
+  let b = await roomBtn();
+  check(b.shown && !b.disabled && b.main === 'Infirmary' && /Heal 2 · 1 action/.test(b.sub), `standing in it shows its button ("${b.main} — ${b.sub}")`);
+  const logBefore = await game(() => window.__game.publicLog().length);
+  await tap('#btn-room');
+  const r = await game(() => ({ h: window.__game.activePlayer().health, ap: window.__game.activePlayer().actionPoints,
+    bars: document.querySelectorAll('#health .bar.full').length, log: window.__game.publicLog() }));
+  check(r.h === 3 && r.bars === 3, 'tapping it at 1 health restores 2: health 3 of 3, and the health bars show it');
+  check(r.ap === 3, '1 action spent');
+  check(r.log.length === logBefore + 1 && /treated in the Infirmary/.test(r.log.at(-1)), `the public log records the visit ("${r.log.at(-1)}")`);
+  b = await roomBtn();
+  check(b.shown && b.disabled && b.sub === 'Full health', `the button then says full health ("${b.sub}")`);
+  await shot('hs-10-infirmary');
+  // Never above the maximum: at 2 health it restores only 1.
+  await game(() => { window.__game.activePlayer().health = 2; window.__game.refresh(); });
+  await tap('#btn-room');
+  check(await game(() => window.__game.activePlayer().health) === 3 && await game(() => window.__game.activePlayer().actionPoints) === 2, 'at 2 health it tops up to 3, never above');
+  // No actions left: the button says so and stays shut.
+  await game(() => { const p = window.__game.activePlayer(); p.health = 1; p.actionPoints = 0; window.__game.refresh(); });
+  b = await roomBtn();
+  check(b.disabled && b.sub === 'No actions left', `with no actions left it cannot be used ("${b.sub}")`);
+}
+
+console.log('\n10c. the Switchboard');
+{
+  await load(JOBS);
+  await tap('#btn-begin'); await throughRoles(); await intoTurn();
+  // Guests 3 and 4 possessed, guest 5 possessed but dead (the dead are out of the game: not counted).
+  await game(() => {
+    const s = window.__game.state;
+    s.players.forEach((p, i) => { p.possessed = i >= 3; p.notes = []; p.knows = new Set(); });
+    s.players[5].alive = false;
+    window.__game.refresh();
+  });
+  const who = await names();
+  const evil = [who[3], who[4], who[5]];
+  check(await game(() => window.__game.revealTile('switchboard')) && await game(() => window.__game.floor.rooms.get('switchboard').job) === 'switchboard', 'the Switchboard is revealed');
+  await game(() => window.__game.state.lockedRooms.clear());
+  await put('switchboard', 4);
+  let b = await roomBtn();
+  check(b.shown && !b.disabled && b.main === 'Switchboard' && /Call · 1 action/.test(b.sub), `standing in it shows its button ("${b.main} — ${b.sub}")`);
+  const logBefore = await game(() => window.__game.publicLog().length);
+  await tap('#btn-room');
+  check(await game(() => window.__game.noticeOpen()) && await visible('#notice-overlay'), 'tapping it puts up a notice for the whole table');
+  const title = (await page.textContent('#notice-title')).trim(), body = (await page.textContent('#notice-body')).trim();
+  check(title === 'The Switchboard' && body.startsWith(`${who[0]} rang the Switchboard.`), `saying who rang ("${body}")`);
+  check(/\b2 guests are possessed\b/.test(body), 'with the right count, living guests only, in the plural (2 guests are)');
+  check(!evil.some(n => body.includes(n)), 'and never who');
+  check(await game(() => window.__game.activePlayer().actionPoints) === 3, '1 action spent');
+  await shot('hs-11-switchboard');
+  await tap('#btn-notice-ok');
+  check(!(await game(() => window.__game.noticeOpen())), 'Continue closes the notice');
+  b = await roomBtn();
+  check(b.shown && b.disabled && b.sub === 'Called this turn', `the button then says it was called this turn ("${b.sub}")`);
+  let log = await game(() => window.__game.publicLog());
+  check(log.length === logBefore + 1 && /rang the Switchboard/.test(log.at(-1)) && /2 guests are possessed/.test(log.at(-1)), `the public log has the count ("${log.at(-1)}")`);
+  check(log.slice(logBefore).every(l => !evil.some(n => l.includes(n))), 'and never names a possessed guest');
+  check(!/possess/i.test(await page.evaluate(() => document.getElementById('toast').hidden ? '' : document.getElementById('toast').textContent)), 'no toast names anyone as possessed');
+
+  // Singular: the next guest calls once only one living guest is possessed.
+  await game(() => { window.__game.state.players[4].possessed = false; });
+  await tap('#btn-end-turn');
+  await intoTurn();
+  check(await game(() => window.__game.state.activeIndex) === 1, "it is the next guest's turn");
+  await put('switchboard', 4);
+  b = await roomBtn();
+  check(!b.disabled && /Call/.test(b.sub), 'each guest may call once in their own turn');
+  await tap('#btn-room');
+  const body1 = (await page.textContent('#notice-body')).trim();
+  check(/\b1 guest is possessed\b/.test(body1) && !/guests are/.test(body1), `with one possessed, the singular ("${body1}")`);
+  check(!evil.some(n => body1.includes(n)), 'still never who');
+  await tap('#btn-notice-ok');
+  log = await game(() => window.__game.publicLog());
+  check(log.slice(logBefore).every(l => !evil.some(n => l.includes(n))), 'the public log still never names a possessed guest');
+}
+
+console.log('\n10d. the Hand Mirror');
+{
+  await load(JOBS);
+  await tap('#btn-begin'); await throughRoles(); await intoTurn();
+  const P = 0, E = 1;
+  await game(({ P, E }) => {
+    const s = window.__game.state;
+    s.players.forEach((p, i) => { p.possessed = i === E; p.notes = []; p.knows = new Set(); });
+    s.players[P].hand = [{ id: 'hm1', type: 'handMirror' }, { id: 'hm2', type: 'handMirror' }, { id: 'pb', type: 'bandage' }];
+    s.players[E].hand = [{ id: 'e1', type: 'lantern' }, { id: 'e2', type: 'knife' }, { id: 'x1', type: 'possession' }, { id: 'x2', type: 'possession' }, { id: 'x3', type: 'possession' }];
+    s.activeIndex = P; window.__game.refresh();
+  }, { P, E });
+  const who = await names();
+  // Both in the East Corridor; everyone else stays in the lobby. (Placed, not walked: no meeting.)
+  await place(E, 'corridorE');
+  await put('corridorE', 4);
+  check(same(await game(() => window.__game.handMirrorTargets()), [await game(e => window.__game.state.players[e].id, E)]), 'the only guest in the room is the possessed one');
+  const logBefore = await game(() => window.__game.publicLog().length);
+  await handCard('hm1');
+  check(await visible('#hand-overlay'), 'tapping the hand opens the hand sheet');
+  let btns = await detailButtons();
+  check(btns.length === 1 && btns[0].text === `Look at ${who[E]}'s hand · 1 action` && !btns[0].disabled, `the Hand Mirror offers "${btns[0]?.text}"`);
+  await clickBtn('#hand-detail .btn', 'Look at');
+  check(await kind() === 'mirror' && await game(() => window.__game.mirrorOpen()), 'a private hand-over screen opens');
+  check(!(await visible('#hand-overlay')), 'and the hand sheet has closed');
+  check((await page.textContent('#handoff-title')).trim() === `${who[E]}'s hand`, `titled "${(await page.textContent('#handoff-title')).trim()}"`);
+  check((await page.textContent('#handoff-kicker')).includes(`${who[P]} only`), 'for the mirror user only');
+  const tiles = await page.evaluate(() => [...document.querySelectorAll('#handoff-hand .card-tile')].map(t => ({ id: t.dataset.cardId, evil: t.classList.contains('evil') })));
+  check(tiles.length === 5 && ['e1', 'e2', 'x1', 'x2', 'x3'].every(id => tiles.some(t => t.id === id)), `it shows every card they hold (${tiles.length})`);
+  check(tiles.filter(t => t.evil).length === 3 && tiles[0].evil, 'Possession cards included, shown first');
+  check(/POSSESSED/.test(await page.textContent('#handoff-notes')) && (await page.textContent('#handoff-notes')).includes(who[E]), 'and it says plainly that they are possessed');
+  check((await page.textContent('#btn-handoff-next')).trim() === 'Done', 'the button says Done');
+  check(!(await game(() => window.__game.publicLog().slice(-1)[0] || '')).match(/Lantern|Knife|Possession|possess/i), 'the public log says nothing of what it showed');
+  await shot('hs-12-mirror');
+  const st2 = await game(({ P, E }) => {
+    const s = window.__game.state, p = s.players[P];
+    return { gone: !p.hand.some(c => c.id === 'hm1'), discarded: s.discardPile.some(c => c.id === 'hm1'), ap: p.actionPoints, knows: p.knows.has(s.players[E].id),
+      eHand: s.players[E].hand.length };
+  }, { P, E });
+  check(st2.gone && st2.discarded, 'the Hand Mirror is used up (on the discard pile)');
+  check(st2.ap === 3, '1 action spent');
+  check(st2.knows && st2.eHand === 5, 'the user now knows; the other guest keeps every card');
+  await next();
+  check(!(await game(() => window.__game.handoffOpen())) && await game(() => window.__game.inActionPhase()), 'Done returns to the turn');
+  const toast = (await page.textContent('#toast')).trim();
+  check(toast === `${who[P]} used a Hand Mirror on ${who[E]}.`, `the shared toast says only who used it on whom ("${toast}")`);
+  const log = await game(() => window.__game.publicLog());
+  check(log.length === logBefore + 1 && log.at(-1) === `${who[P]} used a Hand Mirror on ${who[E]}.`, 'and so does the public log');
+  check(log.slice(logBefore).every(l => !/possess|Lantern|Knife/i.test(l)), 'with nothing about what it showed');
+  check(!/POSSESS/i.test(await page.evaluate(() => document.getElementById('hud').innerText)), 'the shared screen does not say who is possessed');
+  await handCard('pb');
+  check(await visible('#hand-banner') && (await page.textContent('#hand-banner')).includes(`You have unmasked: ${who[E]}`),
+    `the hand sheet banner now lists the unmasked guest ("${(await page.textContent('#hand-banner')).trim()}")`);
+  await tap('#btn-hand-close');
+
+  // Nobody else in the room: no one to look at.
+  await put('corridorW', 4);
+  check(await game(() => window.__game.handMirrorTargets().length) === 0, 'alone in a room there is nobody to look at');
+  await handCard('hm2');
+  btns = await detailButtons();
+  check(btns.length === 0 && /No other guest in this room/.test(await page.textContent('#hand-detail')), 'and the Hand Mirror offers no buttons, saying why');
+  check(await game(() => window.__game.activePlayer().hand.some(c => c.id === 'hm2') && window.__game.activePlayer().actionPoints === 4), 'nothing is spent');
+  await tap('#btn-hand-close');
+}
+
+console.log('\n10e. Espresso');
+{
+  await load(JOBS);
+  await tap('#btn-begin'); await throughRoles(); await intoTurn();
+  await game(() => { const s = window.__game.state; s.players[0].hand = [{ id: 'es1', type: 'espresso' }, { id: 'es2', type: 'espresso' }]; window.__game.refresh(); });
+  let p = await pips();
+  check(p.n === 4 && p.full === 4 && p.bonus === 0 && p.label === '4 / 4', `4 actions to start (${p.label})`);
+  await handCard('es1');
+  const btns = await detailButtons();
+  check(btns.length === 1 && btns[0].text === 'Drink · free' && !btns[0].disabled, `the Espresso offers "${btns[0]?.text}"`);
+  await clickBtn('#hand-detail .btn', 'Drink');
+  p = await pips();
+  check(await game(() => window.__game.activePlayer().actionPoints) === 6, 'drinking it gives 4 -> 6 actions, and costs none');
+  check(p.n === 6 && p.full === 6 && p.bonus === 2, `six pips, two of them bonus pips (${p.n} pips, ${p.bonus} bonus)`);
+  check(p.label === '6 (+2)', `the count reads "${p.label}"`);
+  check(/Actions 6 \(\+2\)/.test(await page.textContent('#hand-note')), `the hand sheet says so too ("${(await page.textContent('#hand-note')).trim()}")`);
+  check(await game(() => !window.__game.activePlayer().hand.some(c => c.id === 'es1') && window.__game.state.discardPile.some(c => c.id === 'es1')), 'the Espresso is used up');
+  await shot('hs-13-espresso');
+  await tap('#btn-hand-close');
+  // A search spends one of them as normal.
+  await put(await plainRoom(), null);
+  await tap('#btn-search');
+  await page.waitForTimeout(120);
+  while (await game(() => window.__game.handoffOpen())) await next();
+  if (await game(() => window.__game.fullHandOpen())) await tap('#btn-fullhand-leave');
+  check(await game(() => window.__game.activePlayer().actionPoints) === 5 && (await pips()).label === '5 (+1)', `a search spends one of the six (${(await pips()).label})`);
+  // End turn and go round the table: the extra actions do not carry over.
+  await tap('#btn-end-turn');
+  await intoTurn();
+  check(await game(() => window.__game.state.activeIndex) === 1 && (await pips()).label === '4 / 4', 'the next guest has the usual 4');
+  for (let i = 1; i < 6; i++) { await tap('#btn-end-turn'); await intoTurn(); }
+  const back = await game(() => ({ i: window.__game.state.activeIndex, ap: window.__game.activePlayer().actionPoints }));
+  p = await pips();
+  check(back.i === 0 && back.ap === 4 && p.n === 4 && p.bonus === 0 && p.label === '4 / 4', `round the table, the Espresso drinker is back to 4 (${p.label}, ${p.n} pips)`);
+  check(await game(() => window.__game.activePlayer().hand.some(c => c.id === 'es2')), 'the unused Espresso is still in hand');
+}
 
 console.log('\n11. practice is untouched');
 await load('');

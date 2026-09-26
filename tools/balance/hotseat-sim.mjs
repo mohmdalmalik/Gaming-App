@@ -30,7 +30,8 @@
 //                 treatment (health 1 of 3) walks to one that is at most two steps away, and skips the
 //                 Bandage that turn. Never for a clean guest carrying three Lanterns: getting out
 //                 comes first.
-//   Switchboard   a clean guest standing in it rings it, at most once per round, and only when the
+//   Switchboard   a clean guest standing in it rings it once the room is searched, with an action to
+//                 spare (never drinking an Espresso for it), at most once per round, and only when the
 //                 answer could have changed since the table last heard it (a trade or a death since)
 //                 and the number can settle something for that guest: they already know someone is
 //                 possessed, or only one or two guests are left to wonder about. (Ringing whenever
@@ -43,12 +44,20 @@
 //                 possessed ones not yet known, they are all possessed. Possessed guests never ring —
 //                 they have nothing to learn.
 //   Hand Mirror   used outside meetings: in the game a meeting starts the moment you walk in, and the
-//                 mirror is played from your hand. A clean guest sharing a room with a guest it does
-//                 not know about uses it on the carrier (the guest it brings Lanterns to), or failing
-//                 that on the guest there holding the most Lanterns — the guests the Lanterns flow to
-//                 (never on a guest holding no Lantern), at most once a round per guest looked at.
+//                 mirror is played from your hand. A clean guest sharing a room with a guest it knows
+//                 nothing certain about uses it on the carrier (the guest it brings Lanterns to), or
+//                 failing that on the guest there holding the most Lanterns, or anyone there. Never on a
+//                 guest whose Possession cards it has already seen since that guest's last trade — in a
+//                 mirror, or because that guest just traded with it and handed over something else: a
+//                 Possession card only changes hands in a trade, so the mirror could show nothing new.
+//                 (An earlier version looked only at Lantern holders and so mostly at guests who had
+//                 just traded with it; the possessed ones among them had just shown they held no
+//                 Possession card, so the mirror almost never unmasked anyone.)
 //                 A Possession card seen that way tells the bot the truth (the engine records it), which
-//                 steers who it treats as the carrier and whom it attacks. Possessed bots do not use
+//                 steers who it treats as the carrier and whom it attacks; a known possessed guest seen
+//                 in a mirror holding NO Possession card gets no Lantern in a trade (nothing to block).
+//                 Bots never walk away from a known possessed guest (meetings stay forced), so knowing
+//                 helps them less than it would help a person. Possessed bots do not use
 //                 it: here the table talk already says who carries the Lanterns and possessed guests
 //                 already know each other, so it would tell them nothing they act on (a real player
 //                 might still use one to look innocent or to dodge a Lantern block; bots don't bluff).
@@ -83,11 +92,19 @@ const freshMemo = () => ({
   events: 0,              // trades and deaths so far (both public)
   eventsAtCall: 0,        // ...when the table last heard the Switchboard's count (the start: 1)
   rang: new Map(),        // playerId -> round they last rang the Switchboard
-  mirrored: new Map(),    // playerId -> Map(targetId -> round they last looked at them)
+  trades: new Map(),      // playerId -> trades they have made so far (public: "X and Y traded")
+  seen: new Map(),        // playerId -> Map(targetId -> { trades, armed, mirror }): what I last saw for
+                          // myself of a guest's Possession cards — a Hand Mirror (certain) or a trade in
+                          // which they handed me something else (they did not use one on me) — and how
+                          // many trades they had made then
   trusted: new Map(),     // playerId -> Set of guests they are CERTAIN are clean (from the Switchboard)
   gained: 0,              // extra actions from Espresso this turn
 });
 const trustOf = p => { if (!memo.trusted.has(p.id)) memo.trusted.set(p.id, new Set()); return memo.trusted.get(p.id); };
+const seenBy = p => { if (!memo.seen.has(p.id)) memo.seen.set(p.id, new Map()); return memo.seen.get(p.id); };
+const tradesOf = q => memo.trades.get(q.id) || 0;
+// What I saw of `q` still holds: they have not traded since (a Possession card only moves in a trade).
+const stillSeen = (p, q) => { const s = seenBy(p).get(q.id); return s && s.trades === tradesOf(q) ? s : null; };
 const hasEspresso = p => p.hand.some(c => c.type === 'espresso');
 
 // Espresso: make sure I can pay `cost` action points, drinking one only when I am out of them —
@@ -170,6 +187,13 @@ function giveCard(st, me, partner) {
   }
   const lan = lanterns(hand);
   const carrier = carrierOf(st, me);
+  // A guest I know is possessed, and whose whole hand I saw in a Hand Mirror without a Possession card
+  // (no trade since): nothing to block, so no Lantern for them.
+  const saw = stillSeen(me, partner);
+  if (me.knows.has(partner.id) && saw?.mirror && !saw.armed) {
+    const plain = hand.filter(c => c.type !== 'lantern');
+    if (plain.length) return rnd(plain).id;
+  }
   // The carrier keeps their Lanterns and gives something else if they can.
   if (carrier?.id === me.id) {
     const plain = hand.filter(c => c.type !== 'lantern');
@@ -216,6 +240,12 @@ function meet(st, p, m) {
   if (!r.ok) return;
   m.trades++;
   heard(st, p, Q);
+  for (const X of [p, Q]) memo.trades.set(X.id, tradesOf(X) + 1);
+  // A clean guest who was handed something other than a Possession card saw, for themselves, that
+  // the other guest did not use one on them.
+  for (const [X, Y] of [[p, Q], [Q, p]]) {
+    if (!X.possessed && r.given[Y.id] !== 'possession') seenBy(X).set(Y.id, { trades: tradesOf(Y), armed: false, mirror: false });
+  }
   if (r.given[p.id] === 'possession' || r.given[Q.id] === 'possession') m.attempts++;
   m.possessed += r.possessed.length;
   m.blocked += r.blocks.length;
@@ -283,23 +313,28 @@ function ring(st, p, m) {
   if (learned) m.switchLearned++;
 }
 
-// Hand Mirror, outside meetings: on the carrier, or the guest here holding the most Lanterns.
+// Hand Mirror, outside meetings, on a guest here I know nothing certain about: the carrier first (the
+// guest my Lanterns go to), then whoever here holds the most Lanterns, then anyone. Not on a guest whose
+// Possession cards (or lack of them) I have already seen since their last trade — through a mirror, or
+// because they just traded with me and handed me something else: a Possession card only changes hands
+// in a trade, so the mirror could not show anything new.
 function lookInMirror(st, p, m) {
   const mirror = p.hand.find(c => c.type === 'handMirror');
   if (!mirror || p.possessed) return false;
-  const looked = memo.mirrored.get(p.id) || new Map();
   const sure = trustOf(p);
   const here = S.playersInRoom(st, p.currentRoom, p.id)
-    .filter(q => !p.knows.has(q.id) && !sure.has(q.id) && looked.get(q.id) !== st.round);
+    .filter(q => !p.knows.has(q.id) && !sure.has(q.id) && !stillSeen(p, q));
+  if (!here.length) return false;
   const carrier = carrierOf(st, p);
-  const holders = here.filter(q => lanterns(q.hand).length);    // nobody is a carrier without a Lantern
-  const target = holders.find(q => q.id === carrier?.id)
-    || holders.sort((a, b) => lanterns(b.hand).length - lanterns(a.hand).length)[0];
-  if (!target || !spend(st, p, m, rules.actionCost.useCard)) return false;
+  const target = here.find(q => q.id === carrier?.id)
+    || [...here].sort((a, b) => lanterns(b.hand).length - lanterns(a.hand).length || a.index - b.index)[0];
+  if (!spend(st, p, m, rules.actionCost.useCard)) return false;
   const r = A.useHandMirror(st, floor, p, mirror.id, target.id);
   if (!r.ok) return false;
-  looked.set(target.id, st.round); memo.mirrored.set(p.id, looked);
+  const armed = r.hand.some(c => c.type === 'possession');
+  seenBy(p).set(target.id, { trades: tradesOf(target), armed, mirror: true });
   m.mirrors++;
+  if (target.possessed) m.mirrorOnPossessed++;
   if (r.unmasked) m.mirrorUnmasked++;
   else if (target.possessed) m.mirrorMissed++;     // possessed, but holding no Possession card
   return true;
@@ -326,8 +361,6 @@ function botTurn(st, p, m) {
       if (r.ok) { m.infirmaryUses++; m.healthRestored += r.healed; }
       continue;
     }
-    if (!escaping && room.job === 'switchboard' && worthRinging(st, p) && A.canUseRoom(st, floor, ready(p)).ok
-      && spend(st, p, m, rules.actionCost.switchboard)) { ring(st, p, m); continue; }
     if (!escaping && lookInMirror(st, p, m)) continue;
     if (escaping) {
       // Three Lanterns: to the Fire Exit — or, until it has turned up, keep opening doors.
@@ -340,6 +373,8 @@ function botTurn(st, p, m) {
       }
       const lockedNear = S.adjacentLockedRooms(st, floor, p).filter(r => !st.searchedRooms.has(r));
       if (lockedNear.length && opener && spend(st, p, m, rules.actionCost.useCard)) { A.useUnlock(st, floor, p, opener.id, lockedNear[0]); continue; }
+      // The Switchboard, once the room is searched, with an action to spare (never an Espresso for it).
+      if (room.job === 'switchboard' && worthRinging(st, p) && A.canUseRoom(st, floor, p).ok) { ring(st, p, m); continue; }
       const clinic = infirmaryNear(st, p);
       const bringing = !p.possessed && lanterns(p.hand).length && carrier && carrier.id !== p.id;
       const phone = !p.possessed && !bringing ? switchboardNextDoor(st, p) : null;
@@ -399,7 +434,7 @@ function match(seed) {
   memo = freshMemo();
   const m = { meetings: 0, trades: 0, attacks: 0, deaths: 0, attempts: 0, possessed: 0, blocked: 0, burned: 0, found: 0, stuckTurns: 0, opened: 0, jammed: 0, closedOff: 0,
     linenSearches: 0, linenCards: 0, linenLeft: 0, infirmaryUses: 0, healthRestored: 0, bandages: 0,
-    switchCalls: 0, switchLearned: 0, switchUnmasked: 0, mirrors: 0, mirrorUnmasked: 0, mirrorMissed: 0,
+    switchCalls: 0, switchLearned: 0, switchUnmasked: 0, mirrors: 0, mirrorOnPossessed: 0, mirrorUnmasked: 0, mirrorMissed: 0,
     espresso: 0, espressoAP: 0, espressoUnused: 0, emptyHanded: 0 };
   for (const t of DECK_TYPES) {
     m[`dealt:${t}`] = st.players.reduce((n, q) => n + q.hand.filter(c => c.type === t).length, 0);
@@ -545,7 +580,8 @@ const jobs = [
   ['  … possessed guests worked out from the count', `${avg(v, 'switchUnmasked')}`],
   ['Hand Mirrors in hand at the start / drawn by searching', `${avg(v, 'dealt:handMirror')} / ${avg(v, 'drawn:handMirror')}`],
   ['Hand Mirrors used', use('mirrors', 'mirrorsHeld', 'one in a hand')],
-  ['  … unmasked a possessed guest', `${avg(v, 'mirrorUnmasked')} (in ${inPct('mirrorUnmasked')})`],
+  ['  … used on a possessed guest', `${avg(v, 'mirrorOnPossessed')} (in ${inPct('mirrorOnPossessed')})`],
+  ['  … unmasked a possessed guest (saw a Possession card)', `${avg(v, 'mirrorUnmasked')} (in ${inPct('mirrorUnmasked')})`],
   ['  … possessed, but holding no Possession card (looked clean)', `${avg(v, 'mirrorMissed')}`],
   ['Espressos in hand at the start / drawn by searching', `${avg(v, 'dealt:espresso')} / ${avg(v, 'drawn:espresso')}`],
   ['Espressos drunk', use('espresso', 'espressoHeld', 'one in a hand')],

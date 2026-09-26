@@ -4,7 +4,8 @@
 //       node tests/browser-practice.mjs --url http://127.0.0.1:8123/Gaming-App/   (Pages sub-path)
 //
 // One guest alone under docs/GAME_RULES.md in a random hotel: opening doors and moving, searching,
-// dark and locked rooms, finding three Lanterns, and the fire exit. No meetings.
+// dark and locked rooms, a Linen Store's two-card draw, finding three Lanterns, and the fire exit.
+// No meetings.
 import { chromium } from 'playwright-core';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -121,13 +122,13 @@ const info = await game(() => ({
   practice: window.__game.state.practice, players: window.__game.state.players.length,
   ap: window.__game.rules.actionPointsPerTurn, move: window.__game.rules.actionCost.move, open: window.__game.rules.actionCost.open,
   dealt: window.__game.activePlayer().hand.filter(c => c.type === 'lantern').length,
-  inPile: window.__game.state.drawPile.filter(c => c.type === 'lantern').length,
+  inPile: window.__game.state.drawPile.filter(c => c.type === 'lantern').length, pile: window.__game.state.drawPile.length,
   locked: window.__game.lockedRooms(), timer: window.__game.rules.turnTimerEnabled,
 }));
 check(info.problems.length === 0, 'no floor problems');
 check(info.practice && info.players === 1, 'one guest, practice mode');
 check(info.ap === 4 && info.move === 1 && info.open === 1, '4 action points; opening a door costs 1, a move costs 1');
-check(info.dealt === 0 && info.inPile === 12, 'no Lantern is dealt; all 12 are in the deck, to be found by searching');
+check(info.dealt === 0 && info.inPile === 14 && info.pile === 44, `no Lantern is dealt; all 14 are in the ${info.pile}-card deck (48 less a hand of 4), to be found by searching`);
 check(info.locked.length === 0 && info.rooms === 1, 'the hotel starts as just the lobby; nothing is locked yet');
 check(info.timer === false, 'no turn timer in practice');
 await tap('#btn-begin');
@@ -222,6 +223,59 @@ const ok6 = await straightToLobby();
 check(ok6, 'it comes down after one round');
 await settle();
 
+console.log('\n6b. a Linen Store');
+{
+  check(await game(() => window.__game.revealTile('linenStore1')) && await game(() => window.__game.floor.rooms.get('linenStore1').job) === 'linenStore',
+    'a Linen Store is revealed');
+  await game(() => window.__game.state.lockedRooms.clear());
+  await put('linenStore1', 4);
+  await game(() => { const p = window.__game.activePlayer(); p.hand = p.hand.slice(0, 2); window.__game.refresh(); });
+  const top = await game(() => window.__game.state.drawPile.slice(0, 2).map(c => c.id));
+  const before = await game(() => window.__game.activePlayer().hand.length);
+  await tap('#btn-search');
+  const ls = await game(ids => ({
+    n: window.__game.activePlayer().hand.length, has: ids.every(id => window.__game.activePlayer().hand.some(c => c.id === id)),
+    ap: window.__game.activePlayer().actionPoints, full: window.__game.fullHandOpen(),
+  }), top);
+  check(ls.n === before + 2 && ls.has, `the first search there draws two cards (${before} -> ${ls.n}), the top two of the deck`);
+  check(ls.ap === 3 && !ls.full, 'for one action, with no prompt while there is room for both');
+  const toast = (await page.textContent('#toast')).trim();
+  check(/find an? .+ and an? /.test(toast), `the message names both cards ("${toast.slice(0, 80)}")`);
+  check((await page.textContent('#search-sub')).includes('Already searched'), 'and the room gives up its draw once, like any other');
+
+  // A full hand: each of the two cards gets the take-or-leave prompt, one after the other.
+  check(await game(() => window.__game.revealTile('linenStore2')), 'the second Linen Store is revealed');
+  await game(() => window.__game.state.lockedRooms.clear());
+  await put('linenStore2', 4);
+  await game(() => {
+    const g = window.__game, p = g.activePlayer();
+    p.hand = ['k1', 'k2', 'k3', 'k4', 'k5', 'k6'].map(id => ({ id, type: 'knife' }));
+    // stack the top of the deck so the two draws are known
+    g.state.drawPile.unshift({ id: 'ls1', type: 'bandage' }, { id: 'ls2', type: 'flashlight' });
+    g.refresh();
+  });
+  await tap('#btn-search');
+  const firstUp = await page.evaluate(() => [...document.querySelectorAll('#fullhand-found .card-tile')].map(t => t.dataset.cardId));
+  check(await game(() => window.__game.fullHandOpen()) && firstUp.length === 1 && firstUp[0] === 'ls1', `with a full hand the first card gets the take-or-leave prompt (${firstUp.join(',')})`);
+  check(/Bandage/.test(await page.textContent('#fullhand-sub')), 'which names it');
+  await shot('pr-02c-linen-full');
+  await tap('#btn-fullhand-take');
+  await page.click('#fullhand-hand .card-tile[data-card-id="k1"]'); await page.waitForTimeout(100);
+  const secondUp = await page.evaluate(() => [...document.querySelectorAll('#fullhand-found .card-tile')].map(t => t.dataset.cardId));
+  check(await game(() => window.__game.fullHandOpen()) && secondUp.length === 1 && secondUp[0] === 'ls2', `then the second card gets its own prompt straight after (${secondUp.join(',')})`);
+  check(/Flashlight/.test(await page.textContent('#fullhand-sub')), 'which names it');
+  await tap('#btn-fullhand-leave');
+  const end = await game(() => {
+    const g = window.__game, p = g.activePlayer();
+    return { open: g.fullHandOpen(), ids: p.hand.map(c => c.id), discard: g.state.discardPile.map(c => c.id), ap: p.actionPoints };
+  });
+  check(!end.open, 'and no third prompt follows');
+  check(end.ids.length === 6 && end.ids.includes('ls1') && !end.ids.includes('k1') && !end.ids.includes('ls2'),
+    'the first was taken (a Knife dropped for it), the second left: still 6 cards');
+  check(end.discard.includes('k1') && end.discard.includes('ls2'), 'the dropped Knife and the left Flashlight go to the discard pile');
+  check(end.ap === 3, 'the whole search cost one action');
+}
+
 console.log('\n7. finding three Lanterns and the fire exit');
 // A fresh start builds a new random hotel. Open the whole hotel up, then search room after room for
 // real until three Lanterns have turned up.
@@ -240,8 +294,9 @@ for (const r of rooms) {
   await game(r => { window.__game.state.lockedRooms.delete(r); }, r);
   await put(r, 4);
   await tap('#btn-search');
-  // A full hand: keep a Lantern (dropping something that is not one); leave anything else.
-  if (await game(() => window.__game.fullHandOpen())) {
+  // A full hand: keep a Lantern (dropping something that is not one); leave anything else. (A
+  // Linen Store's two cards can ask twice, one after the other.)
+  while (await game(() => window.__game.fullHandOpen())) {
     const isLantern = await page.evaluate(() => !!document.querySelector('#fullhand-found .card-tile [alt="Lantern"], #fullhand-found .card-tile')
       && /Lantern/.test(document.getElementById('fullhand-found').textContent));
     if (isLantern) {

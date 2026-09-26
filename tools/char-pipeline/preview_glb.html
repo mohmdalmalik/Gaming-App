@@ -125,9 +125,15 @@ new GLTFLoader().load(src, (gltf) => {
   // "possessed" eye effect on the portrait exactly over the rendered eye.
   const proj = [];
   root.updateMatrixWorld(true); cam.updateMatrixWorld(true);   // project() needs current matrices
+  // points are given in the model's REST pose: carry them with the head bone into the current pose (the portrait
+  // freezes the Idle clip, which tilts the head a little), via the head's inverse bind matrix
+  let headBone = null, headInv = null;
+  root.traverse(o => { if (!headBone && o.isSkinnedMesh) { const i = o.skeleton.bones.findIndex(b => b.name === 'head'); if (i >= 0) { headBone = o.skeleton.bones[i]; headInv = o.skeleton.boneInverses[i]; } } });
   for (const p of (q.get('points') || '').split(';').filter(Boolean)) {
     const [x, y, z] = p.split(',').map(Number);
-    const w = new THREE.Vector3(x, y, z); root.localToWorld(w); w.project(cam);
+    const w = new THREE.Vector3(x, y, z);
+    if (headBone && q.get('follow') !== '0') w.applyMatrix4(headInv).applyMatrix4(headBone.matrixWorld); else root.localToWorld(w);
+    w.project(cam);
     proj.push({ x: +((w.x + 1) / 2 * innerWidth).toFixed(1), y: +((1 - w.y) / 2 * innerHeight).toFixed(1) });
   }
   window.__info = { ok: true, clips: gltf.animations.map(a => ({ name: a.name, duration: +a.duration.toFixed(3) })), meshes, tris: Math.round(tris),

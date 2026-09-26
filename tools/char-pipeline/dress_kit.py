@@ -20,6 +20,7 @@
 #   lips(g, Li)             small closed smiling lips (upper lip with a soft bow, fuller lower lip)
 #   earrings(g, E)          'stud' / 'ball' (pearl or gold sphere at the lobe), optional 'drop'
 #   eye_shine(g, Sh)        a small painted white glint on each eye;  jaw_lift(g, skull, J): jawline climbing to the ear
+#   soft_hands(g, A)        guest_kit.hands' fingers/thumb with a rounded tapered palm + wrist ball (same A['hand'])
 #   soft_normals(g, Sn)     (via CFG['soft_normals'], applied in finish) even, glowing face shading: face normals bent
 #                           toward a smooth front-facing ellipsoid (the lower face no longer shades like stubble)
 #   coil_bun(g, Bn)         a twisted chignon: a rope coiled in a tightening spiral round an axis + a filling core
@@ -409,6 +410,42 @@ def pumps(g, S):
             L.rotate_verts(ob, (0, 0, s * S['splay']), about=(0, 0.0, 0)); L.translate_verts(ob, (lx, S.get('y', 0.0), 0))
             g.add(ob, mat, f'foot.{tag}')
     for ob0, _ in parts: bpy.data.objects.remove(ob0, do_unlink=True)
+
+# =============================================================================================
+# SOFT HANDS — like guest_kit.hands (same A['hand'] dict), but a rounded, tapered palm (a soft mitten, no box corners)
+# and a small wrist ball that hides the seam between the bare forearm and the palm.
+# =============================================================================================
+def soft_hands(g, A):
+    Hd = A['hand']; zp = g.zp
+    for s, tag in ((1, 'L'), (-1, 'R')):
+        *_, (hx, hy, ZW), xy = GK.arm_path(g, A, s)
+        z0 = zp(A['cuff_end']) + 0.012
+        out = Vector((s, 0, 0)); fwd = Vector((0, -1, 0)); down = Vector((0, 0, -1))
+        base = Vector((hx + s * Hd.get('out', 0.004), hy, 0))
+        pl, pw, pt = Hd['palm_len'], Hd['palm_w'], Hd['palm_t']
+        prof = [(1.00, 0.55, 0.70), (0.92, 0.80, 0.90), (0.78, 0.95, 0.98), (0.55, 1.02, 1.02), (0.30, 1.00, 0.98), (0.10, 0.86, 0.86),
+                (-0.02, 0.70, 0.72), (-0.10, 0.62, 0.64)]
+        palm = L.loft(f'Palm{tag}', [dict(z=z0 - pl * f, w=pt * wt, d=pw * wd, r=1.0) for f, wt, wd in prof], n=16)
+        L.translate_verts(palm, base); g.add(palm, 'skin', f'hand.{tag}')
+        wr = A['stations'][0][1] * 0.47 if A.get('stations') else pt * 0.55   # hides the forearm's flat end (at z0 - 0.012)
+        wx, wy = xy(z0 - 0.012)
+        g.add(L.uvsphere(f'Wrist{tag}', wr, (wx + s * Hd.get('out', 0.004) * 0.5, wy, z0 - 0.016), scale=(0.95, 1.0, 1.25), u=12, v=8), 'skin', f'hand.{tag}')
+        for i, (yo, r, ln, bend) in enumerate(Hd['fingers']):
+            p0 = Vector((base.x + s * Hd.get('finger_out', 0.004), hy + yo, z0 - pl * 0.80))
+            pts = GK._curl(p0, down, -out, ln, bend, 10)
+            tip = pts[-1] + (pts[-1] - pts[-2]).normalized() * r * 0.45
+            rad = [r * (1.0 - 0.12 * k / 10) for k in range(11)]
+            pts.append(tip); rad.append(r * 0.55)
+            pts.append(tip + (pts[-1] - pts[-2]).normalized() * r * 0.35); rad.append(r * 0.18)
+            g.add(L.tube(f'Finger{tag}{i}', [tuple(p) for p in pts], rad, n=8), 'skin', f'hand.{tag}')
+        T = Hd['thumb']
+        p0 = Vector((base.x - s * T[1], hy + T[0], z0 - T[2]))
+        dirn = (down * 0.85 + fwd * 0.30 - out * 0.20).normalized(); inw = (-out * 0.8 + fwd * -0.2).normalized()
+        pts = GK._curl(p0, dirn, inw, T[4], T[5], 8)
+        tip = pts[-1] + (pts[-1] - pts[-2]).normalized() * T[3] * 0.45
+        rad = [T[3] * (1.08 - 0.15 * k / 8) for k in range(9)] + [T[3] * 0.55, T[3] * 0.18]
+        pts += [tip, tip + (tip - pts[-1]).normalized() * T[3] * 0.35]
+        g.add(L.tube(f'Thumb{tag}', [tuple(p) for p in pts], rad, n=10), 'skin', f'hand.{tag}')
 
 # =============================================================================================
 # FACE EXTRAS — lips, earrings

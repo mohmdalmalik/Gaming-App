@@ -46,7 +46,7 @@ CFG = dict(
            'Pearl': (0.70, (-0.3, -0.6, 0.75), 3.0)},
 )
 COLOURS = dict(
-    skin='#ffb98e', hair='#8c6d65', brow='#2e1d16', eye='#0b0b0d', lips='#b03a42',
+    skin='#ffb98e', hair='#7c6259', brow='#2e1d16', eye='#0b0b0d', lips='#b03a42',
     dress=GK.PALETTE['navy'], gold='#d8b077', pearl='#f6f1e8', shoe=GK.PALETTE['shoe_black'], shine='#f4f1ee',
 )
 
@@ -121,20 +121,20 @@ SCULPT = dict(
              dict(keys=[(0.05, 0.03, 0.8, 0.006), (0.10, 0.02, 3.5, 0.008), (0.13, 0.08, 7.5, 0.009), (0.11, 0.15, 11.0, 0.008), (0.06, 0.19, 13.5, 0.006)], depth=0.007, k=0.004)] +
             [dict(keys=[(x * 0.6, 0.12, 3.0, 0.003), (x * 0.9, 0.175, 6.0, 0.009), (x, 0.197, 9.5, 0.010), (x * 0.8, 0.195, 12.5, 0.008), (x * 0.55, 0.18, 14.5, 0.003)],
                   depth=0.0035, k=0.004) for x in (-0.15, -0.09, -0.03, 0.03, 0.09, 0.15)],
-    box=((-0.30, 0.02 - 0.27, zp(30.0)), (0.27, 0.02 + 0.33, zp(-1.0))), voxel=0.004, tris=12000, smooth=5, post_smooth=3,
+    box=((-0.30, 0.02 - 0.27, zp(30.0)), (0.27, 0.02 + 0.33, zp(-1.0))), voxel=0.004, tris=11700, smooth=5, post_smooth=3,
 )
 
 # ---- chignon as overlapping twisted loops (sculpted into the hair volume, creases kept between them): a big outer
 # loop wrapping round from the top, an upper loop lying over it, a small knot, and a filling core. dress_kit.loop_keys
 # kwargs (expanded in build(), where the head axis is known).
 BUN_AX = (0.0, 1.0, -0.04)
-BUN_CORE = dict(c=(-0.035, 0.168, 21.6), r=(0.098, 0.100, 0.086), k=0.03, cut=False)
+BUN_CORE = dict(c=(-0.035, 0.160, 20.4), r=(0.098, 0.090, 0.080), k=0.03, cut=False)
 BUN_LOOPS = [       # stacked outward like a dome (round in profile), each off-centre so they overlap like twisted loops
-    dict(centre=(-0.032, 0.190, 21.6), axis=BUN_AX, radii=(0.088, 0.070), start=95, sweep=330,
+    dict(centre=(-0.032, 0.178, 20.5), axis=BUN_AX, radii=(0.088, 0.070), start=95, sweep=330,
          rope=((0.0, 0.022), (0.12, 0.040), (0.80, 0.040), (1.0, 0.024)), rise=0.018, n=16),
-    dict(centre=(-0.018, 0.232, 20.8), axis=BUN_AX, radii=(0.056, 0.042), start=210, sweep=300, tilt=10,
+    dict(centre=(-0.018, 0.218, 19.7), axis=BUN_AX, radii=(0.056, 0.042), start=210, sweep=300, tilt=10,
          rope=((0.0, 0.020), (0.15, 0.036), (0.80, 0.036), (1.0, 0.020)), rise=0.014, n=14),
-    dict(centre=(-0.046, 0.258, 22.2), axis=BUN_AX, radii=(0.026, 0.020), start=30, sweep=320,
+    dict(centre=(-0.046, 0.242, 21.1), axis=BUN_AX, radii=(0.026, 0.020), start=30, sweep=320,
          rope=((0.0, 0.016), (0.2, 0.024), (0.8, 0.024), (1.0, 0.014)), rise=0.004, n=12, crease=False),
 ]
 # ---- chignon (old coil version, kept for reference: dress_kit.coil_bun): a thick rope coiled in a tightening spiral, axis pointing back and a little down
@@ -156,7 +156,7 @@ BOD = dict(profiles=[(49.2, 0.222, 0.205, 0.92, -0.034), (47.4, 0.214, 0.196, 0.
 A = dict(
     shoulder=(0.171, 36.5), shoulder_y=0.005, elbow=(0.203, 0.0, 49.0), wrist=(0.294, -0.045, 58.5),
     sleeve_end=58.8, cuff_end=58.8, sleeve=None, n=16,
-    stations=[('end', 0.062, 0.058), (56.0, 0.070, 0.064), (52.0, 0.078, 0.072), (49.5, 0.082, 0.076), (46.0, 0.088, 0.082),
+    stations=[('end', 0.048, 0.046), (57.3, 0.058, 0.054), (56.0, 0.068, 0.063), (52.0, 0.078, 0.072), (49.5, 0.082, 0.076), (46.0, 0.088, 0.082),
               (42.0, 0.092, 0.087), (38.5, 0.094, 0.090), (('j', -0.005), 0.088, 0.088), (('j', 0.02), 0.075, 0.078), (('j', 0.035), 0.040, 0.045)],
     hand=dict(palm_len=0.094, palm_w=0.102, palm_t=0.052, out=0.004, finger_out=0.004,
               fingers=[(-0.034, 0.0136, 0.086, 1.35), (-0.012, 0.0144, 0.092, 1.50), (0.011, 0.0140, 0.089, 1.50), (0.032, 0.0126, 0.076, 1.40)],
@@ -204,7 +204,7 @@ def build(g):
     DK.lips(g, g.C['lips']); DK.earrings(g, EAR)
     DK.neck_yoke(g, NECK)
     DK.bodice(g, BOD)
-    GK.arms(g, A); GK.hands(g, A)
+    GK.arms(g, A); DK.soft_hands(g, A)
     DK.sleeves(g, A, SLV)
     DK.skirt(g, SKIRT, RIG)
     def waist_pt(phi, z):                        # the belt hugs whichever is further out: bodice or skirt top

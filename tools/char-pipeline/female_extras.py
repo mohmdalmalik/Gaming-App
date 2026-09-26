@@ -119,7 +119,10 @@ def long_hair(g, Hs):
     rolls = [(curve(R_['keys'], R_.get('n', 40), lambda r, s=R_.get('sink', 0.5): r * s), R_.get('k', 0.008), R_.get('over', False)) for R_ in Hs.get('rolls', [])]
     inset = Hs.get('inset', 0.0)
     # grooves: the carving tube's centre sits (depth - radius) below the BASE surface (the envelope minus inset)
-    grooves = [(curve(G_['keys'], G_.get('n', 30), lambda r, d=G_.get('depth', 0.006): inset + d - r), G_.get('k', 0.004)) for G_ in Hs.get('grooves', [])]
+    grooves = [(curve(G_['keys'], G_.get('n', 30), lambda r, d=G_.get('depth', 0.006): inset + d - r), G_.get('k', 0.004)) for G_ in Hs.get('grooves', []) if not G_.get('over')]
+    # 'over' grooves are carved last (after the 'over' rolls): e.g. the crease separating a raised wave from the hair behind it;
+    # their depth is measured from the ENVELOPE (not the inset base), since they cut into rolls standing on it
+    grooves_o = [(curve(G_['keys'], G_.get('n', 30), lambda r, d=G_.get('depth', 0.006): d - r), G_.get('k', 0.004)) for G_ in Hs.get('grooves', []) if G_.get('over')]
     zb = zp(Hs.get('bottom', 34.0)); zt = zp(Hs.get('top', 0.0))
     def sdf(P):
         s = base_env(P) + inset
@@ -130,6 +133,8 @@ def long_hair(g, Hs):
         s = DK.smax(s, -keepout(P), Hs.get('ko_k', 0.012))
         for (pts, rad, fl), k, over in rolls:                                 # 'over' rolls lie over the keep-out edge (a rolled hairline)
             if over: s = DK.smin(s, DK.sd_tube(P, pts, rad, fl if (fl < 0.999).any() else None, c0), k)
+        for (pts, rad, fl), k in grooves_o:
+            s = DK.smax(s, -DK.sd_tube(P, pts, rad), k)
         s = DK.smax(s, zb - P[:, 2], Hs.get('bottom_k', 0.02))
         return s
     pad = 0.04
@@ -142,14 +147,15 @@ def long_hair(g, Hs):
                        target_tris=Hs.get('tris', 9000), post_smooth=Hs.get('post_smooth', 2))
     if Hs.get('taubin'): MX.taubin(ob, iters=Hs['taubin'])
     hl = Hs.get('hairline')
-    def covered(p, margin=0.02):
-        if keepout(np.array([[p.x, p.y, p.z]]))[0] < margin: return False
-        return p.z > zp(hl(p)) if hl else True
+    def covered(p, margin=0.008):
+        # a skull point is hidden when it lies inside the hair volume (the hair wraps it by `margin`): exact, so the
+        # culled skull edge never shows as a stepped line along the hairline
+        return bool(sdf(np.array([[p.x, p.y, p.z]]))[0] < -margin)
     g.hair_covers = covered; g.hair_sdf = sdf
-    if grooves or WV:
+    if grooves or grooves_o or WV:
         def gam(p):
             P = np.array([[p.x, p.y, p.z]]); best = 0.0
-            for (pts, rad, fl), k in grooves:
+            for (pts, rad, fl), k in grooves + grooves_o:
                 d = DK.sd_tube(P, pts, rad)[0]; best = max(best, float(np.clip(1.0 - (d + 0.002) / 0.008, 0.0, 1.0)))
             if WV:                                                          # the wave troughs (between the locks) read darker
                 u, v, r = MX.radial_uv(c0, P); best = max(best, float(wave_disp(u, (g.H - P[:, 2]) / g.H * 100.0, dark=True)[0]))

@@ -30,40 +30,40 @@ def zp(p): return H * (1 - p / 100)
 sm = GK.sm
 
 CFG = dict(
-    z_hair_top=0.0, z_skull_top=3.2, z_hairline=5.5, z_brow=11.8, z_eye=16.8, z_nose=19.2, z_mouth=22.3, z_chin=28.3, z_ear=19.6,
+    z_hair_top=0.0, z_skull_top=3.2, z_hairline=5.5, z_brow=11.8, z_eye=16.8, z_nose=19.2, z_mouth=22.9, z_chin=29.2, z_ear=20.6,
     head_y=0.046, z_shoulder_top=32.0,
-    ear_style='round', ear_seg=(20, 14), ear_h=0.094, ear_w=0.070, ear_out=0.008, ear_y=0.010, ear_tilt=0.60, ear_thick=0.028, ear_rim=0.008, ear_bowl=0.011, ear_sink=0.020,
-    eye_x=0.070, eye_w=0.046, eye_h=0.078, eye_lift=0.003,
-    brow=dict(x0=0.044, x1=0.118, z=12.1, thick=0.030, arch=0.010, drop_in=0.004, drop_out=0.012,
+    ear_style='round', ear_seg=(20, 14), ear_h=0.118, ear_w=0.086, ear_out=0.010, ear_y=0.010, ear_tilt=0.60, ear_thick=0.028, ear_rim=0.008, ear_bowl=0.011, ear_sink=0.020,
+    eye_x=0.065, eye_w=0.033, eye_h=0.052, eye_lift=0.003,
+    brow=dict(x0=0.041, x1=0.110, z=13.0, thick=0.036, arch=0.014, drop_in=0.004, drop_out=0.012,
               profile=[(0.0, 0.55), (0.06, 0.95), (0.30, 1.0), (0.75, 0.88), (0.94, 0.62), (1.0, 0.35)], flat=0.5),
-    nose_w=0.064, nose_h=0.050, nose_d=0.032, nose_out=0.008, nose_top=1.25,
-    lips=dict(z=22.4, w=0.122, rise=0.012, upper=0.012, lower=0.020, bow=0.003, flat=0.5, mat='lips'),
-    tint=dict(spots=[(0.095, 20.5, 0.040, 0.034, 1.0), (0.0, 19.2, 0.020, 0.020, 0.4)], g=0.18, b=0.16),
+    nose_w=0.074, nose_h=0.058, nose_d=0.040, nose_out=0.016, nose_top=1.25,
+    lips=dict(z=23.1, w=0.122, rise=0.012, upper=0.012, lower=0.020, bow=0.003, flat=0.5, mat='lips'),
+    tint=dict(spots=[(0.100, 21.4, 0.042, 0.034, 1.0), (0.0, 19.6, 0.020, 0.020, 0.4)], g=0.10, b=0.08),
     groove_dark=(0.010, 0.60),
     ao_skip=('Brow', 'Eye', 'Lips', 'Gold', 'Shine'), ao_scale={'Skin': 0.30, 'Dress': 0.85},
     sheen={'Shoe': (0.34, [((0.2, -0.45, 0.87), 14.0, 1.0), ((0.0, -1.0, 0.3), 16.0, 0.8), ((0.9, 0.0, 0.45), 16.0, 0.5), ((-0.9, 0.0, 0.45), 16.0, 0.5)]),
-           'Hair': (0.45, [((-0.1, -0.45, 0.89), 2.0, 1.0), ((0.5, -0.6, 0.6), 5.0, 0.40)]),
+           'Hair': (0.62, [((-0.1, -0.45, 0.89), 3.0, 1.0), ((0.5, -0.6, 0.6), 6.0, 0.45)]),
            'Gold': (0.55, [((0.0, -1.0, 0.25), 6.0, 1.0), ((-0.6, -0.6, 0.3), 8.0, 0.6), ((0.6, -0.6, 0.3), 8.0, 0.6)])},
 )
 COLOURS = dict(
     # lobby-measured (lineup_measure.mjs --inject dressEmerald=...), solved at the palette's mid light level and nudged
     # a little warmer for the neutral preview: in the lobby dress ~#10291f..#2c453e (sheet #1a332c), hair ~#26170f
     # (sheet #2f201d), skin ~#9d512c..#eb875e, gold ~#9a6e31 (sheet #b38042), berry lips ~#511212
-    skin='#d08874', hair='#4f4a52', brow='#3a2c29', eye='#0b0b0d', lips='#7a4652',
+    skin='#d0865c', hair='#564842', brow='#3a2c29', eye='#0b0b0d', lips='#80403c',
     dress='#36524f', gold='#d3b182', shoe=GK.PALETTE['shoe_black'], sole='#1a1818', shine='#f4f1ee',
 )
 
 # ---- skull (f: 0 chin .. 1 skull top): soft round face, full cheeks, round chin
-W  = [(0, 0.0), (0.02, 0.052), (0.05, 0.076), (0.10, 0.100), (0.16, 0.121), (0.24, 0.137), (0.32, 0.146), (0.42, 0.147),
-      (0.52, 0.144), (0.62, 0.138), (0.72, 0.130), (0.82, 0.116), (0.90, 0.095), (0.95, 0.070), (0.99, 0.030), (1, 0.0)]
+W  = [(0, 0.0), (0.02, 0.060), (0.05, 0.085), (0.10, 0.110), (0.16, 0.128), (0.24, 0.142), (0.32, 0.150), (0.42, 0.151),
+      (0.52, 0.147), (0.62, 0.139), (0.72, 0.129), (0.82, 0.114), (0.90, 0.094), (0.95, 0.069), (0.99, 0.030), (1, 0.0)]
 DF = [(0, 0.0), (0.02, 0.150), (0.05, 0.176), (0.10, 0.190), (0.18, 0.197), (0.30, 0.203), (0.45, 0.205),
       (0.60, 0.202), (0.75, 0.194), (0.86, 0.176), (0.94, 0.140), (0.99, 0.060), (1, 0.0)]
 DB = [(0, 0.0), (0.05, 0.030), (0.15, 0.070), (0.30, 0.120), (0.45, 0.160), (0.60, 0.172), (0.75, 0.166), (0.86, 0.146),
       (0.94, 0.112), (0.99, 0.060), (1, 0.0)]
 E  = [(0, 1.9), (0.10, 2.0), (0.20, 2.2), (0.35, 2.35), (0.50, 2.4), (0.70, 2.35), (0.90, 2.2), (1, 2.1)]
-BULGES = [dict(x=0.092, z=20.8, sx=0.045, sz=0.036, a=0.020),      # full cheeks
+BULGES = [dict(x=0.098, z=21.6, sx=0.048, sz=0.038, a=0.024),      # full cheeks
           dict(x=0.0, z=17.9, sx=0.015, sz=0.022, a=0.012),        # soft nose bridge
-          dict(x=0.0, z=26.8, sx=0.045, sz=0.016, a=0.006)]        # round chin
+          dict(x=0.0, z=28.2, sx=0.050, sz=0.016, a=0.006)]        # round chin
 
 # ---- HAIR (dress_kit.sculpt_hair). The bob envelope: half-width A, half-depth B and centre offset DY (behind the
 # head axis) by height, from the sheet; rolls (the S-waves) are laid on it, grooves carved in the valleys between.
@@ -103,46 +103,76 @@ def hairline(u):
     """Lower edge of the hair by longitude u (0 front, 0.25 her right, 0.5 back, 0.75 her left): the fringe (5.5),
     the temples (down to 16 in front of the ear), above the ear (15.5), then the bob's curtain behind it (27.5)."""
     u %= 1.0; a = abs(((u + 0.5) % 1.0) - 0.5); right = u < 0.5; ss = sm
-    z = 4.9 + (3.0 if right else 0.6) * ss(a / 0.08)
+    z = 5.8 + (3.0 if right else 0.6) * ss(a / 0.08)
     z += (15.5 - z) * ss((a - 0.045) / 0.065)                 # arched: down past the temples to the ear's top
     z += (15.0 - z) * ss((a - 0.205) / 0.02)                  # over the ear
     z += (27.5 - z) * ss((a - 0.27) / 0.05)                   # the curtain behind the ear
     return z
 
+def band_keys(th0, p0, p1, sweep, wig, half, k=1.0, n=9):
+    """Band path keys (x, dy, pct, half-width) along an S on the bob envelope; the width tapers toward the crown."""
+    keys = []
+    for i in range(n):
+        t = i / (n - 1); th = th0 + sweep * t + wig * math.sin(2 * math.pi * t * 0.9)
+        x, dy, pp = env(th, p0 + (p1 - p0) * t, k); keys.append((x, dy, pp, half * (0.45 + 0.55 * sm(t / 0.45))))
+    return keys
+def curl_end(th, p=24.8, k=0.93, r=(0.052, 0.048, 0.036)):
+    x, dy, pp = env(th, p, k); return dict(c=(x, dy, pp), r=r, k=0.03)
+# back/sides: 8 locks between the old crease lines, alternately taller / lower (each stands proud of its neighbours)
+def s_band(th0, p0, p1, sweep, amp, half, n=11):
+    """One big S: the path drifts `sweep` rad and swings +-amp rad once (a single full wave over its length)."""
+    keys = []
+    for i in range(n):
+        t = i / (n - 1); th = th0 + sweep * t + amp * math.sin(2 * math.pi * t)
+        x, dy, pp = env(th, p0 + (p1 - p0) * t, 1.0); keys.append((x, dy, pp, half * (0.40 + 0.60 * sm(t / 0.40))))
+    return keys
+BACK_ANGLES = ((84, 36), (112, 27), (140, 16), (168, 5), (-164, -5), (-136, -16), (-108, -27), (-80, -36))
+BACK_BANDS = [dict(keys=band_keys(math.radians(a), 3.0, 27.0, math.radians(sw), math.radians(15), 0.075), height=h, soft=0.012, taper=(0.12, 0.10))
+              for (a, sw), h in zip(BACK_ANGLES, (0.026, 0.014, 0.026, 0.014, 0.026, 0.014, 0.026, 0.016))]
+# the front: the big side-swept wave from the part (her left) over the forehead to her right side, a second wave above it,
+# and her left side's lock falling from the part
+def sweep_band(p_part, half, dx=0.0):
+    return [(0.055 + dx, -0.15 + 0.03 * p_part, p_part, half * 0.5), (-0.02, -0.205, p_part + 2.5, half), (-0.10, -0.19, p_part + 5.0, half),
+            (-0.17, -0.14, p_part + 8.0, half), (-0.225, -0.07, p_part + 11.5, half), (-0.255, 0.005, p_part + 15.5, half),
+            (-0.255, 0.07, p_part + 20.0, half)]
+FRONT_BANDS = [dict(keys=sweep_band(4.6, 0.050), height=0.026, soft=0.012, taper=(0.10, 0.12)),
+               dict(keys=sweep_band(1.2, 0.046), height=0.024, soft=0.012, taper=(0.10, 0.20)),
+               dict(keys=[(0.07, -0.13, 2.0, 0.030), (0.13, -0.17, 4.8, 0.050), (0.19, -0.13, 8.5, 0.055), (0.24, -0.07, 13.0, 0.058),
+                          (0.26, 0.00, 17.5, 0.058), (0.255, 0.07, 22.5, 0.055)], height=0.030, soft=0.012, taper=(0.10, 0.15))]
+
 SCULPT = dict(
     cap=dict(thick=[(0, 0.024), (3, 0.034), (6, 0.040), (10, 0.032), (14, 0.024), (18, 0.020), (24, 0.016), (28, 0.012)], hairline=hairline, edge_k=0.030),
-    masses=[dict(c=(-0.010, 0.030, 6.0), r=(0.195, 0.200, 0.100), k=0.05),            # the round crown (reaches the hair top)
-            dict(c=(-0.012, 0.070, 17.5), r=(0.285, 0.230, 0.102), k=0.05),           # the bob's body
+    masses=[dict(c=(-0.010, 0.030, 6.0), r=(0.195, 0.186, 0.100), k=0.05),            # the round crown (reaches the hair top)
+            dict(c=(-0.012, 0.070, 16.0), r=(0.285, 0.232, 0.112), k=0.05),           # the bob's body
             dict(c=(-0.180, 0.065, 22.0), r=(0.110, 0.150, 0.072), k=0.04),           # her right side, down toward the chin
             dict(c=(0.170, 0.065, 22.0), r=(0.105, 0.150, 0.072), k=0.04),            # her left side
-            dict(c=(0.0, 0.180, 22.5), r=(0.170, 0.110, 0.070), k=0.04),              # the full round back, low
+            dict(c=(0.0, 0.180, 22.5), r=(0.170, 0.110, 0.070), k=0.04)] +             # the full round back, low
+           [curl_end(math.radians(a + sw)) for a, sw in BACK_ANGLES] + [
             dict(c=(-0.195, 0.000, 12.5), r=(0.095, 0.160, 0.072), k=0.05),           # fullness hugging the temples (her right)
             dict(c=(0.185, 0.000, 12.5), r=(0.090, 0.160, 0.072), k=0.05),            # (her left)
             dict(c=(-0.010, -0.080, 2.8), r=(0.130, 0.110, 0.045), k=0.05),           # the front of the crown rolling forward
             ],
-    rolls=[],
-    grooves=[dict(keys=k, depth=0.009, k=0.005) for k in BACK_GROOVES + FRONT_GROOVES + LEFT_GROOVES],
-    box=((-0.36, 0.046 - 0.25, zp(30.0)), (0.34, 0.046 + 0.36, zp(-1.0))), voxel=0.0045, tris=10500, smooth=7, post_smooth=4,
+    bands=BACK_BANDS + FRONT_BANDS, lock_base=0.020,
+    box=((-0.36, 0.046 - 0.25, zp(30.0)), (0.34, 0.046 + 0.36, zp(-1.0))), voxel=0.0045, tris=12000, smooth=6, post_smooth=3,
 )
 
 # ---- body
-NECK = dict(rings=[(24.0, 0.108, 0.104, 1.0, 0.035), (27.0, 0.112, 0.108, 1.0, 0.032), (29.0, 0.116, 0.112, 1.0, 0.030),
-                   (30.4, 0.122, 0.116, 1.0, 0.028), (31.4, 0.140, 0.124, 1.0, 0.026), (32.4, 0.200, 0.140, 0.95, 0.022),
-                   (33.6, 0.270, 0.160, 0.90, 0.016)],
-            split=29.5, blend=0.02, n=28)
+NECK = dict(rings=[(24.0, 0.150, 0.138, 1.0, 0.035), (28.0, 0.152, 0.140, 1.0, 0.032), (30.0, 0.156, 0.144, 1.0, 0.030),
+                   (31.0, 0.160, 0.146, 1.0, 0.028), (32.0, 0.176, 0.150, 0.98, 0.026), (33.6, 0.240, 0.160, 0.92, 0.018)],
+            split=29.8, blend=0.02, n=28)
 BOD = dict(profiles=[(50.0, 0.246, 0.236, 0.92, 0.000), (48.5, 0.238, 0.230, 0.92, 0.000), (47.0, 0.242, 0.234, 0.90, 0.000),
                      (45.0, 0.258, 0.248, 0.88, 0.000), (43.0, 0.276, 0.272, 0.86, -0.002), (41.0, 0.290, 0.290, 0.85, -0.004),
                      (39.0, 0.302, 0.284, 0.84, -0.002), (37.0, 0.318, 0.258, 0.82, 0.008), (35.0, 0.336, 0.226, 0.82, 0.018),
-                     (33.8, 0.330, 0.200, 0.86, 0.022), (32.8, 0.270, 0.176, 0.92, 0.024), (31.8, 0.190, 0.150, 1.0, 0.026),
-                     (31.0, 0.150, 0.134, 1.0, 0.027), (30.6, 0.140, 0.128, 1.0, 0.028)],
-           neck=dict(kind='crew', side=31.4, front=32.3, back=31.4), waist=48.5, ncol=48, nrow=18, lip=0.006)
+                     (33.8, 0.330, 0.200, 0.86, 0.022), (32.8, 0.286, 0.184, 0.92, 0.024), (31.8, 0.226, 0.170, 0.98, 0.026),
+                     (31.0, 0.198, 0.160, 1.0, 0.027), (30.6, 0.190, 0.156, 1.0, 0.028)],
+           neck=dict(kind='crew', side=31.6, front=32.8, back=31.5), waist=48.5, ncol=48, nrow=18, lip=0.006)
 A = dict(
     shoulder=(0.172, 35.0), shoulder_y=0.010, elbow=(0.238, 0.012, 50.0), wrist=(0.290, -0.030, 59.6),
     sleeve_end=59.6, cuff_end=59.6, sleeve=None, n=16,
     stations=[('end', 0.064, 0.060), (57.0, 0.070, 0.066), (53.0, 0.078, 0.074), (50.0, 0.082, 0.078), (46.0, 0.088, 0.084),
               (42.0, 0.092, 0.088), (38.5, 0.094, 0.090), (('j', -0.005), 0.088, 0.088), (('j', 0.02), 0.075, 0.078), (('j', 0.035), 0.040, 0.045)],
-    hand=dict(palm_len=0.092, palm_w=0.098, palm_t=0.052, out=0.004, finger_out=0.004,
-              fingers=[(-0.032, 0.0135, 0.080, 1.0), (-0.011, 0.0142, 0.086, 1.1), (0.010, 0.0138, 0.083, 1.1), (0.030, 0.0124, 0.072, 1.0)],
+    hand=dict(palm_len=0.092, palm_w=0.100, palm_t=0.056, out=0.006, finger_out=0.008,
+              fingers=[(-0.031, 0.0150, 0.082, 1.55), (-0.010, 0.0156, 0.088, 1.65), (0.010, 0.0152, 0.085, 1.65), (0.029, 0.0138, 0.074, 1.55)],
               thumb=(-0.042, 0.011, 0.024, 0.0140, 0.060, 0.40)),
 )
 # long bishop sleeve: gathered at the shoulder, full through the forearm (0.16 at 50-54 %), gathered into a cuff
@@ -163,15 +193,89 @@ LEGS = dict(leg_x=0.100, leg_y=0.0, n=14,
             stations=[(66.0, 0.118, 0.124), (74.0, 0.104, 0.110), (80.0, 0.088, 0.094), (86.0, 0.094, 0.100), (91.0, 0.082, 0.088), (94.0, 0.074, 0.080), (96.0, 0.068, 0.074)])
 SHOES = dict(leg_x=0.100, y=0.0, len=0.24, w=0.086, heel=0.062, heel_h=0.034, heel_len=0.042, collar=0.086, vamp=0.058,
              splay=0.26, out=0.012, foot_top=0.100, ball=0.115, mat='shoe')
-JAW = dict(top=23.0, lift=0.026, y0=-0.10, y1=0.02)
+JAW = dict(top=24.3, lift=0.026, y0=-0.10, y1=0.02)
 SHINE = dict(r=0.0060, dx=0.30, dz=0.42, mat='shine')
-EAR = dict(kind='ball', r=0.018, x=0.165, dy=-0.004, z=22.6, mat='gold')
+EAR = dict(kind='ball', r=0.018, x=0.178, dy=-0.020, z=23.2, mat='gold')
 RIG = dict(hip=62.0, knee=79.0, ankle=95.5, waist=48.5, shoulder_top=32.0, neck_y=0.030, hand_end=70.0, leg_x=0.100,
            heel=0.062, ball=0.115, arm=A, walk_kw=dict(skirt=True))
 
+# =============================================================================================
+# BAND HAIR — dress_kit.sculpt_hair's cap + masses, plus SCULPTED LOCK BANDS (the lock_fields idea of guest_kit.hair_shell
+# carried into the SDF): each band is a broad raised strip following an S path on the hair surface, with a gently domed
+# top and a rounded edge `soft` wide; overlapping bands take the MAX, so a taller band steps down onto its neighbour
+# with its own rounded edge (the sheet's carved clay locks). `lock_base` lowers the mass where the bands are, so they
+# restore the measured silhouette instead of growing it. Band keys: (x, dy, pct, half-width); the path is snapped
+# onto the base surface. Built only from dress_kit's public SDF helpers (dress_kit.py itself is untouched).
+# =============================================================================================
+def band_hair(g, Hs):
+    zp = g.zp; Y0 = g.Y0
+    Cp = Hs['cap']; TT = DK._np_table(GK.Table([(zp(p), t) for p, t in Cp['thick']]))
+    c0 = np.array([0.0, Y0 + 0.02, zp(14.0)])
+    hl = Cp['hairline']; hl_u = np.linspace(0, 1, 721); hl_z = np.array([zp(hl(u)) for u in hl_u])
+    def u_of(P): return (np.arctan2(-(P[:, 1] - c0[1]), P[:, 0] - c0[0]) - math.pi / 2) / (2 * math.pi) % 1.0
+    def cutf(P): return np.interp(u_of(P), hl_u, hl_z) - P[:, 2]
+    hc = np.array([0.0, Y0, zp(Hs.get('centre_pct', 12.0))]); ek = Cp.get('edge_k', 0.012)
+    def base(P):
+        s_ = DK.sd_skull(g, P) - TT(P[:, 2]); s_ = DK.smax(s_, cutf(P), ek)
+        for M in Hs.get('masses', []):
+            m = DK.sd_ellipsoid(P, (M['c'][0], Y0 + M['c'][1], zp(M['c'][2])), M['r'])
+            if M.get('cut', True): m = DK.smax(m, cutf(P) - M.get('below', 0.0), ek)
+            s_ = DK.smin(s_, m, M.get('k', 0.02))
+        return s_
+    def snap(pts):                                     # radially from the head centre onto base = 0
+        D = pts - hc; D /= np.linalg.norm(D, axis=1)[:, None]
+        lo_ = np.full(len(pts), 0.02); hi_ = np.full(len(pts), 0.45)
+        for _ in range(28):
+            mid = 0.5 * (lo_ + hi_); inside = base(hc + D * mid[:, None]) < 0
+            lo_ = np.where(inside, mid, lo_); hi_ = np.where(inside, hi_, mid)
+        return hc + D * lo_[:, None]
+    bands = []
+    for B in Hs.get('bands', []):
+        pts, half, _ = DK._curve(g, B['keys'], B.get('n', 36))
+        bands.append((snap(pts), half, B['height'], B.get('soft', 0.012), B.get('taper', (0.15, 0.15)), B.get('dome', 0.35)))
+    lb = Hs.get('lock_base', 0.0)
+    def dist_param(P, pts, half):
+        lo = pts.min(0) - half.max() - 0.02; hi = pts.max(0) + half.max() + 0.02
+        m = np.all((P >= lo) & (P <= hi), axis=1)
+        d = np.full(len(P), 1.0); sp = np.zeros(len(P)); hw = np.full(len(P), half.mean())
+        if not m.any(): return d, sp, hw
+        Q = P[m]; best = np.full(len(Q), 1e9); bs = np.zeros(len(Q)); bh = np.zeros(len(Q)); n = len(pts) - 1
+        for i in range(n):
+            a, b = pts[i], pts[i + 1]; ab = b - a; L2 = max(1e-12, ab @ ab)
+            t = np.clip(((Q - a) @ ab) / L2, 0.0, 1.0); dd = np.linalg.norm(Q - (a + t[:, None] * ab), axis=1)
+            w = dd < best; best = np.where(w, dd, best); bs = np.where(w, (i + t) / n, bs); bh = np.where(w, half[i] + (half[i + 1] - half[i]) * t, bh)
+        d[m] = best; sp[m] = bs; hw[m] = bh
+        return d, sp, hw
+    def ss(x): x = np.clip(x, 0.0, 1.0); return x * x * (3 - 2 * x)
+    def bump(P):
+        h = np.zeros(len(P)); cov = np.zeros(len(P))
+        for pts, half, hgt, soft, (t0, t1), dome in bands:
+            d, sp, hw = dist_param(P, pts, half)
+            along = ss(sp / t0) * ss((1.0 - sp) / t1)
+            edge = ss((hw - d) / soft + 0.5)
+            prof = 1.0 - dome * np.clip(d / np.maximum(hw, 1e-4), 0, 1) ** 2
+            h = np.maximum(h, hgt * edge * prof * along); cov = np.maximum(cov, edge * along)
+        return h - lb * cov
+    def sdf(P): return base(P) - (bump(P) if bands else 0.0)
+    lo, hi = Hs['box']
+    ob = DK.sdf_object(g, Hs.get('name', 'Hair'), sdf, lo, hi, Hs.get('voxel', 0.005), drop=lambda p: g.inside_skull(p, -0.004),
+                       smooth=Hs.get('smooth', 3), target_tris=Hs.get('tris', 7000), post_smooth=Hs.get('post_smooth', 2))
+    def covered(p, margin=0.02):
+        return bool(p.z > np.interp(u_of(np.array([[p.x, p.y, p.z]])), hl_u, hl_z)[0] + margin)
+    g.hair_covers = covered; g.hair_sdf = sdf
+    # the bake darkens a little along each band's edge (the crease where it steps onto its neighbour)
+    def gam(p):
+        P = np.array([[p.x, p.y, p.z]]); best = 0.0
+        for pts, half, hgt, soft, _, _ in bands:
+            d, sp, hw = dist_param(P, pts, half); x = abs(d[0] - hw[0])
+            if sp[0] > 0.12 and sp[0] < 0.9: best = max(best, float(np.clip(1.0 - x / soft, 0.0, 1.0)))
+        return best * 0.010
+    g.hair_groove = gam
+    return g.add(ob, Hs.get('mat', 'hair'), 'head')
+
 def build(g):
     g.set_head(W, DF, DB, E, BULGES)
-    DK.sculpt_hair(g, SCULPT)
+    band_hair(g, SCULPT)
     skull = GK.head(g, nlon=48, nlat=34, cull_in=g.hair_covers)
     DK.jaw_lift(g, skull, JAW)
     GK.ears(g); GK.eyes(g); GK.brows(g); GK.nose(g)

@@ -6,6 +6,7 @@
 //   PICK     — a private card choice (which card to give in a trade).
 //   CHOICE   — a private yes/no (accept a lobby trade?).
 //   NOTE     — a private consequence (what you received, that you were possessed, who tried).
+//   MIRROR   — another guest's whole hand, seen through a Hand Mirror.
 //
 // Nothing here ever appears on the public HUD, and the turn timer is paused while any of it is up.
 import { rules } from '../data/rules.js';
@@ -157,6 +158,28 @@ export function createHandoff(doc) {
       el.title.textContent = `For ${player.name} only`;
       renderNotes(player, lines);
       show('I understand', onContinue);
+    },
+
+    // Someone else's whole hand, shown to the guest holding the device only (the Hand Mirror).
+    // Possession cards are included and shown first; `lines` says what that means. The guest's own
+    // waiting notes are left for their next private screen.
+    privateHand(player, { kicker, title, sub, cards, lines = [] }, onContinue) {
+      reset('mirror');
+      el.kicker.textContent = kicker || `Private — ${player.name} only`;
+      el.title.textContent = title;
+      el.sub.textContent = sub || '';
+      if (lines.length) {
+        el.notes.hidden = false;
+        for (const line of lines) {
+          const d = doc.createElement('div'); d.className = 'handoff-note'; d.textContent = line;
+          el.notes.appendChild(d);
+        }
+      }
+      el.hand.hidden = false;
+      const shown = [...cards.filter(c => c.type === 'possession'), ...countableCards(cards)];
+      if (!shown.length) el.hand.innerHTML = '<div class="panel-note">No cards at all.</div>';
+      for (const c of shown) el.hand.appendChild(cardTile(doc, c, { hideDesc: true }));
+      show('Done', onContinue);
     },
 
     close() { el.overlay.hidden = true; onNext = null; kind = null; },

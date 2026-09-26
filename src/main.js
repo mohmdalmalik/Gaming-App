@@ -17,6 +17,7 @@ import {
 import {
   search, useBandage, useUnlock, useBarricade, resolveFullHand, resolveTrade, resolveAttack,
   discardCard, overHandLimit, tradeableCards, openDoor,
+  canUseRoom, useInfirmary, useSwitchboard, useHandMirror, useEspresso,
 } from './game/actions.js';
 import { CARDS, weaponsIn } from './game/cards.js';
 import { createScene } from './render/scene.js';
@@ -105,7 +106,7 @@ const rig = createCameraRig(view.camera, cfg);
 const hud = createHud(document, cfg);
 const map = createMap(document, floor, cfg);
 const overlays = createOverlays(document);
-const hand = createHand(document, cfg, { onUseBandage, onUnlock, onBarricade });
+const hand = createHand(document, cfg, { onUseBandage, onUnlock, onBarricade, onEspresso, onHandMirror });
 const discard = createDiscard(document, cfg, {
   onDiscard: cardId => { const r = discardCard(state, activePlayer(state), cardId); if (!r.ok) hud.toast('That card cannot be discarded.'); refresh(); },
 });
@@ -158,6 +159,10 @@ function refreshUsable() {
 function refresh() { hud.update(state, floor); refreshUsable(); hand.refresh(); searchMarks.update(state); discovery.refresh(); }
 
 function activeMover() { return movers[state.activeIndex]; }
+
+// Card names in sentences: "a Lantern", "an Espresso"; "a Lantern and a Knife".
+function aCard(type) { const name = CARDS[type]?.name ?? type; return `${/^[aeiou]/i.test(name) ? 'an' : 'a'} ${name}`; }
+function andList(items) { return items.length < 2 ? items.join('') : `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`; }
 
 // --- Turn flow ---------------------------------------------------------------------------
 // Hot-seat: every turn is pass screen -> private screen -> action phase. Private information
@@ -319,7 +324,7 @@ function runTrade(A, B, { first, second }, onDone = afterMeeting) {
         handoff.passTo(first, 'Back to you', () => {
           const got = events.ok ? events.received[first.id] : null;
           const lines = [events.ok
-            ? (got ? `You received a ${CARDS[got].name} from ${second.name}.` : `The card ${second.name} gave you burned away in your Lantern's light.`)
+            ? (got ? `You received ${aCard(got)} from ${second.name}.` : `The card ${second.name} gave you burned away in your Lantern's light.`)
             : 'The trade could not be made.'];
           const mine = first.notes.splice(0, first.notes.length);
           handoff.privateNote(first, [...lines, ...mine], () => meeting.tradeDone(A, B, onDone));
@@ -375,38 +380,52 @@ function onSearch() {
   syncViews(false);
   // A card that does not fit goes straight to the take-or-leave prompt, on the searcher's own turn.
   if (r.kind === 'card' && r.full) { askFullHand(player, r.card, where); return; }
+  // A Linen Store's draw gives two cards; any that did not fit then go through the take-or-leave
+  // prompt one after another, once the searcher has read what they found.
+  const overflow = r.kind === 'cards' ? r.overflow : [];
   const line = r.kind === 'found'
     ? `Lying in ${where}: ${r.cards.map(c => CARDS[c.type].name).join(', ')}. You take it all.`
     : r.kind === 'nothing' ? `You search ${where}. Nothing.`
-      : `You search ${where} and find a ${CARDS[r.card.type].name}.`;
+      : r.kind === 'cards' ? `You search ${where} and find ${andList(r.cards.map(c => aCard(c.type)))}.`
+        : `You search ${where} and find ${aCard(r.card.type)}.`;
   const lanterns = player.hand.filter(c => c.type === 'lantern').length;
   const tally = lanterns ? ` You now hold ${lanterns} Lantern${lanterns === 1 ? '' : 's'}.` : '';
+  const noRoom = overflow.length
+    ? ` Your hands are full — choose what to do with ${andList(overflow.map(c => `the ${CARDS[c.type].name}`))} next.` : '';
+  const then = () => askEachFullHand(player, overflow, where);
   // Search results are PRIVATE. In hot-seat the table sees only that a search happened; the
   // result goes on a private card for the searcher. Practice has nobody to hide it from.
   if (HOTSEAT) {
     hud.toast(`${player.name} searched.`);
-    handoff.privateNote(player, [line + tally], refresh);
+    handoff.privateNote(player, [line + tally + noRoom], then);
   } else {
-    hud.toast(line + tally);
-    refresh();
+    hud.toast(line + tally + noRoom);
+    then();
   }
 }
 
-// A drawn card with no room for it: never dropped silently — the guest decides.
-function askFullHand(player, card, where = 'the room') {
+// Every drawn card that did not fit, through the take-or-leave prompt one at a time.
+function askEachFullHand(player, cards, where) {
+  if (!cards.length) { refresh(); return; }
+  askFullHand(player, cards[0], where, () => askEachFullHand(player, cards.slice(1), where));
+}
+
+// A drawn card with no room for it: never dropped silently — the guest decides. `then` runs once
+// they have (the next card of a Linen Store's two, if that did not fit either).
+function askFullHand(player, card, where = 'the room', then = null) {
   fullHand.open(state, player, card, {
     // Search results are private: in hot-seat nothing about the card goes on the shared toast.
     onTake: dropId => {
       const res = resolveFullHand(state, player, card, 'take', dropId);
       if (!res.ok) hud.toast('That card cannot be dropped.');
       else if (PRACTICE) hud.toast(`Kept the ${CARDS[card.type].name}, left the ${CARDS[res.dropped.type].name} behind.`);
-      refresh();
+      refresh(); then?.();
     },
-    onUse: () => { resolveFullHand(state, player, card, 'leave'); refresh(); },
+    onUse: () => { resolveFullHand(state, player, card, 'leave'); refresh(); then?.(); },
     onLeave: () => {
       resolveFullHand(state, player, card, 'leave');
       if (PRACTICE) hud.toast(`Left the ${CARDS[card.type].name} in ${where}.`);
-      refresh();
+      refresh(); then?.();
     },
   });
 }
@@ -433,6 +452,76 @@ function onBarricade(cardId, doorwayId) {
   hud.toast('Doorway barricaded for one round.');
   hand.close();
   refresh();
+}
+
+// Espresso (free): extra action points for this turn only.
+function onEspresso(cardId) {
+  const r = useEspresso(state, activePlayer(state), cardId);
+  if (!r.ok) { hud.toast(r.reason === 'ap' ? 'No action points left.' : 'Cannot use that now.'); return; }
+  hud.toast(`Espresso — ${r.gained} extra actions this turn.`);
+  refresh();
+}
+
+// Hand Mirror (1 action): another guest in the room shows the user their whole hand. What it shows
+// is PRIVATE and goes on a private screen for the user only; the shared screen says only that the
+// mirror was used, and on whom.
+const MIRROR_FAIL = {
+  ap: 'No action points left.',
+  noTarget: 'Choose another guest in this room.',
+  targetDead: 'That guest is dead.',
+  notTogether: 'That guest is not in this room any more.',
+};
+function onHandMirror(cardId, targetId) {
+  const player = activePlayer(state);
+  const r = useHandMirror(state, floor, player, cardId, targetId);
+  if (!r.ok) { hud.toast(MIRROR_FAIL[r.reason] || 'Cannot use that now.'); return; }
+  const target = state.players.find(q => q.id === r.target);
+  hand.close();
+  refresh();
+  const lines = r.unmasked
+    ? [player.possessed
+      ? `${target.name} holds a Possession card — ${target.name} is possessed too.`
+      : `${target.name} holds a Possession card — ${target.name} is POSSESSED. Only you know.`]
+    : [];
+  handoff.privateHand(player, {
+    kicker: `Hand Mirror · private — ${player.name} only`,
+    title: `${target.name}'s hand`,
+    sub: `${target.name} shows you every card they carry. Nobody else sees this.`,
+    cards: r.hand,
+    lines,
+  }, () => { hud.toast(`${player.name} used a Hand Mirror on ${target.name}.`); refresh(); });
+}
+
+// A room with a job (src/data/hotel.js `job`). The Infirmary heals; the Switchboard tells the whole
+// table how many guests are possessed right now, never who. A Linen Store's job is in the search.
+const ROOM_FAIL = {
+  full: 'Already at full health.',
+  ap: 'No action points left.',
+  usedThisTurn: 'You have already rung the Switchboard this turn.',
+  noJob: 'There is nothing to use in this room.',
+};
+function switchboardLine(n) {
+  if (n === 0) return 'No guest is possessed right now.';
+  return `${n} ${n === 1 ? 'guest is' : 'guests are'} possessed right now — it doesn't say who.`;
+}
+function onRoom() {
+  if (!running || state.finished || uiBusy() || activeMover().walking) return;
+  if (HOTSEAT && !inActionPhase) return;
+  const player = activePlayer(state);
+  const gate = canUseRoom(state, floor, player);
+  if (!gate.ok) { hud.toast(ROOM_FAIL[gate.reason] || 'Cannot use this room now.'); return; }
+  if (gate.job === 'infirmary') {
+    const r = useInfirmary(state, floor, player);
+    if (!r.ok) { hud.toast(ROOM_FAIL[r.reason] || 'Cannot use this room now.'); return; }
+    hud.toast(`Treated in the Infirmary — health ${r.health} of ${rules.maxHealth}.`);
+    refresh();
+  } else if (gate.job === 'switchboard') {
+    const r = useSwitchboard(state, floor, player);
+    if (!r.ok) { hud.toast(ROOM_FAIL[r.reason] || 'Cannot use this room now.'); return; }
+    refresh();
+    // PUBLIC, for the whole table: it stays up until someone taps Continue (the clock waits).
+    overlays.showNotice('The Switchboard', `${player.name} rang the Switchboard. ${switchboardLine(r.count)}`, refresh);
+  }
 }
 
 // --- End of the match ----------------------------------------------------------------------
@@ -643,6 +732,7 @@ hud.on('rotateLeft', () => rig.rotateLeft());
 hud.on('rotateRight', () => rig.rotateRight());
 hud.on('endTurn', doEndTurn);
 hud.on('search', onSearch);
+hud.on('roomJob', onRoom);
 hud.on('trade', onTrade);
 hud.onHand(() => { if (running && !uiBusy()) hand.open(state, floor); });
 hud.on('private', () => { if (running && !uiBusy()) hand.open(state, floor); });
@@ -737,6 +827,13 @@ window.__game = {
   moveToRoom,
   search: () => onSearch(),
   useBandage: id => onUseBandage(id),
+  // Part 2: rooms with jobs and the new cards (same paths as the buttons).
+  roomJob: () => canUseRoom(state, floor, activePlayer(state)),
+  useRoom: () => onRoom(),
+  useEspresso: id => onEspresso(id),
+  useHandMirror: (id, targetId) => onHandMirror(id, targetId),
+  handMirrorTargets: () => playersInRoom(state, activePlayer(state).currentRoom, activePlayer(state).id).map(q => q.id),
+  mirrorOpen: () => handoff.kind === 'mirror',
   unlock: (id, room) => onUnlock(id, room),
   barricade: (id, door) => onBarricade(id, door),
   trade: () => onTrade(),

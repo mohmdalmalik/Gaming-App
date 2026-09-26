@@ -24,7 +24,8 @@ export function createFullHand(doc) {
 
   function renderChoice() {
     const meta = CARDS[ctx.card.type];
-    sub.textContent = `You are carrying the most you can (${rules.handLimit}). You found a ${meta.name}.`;
+    const a = /^[aeiou]/i.test(meta.name) ? 'an' : 'a';            // "an Espresso"
+    sub.textContent = `You are carrying the most you can (${rules.handLimit}). You found ${a} ${meta.name}.`;
     found.innerHTML = '';
     found.appendChild(cardTile(doc, ctx.card, { hideDesc: false }));
     step.textContent = '';

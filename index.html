@@ -74,6 +74,8 @@
           </div>
           <div class="action-row">
             <button id="btn-search" class="btn action" type="button"><span class="btn-main">Search</span><span id="search-sub" class="btn-sub">1 action</span></button>
+            <!-- A room with a job (Infirmary, Switchboard): shown only while standing in one. -->
+            <button id="btn-room" class="btn action room-job" type="button" hidden><span class="btn-main">Infirmary</span><span id="room-sub" class="btn-sub">1 action</span></button>
             <button id="btn-trade" class="btn action" type="button" hidden><span class="btn-main">Trade</span><span class="btn-sub">Safe zone</span></button>
             <button id="btn-end-turn" class="btn primary end" type="button"><span class="btn-main">End turn &#x203A;</span><span id="end-sub" class="btn-sub">Next: —</span></button>
           </div>
@@ -158,6 +160,9 @@
           <span><span class="sw searched"></span> Searched</span>
           <span><span class="sw objective"></span> Something on the floor</span>
           <span><span class="sw frontier"></span> Closed door (?)</span>
+          <span><span class="mk infirmary">&#x271A;</span> Infirmary &#183; heal</span>
+          <span><span class="mk switchboard">&#x260E;&#xFE0E;</span> Switchboard &#183; count the possessed</span>
+          <span><span class="mk linen">&#x2261;</span> Linen Store &#183; 2 cards</span>
         </div>
       </div>
     </div>

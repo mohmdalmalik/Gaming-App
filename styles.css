@@ -231,8 +231,15 @@ html, body {
 .ap-pips { display: flex; gap: 5px; }
 .ap-pips .pip { width: 12px; height: 12px; border-radius: 50%; background: rgba(255,255,255,0.08); border: 1px solid var(--line-soft); }
 .ap-pips .pip.full { background: var(--brass); border-color: var(--brass-bright); box-shadow: 0 0 6px rgba(201,162,78,0.5); }
-.ap-count { font-size: 13px; font-weight: 700; color: var(--ivory-dim); margin-left: 2px; }
+.ap-count { font-size: 13px; font-weight: 700; color: var(--ivory-dim); margin-left: 2px; white-space: nowrap; }
 .ap-count.empty { color: #ffb3a7; }
+/* Extra action points from an Espresso: warm copper pips after the normal row, set a little apart. */
+.ap-pips .pip.bonus { border-color: rgba(232,150,90,0.55); }
+.ap-pips .pip.bonus.full { background: #e0894a; border-color: #ffc89a; box-shadow: 0 0 7px rgba(224,137,74,0.7); }
+.ap-pips .pip:not(.bonus) + .pip.bonus { margin-left: 4px; }
+.ap-pips.many { gap: 3px; }
+.ap-pips.many .pip { width: 10px; height: 10px; }
+.ap-count.bonus { color: #ffc89a; }
 .ap-line { font-size: 13px; color: var(--muted); }  /* legacy */
 
 .private-link {
@@ -490,6 +497,11 @@ html, body {
 .map-legend .sw.searched { background: rgba(120,200,150,0.18); border-color: rgba(120,200,150,0.5); }
 .map-legend .sw.frontier { background: var(--brass-bright); border-color: var(--brass); height: 4px; margin-top: 5px; }
 .map-legend .sw.objective { background: rgba(201,162,78,0.35); border-color: var(--brass-bright); border-radius: 50%; }
+/* Rooms with jobs carry a small mark on the plan (drawn in src/map.js in the same colours). */
+.map-legend .mk { font-family: var(--serif); font-weight: 700; font-size: 14px; line-height: 1; }
+.map-legend .mk.infirmary { color: #f08c84; }
+.map-legend .mk.switchboard { color: #9fd0f0; }
+.map-legend .mk.linen { color: #efe7d6; }
 
 /* The one-off announcement when the exit opens, and the end-screen button pair. */
 .card.notice { max-width: 440px; }
@@ -622,6 +634,10 @@ html, body {
 .handoff-hand[hidden] { display: none; }
 .handoff-hand .card-tile { width: 118px; }
 .handoff-hand .card-tile .art { min-height: 70px; }
+/* A whole hand can hold 7 or more cards (a possessed guest's Possession cards, a Hand Mirror look at
+   someone else's), so the row wraps instead of running off both sides. */
+.handoff-hand { flex-wrap: wrap; }
+.handoff-card.mirror .handoff-hand .card-tile { width: 108px; }
 
 /* --- The Offer chooser ----------------------------------------------------------------------- */
 .offer-block {

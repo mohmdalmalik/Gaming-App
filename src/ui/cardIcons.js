@@ -23,6 +23,10 @@ export const CARD_ICONS = {
   lockPick: wrap(`<path d="M22 74l44-44"/><path d="M66 30c4-4 8-4 10 0s0 8-4 10"/><path d="M74 74L30 30"/><path d="M30 30c-4-4-8-4-10 0s0 8 4 10"/><path d="M40 60l-6 6M56 60l6 6" opacity="0.7"/>`),
   // Barricade: two planks nailed across.
   barricade: wrap(`<path d="M18 34l60 20-4 10-60-20z" fill="currentColor" fill-opacity="0.15"/><path d="M18 62l60-20 4 10-60 20z" fill="currentColor" fill-opacity="0.15"/><circle cx="26" cy="40" r="2" fill="currentColor"/><circle cx="70" cy="56" r="2" fill="currentColor"/><circle cx="26" cy="66" r="2" fill="currentColor"/><circle cx="70" cy="46" r="2" fill="currentColor"/>`),
+  // Hand mirror: an oval glass in a rim, a glint across it, and a handle below.
+  handMirror: wrap(`<ellipse cx="48" cy="36" rx="20" ry="24"/><ellipse cx="48" cy="36" rx="14" ry="18" opacity="0.5"/><path d="M40 26c2-4 6-6 10-6" opacity="0.8"/><path d="M48 60v6"/><path d="M44 66h8l-1 18a3 3 0 0 1-6 0z" fill="currentColor" fill-opacity="0.15"/>`),
+  // Espresso: a small cup on a saucer, with steam rising.
+  espresso: wrap(`<path d="M30 50h32v8a14 14 0 0 1-14 14h-4a14 14 0 0 1-14-14z" fill="currentColor" fill-opacity="0.15"/><path d="M62 54h4a6 6 0 0 1 0 12h-6"/><path d="M18 78h60"/><path d="M26 78c4 4 40 4 44 0" opacity="0.7"/><path d="M40 42c-4-4 4-8 0-14M52 42c-4-4 4-8 0-14" opacity="0.8"/>`),
   // Trinket: a small locket on a chain.
   trinket: wrap(`<path d="M48 22c-10 0-16 8-14 16l14 8 14-8c2-8-4-16-14-16z"/><path d="M48 46v28"/><circle cx="48" cy="68" r="10"/><path d="M48 62v12M42 68h12" opacity="0.7"/>`),
 };

@@ -3,6 +3,14 @@
 import { activePlayer, isLocked, isBarricaded } from './game/state.js';
 import { rules } from './data/rules.js';
 
+// Rooms with jobs are marked so they can be found again: Infirmary, Switchboard, Linen Store.
+// (The \uFE0E after the telephone asks for the plain symbol, not the colour emoji.)
+const JOB_MARKS = {
+  infirmary: { mark: '✚', color: '#f08c84' },
+  switchboard: { mark: '☎\uFE0E', color: '#9fd0f0' },
+  linenStore: { mark: '≡', color: '#efe7d6' },
+};
+
 export function createMap(doc, floor, cfg) {
   const overlay = doc.getElementById('map-overlay');
   const canvas = doc.getElementById('map-canvas');
@@ -104,6 +112,13 @@ export function createMap(doc, floor, cfg) {
         ctx.fillStyle = BRASS_BRIGHT; ctx.font = `bold 14px ${serif}`;
         ctx.textAlign = 'left'; ctx.textBaseline = 'top';
         ctx.fillText('◆', x + 8, z + 6);
+      }
+      // A room with a job: its mark in the lower-left corner (matching the legend in index.html).
+      const job = JOB_MARKS[r.job];
+      if (job) {
+        ctx.fillStyle = job.color; ctx.font = `bold ${Math.max(15, Math.min(20, scale * 0.6))}px ${serif}`;
+        ctx.textAlign = 'left'; ctx.textBaseline = 'bottom';
+        ctx.fillText(job.mark, x + 9, z + h - 6);
       }
     }
 

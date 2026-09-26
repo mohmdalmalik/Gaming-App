@@ -4,7 +4,7 @@
 // bar and toasts. Portraits are illustrated placeholders (see ui/portrait.js) so real art can
 // drop in later without changing this logic. Possession is never revealed on the public strip.
 import { activePlayer, nextPlayer, playersInRoom } from './game/state.js';
-import { canSearch } from './game/actions.js';
+import { canSearch, canUseRoom } from './game/actions.js';
 import { rules } from './data/rules.js';
 import { countableCount } from './game/cards.js';
 import { makePortrait } from './ui/portrait.js';
@@ -20,6 +20,21 @@ const SEARCH_REASON = {
   ap: 'No actions left',
   empty: 'Nothing left to find',
   finished: '—',
+};
+
+// The room-job button (Infirmary, Switchboard): its label, what it does for its cost, and a plain
+// reason when it can't be used. A Linen Store has no button — its job is in the search itself.
+const plural = n => `${n} action${n === 1 ? '' : 's'}`;
+const ROOM_JOB = {
+  infirmary: { name: 'Infirmary', does: () => `Heal ${rules.infirmaryHeal} · ${plural(rules.actionCost.infirmary)}` },
+  switchboard: { name: 'Switchboard', does: () => `Call · ${plural(rules.actionCost.switchboard)}` },
+};
+const ROOM_REASON = {
+  full: 'Full health',
+  ap: 'No actions left',
+  usedThisTurn: 'Called this turn',
+  finished: '—',
+  dead: '—',
 };
 
 export function createHud(doc, cfg) {
@@ -44,6 +59,10 @@ export function createHud(doc, cfg) {
     private: doc.getElementById('btn-private'),
     search: doc.getElementById('btn-search'),
     searchSub: doc.getElementById('search-sub'),
+    // (`room` above is the room-name header; the room's job button is `roomJob`.)
+    roomJob: doc.getElementById('btn-room'),
+    roomJobMain: doc.querySelector('#btn-room .btn-main'),
+    roomJobSub: doc.getElementById('room-sub'),
     trade: doc.getElementById('btn-trade'),
     endTurn: doc.getElementById('btn-end-turn'),
     endMain: doc.querySelector('#btn-end-turn .btn-main'),
@@ -94,15 +113,21 @@ export function createHud(doc, cfg) {
     }
   }
 
+  // An Espresso can lift a turn above the usual action points: the extra ones get their own
+  // "bonus" pips after the normal row, and the label says how many extra ("6 (+2)").
   function renderAp(n) {
+    const base = rules.actionPointsPerTurn;
+    const total = Math.max(base, n);
     el.apPips.innerHTML = '';
-    for (let i = 0; i < rules.actionPointsPerTurn; i++) {
+    el.apPips.classList.toggle('many', total > base + 2);
+    for (let i = 0; i < total; i++) {
       const pip = doc.createElement('span');
-      pip.className = 'pip' + (i < n ? ' full' : '');
+      pip.className = 'pip' + (i < n ? ' full' : '') + (i >= base ? ' bonus' : '');
       el.apPips.appendChild(pip);
     }
-    el.ap.textContent = `${n} / ${rules.actionPointsPerTurn}`;
+    el.ap.textContent = n > base ? `${n} (+${n - base})` : `${n} / ${base}`;
     el.ap.classList.toggle('empty', n === 0);
+    el.ap.classList.toggle('bonus', n > base);
   }
 
   function renderHand(count) {
@@ -168,6 +193,16 @@ export function createHud(doc, cfg) {
       el.searchSub.textContent = gate.ok
         ? (room?.searchPoint ? `${room.searchPoint} · ${rules.searchCost} action` : `${rules.searchCost} action`)
         : (SEARCH_REASON[gate.reason] || 'Unavailable');
+
+      // A room with a job: its button shows only while standing in one (Infirmary, Switchboard).
+      const job = ROOM_JOB[room?.job];
+      el.roomJob.hidden = !job;
+      if (job) {
+        const use = canUseRoom(state, floor, p);
+        el.roomJobMain.textContent = job.name;
+        el.roomJob.disabled = !use.ok;
+        el.roomJobSub.textContent = use.ok ? job.does() : (ROOM_REASON[use.reason] || 'Unavailable');
+      }
 
       // Voluntary trade: only in the lobby (a safe zone) when someone else is there to trade with.
       const safeRoom = !!room?.safe;

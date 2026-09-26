@@ -1,12 +1,12 @@
 // The hand sheet: the active guest's cards as large illustrated tiles, with a detail pane that
 // explains the selected card and offers its action when it has one. Private to whoever holds
 // the device: it shows their Lanterns, their Possession cards and who they have unmasked.
-import { activePlayer, adjacentLockedRooms, isBarricaded } from '../game/state.js';
+import { activePlayer, adjacentLockedRooms, isBarricaded, playersInRoom } from '../game/state.js';
 import { rules } from '../data/rules.js';
 import { CARDS, countableCount } from '../game/cards.js';
 import { cardTile } from './cards.js';
 
-export function createHand(doc, cfg, { onUseBandage, onUnlock, onBarricade }) {
+export function createHand(doc, cfg, { onUseBandage, onUnlock, onBarricade, onEspresso, onHandMirror }) {
   const overlay = doc.getElementById('hand-overlay');
   const title = doc.getElementById('hand-title');
   const banner = doc.getElementById('hand-banner');
@@ -49,7 +49,10 @@ export function createHand(doc, cfg, { onUseBandage, onUnlock, onBarricade }) {
 
     renderDetail(state, floor, p, hand.find(c => c.id === selectedId) || null);
 
-    const parts = [`Health ${p.health}/${rules.maxHealth}`, `Actions ${p.actionPoints}/${rules.actionPointsPerTurn}`,
+    // An Espresso can lift a turn above the usual action points: say by how much.
+    const base = rules.actionPointsPerTurn;
+    const actions = p.actionPoints > base ? `Actions ${p.actionPoints} (+${p.actionPoints - base})` : `Actions ${p.actionPoints}/${base}`;
+    const parts = [`Health ${p.health}/${rules.maxHealth}`, actions,
       `Cards ${countableCount(p.hand)}/${rules.handLimit}`, `Lanterns ${p.hand.filter(c => c.type === 'lantern').length}/${rules.lanternsToEscape}`];
     note.textContent = parts.join(' · ');
   }
@@ -112,6 +115,24 @@ export function createHand(doc, cfg, { onUseBandage, onUnlock, onBarricade }) {
         const other = floor.rooms.get(d.otherRoom(p.currentRoom));
         actionBtn(`Seal the door to ${state.discovered.has(other.id) ? other.name : 'the unknown room'} · ${rules.actionCost.useCard} action`, noAp, () => onBarricade(card.id, d.id));
       }
+      return;
+    }
+    if (card.type === 'handMirror') {
+      // One button per other living guest in this room; what they hold is shown in private.
+      const others = playersInRoom(state, p.currentRoom, p.id);
+      if (!others.length) { line(state.practice ? 'There is no one else here.' : 'No other guest in this room.', 'd-tag'); return; }
+      if (noAp) line('No actions left this turn.', 'd-tag');
+      for (const q of others) {
+        actionBtn(`Look at ${q.name}'s hand · ${rules.actionCost.useCard} action`, noAp, () => onHandMirror(card.id, q.id));
+      }
+      return;
+    }
+    if (card.type === 'espresso') {
+      const cost = rules.actionCost.espresso;
+      const short = p.actionPoints < cost;
+      line('The extra actions are gone when the turn ends, like any you have not used.', 'd-tag');
+      if (short) line('No actions left this turn.', 'd-tag');
+      actionBtn(`Drink · ${cost ? `${cost} action` : 'free'}`, short, () => onEspresso(card.id));
     }
   }
 

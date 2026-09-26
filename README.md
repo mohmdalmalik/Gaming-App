@@ -63,10 +63,14 @@ readout at the top of the screen, for measuring speed on the iPad.
   repositions for free. A locked room says so; a Master Key or Lock Pick (from the hand sheet) opens
   it from next door.
 - **Search** (1 AP) — takes anything lying in the room (a dead guest's cards); otherwise draws
-  one card, once per room. Dark rooms need a Flashlight in hand. What you find is private: the
+  one card, once per room (two in a Linen Store). Dark rooms need a Flashlight in hand. What you find is private: the
   table only sees that you searched. Lanterns are never dealt — searching is the only way to get one.
+- **Rooms with jobs** — in an Infirmary or the Switchboard a room button appears next to Search:
+  Infirmary (1 AP, heal 2), Switchboard (1 AP, once a turn: the whole table learns how many guests
+  are possessed, not who). The map marks them (✚ ☎ ≡).
 - **Hand** — Bandage (heal 1), Master Key / Lock Pick (open a locked room next door), Barricade
-  (seal a doorway of your room for one round) are played from here. Lantern, Flashlight and
+  (seal a doorway of your room for one round), Hand Mirror (1 AP: see the whole hand of a guest in
+  your room, in private) and Espresso (free: +2 actions this turn) are played from here. Lantern, Flashlight and
   weapons are used in context.
 - **Meetings** (hot-seat) — walk in on a guest you have not met in that room this round and you
   must Trade or Attack. In a trade each side picks a card in private and sees only what they
@@ -158,10 +162,10 @@ Which mode runs is decided by the address: `applyMode()` at the bottom of `src/d
 
 ```
 python3 -m http.server 8123 --bind 127.0.0.1 &
-node tests/rules-check.mjs        # the rules engine against docs/GAME_RULES.md (125 assertions)
+node tests/rules-check.mjs        # the rules engine against docs/GAME_RULES.md (280 assertions)
 node tests/logic-check.mjs        # floor, map topology, grid, pathfinding
 node tests/browser-practice.mjs   # practice mode in a real browser [--screens]
 node tests/browser-hotseat.mjs    # hot-seat in a real browser: roles, private trades, attacks, escape [--screens]
 node tests/browser-lobby.mjs      # the baked starting room, door cues, path preview, camera, draw calls
-node tools/balance/hotseat-sim.mjs 400 6   # 400 six-player matches under the rules as they stand (--compare for variants)
+node tools/balance/hotseat-sim.mjs 400 6   # 400 six-player matches under the rules as they stand (--before: same bots on the rules before Part 2; --compare: Lantern variants; --cautious)
 ```

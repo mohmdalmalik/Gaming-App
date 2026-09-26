@@ -600,3 +600,26 @@ Target: `docs/art-reference.jpg` (style, palette and finish; not its layout or i
   The four bake passes each light only what is actually seen together.
 - **Other rooms are greybox for now.** The earlier Kenney-kit dressing cost 100+ draw calls per room,
   which does not scale to 24 tiles; room art comes after this system is approved.
+
+## Approved rule changes — Part 2: rooms with jobs and new cards
+- **A room's job is data.** A tile in `src/data/hotel.js` carries `job: 'linenStore' | 'infirmary' |
+  'switchboard'`; the numbers (2 cards, 1 AP, heal 2, …) live in `src/data/rules.js`; what each job does is
+  in `src/game/actions.js` (`search`, `canUseRoom`, `useInfirmary`, `useSwitchboard`). A new job means one
+  data field plus one engine function — no rendering change.
+- **The five job tiles replaced five ordinary tiles of the same doorway shapes** (Guest Suites 410, 412,
+  414, 418 and the Garden Lounge), so the hotel generator's mix of dead ends, corners, straights, Ts and
+  crossroads — and everything the never-close-off rule was tested on — is unchanged.
+- **Linen Store: "the first search" is the room's card draw.** A search that picks up a dead guest's
+  dropped cards does not use it (as for any room). Each drawn card that does not fit in a full hand gets the
+  usual take-or-leave prompt, one after another.
+- **Switchboard counts living guests** (the dead are out of the game) and the answer is public: a notice
+  the whole table dismisses, plus the public log. "Once per player per turn" is kept per guest, per turn.
+- **Hand Mirror: contents private, the act public.** What the mirror shows appears only on the user's
+  private hand-over screen; the table sees "A used a Hand Mirror on B", and B is told privately on their
+  own next screen. A clean guest who sees a Possession card is recorded as knowing (the same "unmasked" list
+  a Lantern block feeds). It can't be used mid-walk: walking in on a guest starts the meeting first.
+- **Espresso** is the one free card: it works at 0 actions, stacks, and the extra actions are shown as
+  copper bonus pips; like all actions they are gone when the turn ends.
+- **Simulator** (`tools/balance/hotseat-sim.mjs`): bot choices are now seeded per match, so the same
+  command gives the same numbers; `--before` replays the same bots, seeds and hotels on the rules before
+  Part 2, so a change is measured like for like rather than against an old table.

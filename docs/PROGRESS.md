@@ -969,11 +969,8 @@ With cautious bots the clean side wins 2%. Before this change (fixed map, same b
 
 # Approved rule changes — Part 2: rooms with jobs and new cards (current)
 
-**Status: in progress.** Done and committed: the rules engine, the data (room deck and 48-card deck) and
-docs/GAME_RULES.md (commit 94a38c3); the interface (commit 0a24f8c). In progress: the simulator bots
-(`tools/balance/hotseat-sim.mjs`) and the 400-match simulation, the rule tests (`tests/rules-check.mjs`)
-and the browser tests (the hot-seat and practice suites still expect the old 40-card deck). If work stops
-here, the next step is to finish those three and then review everything against the approved list.
+**Status: implemented, tested, reviewed, committed.** Recommendations below are for the owner; nothing
+was changed beyond the approved list.
 
 ## The approved list (applied exactly)
 1. Rooms with jobs, in place of ordinary tiles (the deck stays at 24): Linen Store ×2 (first search
@@ -983,3 +980,106 @@ here, the next step is to finish those three and then review everything against 
    and Espresso (free: +2 AP this turn; used up).
 3. Deck 40 → 48: Lantern 14, Bandage 7, Flashlight 5, Knife 4, Barricade 4, Lock Pick 4, Hand Mirror 3,
    Espresso 3, Revolver 2, Master Key 2.
+
+## Where the rules were silent — what the game does (tell me if any should differ)
+- **Which tiles made way:** Guest Suites 410, 412, 414, 418 and the Garden Lounge. The new rooms take their
+  exact doorway shapes: Linen Stores are dead ends, Infirmaries a corner and a straight, the Switchboard a
+  crossroads. So the map generator behaves exactly as before.
+- **Rooms with jobs can also be searched** once, like every other room (only the Fire Exit can't).
+- **Linen Store:** "the first search" = the room's one card draw. Picking up a dead guest's dropped cards
+  there doesn't use it up. If the hand is full, each card that doesn't fit gets the usual keep-or-leave
+  prompt, one after the other.
+- **Infirmary:** can be used again in the same turn while you're still hurt; refused at full health.
+- **Switchboard:** counts living guests only. The number is shown to the whole table and written in the log.
+- **Hand Mirror:** the table sees who looked at whose hand; what it showed is private to the user. The
+  target is told privately on their next screen. It works in the lobby (it isn't a meeting or an attack).
+  It can't be used while still walking into a room — the meeting comes first.
+- **Espresso:** works at 0 actions; two in one turn stack (8 actions).
+
+## Interface
+- A room button next to Search in an Infirmary ("Heal 2 · 1 action") or the Switchboard ("Call · 1
+  action"), with a plain reason when it can't be used ("Full health", "Called this turn", "No actions left").
+- The Switchboard answer is a public notice the table dismisses: "2 guests are possessed right now — it
+  doesn't say who."
+- Hand sheet: Espresso "Drink · free" (extra actions show as copper pips); Hand Mirror "Whose hand?" with one
+  name button per guest in the room → a private screen with their cards, Possession cards included.
+- Linen Store results name both cards. Map marks: ✚ Infirmary, ☎ Switchboard, ≡ Linen Store.
+- Drawn icons for the two new cards. Greybox furniture for the new rooms (white beds and cabinet, switchboard
+  panels, linen shelves).
+- Also fixed: a hand of 7+ cards ran off the start-of-turn private screen (it now wraps).
+
+## Review (independent, four angles; each finding reproduced before fixing)
+Fixed: a hand sheet opened while walking stayed readable under the public meeting panel (could show
+"POSSESSED" to the table — this existed before Part 2 but the new cards made it likelier); the Hand Mirror
+could be used mid-walk before the forced meeting; the mirror target was never told; crowded-lobby mirror
+buttons hid below the fold; the action count ran out of its panel on an iPad mini; four simulator issues
+(the Lantern carrier ignored what it knew, blind mirror looks in the lobby, a double-counted number, and
+unseeded bot choices making runs differ).
+
+## Tests
+rules-check (280 checks, +106 for Part 2), logic-check (job tiles in every orientation, 400 hotels),
+browser-lobby, browser-practice (Linen Store double draw, chained full-hand prompts), browser-hotseat
+(Infirmary, Switchboard notice, Hand Mirror private screen, Espresso pips) — all passing, including the
+`/Gaming-App/` sub-path.
+
+## Simulation (`node tools/balance/hotseat-sim.mjs 4000 6 --before`)
+Same bots, same seeds, same hotels; "Before" = the 40-card deck and the five job rooms as plain rooms.
+4,000 matches (400-match runs vary by ±2 points; the table uses 4,000 so differences are real).
+
+| | Before Part 2 | Part 2 |
+| --- | --- | --- |
+| Clean guests win | 10% | 6% |
+| The hotel wins | 90% | 94% |
+| … by possessing or killing every clean guest | 77% | 83% |
+| … at dawn | 13% | 11% |
+| Match length, median rounds | 3 | 3 |
+| Fire Exit revealed: median round (never revealed) | 5 (3039 of 4000) | 4 (3219 of 4000) |
+| Tiles explored per match: median | 13 | 12 |
+| Meetings per match: median (average) | 15 (19.74) | 14 (18.24) |
+| Meetings per round | 5.16 | 5.29 |
+| Hotel closed itself off | 0 | 0 |
+| Possession attempts / succeeded / blocked | 5.83 / 4.32 / 1.51 | 5.79 / 4.50 / 1.29 |
+| Lanterns found / burned | 6.36 / 1.51 | 5.50 / 1.29 |
+| Attacks / deaths | 0.13 / 0.01 | 0.15 / 0.01 |
+
+The 400-match run asked for (`400 6 --before`): clean 8% → 7%, hotel 92% → 93%, dawn 14% → 14%, median 3
+rounds, exit median round 4, 13 tiles, 15 meetings (5.37 a round), never closed off, 4.38 possessions,
+5.92 Lanterns found. Cautious bots (4,000): clean 3% → 3%.
+
+**How often the new rooms and cards get used (per match, 4,000 matches)**
+
+| | Used | On the board / in hand |
+| --- | --- | --- |
+| Linen Store 2-card searches | 0.95 (in 72% of matches) | at least one on the board in 79%; searched in 90% of those |
+| Infirmary treatments | 0.02 (in 2%) | at least one on the board in 81%; used in 3% of those |
+| Switchboard calls | 0.46 (in 16%) | on the board in 50%; rung in 33% of those; told someone something new in 7% |
+| Hand Mirrors used | 0.62 (in 41%) | held in about every match; 0.44 on a possessed guest, 0.26 saw a Possession card (23% of matches) |
+| Espressos drunk | 2.29 (in 98%) | +4.6 actions per match, almost none wasted |
+
+**Recommendations only — nothing has been changed:**
+1. **Lanterns got harder to find.** After dealing, Lanterns were 12 of 16 cards left in the deck (75%);
+   now 14 of 24 (58%). Found per match 6.4 → 5.5, fewer Lanterns to block possession (1.51 → 1.29), clean
+   wins 10% → 6%. The Linen Store only makes up part of it. Options: the new cards replace existing cards
+   instead of being added, or a Lantern count of about 16–17 to keep the old share.
+2. **The Infirmary is almost never needed** (2% of matches) because fights are rare (0.15 attacks a
+   match). It will matter only if combat becomes more common — worth re-checking after real play-tests.
+3. **Knowing who is possessed barely helps**, because meetings are forced: bots can't avoid a guest they
+   know is possessed. The Mirror unmasks someone in about a quarter of matches, yet wins hardly move.
+   The bigger lever is still Part 1's finding (possession spreads fast in the crowded early hotel).
+4. **The Switchboard is on the board in only half the matches** (about 12 of 24 tiles get placed). If it
+   should matter every match, it could be kept out of the back half of the room deck.
+
+## What to test on the iPad
+1. Hot-seat (`?mode=hotseat&players=4`): open doors until an Infirmary (✚ on the map) appears. Get hurt
+   (or just check the button): the button next to Search says "Heal 2 · 1 action"; at full health it
+   says "Full health".
+2. Find the Switchboard (☎): tap it — a notice tells the table how many guests are possessed, never who.
+   Tap again: "Called this turn".
+3. With a Hand Mirror, stand in a room with another guest, open your hand, tap the mirror, then their
+   name: a private screen shows their whole hand. The table only sees who looked at whom; that guest is
+   told on their next turn screen.
+4. With an Espresso: "Drink · free" — two copper pips appear; the count shows 6. Next turn it's back to 4.
+5. Practice: find a Linen Store (≡) and search it — two cards. With a full hand, you'll get two
+   keep-or-leave prompts in a row.
+6. Open your hand while walking into a room where someone stands: when the meeting starts, the hand
+   closes (nobody else should ever see your cards).

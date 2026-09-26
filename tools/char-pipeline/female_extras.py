@@ -119,10 +119,15 @@ def long_hair(g, Hs):
     rolls = [(curve(R_['keys'], R_.get('n', 40), lambda r, s=R_.get('sink', 0.5): r * s), R_.get('k', 0.008), R_.get('over', False)) for R_ in Hs.get('rolls', [])]
     inset = Hs.get('inset', 0.0)
     # grooves: the carving tube's centre sits (depth - radius) below the BASE surface (the envelope minus inset)
-    grooves = [(curve(G_['keys'], G_.get('n', 30), lambda r, d=G_.get('depth', 0.006): inset + d - r), G_.get('k', 0.004)) for G_ in Hs.get('grooves', []) if not G_.get('over')]
+    # a groove's depth scales with its radius (depth at the widest key): the ends taper out shallow instead of ending in
+    # a narrow deep slit
+    def gdepth(G_):
+        rm = max(k[2] for k in G_['keys']); d = G_.get('depth', 0.006)
+        return lambda r: d * min(1.0, r / rm)
+    grooves = [(curve(G_['keys'], G_.get('n', 30), lambda r, dd=gdepth(G_): inset + dd(r) - r), G_.get('k', 0.004)) for G_ in Hs.get('grooves', []) if not G_.get('over')]
     # 'over' grooves are carved last (after the 'over' rolls): e.g. the crease separating a raised wave from the hair behind it;
     # their depth is measured from the ENVELOPE (not the inset base), since they cut into rolls standing on it
-    grooves_o = [(curve(G_['keys'], G_.get('n', 30), lambda r, d=G_.get('depth', 0.006): d - r), G_.get('k', 0.004)) for G_ in Hs.get('grooves', []) if G_.get('over')]
+    grooves_o = [(curve(G_['keys'], G_.get('n', 30), lambda r, dd=gdepth(G_): dd(r) - r), G_.get('k', 0.004)) for G_ in Hs.get('grooves', []) if G_.get('over')]
     zb = zp(Hs.get('bottom', 34.0)); zt = zp(Hs.get('top', 0.0))
     def sdf(P):
         s = base_env(P) + inset

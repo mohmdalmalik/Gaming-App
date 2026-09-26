@@ -36,10 +36,10 @@ CFG = dict(
     head_y=0.03, z_shoulder_top=32.3,
     ear_style='round', ear_h=0.088, ear_w=0.062, ear_out=0.006, ear_y=0.030, ear_tilt=0.35, ear_thick=0.024, ear_rim=0.007, ear_bowl=0.010, ear_sink=0.020,
     eye_x=0.066, eye_w=0.040, eye_h=0.062, eye_lift=0.003,
-    brow=dict(x0=0.030, x1=0.112, z=12.9, thick=0.030, arch=0.014, drop_in=0.006, drop_out=0.018,
+    brow=dict(x0=0.034, x1=0.102, z=12.7, thick=0.028, arch=0.014, drop_in=-0.020, drop_out=0.022,
               profile=[(0.0, 0.55), (0.06, 0.95), (0.25, 1.0), (0.60, 0.88), (0.90, 0.55), (1.0, 0.25)], flat=0.5),
-    nose_w=0.058, nose_h=0.050, nose_d=0.036, nose_out=0.013, nose_top=1.3,
-    lips=dict(z=22.9, w=0.094, rise=0.010, upper=0.011, lower=0.015, bow=0.002, flat=0.45),
+    nose_w=0.054, nose_h=0.046, nose_d=0.032, nose_out=0.010, nose_top=1.3,
+    lips=dict(z=22.9, w=0.098, rise=0.014, upper=0.011, lower=0.015, bow=0.002, flat=0.45),
     tint=dict(spots=[(0.090, 21.5, 0.038, 0.032, 1.0), (0.0, 20.3, 0.020, 0.020, 0.4)], g=0.20, b=0.16),
     soft_normals=dict(centre=(0.0, 0.03, 23.5), radii=(0.20, 0.24, 0.50), amount=1.0, z_top=12.5, z_bot=31.0, fade=0.03, front=0.04,
                       keep=[(0.0, -0.22, 20.3, 0.036)]),       # dress_kit: even glowing face shading (no dark jaw)
@@ -51,7 +51,7 @@ CFG = dict(
 )
 COLOURS = dict(
     skin='#ffb084', hair='#7a4a44', brow='#3a221c', eye='#0b0b0d', lips='#962430',
-    dress='#5e2836', sash='#48222c', gold='#e8b25c', shoe=GK.PALETTE['shoe_black'],
+    dress='#4a2230', sash='#381a24', gold='#e8b25c', shoe=GK.PALETTE['shoe_black'],
 )
 
 # ---- skull tables by f (0 chin .. 1 skull top): a soft oval face, full cheeks, small round chin (Eleanor's, a touch longer)
@@ -84,7 +84,7 @@ ENV = dict(
 def forehead(x):
     """Lowest point of the hair over the forehead / temples (pct) across x (her right negative): the wave hangs low on
     her right; the part side (her left) is higher; the temples drop to the flat strands in front of the ears."""
-    keys = [(-0.20, 19.5), (-0.145, 14.2), (-0.09, 12.2), (-0.03, 9.6), (0.02, 8.6), (0.06, 8.0), (0.10, 8.2), (0.13, 9.5), (0.16, 17.5), (0.20, 19.5)]
+    keys = [(-0.20, 19.5), (-0.145, 15.0), (-0.09, 13.0), (-0.03, 10.4), (0.02, 8.6), (0.06, 8.0), (0.10, 8.2), (0.13, 9.5), (0.16, 17.5), (0.20, 19.5)]
     for (x0, z0), (x1, z1) in zip(keys, keys[1:]):
         if x <= x1: return z0 + (z1 - z0) * sm((x - x0) / (x1 - x0)) if x >= x0 else z0
     return keys[-1][1]
@@ -102,7 +102,7 @@ ROLLS = [
     # forehead (the tallest point of the hair) and rolling down to her right temple, where it joins the side curls.
     # Mostly above the scalp (sink 0.15); its underside overhangs the forehead (the bake shades the undercut).
     dict(keys=[(0.85, 7.0, 0.016, 0.9), (0.875, 4.2, 0.034, 0.85), (0.925, 2.6, 0.044, 0.82), (0.99, 3.2, 0.048, 0.80), (0.06, 5.0, 0.048, 0.80),
-               (0.12, 8.4, 0.046, 0.80), (0.17, 11.4, 0.042, 0.82), (0.212, 14.0, 0.036, 0.85), (0.232, 16.8, 0.026, 0.9), (0.245, 19.5, 0.012, 0.9)],
+               (0.12, 9.0, 0.046, 0.80), (0.17, 12.2, 0.042, 0.82), (0.212, 14.0, 0.036, 0.85), (0.232, 16.8, 0.026, 0.9), (0.245, 19.5, 0.012, 0.9)],
          sink=0.15, k=0.012, over=True, n=48),
     # the next wave behind it, and one more over the top toward the back of her right side
     dict(keys=[(0.28, 9.5, 0.014, 0.8), (0.20, 7.0, 0.028, 0.70), (0.10, 4.6, 0.030, 0.70), (0.00, 3.2, 0.030, 0.70), (0.93, 2.2, 0.026, 0.72),

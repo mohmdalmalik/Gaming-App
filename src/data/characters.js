@@ -28,7 +28,8 @@ export const outfits = {
     // modelHeight places the active marker; strideLength is a fallback — the GLB carries the
     // measured value in its extras (tools/char-pipeline/make_victor.py prints it).
     model: 'assets/characters/victor.glb', modelHeight: 1.66, strideLength: 1.1513 },
-  dinnerJacket: { name: 'White dinner jacket', body: 'male', jacket: '#ece5d4', trousers: '#15151a', shirt: '#f7f5ef', neckwear: 'bow', neckwearColor: '#15151a', lapels: '#d5ccb8' },
+  dinnerJacket: { name: 'White dinner jacket', body: 'male', jacket: '#ece5d4', trousers: '#15151a', shirt: '#f7f5ef', neckwear: 'bow', neckwearColor: '#15151a', lapels: '#d5ccb8',
+    model: 'assets/characters/henry.glb', modelHeight: 1.66, strideLength: 1.169 },   // Henry (tools/char-pipeline/guests/henry.py)
   // Women: elegant, modest period dresses (silhouette: aline / column / full).
   dressEmerald: { name: 'Emerald A-line gown', body: 'female', bodice: '#1f6b4a', skirt: '#1f6b4a', skirtStyle: 'aline', sleeves: 'long', sash: '#c9a86a' },
   dressBurgundy: { name: 'Burgundy column dress', body: 'female', bodice: '#6b1f30', skirt: '#6b1f30', skirtStyle: 'column', sleeves: 'short', sash: '#2a1418' },

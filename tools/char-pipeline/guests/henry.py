@@ -3,8 +3,8 @@
 # back (a full quiff, sculpted locks), round thin dark-brown wire glasses, fair peachy skin with rosy cheeks.
 # Reference: tools/char-pipeline/ref/henry-sheet.png (panels in ref/panels-henry/). Built by
 #   python3 tools/char-pipeline/make_guest.py henry   -> assets/characters/henry.glb
-# Uses guest_kit (face, suit body, finish), male_extras (the envelope-sculpted hair, glasses, bow tie, studs, pocket
-# square, the lower-face normal bend) and dress_kit's SDF helpers / lift_ao (read-only use).
+# Uses guest_kit (face, hair_shell with sculpted lock planes, suit body, finish), male_extras (glasses, bow tie, studs,
+# pocket square, Taubin smoothing of the hair, radial groove shading, the lower-face normal bend) and dress_kit.lift_ao.
 #
 # Measurements (sheet FRONT panel: figure 567 px = H = 1.66 m, 2.93 mm/px; SIDE 567 px; HEAD close-ups ~2.5 mm/px but
 # drawn ~8 % larger and turned ~9 deg to his left, so the body panels win where they disagree). Percent of H from the top:
@@ -32,7 +32,7 @@ sm = GK.sm
 CFG = dict(
     z_hair_top=0.0, z_skull_top=4.5, z_hairline=8.0, z_brow=13.5, z_eye=19.8, z_nose=23.1, z_mouth=26.3, z_chin=31.4, z_ear=22.2,
     head_y=0.03, z_shoulder_top=35.3,
-    ear_style='round', ear_seg=(16, 12), ear_h=0.136, ear_w=0.110, ear_out=0.020, ear_y=0.022, ear_tilt=0.60, ear_thick=0.034, ear_rim=0.010, ear_bowl=0.016, ear_sink=0.022,
+    ear_style='round', ear_seg=(16, 12), ear_h=0.140, ear_w=0.114, ear_out=0.020, ear_y=0.022, ear_tilt=0.72, ear_thick=0.034, ear_rim=0.010, ear_bowl=0.016, ear_sink=0.022,
     eye_x=0.064, eye_w=0.040, eye_h=0.058, eye_lift=0.003,
     brow=dict(x0=0.038, x1=0.128, z=13.4, thick=0.036, arch=0.010, drop_in=0.000, drop_out=0.022,
               profile=[(0.0, 0.40), (0.05, 0.85), (0.14, 0.97), (0.45, 1.0), (0.85, 0.92), (0.95, 0.75), (1.0, 0.35)], flat=0.5),
@@ -40,31 +40,31 @@ CFG = dict(
     mouth=dict(w=0.132, z=26.3, rise=0.020, sag=0.004, thick=0.008),
     neck_r=0.094, neck_y=0.020,
     tint=dict(spots=[(0.100, 24.0, 0.050, 0.035, 1.0), (0.0, 22.9, 0.028, 0.024, 0.7)], g=0.20, b=0.20),
-    groove_dark=(0.008, 0.45), smooth_angle=80.0,
+    groove_dark=(0.007, 0.55), smooth_angle=80.0,
     sheen={'Shoe': (0.34, [((0.2, -0.45, 0.87), 14.0, 1.0), ((0.0, -1.0, 0.3), 16.0, 0.8), ((0.9, 0.0, 0.45), 16.0, 0.5), ((-0.9, 0.0, 0.45), 16.0, 0.5)]),
-           'Hair': (0.70, (-0.2, -0.40, 0.89), 2.0)},
-    ao_skip=('Brow', 'Eye', 'Mouth', 'Glasses'), ao_scale={'Skin': 0.45, 'Jacket': 0.65, 'Hair': 0.95},
+           'Hair': (0.74, (-0.2, -0.40, 0.89), 2.0)},
+    ao_skip=('Brow', 'Eye', 'Mouth', 'Glasses'), ao_scale={'Skin': 0.45, 'Jacket': 0.65},
 )
 COLOURS = dict(
-    skin='#ffb08a', hair='#d9ccc7', brow='#9a8a86', mouth='#4a2418', eye='#0b0b0d', glasses='#3a2218',
+    skin='#ffb08a', hair='#e0d4cf', brow='#9a8a86', mouth='#4a2418', eye='#0b0b0d', glasses='#3a2218',
     jacket='#fbe7d3', trouser='#4e4c4e', button='#1b1a1a', shade='#cdb9a4', horn='#dccab4',
     shirt='#fbf6f0', tie='#4a4545',
     shoe='#646266', sole='#1a1818',
 )
 
 # ---- skull tables by f (0 chin .. 1 skull top): a round soft face, full low cheeks/jowls
-W  = [(0, 0.0), (0.02, 0.078), (0.05, 0.110), (0.08, 0.130), (0.13, 0.152), (0.20, 0.167), (0.28, 0.175), (0.35, 0.176),
+W  = [(0, 0.0), (0.02, 0.066), (0.05, 0.100), (0.08, 0.122), (0.13, 0.146), (0.20, 0.164), (0.28, 0.174), (0.35, 0.176),
       (0.43, 0.174), (0.50, 0.171), (0.61, 0.165), (0.72, 0.158), (0.83, 0.146), (0.90, 0.128), (0.96, 0.092), (0.99, 0.050), (1, 0.0)]
 DF = [(0, 0.0), (0.02, 0.095), (0.037, 0.135), (0.074, 0.180), (0.13, 0.204), (0.20, 0.214), (0.28, 0.216), (0.35, 0.215), (0.43, 0.213),
       (0.50, 0.211), (0.57, 0.209), (0.65, 0.207), (0.72, 0.204), (0.80, 0.196), (0.87, 0.184), (0.94, 0.158), (0.98, 0.110), (1, 0.0)]
 DB = [(0, 0.0), (0.02, 0.030), (0.06, 0.052), (0.12, 0.075), (0.20, 0.102), (0.30, 0.130), (0.42, 0.158), (0.55, 0.176),
       (0.68, 0.181), (0.78, 0.174), (0.87, 0.155), (0.93, 0.125), (0.98, 0.070), (1, 0.0)]
-E  = [(0, 2.1), (0.08, 2.3), (0.25, 2.5), (0.45, 2.55), (0.65, 2.5), (0.85, 2.35), (1, 2.2)]
+E  = [(0, 2.0), (0.08, 2.15), (0.25, 2.5), (0.45, 2.55), (0.65, 2.5), (0.85, 2.35), (1, 2.2)]
 BULGES = [dict(x=0.105, z=24.8, sx=0.060, sz=0.050, a=0.040),      # full rosy cheeks beside the smile
           dict(x=0.0, z=21.2, sx=0.016, sz=0.024, a=0.026),        # nose bridge rising into the ball
           dict(x=0.0, z=29.0, sx=0.050, sz=0.020, a=0.006)]        # soft chin
 
-# ---- hair (male_extras.env_hair): the envelope measured on the FRONT (widths: wr his right, wl his left) and SIDE
+# ---- hair (guest_kit.hair_shell + lock_fields, smoothed by male_extras.taubin): the envelope measured on the FRONT (widths: wr his right, wl his left) and SIDE
 # (front / back) panels, metres from the head axis by pct height, + expo (slice roundness)
 HAIR = dict(
     wr=[(0.0, -0.010), (0.5, 0.010), (1.0, 0.035), (1.5, 0.060), (2.0, 0.085), (3.0, 0.130), (4.0, 0.168), (5.0, 0.197), (6.0, 0.215),
@@ -91,37 +91,13 @@ HAIR = dict(
     grooves=[dict(keys=[(0.20, 8.4), (0.13, 6.4), (0.04, 4.6), (0.95, 3.6), (0.90, 3.0)], depth=0.008, width=0.013, n=40),     # quiff / top band
              dict(keys=[(0.33, 6.5), (0.27, 4.8), (0.21, 3.6)], depth=0.008, width=0.013, n=30),                                   # top band / his right side
              dict(keys=[(0.78, 3.5), (0.70, 5.5), (0.64, 9.5), (0.60, 14.5)], depth=0.008, width=0.013, n=30),                     # top band / his left side
-             dict(keys=[(0.28, 9.5), (0.34, 12.5), (0.39, 16.5)], depth=0.007, width=0.013, n=30),                                  # lock line, his right side
+             dict(keys=[(0.28, 9.5), (0.34, 12.5), (0.39, 16.5)], depth=0.007, width=0.013, n=30),
+             dict(keys=[(0.23, 12.5), (0.29, 14.2), (0.35, 17.0), (0.40, 20.5)], depth=0.007, width=0.013, n=30),
+             dict(keys=[(0.74, 9.0), (0.68, 12.0), (0.63, 16.0), (0.59, 20.0)], depth=0.007, width=0.013, n=30),                                  # lock line, his right side
              dict(keys=[(0.45, 6.0), (0.47, 12.0), (0.49, 18.5)], depth=0.008, width=0.013, n=30),                                 # the back: planes converging
              dict(keys=[(0.55, 6.0), (0.53, 12.0), (0.51, 18.5)], depth=0.008, width=0.013, n=30)],
     slope=1.6, t_min=0.010, centre=(0.0, 0.02, 14.5), nlon=92, nrows=42, top=0.2, lip=0.6,
 )
-# sculpted locks (male_extras.env_hair): rounded locks lying on the measured envelope, keys (u, pct, radius); u 0 front,
-# 0.25 his right, 0.5 back, 0.75 his left (radius 0.04+ with sink 0.85 = a broad flat lock plane, not a tube).
-# GROOVES: channels carved between them (also darkened by the bake: CFG['groove_dark']).
-ROLLS = [
-    # the quiff: its thick rolled front edge over the forehead, turning up into the crest over his left temple
-    dict(keys=[(0.215, 12.0, 0.012), (0.19, 11.0, 0.024), (0.12, 8.8, 0.026), (0.03, 6.6, 0.024), (0.95, 5.4, 0.024), (0.89, 5.0, 0.024),
-               (0.855, 4.5, 0.026), (0.865, 1.8, 0.026), (0.89, 0.6, 0.012)], sink=0.62, k=0.010),
-    dict(keys=[(0.28, 7.5, 0.010), (0.25, 7.0, 0.020), (0.16, 5.6, 0.024), (0.05, 4.2, 0.025), (0.96, 3.0, 0.024), (0.91, 1.6, 0.018), (0.90, 0.8, 0.008)], sink=0.60, k=0.010),
-    dict(keys=[(0.33, 4.5, 0.010), (0.29, 4.0, 0.020), (0.19, 2.6, 0.022), (0.08, 1.3, 0.020), (0.99, 0.6, 0.010)], sink=0.60, k=0.010),
-    # his right side: broad flat locks sweeping back and down to the nape (big radius, mostly sunk: planes, not tubes)
-    dict(keys=[(0.19, 12.5, 0.015), (0.22, 13.2, 0.040), (0.29, 15.5, 0.045), (0.35, 19.0, 0.045), (0.40, 23.0, 0.035), (0.43, 25.5, 0.012)], sink=0.85, k=0.012),
-    dict(keys=[(0.22, 8.8, 0.015), (0.26, 9.3, 0.042), (0.33, 11.5, 0.048), (0.39, 15.5, 0.048), (0.44, 20.5, 0.040), (0.47, 24.0, 0.012)], sink=0.85, k=0.012),
-    dict(keys=[(0.30, 5.2, 0.015), (0.34, 6.0, 0.042), (0.40, 8.8, 0.048), (0.45, 13.0, 0.048), (0.49, 18.5, 0.040), (0.50, 22.0, 0.012)], sink=0.85, k=0.012),
-    # his left side: back from the crest
-    dict(keys=[(0.855, 7.5, 0.015), (0.82, 8.5, 0.040), (0.75, 11.0, 0.045), (0.68, 14.5, 0.045), (0.62, 19.0, 0.035), (0.58, 23.0, 0.012)], sink=0.85, k=0.012),
-    dict(keys=[(0.86, 3.2, 0.015), (0.81, 4.0, 0.042), (0.73, 6.3, 0.048), (0.66, 10.0, 0.048), (0.59, 15.0, 0.040), (0.55, 20.0, 0.012)], sink=0.85, k=0.012),
-    dict(keys=[(0.93, 0.8, 0.015), (0.80, 1.5, 0.040), (0.70, 3.0, 0.045), (0.61, 6.5, 0.045), (0.55, 11.0, 0.035), (0.52, 16.0, 0.012)], sink=0.85, k=0.012),
-]
-GROOVES = [
-    dict(keys=[(0.26, 8.8, 0.010), (0.17, 7.9, 0.010), (0.06, 6.7, 0.010), (0.97, 5.5, 0.010), (0.91, 4.0, 0.010), (0.88, 2.5, 0.010)], k=0.006),
-    dict(keys=[(0.31, 5.8, 0.010), (0.21, 4.2, 0.010), (0.10, 2.9, 0.010), (0.01, 1.9, 0.010), (0.94, 1.2, 0.010)], k=0.006),
-    dict(keys=[(0.24, 11.2, 0.010), (0.30, 12.8, 0.010), (0.36, 15.5, 0.010), (0.42, 20.0, 0.010), (0.45, 23.5, 0.010)], k=0.006),
-    dict(keys=[(0.29, 7.2, 0.010), (0.36, 9.0, 0.010), (0.42, 12.5, 0.010), (0.47, 17.5, 0.010), (0.49, 21.5, 0.010)], k=0.006),
-    dict(keys=[(0.83, 6.0, 0.010), (0.77, 7.6, 0.010), (0.70, 10.5, 0.010), (0.63, 14.5, 0.010), (0.58, 19.0, 0.010)], k=0.006),
-    dict(keys=[(0.85, 2.2, 0.010), (0.76, 3.0, 0.010), (0.66, 5.0, 0.010), (0.58, 9.0, 0.010), (0.54, 14.0, 0.010)], k=0.006),
-]
 def _a(u): return abs(((u + 0.5) % 1.0) - 0.5)
 def _keys(a, keys):
     for (a0, z0), (a1, z1) in zip(keys, keys[1:]):
@@ -156,18 +132,18 @@ J = dict(
     profiles=[(66.5, 0.452, 0.345, 0.70, 0.000), (64.0, 0.452, 0.356, 0.70, -0.003), (60.0, 0.448, 0.364, 0.70, -0.005),
               (55.0, 0.446, 0.366, 0.70, -0.006), (50.0, 0.448, 0.360, 0.70, -0.005), (45.0, 0.456, 0.346, 0.72, -0.002),
               (41.0, 0.474, 0.318, 0.76, 0.004), (38.5, 0.492, 0.284, 0.76, 0.010), (36.8, 0.506, 0.248, 0.74, 0.014),
-              (35.3, 0.470, 0.218, 0.80, 0.018), (34.0, 0.300, 0.200, 0.96, 0.024), (33.0, 0.200, 0.180, 1.0, 0.028)],
+              (35.3, 0.476, 0.220, 0.80, 0.018), (34.2, 0.400, 0.210, 0.88, 0.022), (33.1, 0.290, 0.196, 0.96, 0.026), (32.3, 0.205, 0.182, 1.0, 0.028)],   # sloped shoulders
     waist=55.0, hem_hips=0.5, nj=44, ring_dz=0.020, open_apex=59.5, open_hem=0.030, corner=0.050,
     lapel=dict(outline=[(0.004, 55.2), (0.034, 54.0), (0.066, 52.0), (0.103, 48.0), (0.128, 44.0), (0.148, 40.0), (0.160, 37.0), (0.164, 35.4),
                         (0.155, 34.4), (0.130, 34.1), (0.106, 34.6), (0.092, 35.8), (0.082, 37.5), (0.070, 40.5), (0.057, 44.0), (0.040, 48.0), (0.020, 52.0), (0.010, 53.8)],
-               wrap=dict(top=30.0, front=32.8, open=0.95, v_width=1.2, tip=(0.135, 35.2), th_side=1.55, gap=0.020, gap_neck=0.022, thick=0.008),
+               wrap=dict(top=31.2, front=32.8, open=0.95, v_width=1.2, tip=(0.135, 35.2), th_side=1.55, gap=0.024, gap_neck=0.024, thick=0.008, tuck=0.030),
                thick=0.012, lift=0.002, max_edge=0.09, edge_shade=list(range(0, 9)), shade_w=0.005, collar_top=31.4, collar_front=34.4, collar_open=0.80, collar_gap=0.020, collar_dy=0.0),
     flaps=[(0.130, 0.215, 56.4, 58.8)], welt=(0.135, 0.195, 44.6, 0.008, 0.006), flap_thick=0.008,
     buttons=[(0.006, 56.6)], button_r=0.0150, vent=57.0,
 )
 SH = dict(max_edge=0.08, v=[(-0.122, 33.1), (0.122, 33.1), (0.098, 38.0), (0.070, 44.0), (0.035, 50.0), (0.006, 55.0), (-0.006, 55.0), (-0.035, 50.0), (-0.070, 44.0), (-0.098, 38.0)],
           collar_top=29.8, collar_v=31.2, v_width=0.60, v_open=0.30,
-          wrap=dict(top=29.8, v=32.8, open=0.10, v_width=0.85, tip=(0.070, 34.5), th_side=1.0, below=0.012, gap=0.008, gap_neck=0.010, thick=0.005))
+          wrap=dict(top=30.6, v=32.8, open=0.10, v_width=0.85, tip=(0.070, 34.5), th_side=1.0, below=0.012, gap=0.008, gap_neck=0.010, thick=0.005))
 COLLAR_FALL = [(-0.175, 36.0), (-0.12, 34.9), (-0.06, 34.4), (0.0, 34.3), (0.06, 34.4), (0.12, 34.9), (0.175, 36.0),
                (0.150, 33.8), (0.080, 33.3), (0.0, 33.2), (-0.080, 33.3), (-0.150, 33.8)]
 BOW = dict(z=35.6, w=0.084, h=0.094, h_mid=0.044, knot=(0.034, 0.040, 0.030), d=0.020, y=0.012, curve=0.018, pinch=0.25, mat='tie')
@@ -175,12 +151,12 @@ STUDS = dict(pts=[(0.0, 40.2), (0.0, 46.2)], r=0.0085, mat='button', out=0.009)
 SQUARE = dict(x0=0.140, x1=0.190, p=44.4, h=0.022, slant=0.006, mat='shirt')
 A = dict(
     shoulder=(0.222, 37.8), shoulder_y=0.0, elbow=(0.285, 0.0, 52.0), wrist=(0.315, 0.0, 63.2),
-    sleeve_end=61.0, cuff_end=63.2, sleeve='jacket', n=20,
+    sleeve_end=62.0, cuff_end=63.6, sleeve='jacket', n=20,
     stations=[('end', 0.134, 0.130), (58.0, 0.136, 0.134), (53.0, 0.140, 0.140), (47.0, 0.148, 0.150), (42.0, 0.152, 0.154),
               (('j', -0.01), 0.154, 0.158), (('j', 0.018), 0.132, 0.142), (('j', 0.034), 0.070, 0.080)],
     cuff_wd=(0.120, 0.116), cufflink=True, sleeve_buttons=1, button_angle=60.0,
     hand=dict(finger_n=8, palm_len=0.108, palm_w=0.128, palm_t=0.078, out=0.014, finger_out=0.015,      # Marcus's chunky curled hands, a touch fuller
-              fingers=[(-0.044, 0.0215, 0.100, 1.75), (-0.015, 0.0222, 0.106, 1.85), (0.014, 0.0215, 0.102, 1.85), (0.043, 0.0195, 0.090, 1.75)],
+              fingers=[(-0.044, 0.0225, 0.100, 1.20), (-0.015, 0.0232, 0.106, 1.30), (0.014, 0.0225, 0.102, 1.35), (0.043, 0.0205, 0.090, 1.35)],   # relaxed, only softly curled
               thumb=(-0.057, 0.017, 0.026, 0.0235, 0.074, 0.55)),
 )
 P = dict(leg_x=0.106, leg_x_hem=0.118, leg_y=0.015, thigh_w=0.180, thigh_d=0.225, shin_w=0.138, shin_d=0.190, hip=72.5, knee=84.5, crotch=70.5,
@@ -188,7 +164,7 @@ P = dict(leg_x=0.106, leg_x_hem=0.118, leg_y=0.015, thigh_w=0.180, thigh_d=0.225
          leg_profile=[(93.0, 0.142, 0.196), (91.0, 0.138, 0.190), (88.0, 0.142, 0.192), (84.5, 0.152, 0.198), (80.0, 0.163, 0.208), (76.0, 0.173, 0.220), (73.0, 0.178, 0.226)],
          pelvis=[(69.0, 0.95, 0.01, 0.85), (66.5, 1.0, 0.03, 0.78), (63.0, 1.0, 0.05, 0.75), (60.0, 0.97, 0.06, 0.75), (58.0, 0.93, 0.05, 0.8)])
 S = dict(n=16, leg_x=0.121, len=0.305, w=0.150, h=0.098, heel=0.070, splay=0.28, out=0.002, y=0.022, laces=3)
-RIG = dict(hip=72.5, knee=84.5, ankle=95.8, waist=55.0, shoulder_top=35.3, neck_y=0.020, hand_end=72.6, leg_x=0.112,
+RIG = dict(hip=72.5, knee=84.5, ankle=95.8, waist=55.0, shoulder_top=35.3, neck_y=0.020, hand_end=72.8, leg_x=0.112,
            heel=0.070, ball=0.16, arm=A)
 
 def _bake_soft(g, *a, **k):

@@ -14,6 +14,7 @@ export const PORTRAIT_ART = {
   // role never leaks; his own active-player panel uses `possessed` when he is possessed.
   tuxedo: { normal: 'assets/portraits/victor.jpg', possessed: 'assets/portraits/victor-possessed.jpg' },
   suit: { normal: 'assets/portraits/marcus.jpg', possessed: 'assets/portraits/marcus-possessed.jpg' },
+  dinnerJacket: { normal: 'assets/portraits/henry.jpg', possessed: 'assets/portraits/henry-possessed.jpg' },
 };
 
 export function makePortrait(doc, player, { possessed = false } = {}) {

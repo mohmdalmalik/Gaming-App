@@ -136,22 +136,10 @@ the body. Prefer wide soft `grooves` (width >= 2x the
 shell's vertex spacing) over narrow ribbon locks, which crinkle the surface.
 
 ### Henry (`guests/henry.py` + `male_extras.py`)
-`python3 tools/char-pipeline/make_guest.py henry` -> `assets/characters/henry.glb` (~30.5k tris, ~1.17 MB). Bespoke parts
-live in `male_extras.py` (guest_kit untouched): `glasses` (round wire rims on flat planes cleared off the face, keyhole
-bridge, temple arms to the ears), a fuller `bow_tie` (placed in front of whatever is behind it), `studs`, `pocket_square`,
-`env_hair` (sculpted hair as a signed-distance volume: the measured envelope as a smooth radius field + rounded lock
-rolls + carved grooves, polygonised with dress_kit's surface nets) and `bend_normals` (the round lower face's shading
-normals bent forward so the chin does not go brown under the key light). Henry's spec installs a bake wrapper for its own
-build only (dress_kit.lift_ao for fair skin + the normal bend). Scratch iteration renders: `shots/h/` (run.sh, overlay/
-facepair/headpair helpers); final six-up: `shots/henry-vs-sheet.png`.
-
-## In-game colour check (lobby lineup)
-`lineup.mjs` puts all six guests in the real lobby. To tune colours for the game's warm, uneven hotel light:
-```bash
-node tools/char-pipeline/lineup_measure.mjs tools/char-pipeline/shots/lm    # lit shot + material-ID shot, same pinned camera
-python3 tools/char-pipeline/line_colours.py tools/char-pipeline/shots/lm    # median lit colour of every guest material
-```
-The measured light is warm (red ~1.85x, green ~1.45x blue) and ~2.4x brighter by the lamps than mid-room, so greyish
-bases wash out to lavender/taupe there. `guest_kit.PALETTE` holds the lobby-solved bases (navy cloth, satin black,
-black leather shoes, dark-brown hair) and `guest_kit.lobby_base('#rrggbb')` solves a base for any target colour.
-They read a little bluer than the sheets in the neutral preview (preview_glb.mjs without --light game): by design.
+`python3 tools/char-pipeline/make_guest.py henry` -> `assets/characters/henry.glb` (~31.5k tris, ~1.19 MB). Hair is the kit's
+`hair_shell` with sculpted `lock_fields` (quiff edge, top band, two sides, back), then `male_extras.taubin` irons out small
+bumps and `male_extras.radial_grooves` makes the bake darken the lock lines even under raised locks. Other bespoke parts in
+`male_extras.py` (guest_kit untouched): `glasses`, a fuller `bow_tie`, `studs`, `pocket_square`, `bend_normals` (the round
+lower face's shading normals bent forward), plus `env_hair` (an SDF hair sculpt, not used by Henry now). Henry's spec
+installs a bake wrapper for its own build only (dress_kit.lift_ao for fair skin + the normal bend). Scratch iteration
+renders: `shots/h/`; final six-up: `shots/henry-vs-sheet.png`.

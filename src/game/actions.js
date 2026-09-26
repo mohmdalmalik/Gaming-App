@@ -67,9 +67,14 @@ export function canSearch(state, floor, player) {
 }
 
 // Search the current room (1 AP). If dropped cards are lying there you take them all (always
-// possible). Otherwise you draw one card, once per room. Results are PRIVATE to the searcher: the
-// public log records only that a search happened. A drawn card that does not fit is reported with `full` so
-// the caller can ask what to do with it; the room counts as searched either way.
+// possible). Otherwise you draw one card, once per room — a Linen Store's draw gives
+// `linenStoreDraws` (2) cards. Results are PRIVATE to the searcher: the public log records only
+// that a search happened. A drawn card that does not fit is reported with `full` so the caller can
+// ask what to do with it; the room counts as searched either way.
+//
+// Result: `kind: 'card'` with `card` (one draw), or `kind: 'cards'` with `cards` (a Linen Store);
+// `overflow` lists the drawn cards that did not fit (each goes to the take-or-leave prompt, like a
+// single card that does not fit), and `full` says whether there are any.
 export function search(state, floor, player) {
   const gate = canSearch(state, floor, player);
   if (!gate.ok) return gate;
@@ -89,11 +94,17 @@ export function search(state, floor, player) {
   }
 
   state.searchedRooms.add(room.id);
-  const card = drawCard(state);
-  if (!card) return { ...base, kind: 'nothing' };
-  const full = countableCount(player.hand) >= rules.handLimit;
-  if (!full) player.hand.push(card);
-  return { ...base, kind: 'card', card, full };
+  const draws = room.job === 'linenStore' ? rules.linenStoreDraws : 1;
+  const drawn = [];
+  for (let k = 0; k < draws; k++) { const c = drawCard(state); if (c) drawn.push(c); }
+  if (!drawn.length) return { ...base, kind: 'nothing' };
+  const overflow = [];
+  for (const c of drawn) {
+    if (countableCount(player.hand) >= rules.handLimit) overflow.push(c);
+    else player.hand.push(c);
+  }
+  if (draws === 1) return { ...base, kind: 'card', card: drawn[0], full: overflow.length > 0, overflow };
+  return { ...base, kind: 'cards', cards: drawn, card: drawn[0], full: overflow.length > 0, overflow };
 }
 
 // A drawn card the guest could not hold: 'take' it (dropping `dropId`) or 'leave' it.
@@ -145,6 +156,40 @@ export function useBandage(state, player, cardId) {
   return { ok: true, health: player.health };
 }
 
+// Espresso (free): gain `extraActions` (2) action points this turn. Used up. Action points are
+// never carried over, so the extra ones are gone when the turn ends.
+export function useEspresso(state, player, cardId) {
+  if (state.finished) return { ok: false, reason: 'finished' };
+  if (!player.alive) return { ok: false, reason: 'dead' };
+  const card = player.hand.find(c => c.id === cardId && c.type === 'espresso');
+  if (!card) return { ok: false, reason: 'noCard' };
+  if (player.actionPoints < rules.actionCost.espresso) return { ok: false, reason: 'ap' };
+  player.actionPoints += CARDS.espresso.extraActions - rules.actionCost.espresso;
+  takeCard(player.hand, cardId); toDiscard(state, card);
+  return { ok: true, actionPoints: player.actionPoints, gained: CARDS.espresso.extraActions };
+}
+
+// Hand Mirror (1 AP): choose a guest in your room; they show you their whole hand, in private —
+// Possession cards included, so seeing one tells you they are possessed. Used up. The table sees
+// that the mirror was used and on whom, never what it showed.
+export function useHandMirror(state, floor, player, cardId, targetId) {
+  const bad = needAp(state, player); if (bad) return bad;
+  if (!player.alive) return { ok: false, reason: 'dead' };
+  const card = player.hand.find(c => c.id === cardId && c.type === 'handMirror');
+  if (!card) return { ok: false, reason: 'noCard' };
+  const target = state.players.find(q => q.id === targetId);
+  if (!target || target.id === player.id) return { ok: false, reason: 'noTarget' };
+  if (!target.alive) return { ok: false, reason: 'targetDead' };
+  if (target.currentRoom !== player.currentRoom) return { ok: false, reason: 'notTogether' };
+  player.actionPoints -= rules.actionCost.useCard;
+  takeCard(player.hand, cardId); toDiscard(state, card);
+  const shown = target.hand.map(c => ({ ...c }));
+  const unmasked = shown.some(c => c.type === 'possession');
+  if (unmasked && !player.possessed) player.knows.add(target.id);
+  logPublic(state, `${player.name} used a Hand Mirror on ${target.name}.`);
+  return { ok: true, target: target.id, hand: shown, unmasked };
+}
+
 // Master Key or Lock Pick (1 AP) on a locked room next door. The key always works; the pick
 // works `lockPickChance` of the time. Both are used up whatever happens.
 export function useUnlock(state, floor, player, cardId, roomId) {
@@ -173,6 +218,51 @@ export function useBarricade(state, floor, player, cardId, doorwayId) {
   placeBarricade(state, player, doorwayId);
   logPublic(state, `${player.name} barricaded a doorway of ${floor.rooms.get(player.currentRoom)?.name}.`);
   return { ok: true, doorway: doorwayId };
+}
+
+// --- Rooms with jobs ---------------------------------------------------------------------------
+// Whether `player` can use the job of the room they stand in right now, and why not.
+export function canUseRoom(state, floor, player) {
+  const room = floor.rooms.get(player.currentRoom);
+  if (state.finished) return { ok: false, reason: 'finished' };
+  if (!player.alive) return { ok: false, reason: 'dead' };
+  if (room?.job === 'infirmary') {
+    if (player.health >= rules.maxHealth) return { ok: false, reason: 'full', job: room.job };
+    if (player.actionPoints < rules.actionCost.infirmary) return { ok: false, reason: 'ap', job: room.job };
+    return { ok: true, job: room.job };
+  }
+  if (room?.job === 'switchboard') {
+    if (state.switchboardCalls?.get(player.id) === state.turn) return { ok: false, reason: 'usedThisTurn', job: room.job };
+    if (player.actionPoints < rules.actionCost.switchboard) return { ok: false, reason: 'ap', job: room.job };
+    return { ok: true, job: room.job };
+  }
+  return { ok: false, reason: 'noJob', job: room?.job || null };
+}
+
+// Infirmary (1 AP): restore `infirmaryHeal` (2) health, never above the maximum.
+export function useInfirmary(state, floor, player) {
+  const gate = canUseRoom(state, floor, player);
+  if (!gate.ok) return gate;
+  if (gate.job !== 'infirmary') return { ok: false, reason: 'noJob', job: gate.job };
+  const before = player.health;
+  player.actionPoints -= rules.actionCost.infirmary;
+  player.health = Math.min(rules.maxHealth, player.health + rules.infirmaryHeal);
+  logPublic(state, `${player.name} was treated in the Infirmary.`);
+  return { ok: true, health: player.health, healed: player.health - before };
+}
+
+// Switchboard (1 AP, once per player per turn): everyone learns how many guests are possessed right
+// now — living guests only, since the dead are out of the game — but never who. The count is PUBLIC:
+// it goes in the public log for the whole table.
+export function useSwitchboard(state, floor, player) {
+  const gate = canUseRoom(state, floor, player);
+  if (!gate.ok) return gate;
+  if (gate.job !== 'switchboard') return { ok: false, reason: 'noJob', job: gate.job };
+  player.actionPoints -= rules.actionCost.switchboard;
+  state.switchboardCalls.set(player.id, state.turn);
+  const count = state.players.filter(q => q.alive && q.possessed).length;
+  logPublic(state, `${player.name} rang the Switchboard: ${count} ${count === 1 ? 'guest is' : 'guests are'} possessed.`);
+  return { ok: true, count };
 }
 
 // --- Trade ------------------------------------------------------------------------------------

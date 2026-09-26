@@ -30,7 +30,8 @@ export const rules = {
   moveCost: 1,              // into ANY adjacent room through an open doorway
   openDoorCost: 1,          // open a closed door of your room: reveals the room behind; you stay put
   searchCost: 1,
-  playCardCost: 1,          // Bandage, Master Key, Lock Pick, Barricade
+  playCardCost: 1,          // Bandage, Master Key, Lock Pick, Barricade, Hand Mirror
+  espressoCost: 0,          // Espresso is free to use
   attackCost: 1,
   turnTimerEnabled: false,  // practice: off. Hot-seat: on. ?timer=off disables it anywhere.
   turnTimerSeconds: 45,     // counts the active player's actions only; pauses in meetings and
@@ -62,6 +63,13 @@ export const rules = {
   lockPickChance: 0.5,      // a Lock Pick works half the time; discarded either way
   barricadeRounds: 1,       // a Barricade seals one doorway of your room until your next turn starts
 
+  // Rooms with jobs (which tiles have them is in src/data/hotel.js, `job`).
+  linenStoreDraws: 2,       // Linen Store: the first search here draws 2 cards instead of 1
+  infirmaryCost: 1,         // Infirmary: 1 AP to restore health...
+  infirmaryHeal: 2,         // ...2 bars (never above maxHealth)
+  switchboardCost: 1,       // Switchboard: 1 AP, once per player per turn; everyone learns how many
+                            // guests are currently possessed, but not who
+
   // --- Hand ----------------------------------------------------------------------------------
   startingHandSize: 4,      // dealt from the deck with the Lanterns taken out
   handLimit: 6,             // checked at the end of your turn; Lanterns count, Possession cards don't
@@ -87,19 +95,25 @@ export const rules = {
                   desc: 'Tries a locked room next door: works half the time. Used up either way. 1 action.' },
     masterKey:  { name: 'Master Key', glyph: '⚷', tint: '#e6cf8a', active: true, unlock: true,
                   desc: 'Opens a locked room next door. Always works, then used up. 1 action.' },
+    handMirror: { name: 'Hand Mirror', glyph: '◐', tint: '#b9c8d8', active: true,
+                  desc: 'Choose a guest in your room: they show you their whole hand, in private. Used up. 1 action.' },
+    espresso:   { name: 'Espresso',   glyph: '☕', tint: '#c08a5a', active: true, extraActions: 2,
+                  desc: 'Free to use: gain 2 extra actions this turn. Used up.' },
     // The possessed side's supply — never in the deck.
     possession: { name: 'Possession', glyph: '☠', tint: '#b46bff', evil: true,
                   desc: 'Give it in a trade to possess someone — unless they hand you a Lantern.' },
   },
 
-  // --- The draw deck (40, tuned for 6 players) --------------------------------------------------
+  // --- The draw deck (48, tuned for 6 players) --------------------------------------------------
   deck: {
-    lantern: 12,
+    lantern: 14,
     bandage: 7,
     flashlight: 5,
     knife: 4,
     barricade: 4,
     lockPick: 4,
+    handMirror: 3,
+    espresso: 3,
     revolver: 2,
     masterKey: 2,
   },
@@ -113,6 +127,9 @@ function derive() {
     discover: 0,
     search: rules.searchCost,
     useCard: rules.playCardCost,
+    espresso: rules.espressoCost,
+    infirmary: rules.infirmaryCost,
+    switchboard: rules.switchboardCost,
     attack: rules.attackCost,
   };
   rules.handSize = rules.startingHandSize;

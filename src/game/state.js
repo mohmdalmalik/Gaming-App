@@ -59,6 +59,7 @@ export function resetState(state, floor, seed) {
   state.roomDrops = new Map();           // roomId -> cards lying on the floor (a dead guest's hand)
   state.lockedRooms = new Set();         // the locked tiles, from the moment they are revealed
   state.barricades = new Map();          // doorwayId -> { by: playerId, until: turn number }
+  state.switchboardCalls = new Map();    // playerId -> the turn they last rang the Switchboard
 
   state.activeIndex = 0;
   state.round = 1;             // one round = every living guest has taken a turn

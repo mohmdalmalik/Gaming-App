@@ -9,13 +9,13 @@ Guests are trapped on a hotel floor. Lanterns are the way out: a clean guest car
 
 ## Turn
 - 4 action points (AP), never carried over.
-- Open a closed door of your room: 1 AP (see Doors and exploring). Move into an adjacent room through an open doorway: 1 AP. Search: 1 AP. Use a card: 1 AP. Repositioning inside a room: free.
+- Open a closed door of your room: 1 AP (see Doors and exploring). Move into an adjacent room through an open doorway: 1 AP. Search: 1 AP. Use a card: 1 AP (Espresso: free). Use a room's job (Infirmary, Switchboard): 1 AP. Repositioning inside a room: free.
 - 45-second timer for the active player's actions. It pauses during meetings and pass-the-device screens. When it runs out, the turn ends. ?timer=off disables it.
 - A round = every living guest takes one turn.
 - Dawn deadline: the match lasts at most 8 rounds. The round is shown as "Round 3 of 8", and the final round before dawn is clearly marked.
 
 ## Health
-- 3 health bars. Bandage restores 1 (max 3).
+- 3 health bars. Bandage restores 1 (max 3). The Infirmary restores 2 (max 3).
 - At 0 health a guest dies and is out of the game. Everything they carried drops in that room, except Possession cards, which leave the game.
 
 ## Meetings
@@ -57,7 +57,7 @@ Guests are trapped on a hotel floor. Lanterns are the way out: a clean guest car
 - The Fire Exit is shuffled into the last five tiles of the room deck.
 - A new tile is turned automatically to a random orientation that fits: one of its doorways meets the door that was opened, and none of its doorways opens into a wall. Where two doorways meet, they connect. If a tile can't fit, it goes to the bottom of the deck and the next tile is tried.
 - The hotel never closes itself off before the Fire Exit is placed: there is always at least one reachable unexplored doorway.
-- Tile mix: 1 Fire Exit, 2 locked rooms, dark rooms in about the same share as before, and the rest ordinary rooms and corridors, with doorway counts that give branching routes and a few dead ends. The exact mix is in src/data/hotel.js (awaiting the owner's approval).
+- Tile mix: 1 Fire Exit, 2 locked rooms, dark rooms in about the same share as before, 5 rooms with jobs (2 Linen Stores, 2 Infirmaries, 1 Switchboard, in place of ordinary tiles; the deck stays at 24), and the rest ordinary rooms and corridors, with doorway counts that give branching routes and a few dead ends. The exact mix is in src/data/hotel.js (awaiting the owner's approval).
 - *Placeholder, awaiting approval:* if no remaining tile can fit behind a door, the door is jammed: it stays shut for the rest of the match, and trying it costs nothing.
 
 ## Doors and exploring
@@ -71,14 +71,21 @@ Guests are trapped on a hotel floor. Lanterns are the way out: a clean guest car
 - Two locked rooms are tiles in the room deck. A locked room is locked from the moment it is revealed, and never joins the lobby. It is opened from a room next door with a Master Key (always works, then discarded) or a Lock Pick (works half the time, discarded either way). Once opened, it stays open.
 - Barricade: seals one doorway of your room until your next turn starts.
 
+### Rooms with jobs
+- Linen Store ×2: the first search here draws 2 cards instead of 1.
+- Infirmary ×2: 1 AP to restore 2 health (maximum 3).
+- Switchboard ×1: 1 AP, once per player per turn. Everyone learns how many guests are currently possessed, but not who.
+
 ## Searching
-- 1 AP. If dropped cards are lying in the room, you take them all — dropped items can always be picked up. Otherwise you draw one card; each room gives one card draw per match.
+- 1 AP. If dropped cards are lying in the room, you take them all — dropped items can always be picked up. Otherwise you draw one card (two in a Linen Store); each room gives one card draw per match.
 - Search results are private: only the searcher sees what they found. The table only sees that someone searched.
 - When the deck runs out, shuffle the discard pile into a new deck.
 
 ## Cards and deck (6 players)
 - Possession ×3 (the possessed guest's supply, not in the deck).
-- Draw deck (40): Lantern ×12, Bandage ×7, Flashlight ×5, Knife ×4, Barricade ×4, Lock Pick ×4, Revolver ×2, Master Key ×2.
+- Draw deck (48): Lantern ×14, Bandage ×7, Flashlight ×5, Knife ×4, Barricade ×4, Lock Pick ×4, Hand Mirror ×3, Espresso ×3, Revolver ×2, Master Key ×2.
 - Lantern: give it in a trade to block a possession attempt; three of them let a clean guest escape.
+- Hand Mirror: 1 AP. Choose a guest in your room; they show you their whole hand in private. Used up.
+- Espresso: free to use (no AP). Gain 2 extra AP this turn. Used up.
 - Starting hand: 4 cards dealt from the deck with the Lanterns taken out. Lanterns are never dealt; they are shuffled into the rest of the deck afterwards.
 - Hand limit: 6, checked at the end of your turn. Lanterns count like other cards; Possession cards don't count.

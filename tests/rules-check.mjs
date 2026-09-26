@@ -63,10 +63,11 @@ check(rules.lanternsDealtEach === 0, 'the game uses the approved rule: Lanterns 
 check(rules.lockPickChance === 0.5, 'a Lock Pick works half the time');
 check(!('lockedRoomCount' in rules), 'the locked rooms are tiles in the room deck, not a number here');
 check(rules.startingHandSize === 4 && rules.handLimit === 6, '4-card starting hand; hand limit 6');
-check(deckTotal === 40, `the draw deck has ${deckTotal} cards (40)`);
-check(rules.deck.lantern === 12 && rules.deck.bandage === 7 && rules.deck.flashlight === 5 && rules.deck.knife === 4
-  && rules.deck.barricade === 4 && rules.deck.lockPick === 4 && rules.deck.revolver === 2 && rules.deck.masterKey === 2,
-  'deck mix: 12 Lantern, 7 Bandage, 5 Flashlight, 4 Knife, 4 Barricade, 4 Lock Pick, 2 Revolver, 2 Master Key');
+check(deckTotal === 48, `the draw deck has ${deckTotal} cards (48)`);
+check(rules.deck.lantern === 14 && rules.deck.bandage === 7 && rules.deck.flashlight === 5 && rules.deck.knife === 4
+  && rules.deck.barricade === 4 && rules.deck.lockPick === 4 && rules.deck.handMirror === 3 && rules.deck.espresso === 3
+  && rules.deck.revolver === 2 && rules.deck.masterKey === 2 && Object.keys(rules.deck).length === 10,
+  'deck mix: 14 Lantern, 7 Bandage, 5 Flashlight, 4 Knife, 4 Barricade, 4 Lock Pick, 3 Hand Mirror, 3 Espresso, 2 Revolver, 2 Master Key');
 check(!('hint' in rules.cards) && !('distraction' in rules.cards) && !('trinket' in rules.cards), 'no Hint, Distraction or Trinket cards');
 check(!('possession' in rules.deck), 'Possession cards are never in the deck');
 check(rules.onlineMode === false, 'no server, no networking');
@@ -82,7 +83,7 @@ console.log('\nsetup');
   check(cleanOnes(s).every(p => countType(p.hand, 'possession') === 0), 'nobody else holds one');
   check(s.players.every(p => countableCount(p.hand) === 4), 'four ordinary cards each');
   check(s.drawPile.length === deckTotal - 24, `${s.drawPile.length} cards left in the pile after dealing`);
-  check(countType(s.drawPile, 'lantern') === rules.deck.lantern, 'all 12 Lanterns are in the draw pile');
+  check(countType(s.drawPile, 'lantern') === rules.deck.lantern, `all ${rules.deck.lantern} Lanterns are in the draw pile`);
   check(s.discardPile.length === 0, 'the discard pile starts empty');
   check(s.players.every(p => p.health === 3 && p.alive), 'everyone starts at full health');
   check(s.roomDrops.size === 0, 'nothing is lying on any floor at the start');
@@ -93,10 +94,10 @@ console.log('\nsetup');
   for (let seed = 1; seed <= 200; seed++) {
     const s = hs(seed);
     dealt += s.players.reduce((n, p) => n + lanternCount(p.hand), 0);
-    if (countType(s.drawPile, 'lantern') !== 12) pileOk = false;
+    if (countType(s.drawPile, 'lantern') !== rules.deck.lantern) pileOk = false;
   }
   check(dealt === 0, 'over 200 six-player deals, not one Lantern was dealt');
-  check(pileOk, 'every time, all 12 Lanterns went into the draw pile');
+  check(pileOk, `every time, all ${rules.deck.lantern} Lanterns went into the draw pile`);
   applyMode('hotseat', 4);
   const f = createState(floor, roster.slice(0, 4), 3, { mode: 'hotseat' });
   check(f.players.every(p => lanternCount(p.hand) === 0 && countableCount(p.hand) === 4), 'four players: four cards each, no Lanterns');

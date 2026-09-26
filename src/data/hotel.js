@@ -21,6 +21,10 @@
 //
 // Mood: light colour, intensity (× config.render.pointLightScale), ambient (overall brightness while
 // a guest is there) and an optional flicker.
+//
+// Rooms with jobs (`job`): 'linenStore' (its card draw gives 2 cards), 'infirmary' (1 AP: restore 2
+// health) and 'switchboard' (1 AP, once per player per turn: everyone learns how many guests are
+// possessed). What each job does, and its numbers, live in src/data/rules.js and src/game/actions.js.
 
 const DEAD = ['south'];
 const STRAIGHT = ['north', 'south'];
@@ -50,6 +54,7 @@ const CORRIDOR = { color: '#ffd8b0', intensity: 0.9, ambient: 0.75 };
 const QUIET = { color: '#e8d8b8', intensity: 0.8, ambient: 0.6 };
 const COOL = { color: '#c0ccd8', intensity: 0.7, ambient: 0.45 };
 const DARK = { color: '#b8c2d0', intensity: 0.45, ambient: 0.32 };
+const CLINIC = { color: '#e6eeff', intensity: 1.0, ambient: 0.8 };
 const FLICKER = { color: '#c4c8d4', intensity: 0.55, ambient: 0.38, flicker: { min: 0.3, max: 1.0, speed: 10 } };
 
 export const hotel = {
@@ -85,9 +90,9 @@ export const hotel = {
     ],
   },
 
-  // THE ROOM DECK: 24 tiles. 1 Fire Exit, 2 locked rooms, 5 dark rooms, the rest ordinary rooms
-  // and corridors. Doorways: 4 crossings, 7 T-junctions, 4 straight, 4 corners, 4 dead ends + the
-  // exit (a dead end).
+  // THE ROOM DECK: 24 tiles. 1 Fire Exit, 2 locked rooms, 5 dark rooms, 5 rooms with jobs
+  // (2 Linen Stores, 2 Infirmaries, 1 Switchboard), the rest ordinary rooms and corridors.
+  // Doorways: 4 crossings, 7 T-junctions, 4 straight, 4 corners, 4 dead ends + the exit (a dead end).
   tiles: [
     // --- four-way ------------------------------------------------------------------------------
     { id: 'lounge', name: 'Lounge', doors: CROSS, searchPoint: 'the writing bureau', mood: WARM,
@@ -96,8 +101,10 @@ export const hotel = {
       furniture: [corner('nw', 'bandstand', 1.3, 0.5, 1.3), corner('ne', 'table'), corner('sw', 'table'), corner('se', 'table')] },
     { id: 'grandCorridor', name: 'Grand Corridor', doors: CROSS, searchPoint: 'the umbrella stand', mood: CORRIDOR,
       furniture: [corner('nw', 'plant', 0.6, 1.3, 0.6), corner('se', 'plant', 0.6, 1.3, 0.6), corner('ne', 'bench', 1.2, 0.5, 0.5)] },
-    { id: 'gardenLounge', name: 'Garden Lounge', doors: CROSS, searchPoint: 'the planters', mood: WARM,
-      furniture: [corner('nw', 'planter', 1.2, 0.8, 1.2), corner('ne', 'planter', 1.2, 0.8, 1.2), corner('sw', 'armchair'), corner('se', 'armchair')] },
+    // Room with a job: 1 AP, once per player per turn — everyone learns how many guests are possessed.
+    { id: 'switchboard', name: 'Switchboard', doors: CROSS, job: 'switchboard', searchPoint: "the operator's desk", mood: WARM,
+      furniture: [corner('nw', 'switchboard', 1.3, 1.5, 0.9), corner('ne', 'switchboard', 1.3, 1.5, 0.9), corner('sw', 'chair', 0.7, 0.9, 0.7), corner('se', 'filingCabinet', 0.7, 1.3, 0.7)],
+      colors: { switchboard: { color: '#4a3424', emissive: '#3a2208' } } },
 
     // --- T-junctions (the north side is a wall) -------------------------------------------------
     { id: 'dining', name: 'Dining Room', doors: TEE, searchPoint: 'the sideboard', mood: WARM,
@@ -122,8 +129,10 @@ export const hotel = {
       furniture: [wall('west', 'trolley', 1.2, 1.0, 0.8), corner('ne', 'bench', 0.5, 0.5, 1.2)] },
     { id: 'stairs', name: 'Service Stairs', doors: STRAIGHT, searchPoint: 'the stairwell bench', dark: true, mood: DARK,
       furniture: [wall('east', 'stairs', 3.0, 0.9, 1.6), wall('west', 'bench', 1.4, 0.5, 0.5)] },
-    { id: 'suite418', name: 'Guest Suite 418', doors: STRAIGHT, searchPoint: 'the wardrobe', mood: WARM,
-      furniture: [wall('west', 'bed', 2.0, 0.6, 1.8), wall('east', 'wardrobe', 1.4, 2.1, 0.6), corner('ne', 'chair', 0.7, 0.9, 0.7)] },
+    // Room with a job: 1 AP to restore 2 health (maximum 3).
+    { id: 'infirmary2', name: 'Infirmary', doors: STRAIGHT, job: 'infirmary', searchPoint: 'the medicine cabinet', mood: CLINIC,
+      furniture: [wall('west', 'infirmaryBed', 2.0, 0.6, 1.8), wall('east', 'medicineCabinet', 1.4, 1.9, 0.5), corner('ne', 'stool', 0.7, 0.9, 0.7)],
+      colors: { infirmaryBed: { color: '#e4e2dc' }, medicineCabinet: { color: '#d8e2e4', emissive: '#3a0c0c' } } },
 
     // --- corners (north and west are walls) ------------------------------------------------------
     { id: 'backCorridor', name: 'Back Stairs Passage', doors: CORNER, searchPoint: 'the stacked crates', dark: true, mood: FLICKER,
@@ -132,14 +141,19 @@ export const hotel = {
       furniture: [wall('north', 'rail', 3.0, 1.7, 0.6), wall('west', 'rail', 3.0, 1.7, 0.6), corner('se', 'bench', 1.2, 0.5, 0.5)] },
     { id: 'cornerCorridor', name: 'Corner Corridor', doors: CORNER, searchPoint: 'the window seat', mood: CORRIDOR,
       furniture: [corner('nw', 'windowSeat', 1.3, 0.5, 1.3), corner('sw', 'plant', 0.6, 1.3, 0.6)] },
-    { id: 'suite410', name: 'Guest Suite 410', doors: CORNER, searchPoint: 'the dressing table', mood: WARM,
-      furniture: [wall('north', 'bed', 2.0, 0.6, 1.8), wall('west', 'dresser', 1.4, 0.8, 0.6), corner('se', 'chair', 0.7, 0.9, 0.7)] },
+    // Room with a job: 1 AP to restore 2 health (maximum 3).
+    { id: 'infirmary1', name: 'Infirmary', doors: CORNER, job: 'infirmary', searchPoint: 'the medicine cabinet', mood: CLINIC,
+      furniture: [wall('north', 'infirmaryBed', 2.0, 0.6, 1.8), wall('west', 'medicineCabinet', 1.4, 1.9, 0.5), corner('se', 'stool', 0.7, 0.9, 0.7)],
+      colors: { infirmaryBed: { color: '#e4e2dc' }, medicineCabinet: { color: '#d8e2e4', emissive: '#3a0c0c' } } },
 
     // --- dead ends (only the south side opens) ------------------------------------------------------
-    { id: 'suite412', name: 'Guest Suite 412', doors: DEAD, searchPoint: 'the wardrobe', mood: WARM,
-      furniture: [wall('north', 'bed', 2.0, 0.6, 1.8), wall('east', 'wardrobe', 1.4, 2.1, 0.6), wall('west', 'desk', 1.4, 0.75, 0.6)] },
-    { id: 'suite414', name: 'Guest Suite 414', doors: DEAD, searchPoint: 'the writing desk', mood: WARM,
-      furniture: [wall('north', 'bed', 2.0, 0.6, 1.8), wall('west', 'desk', 1.4, 0.75, 0.6), corner('se', 'armchair')] },
+    // Rooms with a job: the first search here draws 2 cards instead of 1.
+    { id: 'linenStore1', name: 'Linen Store', doors: DEAD, job: 'linenStore', searchPoint: 'the linen shelves', mood: QUIET,
+      furniture: [wall('north', 'linenShelf', 3.0, 1.8, 0.5), wall('west', 'linenShelf', 3.0, 1.8, 0.5), corner('se', 'laundryBasket', 0.7, 0.7, 0.7)],
+      colors: { linenShelf: { color: '#e8e0cc' } } },
+    { id: 'linenStore2', name: 'Linen Store', doors: DEAD, job: 'linenStore', searchPoint: 'the linen press', mood: QUIET,
+      furniture: [wall('north', 'linenPress', 2.4, 1.6, 0.6), wall('east', 'linenShelf', 3.0, 1.8, 0.5), corner('sw', 'foldingTable', 0.9, 0.8, 1.0)],
+      colors: { linenShelf: { color: '#e8e0cc' }, linenPress: { color: '#e8e0cc' } } },
     { id: 'suite416', name: 'Guest Suite 416', doors: DEAD, searchPoint: 'the bedside table', locked: true, mood: WARM,
       furniture: [wall('north', 'bed', 2.0, 0.6, 1.8), wall('east', 'wardrobe', 1.4, 2.1, 0.6), corner('sw', 'chair', 0.7, 0.9, 0.7)] },
     { id: 'housekeeping', name: 'Housekeeping Store', doors: DEAD, searchPoint: 'the linen shelves', dark: true, mood: DARK,

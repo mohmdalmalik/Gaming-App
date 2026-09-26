@@ -229,7 +229,7 @@ const before7 = await game(() => window.__game.hotelRooms().length);
 await tap('#btn-restart-practice');
 check(await game(() => window.__game.hotelRooms().length) === 1 && before7 > 1, 'Restart practice builds a new hotel: just the lobby again');
 await give(0, [{ id: 'fl7', type: 'flashlight' }]);
-for (const t of ['lounge', 'ballroom', 'grandCorridor', 'gardenLounge', 'dining', 'library', 'kitchen', 'corridorE', 'corridorW', 'corridorN', 'corridorS', 'suite418', 'suite410', 'suite412', 'suite414', 'cornerCorridor', 'storage', 'stairs', 'serviceCorridor', 'backCorridor', 'housekeeping']) {
+for (const t of ['lounge', 'ballroom', 'grandCorridor', 'dining', 'library', 'kitchen', 'corridorE', 'corridorW', 'corridorN', 'corridorS', 'infirmary1', 'infirmary2', 'linenStore1', 'linenStore2', 'switchboard', 'cornerCorridor', 'storage', 'stairs', 'serviceCorridor', 'backCorridor', 'housekeeping']) {
   await game(id => window.__game.revealTile(id), t);
 }
 const rooms = await game(() => window.__game.floor.roomList.filter(r => r.searchable).map(r => r.id));

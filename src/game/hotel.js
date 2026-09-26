@@ -123,6 +123,7 @@ function placeRoom(floor, def, cell, rot) {
     safe: !!def.safe,
     searchable: def.searchable !== false && !def.isExit,
     searchPoint: def.searchPoint || null,
+    job: def.job || null,       // a room with a job: 'linenStore' | 'infirmary' | 'switchboard'
     center: [cx, cz],
     size: [S, S],
     min: [cx - S / 2, cz - S / 2],

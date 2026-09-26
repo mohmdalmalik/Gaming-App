@@ -41,16 +41,33 @@ def render_mask(a):
     bg = np.median(np.concatenate([a[:4].reshape(-1, 3), a[:, :4].reshape(-1, 3), a[:, -4:].reshape(-1, 3)]), axis=0)
     return largest(np.abs(a - bg).sum(2) > 12)          # renders have a perfectly flat background
 
-def eyes(a):
-    """Centre (y, x) of the two eye ovals: the largest near-black blobs taller than wide in the panel's middle."""
+def _eye_pair(a):
+    """The two eye ovals: near-black, taller-than-wide blobs in the panel's middle; of all candidate pairs, the one
+    most alike in size and height, sensibly spaced, with skin (warm) pixels round them (hair blobs are rejected)."""
     lum = a.mean(2); d = (lum < 42) & (np.abs(a[..., 0] - a[..., 2]) < 14)
     Hh, Ww = d.shape; d[:int(Hh * 0.2)] = False; d[int(Hh * 0.8):] = False; d[:, :int(Ww * 0.15)] = False; d[:, int(Ww * 0.85):] = False
+    warm = (a[..., 0] > 110) & (a[..., 0] - a[..., 2] > 35)
     lab, n = nd.label(d); c = []
     for i in range(1, n + 1):
-        ys, xs = np.where(lab == i)
-        if len(ys) > 20 and (np.ptp(ys) + 1) > 1.1 * (np.ptp(xs) + 1): c.append((len(ys), ys.mean(), xs.mean()))
-    c = sorted(c)[-2:]
-    return (np.mean([q[1] for q in c]), np.mean([q[2] for q in c]))
+        m = lab == i; ys, xs = np.where(m)
+        if len(ys) <= 20 or (np.ptp(ys) + 1) <= 1.1 * (np.ptp(xs) + 1): continue
+        ring = nd.binary_dilation(m, iterations=4) & ~nd.binary_dilation(m, iterations=1)
+        c.append((len(ys), ys.mean(), xs.mean(), np.ptp(ys) + 1, warm[ring].mean()))
+    cw = [q for q in c if q[4] >= 0.5]
+    c = cw if len(cw) >= 2 else c
+    best, bp = None, None
+    for i in range(len(c)):
+        for j in range(i + 1, len(c)):
+            p, q = c[i], c[j]; dx = abs(p[2] - q[2])
+            if not (0.08 * Ww < dx < 0.6 * Ww): continue
+            cost = abs(p[1] - q[1]) / max(p[3], q[3]) + abs(p[0] - q[0]) / max(p[0], q[0])
+            if best is None or cost < best: best, bp = cost, (p, q)
+    if bp is None: bp = tuple(sorted(c)[-2:])
+    return bp
+
+def eyes(a):
+    """Centre (y, x) of the two eye ovals."""
+    p, q = _eye_pair(a); return ((p[1] + q[1]) / 2, (p[2] + q[2]) / 2)
 
 def bbox(m):
     ys, xs = np.where(m); return ys.min(), ys.max(), xs.min(), xs.max()
@@ -91,14 +108,7 @@ def place(ref, ren, kind, face_scale=None):
 
 def eye_gap(a):
     """Horizontal distance between the two eye centres (px)."""
-    lum = a.mean(2); d = (lum < 42) & (np.abs(a[..., 0] - a[..., 2]) < 14)
-    Hh, Ww = d.shape; d[:int(Hh * 0.2)] = False; d[int(Hh * 0.8):] = False; d[:, :int(Ww * 0.15)] = False; d[:, int(Ww * 0.85):] = False
-    lab, n = nd.label(d); c = []
-    for i in range(1, n + 1):
-        ys, xs = np.where(lab == i)
-        if len(ys) > 20 and (np.ptp(ys) + 1) > 1.1 * (np.ptp(xs) + 1): c.append((len(ys), xs.mean()))
-    c = sorted(c)[-2:]
-    return abs(c[0][1] - c[1][1])
+    p, q = _eye_pair(a); return abs(p[2] - q[2])
 
 def body_numbers(name, ref, canvas):
     A = sheet_mask(np.asarray(ref.convert('RGB')).astype(float)); B = render_mask(np.asarray(canvas).astype(float))

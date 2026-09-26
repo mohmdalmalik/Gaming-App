@@ -19,6 +19,7 @@
 #   pumps(g, S)             low-heeled court shoes: sole + block heel + low upper, the skin instep showing
 #   lips(g, Li)             small closed smiling lips (upper lip with a soft bow, fuller lower lip)
 #   earrings(g, E)          'stud' / 'ball' (pearl or gold sphere at the lobe), optional 'drop'
+#   eye_shine(g, Sh)        a small painted white glint on each eye;  jaw_lift(g, skull, J): jawline climbing to the ear
 #   coil_bun(g, Bn)         a twisted chignon: a rope coiled in a tightening spiral round an axis + a filling core
 #   finish(g, RIG, out)     guest_kit join -> bake -> rig -> animate -> eyeCentre (one eye, glTF space) -> export
 #
@@ -406,6 +407,34 @@ def earrings(g, E):
         if E.get('kind') == 'drop':
             D = E['drop']; g.add(L.uvsphere(f'EarDrop{s}', D['r'], c - Vector((0, 0, D['len'])), u=12, v=8), E.get('mat', 'pearl'), 'head')
 
+def eye_shine(g, Sh):
+    """A small painted highlight on each eye (the sheets' soft white glint): Sh = dict(r (radius), dx, dz (offset from
+    the eye centre as a fraction of the eye's half width / half height; + = toward her left / up, mirrored or not by
+    `mirror`), mat ('shine')). Needs guest_kit.eyes() first (g.eye_pts)."""
+    C = g.C
+    for p in getattr(g, 'eye_pts', []):
+        s = 1 if (p.x > 0 or not Sh.get('mirror', False)) else -1
+        n = g.face_normal(p.x, p.z)                                   # the eye disc's own plane (eyes() sits it in the face plane)
+        rt = (Vector((1, 0, 0)) - n * n.x).normalized(); up = n.cross(rt).normalized()
+        if up.z < 0: up = -up
+        a, b = s * Sh.get('dx', -0.30), Sh.get('dz', 0.35)
+        front = 0.012 * math.sqrt(max(0.05, 1.0 - a * a - b * b))           # the eye's front surface at that spot
+        q = p + rt * (a * C['eye_w'] * 0.5) + up * (b * C['eye_h'] * 0.5) + n * (front + 0.0008)
+        sh = L.uvsphere('EyeShine', 1.0, (0, 0, 0), scale=(Sh['r'], 0.002, Sh['r'] * 1.15), u=10, v=6)
+        rot = Vector((0, -1, 0)).rotation_difference(n).to_matrix().to_4x4(); sh.data.transform(rot)
+        L.translate_verts(sh, q); g.add(sh, Sh.get('mat', 'shine'), 'head')
+
+def jaw_lift(g, ob, J):
+    """Raise the underside of the head toward the back so the jawline climbs from the chin to the ear lobe (the skull
+    shell's bottom is otherwise flat at the chin height). J: top (pct above which nothing moves), lift (m at the back
+    bottom), y0 / y1 (offsets from the head axis: no lift in front of y0, full lift behind y1)."""
+    zt = g.zp(J['top']); zc = g.zc
+    for v in ob.data.vertices:
+        if v.co.z >= zt: continue
+        t = (zt - v.co.z) / max(1e-6, zt - zc); w = sm((v.co.y - g.Y0 - J['y0']) / (J['y1'] - J['y0']))
+        v.co.z += J['lift'] * t * w
+    ob.data.update()
+
 # =============================================================================================
 # HAIR EXTRAS — a coiled chignon
 # =============================================================================================
@@ -673,8 +702,9 @@ def sculpt_hair(g, Hs):
 # FINISH
 # =============================================================================================
 def lift_ao(g, scale):
-    """Soften the baked shading per material: colour = 1 - (1 - colour) * scale[name] (e.g. {'Skin': 0.6} keeps a
-    fair face bright under the hair's occlusion). Runs after guest_kit.bake on the joined mesh."""
+    """Soften the baked shading per material: red = 1 - (1 - red) * scale[name], green/blue keep their ratio to red
+    (so a baked blush survives), e.g. {'Skin': 0.3} keeps a fair face bright under the hair's occlusion. Runs after
+    guest_kit.bake on the joined mesh."""
     if not scale: return
     me = g.mesh.data; col = me.color_attributes.get('Col')
     if col is None: return
@@ -684,7 +714,8 @@ def lift_ao(g, scale):
     for vi, name in vm.items():
         s = scale.get(name)
         if s is None: continue
-        c = col.data[vi].color; col.data[vi].color = tuple(1 - (1 - c[k]) * s for k in range(3)) + (1.0,)
+        c = col.data[vi].color; r = max(1e-4, c[0]); r2 = 1 - (1 - r) * s        # lift the grey (AO) part, keep tint ratios
+        col.data[vi].color = (r2, min(1.0, r2 * c[1] / r), min(1.0, r2 * c[2] / r), 1.0)
 
 def finish(g, R, out):
     """guest_kit's finish, plus eyeCentre = ONE eye centre (her left eye, +x) in glTF space (Y up, face toward

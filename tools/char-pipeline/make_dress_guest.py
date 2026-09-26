@@ -16,3 +16,5 @@ g = GK.Guest(name, spec.CFG, spec.COLOURS, H=getattr(spec, 'H', 1.66))
 spec.build(g)
 out = os.environ.get('GUEST_OUT') or (GK.REPO / 'assets' / 'characters' / f'{name}.glb')
 DK.finish(g, spec.RIG, out)
+# bpy 4.2 as a module can crash while tearing down at interpreter exit (after the GLB is written): exit cleanly
+sys.stdout.flush(); sys.stderr.flush(); os._exit(0)

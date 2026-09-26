@@ -4,6 +4,8 @@
 #   bow_tie(g, B)        a fuller bow tie than guest_kit.bow_tie (tall wings pinched to a knot), on the collar
 #   studs(g, S)          shirt studs (small glossy spheres on the shirt front)
 #   pocket_square(g, P)  a folded white square peeking out of the chest welt (two soft points)
+#   env_hair(g, Hs)      sculpted hair: measured envelope + rounded lock rolls + carved grooves (SDF, surface nets)
+#   bend_normals(...)    stylised shading help: bend a material's normals toward a direction (e.g. a round lower face)
 # Heights are PERCENT OF STANDING HEIGHT FROM THE TOP, x/y in metres; Blender Z up, the guest faces -Y, HIS right
 # is -X. Every part is rigid-skinned (head / spine) like the rest of the kit.
 import math
@@ -117,65 +119,11 @@ def pocket_square(g, P):
                (xm - 0.012, z0 + h * 0.75), (x0 + 0.010, z0 + h * 0.60)]
     GK.slab(g, 'PocketSq', outline, lambda x, z: g.chest_y(x, z), 0.0, P.get('thick', 0.006), P.get('mat', 'shirt'), g.jw, cuts=2)
 
-def stepped_hair(g, hair, hairline, edge, thin_below=None, steps=(), crease_dark=1.0):
-    """guest_kit.hair_shell plus SCULPTED LOCK STEPS: each step is a curve [(u, pct)] on the hair surface along
-    which the surface on one side (`side` +1/-1 relative to the curve's direction x the outward normal) stands
-    `depth` proud, rising over `w` (the rounded lock edge) and easing back to the base surface over `reach`
-    (a flat, slightly tilted lock plane overlapping the next one), with a narrow crease on the low side. Steps fade
-    in/out over `fade` of their length. The curves are sampled on a first, plain shell (then discarded).
-    steps: [dict(keys=[(u, pct)], depth, w, reach, side, crease, fade, n)]."""
-    import numpy as np, bpy
-    base = {k: v for k, v in hair.items() if k not in ('grooves', 'disp')}
-    ob = GK.hair_shell(g, hairline=hairline, edge=edge, thin_below=thin_below, **base)
-    C = []
-    for st in steps:
-        ks = [list(k) for k in st['keys']]
-        for i in range(1, len(ks)):
-            while ks[i][0] - ks[i - 1][0] > 0.5: ks[i][0] -= 1.0
-            while ks[i][0] - ks[i - 1][0] < -0.5: ks[i][0] += 1.0
-        dense = L.catmull_rom([(u, p, 0.0) for u, p in ks], st.get('n', 36))
-        P, N = [], []
-        for u, p, _ in dense:
-            q, n = g.hair_surface(u % 1.0, p); P.append(tuple(q)); N.append(tuple(n))
-        P = np.array(P); N = np.array(N); T = np.gradient(P, axis=0); T /= np.maximum(1e-9, np.linalg.norm(T, axis=1))[:, None]
-        C.append((P, N, T, st))
-    g.parts.remove(ob); bpy.data.objects.remove(ob, do_unlink=True)
-    def near(P, p):
-        A = P[:-1]; AB = P[1:] - A; L2 = np.maximum(1e-12, (AB * AB).sum(1))
-        t = np.clip(((p - A) * AB).sum(1) / L2, 0.0, 1.0); Q = A + AB * t[:, None]; d = np.linalg.norm(Q - p, axis=1)
-        i = int(np.argmin(d)); return i, t[i], Q[i], d[i]
-    def step_amt(p):
-        """(raise, crease) at point p (numpy)."""
-        up = 0.0; cr = 0.0
-        for P, N, T, st in C:
-            lo = P.min(0) - st.get('reach', 0.03) - 0.01; hi = P.max(0) + st.get('reach', 0.03) + 0.01
-            if np.any(p < lo) or np.any(p > hi): continue
-            i, t, q, d = near(P, p)
-            s = (i + t) / (len(P) - 1); f = st.get('fade', 0.18)
-            taper = sm(s / f) * sm((1.0 - s) / f)
-            if taper <= 1e-4: continue
-            side = np.dot(np.cross(T[i], N[i]), p - q) * st.get('side', 1)
-            w = st.get('w', 0.005); reach = st.get('reach', 0.03); dep = st['depth']
-            if side > 0:
-                up += dep * taper * sm(d / w) * max(0.0, 1.0 - d / reach) ** 1.3
-            else:
-                cr += st.get('crease', 0.5) * dep * taper * math.exp(-(d / w) ** 2)
-        return up, cr
-    def disp(u, v, p):
-        up, cr = step_amt(np.array([p.x, p.y, p.z])); return up - cr
-    extra = dict(hair); extra.pop('disp', None)
-    ob = GK.hair_shell(g, hairline=hairline, edge=edge, thin_below=thin_below, disp=disp, **extra)
-    hg = getattr(g, 'hair_groove', None)
-    def groove(p):
-        up, cr = step_amt(np.array([p.x, p.y, p.z]))
-        return (hg(p) if hg else 0.0) + crease_dark * cr * 4.0
-    g.hair_groove = groove
-    return ob
-
 # =============================================================================================
 # SCULPTED HAIR from a MEASURED ENVELOPE (signed-distance volume, polygonised with dress_kit's surface nets):
-#   base   = the envelope (per-height superellipse slices from four measured extents, like guest_kit.hair_shell)
-#            shrunk by `inset`, united with a thin skin-tight layer over the skull (t_min), limited to
+#   base   = the envelope (per-height superellipse slices from four measured extents, like guest_kit.hair_shell),
+#            resampled as a smooth radius field about a centre in the head (radial_env: round crown, no knife-edge
+#            ridge) and shrunk by `inset`, united with a thin skin-tight layer over the skull (t_min), limited to
 #            skull + edge(u) + slope * (height above the hairline) (short sides, full top), cut at the hairline
 #            with a rounded edge (edge_k)
 #   rolls  = rounded locks lying ON the envelope along (u, pct, radius) keys (sink: how much of the radius hides)
@@ -187,33 +135,6 @@ def env_tables(g, E):
     zp = g.zp
     T = {k: DK._np_table(GK.Table([(zp(p), v) for p, v in E[k]])) for k in ('wr', 'wl', 'front', 'back', 'expo')}
     return T
-
-def env_point(g, T, u, pct, inset=0.0):
-    """Point on the envelope at longitude u (0 front, 0.25 his right, 0.5 back, 0.75 his left) and height pct,
-    moved `inset` inward along the slice normal; also returns the outward normal (horizontal-ish)."""
-    import numpy as np
-    z = g.zp(pct); x0, x1 = -float(T['wr'](z)), float(T['wl'](z)); yf, yb = g.Y0 - float(T['front'](z)), g.Y0 + float(T['back'](z))
-    a, b = max(1e-4, (x1 - x0) / 2), max(1e-4, (yb - yf) / 2); cx, cy = (x0 + x1) / 2, (yf + yb) / 2; e = float(T['expo'](z))
-    t = 2 * math.pi * u + math.pi / 2; dx, dy = math.cos(t), -math.sin(t)            # direction from the slice centre
-    # superellipse radius along (dx, dy)
-    r = 1.0 / ((abs(dx) / a) ** e + (abs(dy) / b) ** e) ** (1.0 / e)
-    px, py = cx + dx * r, cy + dy * r
-    nx = e * abs((px - cx) / a) ** (e - 1) * math.copysign(1, px - cx) / a; ny = e * abs((py - cy) / b) ** (e - 1) * math.copysign(1, py - cy) / b
-    n = Vector((nx, ny, 0.0)).normalized()
-    p = Vector((px, py, z)) - n * inset
-    return p, n
-
-def env_sdf(g, T):
-    import numpy as np
-    def sdf(P):
-        z = P[:, 2]
-        x0, x1 = -T['wr'](z), T['wl'](z); yf, yb = g.Y0 - T['front'](z), g.Y0 + T['back'](z)
-        a = np.maximum((x1 - x0) / 2, 2e-3); b = np.maximum((yb - yf) / 2, 2e-3); cx = (x0 + x1) / 2; cy = (yf + yb) / 2; e = T['expo'](z)
-        ax = np.abs(P[:, 0] - cx) / a + 1e-9; ay = np.abs(P[:, 1] - cy) / b + 1e-9
-        f = (ax ** e + ay ** e) ** (1.0 / e)
-        gx = f ** (1 - e) * ax ** (e - 1) / a; gy = f ** (1 - e) * ay ** (e - 1) / b
-        return (f - 1.0) / np.maximum(np.sqrt(gx * gx + gy * gy), 1e-6)
-    return sdf
 
 def env_hair(g, Hs):
     """Hs: env (wr/wl/front/back/expo tables, like hair_shell), top (pct of the crown), hairline(u) -> pct, edge(u) -> m,
@@ -320,7 +241,7 @@ def radial_point(g, R_at, c0, u, pct, inset=0.0):
         if pt(m)[0][2] > zt: lo = m
         else: hi = m
     v = 0.5 * (lo + hi); p, d = pt(v)
-    e = 1e-3; pu = pt(v)[0]; a = np.array(pt(v)[0])
+    e = 1e-3
     # normal from the local surface tangents
     t1 = radial_pt_uv(R_at, c0, (u + e) % 1.0, v) - radial_pt_uv(R_at, c0, (u - e) % 1.0, v)
     t2 = radial_pt_uv(R_at, c0, u, v + e) - radial_pt_uv(R_at, c0, u, v - e)

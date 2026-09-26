@@ -133,8 +133,10 @@ def plane(t, x0, x1, z0, z1, y, mat, uvfn, color='#ffffff'):
     """One upward-facing quad (floor, rugs)."""
     bm = bmesh.new()
     vs = [bm.verts.new(G(x, y, z)) for (x, z) in ((x0, z1), (x1, z1), (x1, z0), (x0, z0))]
-    bm.faces.new(vs)
-    bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+    f = bm.faces.new(vs)
+    f.normal_update()
+    if f.normal.z < 0:            # always facing up (recalculating normals on a lone quad can flip it)
+        f.normal_flip()
     t.add_bm(bm, color, mat, uvfn)
 
 def cyl(t, x, z, y0, y1, r0, r1=None, color='#ffffff', segs=20, bevel=0.0, mat='vc', caps=True):
@@ -508,7 +510,8 @@ def sign(sg, s, y, w, h, quad, glow=False):
 
 def mirror(sg, s, y, w, h):
     sg.put(s - w / 2 - 0.06, s + w / 2 + 0.06, y - h / 2 - 0.06, y + h / 2 + 0.06, 0.0, 0.04, C['gold'], 0.015, where=sg.up)
-    sg.put(s - w / 2, s + w / 2, y - h / 2, y + h / 2, 0.0, 0.046, '#a9b8bc', 0.004, where=sg.up)
+    sg.put(s - w / 2, s + w / 2, y - h / 2, y + h / 2, 0.0, 0.046, '#56646a', 0.004, where=sg.up)       # dark silvered glass
+    sg.put(s - w / 2 + 0.05, s - w / 2 + 0.16, y - h / 2 + 0.1, y + h / 2 - 0.1, 0.0, 0.048, '#7a8a90', 0.003, where=sg.up)   # a sheen
 
 def window(sg, s, y=1.45, w=0.95, h=1.05):
     """A night window with walnut frame, sill and velvet curtains (the signs cell's window)."""

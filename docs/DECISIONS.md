@@ -623,3 +623,26 @@ Target: `docs/art-reference.jpg` (style, palette and finish; not its layout or i
 - **Simulator** (`tools/balance/hotseat-sim.mjs`): bot choices are now seeded per match, so the same
   command gives the same numbers; `--before` replays the same bots, seeds and hotels on the rules before
   Part 2, so a change is measured like for like rather than against an old table.
+
+## Every room baked like the lobby (tools/room-pipeline/)
+- **One kit, generalised from the lobby build.** `roomkit.py` holds the lobby's techniques (softly
+  bevelled boxes, walls cut at a consistent 2.4 m with a dark cap, doorways with walnut casings and brass
+  plinths, sconces, gilt-framed paintings) plus wall styles (walnut panelling, wallpaper over a walnut
+  wainscot, glazed tile, painted plaster), windows, mirrors, clocks, radiators and caged bulbs.
+  `make_room.py` has a furniture builder for every footprint kind in `src/data/hotel.js` and a theme per
+  room; `build_all.sh` bakes all of them. The furniture stands on the game's own footprints, so collision
+  and pathfinding are unchanged; decoration only goes against the walls, inside the 0.3 m band guests
+  never reach.
+- **Built in the tile's default orientation, turned in the game.** A tile can be placed at any of four
+  orientations; the model is turned with it (`dressBakedTile`), and each game wall segment is matched to
+  its model part by turning its centre back into the model's frame. The baked light turns with the room.
+- **Few draw calls.** Only the upper walls fold for the cutaway, so each wall segment keeps one upper part
+  (`W_<side>_<k>_up`) and everything else — lower walls, furniture, decoration — is merged into "static"
+  plus "floor". Three materials (vertex colour, the shared atlas, and unlit lamp glass): about 10–15 draw
+  calls a room; 13 rooms revealed come to ~130 (the grey boxes were ~150).
+- **One shared albedo atlas** (`rooms/albedo.jpg`, 16 cells: floors, rugs, paintings, wallpapers, book
+  spines, wall tiles, signs) loaded once; each room adds only its two light maps (1024 px JPEG) and its
+  geometry. The .glb files carry no images and are packed (8-bit colours, 16-bit UVs) to ~0.6–1 MB.
+- **Loaded when revealed.** A room's files are fetched the first time its door is opened (and cached for
+  the next match), in keeping with "load rooms on demand" in the path to mobile apps.
+- **Flicker on a baked room** dims its whole light map with the bulb (mood.js), since the light is baked.

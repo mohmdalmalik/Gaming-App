@@ -324,7 +324,8 @@ def shelving(fr, variant='boxes', metal=True):
     for u in (-W / 2 + 0.03, W / 2 - 0.03):
         for w in (0.03, D - 0.03):
             fr.box(u - 0.025, u + 0.025, w - 0.025, w + 0.025, 0.0, H, post, 0.005)
-    levels = [0.1, 0.5, 0.9, 1.3, H - 0.04]
+    # linens sit in three tall, open compartments (so light reaches the stacks); the rest in four
+    levels = [0.1, 0.62, 1.14, H - 0.04] if variant == 'linens' else [0.1, 0.5, 0.9, 1.3, H - 0.04]
     for y in levels:
         fr.box(-W / 2, W / 2, 0.0, D, y, y + 0.03, C['steel'] if metal else C['oak'], 0.004)
     rr = random.Random(int(fr.cx * 100 + fr.cz * 7))
@@ -332,12 +333,12 @@ def shelving(fr, variant='boxes', metal=True):
         u = -W / 2 + 0.07
         while u < W / 2 - 0.12:
             if variant == 'linens':
-                w_ = rr.uniform(0.28, 0.36)
-                col = rr.choice([C['linen'], C['linen2'], C['linenBlue'], C['white']])
-                n = rr.randint(3, 6)
+                w_ = rr.uniform(0.34, 0.44)
+                col = rr.choice([C['linen'], C['linen'], C['white'], C['linen2'], C['linenBlue']])
+                n = rr.randint(6, 9)
                 for k in range(n):
-                    fr.box(u, u + w_, 0.08, D - 0.06, y + 0.03 + k * 0.05, y + 0.03 + (k + 1) * 0.05 - 0.004, col, 0.012)
-                u += w_ + 0.05
+                    fr.box(u, u + w_, 0.03, D + 0.01, y + 0.03 + k * 0.048, y + 0.03 + (k + 1) * 0.048 - 0.003, col, 0.02)
+                u += w_ + 0.025
             elif variant == 'kitchen':
                 if rr.random() < 0.5:
                     r_ = rr.uniform(0.05, 0.08); h_ = rr.uniform(0.14, 0.26)
@@ -455,7 +456,7 @@ def bed(fr, blanket=C['velvet'], frame=C['walnut'], sheet=C['linen']):
     fr.box(-W / 2 + 0.03, W / 2 - 0.03, 0.1, D - 0.03, 0.34, 0.54, sheet, 0.05)       # mattress
     fr.box(-W / 2 + 0.01, W / 2 - 0.01, 0.62, D, 0.36, 0.6, blanket, 0.05)             # blanket
     fr.box(-W / 2 + 0.02, W / 2 - 0.02, 0.56, 0.72, 0.52, 0.63, sheet, 0.04)           # turned-down sheet
-    fr.box(-W / 2 + 0.005, W / 2 - 0.005, 0.95, D - 0.1, 0.59, 0.605, C['gold'], 0.004)
+    fr.box(-W / 2 + 0.005, W / 2 - 0.005, 0.95, 0.99, 0.595, 0.607, C['gold'], 0.003)   # a gold band across the cover
     n = 2 if W > 1.3 else 1
     pw = (W - 0.3) / n
     for i in range(n):
@@ -792,12 +793,36 @@ def wall_bookshelf(side, s0, s1, H=2.0, depth=0.28):
     f = {'center': [(x0 + x1) / 2, (z0 + z1) / 2], 'size': [x1 - x0, H, z1 - z0]}
     bookcase(Fr(f, facing))
 
+def side_table(side, s_, lamp=False, W=0.72, D=0.28, H=0.78):
+    """A narrow walnut side table against a wall (inside the band the guests never reach), with a lamp,
+    or a vase and books when it stands under a painting."""
+    sg = seg_at(side, s_)
+    x0, x1, z0, z1 = sg.rect(s_ - W / 2, s_ + W / 2, 0.0, D)
+    facing = {'north': 's', 'south': 'n', 'west': 'e', 'east': 'w'}[side]
+    fr = Fr({'center': [(x0 + x1) / 2, (z0 + z1) / 2], 'size': [x1 - x0, H, z1 - z0]}, facing)
+    for u in (-W / 2 + 0.04, W / 2 - 0.04):
+        for w in (0.04, D - 0.04):
+            fr.box(u - 0.018, u + 0.018, w - 0.018, w + 0.018, 0.0, H - 0.06, C['walnutDark'], 0.006)
+    fr.box(-W / 2 + 0.02, W / 2 - 0.02, 0.02, D - 0.02, H - 0.13, H - 0.04, C['walnut'], 0.01)
+    fr.box(-W / 2, W / 2, 0.0, D, H - 0.04, H, C['walnutTop'], 0.01)
+    fr.box(-0.05, 0.05, D - 0.005, D + 0.012, H - 0.1, H - 0.075, C['brass'], 0.004)
+    x, z = fr.at(0.1 if lamp else 0.16, D / 2)
+    if lamp:
+        lamp_on(x, z, H, 0.5, 0.13, 50.0)
+        bx, bz = fr.at(-0.18, D / 2)
+        books_pile(bx, bz, H, 2)
+    else:
+        vase(x, z, H)
+        bx, bz = fr.at(-0.16, D / 2)
+        books_pile(bx, bz, H, 3)
+
 def dec_lounge():
     door_sconces()
     paint('north', 2.4, 1.5, 1.0, 0.66, 0); paint('south', -2.4, 1.5, 1.0, 0.66, 1)
     paint('east', -2.4, 1.5, 0.66, 0.86, 2); paint('west', 2.4, 1.5, 0.66, 0.86, 3)
     floor_lamp(-3.6, -2.2)
     plant_at(3.62, 2.2, 0.55, seed=4)
+    side_table('north', -2.2, lamp=True); side_table('south', 2.2, lamp=True)
 
 def dec_ballroom():
     door_sconces()
@@ -812,12 +837,14 @@ def dec_grand():
     paint('south', -2.4, 1.5, 1.0, 0.66, 1); paint('south', 2.4, 1.5, 0.66, 0.86, 3)
     paint('east', 2.4, 1.5, 1.0, 0.66, 0); paint('west', -2.4, 1.5, 1.0, 0.66, 1)
     floor_lamp(-3.6, 3.6)
+    side_table('north', -2.4); side_table('south', 2.4); side_table('east', -2.3, lamp=True); side_table('west', 2.3, lamp=True)
 
 def dec_switchboard():
     door_sconces()
     wall_clock(seg_at('north', -3.1), -3.1, 1.98)
     paint('east', 2.4, 1.5, 0.66, 0.86, 2); paint('west', -2.2, 1.5, 0.9, 0.62, 0)
     paint('south', 2.4, 1.5, 0.9, 0.62, 1)
+    side_table('south', -2.3, lamp=True)
 
 def dec_dining():
     door_sconces()
@@ -854,6 +881,9 @@ def dec_corridor_ew(quad_a=0, quad_b=1):
     paint('north', 0.0, 1.55, 1.1, 0.7, quad_a)
     paint('north', -2.6, 1.5, 0.66, 0.86, 2); paint('north', 2.6, 1.5, 0.66, 0.86, 3)
     paint('south', -2.4, 1.5, 0.9, 0.62, quad_b); paint('south', 2.4, 1.5, 0.9, 0.62, quad_a)
+    side_table('south', 2.4)
+    if ROOM == 'corridorW':
+        side_table('south', -2.4)
 
 def dec_corridor_ns(console_side='east', quads=(0, 1)):
     door_sconces()
@@ -863,8 +893,10 @@ def dec_corridor_ns(console_side='east', quads=(0, 1)):
         for s_, q in ((-2.6, 2), (2.6, 3)):
             if not (side == 'west' and room_has_near(side, s_)):
                 paint(side, s_, 1.5, 0.66, 0.86, q)
-    if console_side != 'west':
-        mirror(seg_at('west', 0.0), 0.0, 1.45, 0.6, 0.9) if ROOM == 'corridorN' else None
+    if ROOM == 'corridorN':
+        mirror(seg_at('west', 0.0), 0.0, 1.45, 0.6, 0.9)
+        side_table('west', 0.0, lamp=True)
+    side_table('east', 2.6) if ROOM == 'corridorS' else side_table('east', -2.6)
 
 def room_has_near(side, s_):
     for f in R['furniture']:
@@ -888,12 +920,14 @@ def dec_cloakroom():
     mirror(seg_at('east', -2.4), -2.4, 1.45, 0.6, 1.0)
     paint('south', -2.4, 1.5, 0.9, 0.62, 1)
     sconce(seg_at('east', -3.2), -3.2, 1.62)
+    side_table('south', -2.4)
 
 def dec_corner():
     door_sconces()
     window(seg_at('north', -3.05), -3.05, 1.5, 0.8, 0.95)
     paint('north', 1.4, 1.5, 1.0, 0.66, 0); paint('west', 0.4, 1.5, 0.66, 0.86, 2)
     floor_lamp(3.6, -3.6)
+    side_table('north', 1.4); side_table('east', -2.3, lamp=True)
 
 def dec_infirmary(n):
     door_sconces()

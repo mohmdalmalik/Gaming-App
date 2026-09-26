@@ -47,9 +47,9 @@ def stone():
 
 
 def parquet():
-    tones = [rgb(c) for c in ('#8a5a34', '#7d5030', '#93633a', '#845632', '#9a6a3e')]
+    tones = [rgb(c) for c in ('#86583a', '#80543a', '#8a5c3c', '#835638', '#8e603e')]
     # herringbone: diagonal staggered planks drawn on a 2x canvas, then cropped (2 m = 512 px)
-    big = Image.new('RGB', (S * 2, S * 2), rgb('#4a2c18'))
+    big = Image.new('RGB', (S * 2, S * 2), rgb('#5e3a24'))
     d = ImageDraw.Draw(big)
     pl, pw = 96, 24
     for row in range(-4, 40):
@@ -58,8 +58,8 @@ def parquet():
             y = row * pw * 2
             c1 = jit(tones[(row * 3 + k) % len(tones)], 8)
             c2 = jit(tones[(row * 5 + k * 2 + 1) % len(tones)], 8)
-            d.polygon([(x, y), (x + pl, y + pl), (x + pl - pw, y + pl + pw), (x - pw, y + pw)], fill=c1, outline=rgb('#3e2414'))
-            d.polygon([(x + pl, y + pl), (x + 2 * pl, y), (x + 2 * pl + pw, y + pw), (x + pl + pw, y + pl + pw)], fill=c2, outline=rgb('#3e2414'))
+            d.polygon([(x, y), (x + pl, y + pl), (x + pl - pw, y + pl + pw), (x - pw, y + pw)], fill=c1, outline=rgb('#5e3a24'))
+            d.polygon([(x + pl, y + pl), (x + 2 * pl, y), (x + 2 * pl + pw, y + pw), (x + pl + pw, y + pl + pw)], fill=c2, outline=rgb('#5e3a24'))
     return big.crop((S // 2, S // 2, S // 2 + S, S // 2 + S)).filter(ImageFilter.GaussianBlur(0.5))
 
 

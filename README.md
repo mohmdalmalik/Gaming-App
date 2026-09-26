@@ -150,6 +150,14 @@ python3 tools/lobby-pipeline/make_lobby.py --size 2048 --samples 64           # 
 Output: `assets/models/lobby/` (`lobby.glb`, `lobby-light.jpg`, `lobby-floor-light.jpg`).
 `tools/lobby-pipeline/README.md` explains the parts.
 
+## Room pipeline (Blender → baked glTF → game)
+
+Every other room is built the same way as the starting room, from the game's own tile data
+(`tools/room-pipeline/`, see its README): `node tools/room-pipeline/dump_rooms.mjs > tools/room-pipeline/rooms.json`,
+`python3 tools/room-pipeline/textures_rooms.py`, `tools/room-pipeline/build_all.sh 1024 48` (about an hour on
+4 CPUs), then `node tools/room-pipeline/shoot.mjs --rooms library,kitchen` to look at rooms in the game and
+`node tools/room-pipeline/perf.mjs --rooms 12` for draw calls. Output: `assets/models/rooms/`.
+
 ## Changing the rules or the floor
 
 Every rule number — action points, costs, health, the deck, Lanterns to escape, the dawn round limit, locked rooms, the

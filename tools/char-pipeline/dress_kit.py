@@ -411,7 +411,9 @@ def coil_bun(g, Bn):
     """Bn: centre (x, dy from the head axis, pct), axis (vector: the coil's axis, pointing out of the head),
     up (a vector roughly 'up' in the coil plane), turns, r_out/r_in (coil radius start/end), depth (how far the
     spiral climbs along the axis), rope (radius keys [(t, r)]), start (angle, rad), squash (x, y scale of the
-    coil plane), core (ellipsoid radii along (right, up, axis) + offset along the axis), n_samples, n_ring, mat."""
+    coil plane), drift / drift_x (the spiral centre moves down / toward Rt = her right by this much from start to end:
+    the knot sits low), core (ellipsoid radii along (right, up, axis) + offset along the axis), strands (twists, depth),
+    n_samples, n_ring, mat. Negative turns coil the other way (Rt is her right, U up, angle 90 deg = top)."""
     mat = Bn.get('mat', 'hair')
     cx, dy, pz = Bn['centre']; C = Vector((cx, g.Y0 + dy, g.zp(pz)))
     A = Vector(Bn['axis']).normalized(); U0 = Vector(Bn.get('up', (0, 0, 1)))
@@ -429,7 +431,8 @@ def coil_bun(g, Bn):
     for i in range(N):
         t = i / (N - 1); ang = Bn.get('start', 0.0) + 2 * math.pi * Bn['turns'] * t
         rad = Bn['r_out'] + (Bn['r_in'] - Bn['r_out']) * t ** Bn.get('tighten', 1.0)
-        p = C + Rt * (math.cos(ang) * rad * sx) + U * (math.sin(ang) * rad * sy) + A * (Bn.get('depth', 0.0) * math.sin(math.pi * min(1.0, t * 1.1)) ** 0.7 + Bn.get('lean', 0.0) * t)
+        Ct = C - U * (Bn.get('drift', 0.0) * t) + Rt * (Bn.get('drift_x', 0.0) * t)      # an eccentric spiral: the knot sits off centre
+        p = Ct + Rt * (math.cos(ang) * rad * sx) + U * (math.sin(ang) * rad * sy) + A * (Bn.get('depth', 0.0) * math.sin(math.pi * min(1.0, t * 1.1)) ** 0.7 + Bn.get('lean', 0.0) * t)
         pts.append(tuple(p)); rads.append(max(0.003, rr[i]))
     tb = L.tube('BunCoil', pts, rads, n=Bn.get('n_ring', 14))
     if Bn.get('strands'):                                  # twist grooves along the rope (a rope of hair)
@@ -471,8 +474,11 @@ def sd_skull(g, P):
     x, y, z = P[:, 0], P[:, 1] - g.Y0, P[:, 2]
     zc = np.clip(z, g.zc, g.zt)
     w = np.maximum(W(zc), 2e-3); d = np.maximum(np.where(y < 0, DF(zc), DB(zc)), 2e-3); e = E(zc)
-    f = ((np.abs(x) / w) ** e + (np.abs(y) / d) ** e) ** (1.0 / e)
-    s = (f - 1.0) * np.minimum(w, d)
+    ax, ay = np.abs(x) / w + 1e-9, np.abs(y) / d + 1e-9
+    f = (ax ** e + ay ** e) ** (1.0 / e)
+    # first-order distance: (f - 1) / |grad f| (horizontal gradient of the superellipse slice)
+    gx = f ** (1 - e) * ax ** (e - 1) / w; gy = f ** (1 - e) * ay ** (e - 1) / d
+    s = (f - 1.0) / np.maximum(np.sqrt(gx * gx + gy * gy), 1e-6)
     return np.maximum(s, np.maximum(z - g.zt, g.zc - z))
 
 def sd_ellipsoid(P, c, r):
@@ -480,26 +486,37 @@ def sd_ellipsoid(P, c, r):
     return (k - 1.0) * min(r)
 
 def _curve(g, keys, n):
-    """keys [(x, dy, pct, radius)] -> dense (N,3) points (world) and radii via Catmull-Rom."""
-    ks = [(x, g.Y0 + dy, g.zp(p), r) for x, dy, p, r in keys]
+    """keys [(x, dy, pct, radius[, flat])] -> dense (N,3) points (world), radii and flatness (thickness / width)
+    via Catmull-Rom."""
+    ks = [(x, g.Y0 + dy, g.zp(p), r, (k[0] if k else 1.0)) for x, dy, p, r, *k in keys]
     d = np.array(L.catmull_rom(ks, n), dtype=np.float64)
-    return d[:, :3], np.maximum(1e-3, d[:, 3])
+    return d[:, :3], np.maximum(1e-3, d[:, 3]), np.clip(d[:, 4], 0.2, 1.0)
 
-def sd_tube(P, pts, rad, margin=0.06):
-    """Distance to a variable-radius tube along a polyline (min over segments). Points further than `margin`
-    outside the tube's bounding box get a coarse (positive) value — enough for blending."""
+def sd_tube(P, pts, rad, flat=None, centre=None, margin=0.06):
+    """Distance to a variable-radius tube along a polyline (min over segments). With `flat` (per point, thickness /
+    width) the cross-section is an ellipse: `rad` across the surface, rad*flat along the outward direction from
+    `centre` (a ribbon lying on the head). Points further than `margin` outside the bounding box get a coarse
+    positive value — enough for blending."""
     lo = pts.min(0) - rad.max() - margin; hi = pts.max(0) + rad.max() + margin
     m = np.all((P >= lo) & (P <= hi), axis=1)
     out = np.full(len(P), margin)
-    if m.any(): out[m] = _sd_tube(P[m], pts, rad)
+    if m.any(): out[m] = _sd_tube(P[m], pts, rad, flat, centre)
     return out
 
-def _sd_tube(P, pts, rad):
+def _sd_tube(P, pts, rad, flat=None, centre=None):
     best = np.full(len(P), 1e9)
     for i in range(len(pts) - 1):
         a, b = pts[i], pts[i + 1]; ab = b - a; L2 = max(1e-12, ab @ ab)
         t = np.clip(((P - a) @ ab) / L2, 0.0, 1.0)
-        dist = np.linalg.norm(P - (a + t[:, None] * ab), axis=1) - (rad[i] + (rad[i + 1] - rad[i]) * t)
+        v = P - (a + t[:, None] * ab); r = rad[i] + (rad[i + 1] - rad[i]) * t
+        if flat is None or centre is None:
+            dist = np.linalg.norm(v, axis=1) - r
+        else:
+            T = ab / math.sqrt(L2); N = 0.5 * (a + b) - centre; N = N - T * (N @ T); N /= max(1e-9, np.linalg.norm(N))
+            fl = flat[i] + (flat[i + 1] - flat[i]) * t
+            vn = v @ N; vt = v - vn[:, None] * N
+            q = np.sqrt((np.linalg.norm(vt, axis=1) / r) ** 2 + (vn / (r * fl)) ** 2)
+            dist = (q - 1.0) * r * fl
         np.minimum(best, dist, out=best)
     return best
 
@@ -593,7 +610,8 @@ def valley(a, b, radius, lift=0.0, t0=0.08, t1=0.92, n=9):
 
 def sculpt_hair(g, Hs):
     """Hs: cap=dict(thick=[(pct, m)], hairline=fn(u)->pct, edge_k (rounding of the cut), blend), masses=[dict(c=(x, dy, pct),
-    r=(rx, ry, rz), k)], rolls=[dict(keys=[(x, dy, pct, r)], k, n)], grooves=[dict(keys, depth (radius), k)],
+    r=(rx, ry, rz), k)], rolls=[dict(keys=[(x, dy, pct, r[, flat])], k, n)], grooves=[dict(keys=[(x, dy, pct, r)], depth, k)]
+    (groove keys are rough positions: they are projected onto the hair surface; depth = how deep the channel cuts),
     box=(lo, hi) world, voxel, tris, smooth, mat, name. Sets g.hair_covers / g.hair_groove / g.hair_sdf."""
     zp = g.zp; Y0 = g.Y0
     Cp = Hs['cap']; TT = _np_table(Table([(zp(p), t) for p, t in Cp['thick']]))
@@ -602,21 +620,36 @@ def sculpt_hair(g, Hs):
     def u_of(P):
         return (np.arctan2(-(P[:, 1] - c0[1]), P[:, 0] - c0[0]) - math.pi / 2) / (2 * math.pi) % 1.0
     rolls = [(_curve(g, R_['keys'], R_.get('n', 40)), R_.get('k', 0.01), R_.get('cut', True)) for R_ in Hs.get('rolls', [])]
-    grooves = [(_curve(g, G_['keys'], G_.get('n', 30)), G_.get('k', 0.004)) for G_ in Hs.get('grooves', [])]
+    grooves = [(_curve(g, G_['keys'], G_.get('n', 30)), G_.get('k', 0.004), G_.get('depth', 0.006)) for G_ in Hs.get('grooves', [])]
+    hc = np.array([0.0, Y0, zp(Hs.get('centre_pct', 12.0))])
     def cutf(P):
         """Positive below the hairline (where there must be no hair), smooth in height."""
         return np.interp(u_of(P), hl_u, hl_z) - P[:, 2]
-    def sdf(P):
+    def base(P):
         s = sd_skull(g, P) - TT(P[:, 2])
         s = smax(s, cutf(P), Cp.get('edge_k', 0.012))
         for M in Hs.get('masses', []):
             m = sd_ellipsoid(P, (M['c'][0], Y0 + M['c'][1], zp(M['c'][2])), M['r'])
             if M.get('cut', True): m = smax(m, cutf(P) - M.get('below', 0.0), Cp.get('edge_k', 0.012))
             s = smin(s, m, M.get('k', 0.02))
-        for (pts, rad), k, cut in rolls:
-            t = sd_tube(P, pts, rad)
+        for (pts, rad, fl), k, cut in rolls:
+            t = sd_tube(P, pts, rad, fl if (fl < 0.999).any() else None, hc)
             s = smin(s, t, k)
-        for (pts, rad), k in grooves:
+        return s
+    # grooves SNAP to the base surface: each curve point is projected radially from the head centre onto base = 0,
+    # then the carving tube runs `depth` below the surface (radius r): a channel of constant depth wherever it goes
+    snapped = []
+    for (pts, rad, fl), k, dep in grooves:
+        D = pts - hc; D /= np.linalg.norm(D, axis=1)[:, None]
+        lo_ = np.full(len(pts), 0.02); hi_ = np.full(len(pts), 0.45)
+        for _ in range(30):
+            mid = 0.5 * (lo_ + hi_); inside = base(hc + D * mid[:, None]) < 0
+            lo_ = np.where(inside, mid, lo_); hi_ = np.where(inside, hi_, mid)
+        surf = hc + D * lo_[:, None]
+        snapped.append((surf + D * (rad - dep)[:, None], rad, k))
+    def sdf(P):
+        s = base(P)
+        for pts, rad, k in snapped:
             s = smax(s, -sd_tube(P, pts, rad), k)
         return s
     lo, hi = Hs['box']
@@ -625,11 +658,11 @@ def sculpt_hair(g, Hs):
     def covered(p, margin=0.02):
         P = np.array([[p.x, p.y, p.z]]); return bool(p.z > np.interp(u_of(P), hl_u, hl_z)[0] + margin)
     g.hair_covers = covered; g.hair_sdf = sdf
-    if grooves:
+    if snapped:
         def gam(p):
             P = np.array([[p.x, p.y, p.z]]); best = 0.0
-            for (pts, rad), k in grooves:
-                d = sd_tube(P, pts, rad)[0]; best = max(best, float(np.clip(1.0 - d / 0.010, 0.0, 1.0)))
+            for pts, rad, k in snapped:
+                d = sd_tube(P, pts, rad)[0]; best = max(best, float(np.clip(1.0 - (d + 0.002) / 0.008, 0.0, 1.0)))
             return best * 0.010
         g.hair_groove = gam
     return g.add(ob, Hs.get('mat', 'hair'), 'head')

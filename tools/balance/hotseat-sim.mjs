@@ -5,7 +5,8 @@
 // Plays whole matches through the PURE rules engine — no browser — with simple bots, each in a new
 // random hotel that grows as the bots open doors. By default it reports the approved rules: who
 // wins, dawn, match length, when the Fire Exit turns up, how much of the hotel gets explored,
-// meetings, and whether the hotel ever closed itself off (it must not). With
+// meetings, and whether the hotel ever closed itself off (it must not) — then how much the rooms
+// with jobs and the new cards get used, read against how often they were there to use. With
 // --compare it also runs three comparison variants side by side:
 //
 //   blocking Lantern:  'discard'  (APPROVED — used up)   vs  'attacker' (goes to the possessed guest)
@@ -16,8 +17,43 @@
 // The bots are honest about hidden information with ONE exception: clean guests agree on a
 // "carrier" — the clean-looking guest holding the most Lanterns — and bring Lanterns to them,
 // standing in for the talking a real table does. Nobody knows who is possessed except a guest
-// who blocked them with a Lantern. Bots never waste a turn and never bluff, so read the numbers
-// as "the rules played competently and mechanically", not as a prediction of a real evening.
+// who blocked them with a Lantern, saw a Possession card in a Hand Mirror, or worked it out from
+// the Switchboard's count. Bots never waste a turn and never bluff, so read the numbers as "the
+// rules played competently and mechanically", not as a prediction of a real evening.
+//
+// Rooms with jobs and the new cards — what the bots do with them:
+//   Linen Store   searched like any room, and preferred a little: when one is at most one step
+//                 further than the nearest other goal, the bot goes there. Of the two cards, any that
+//                 do not fit are handled like a single card that does not fit: a Lantern is kept
+//                 (something else is dropped), anything else is left.
+//   Infirmary     a hurt guest standing in one is treated (1 AP). A guest who would get the full
+//                 treatment (health 1 of 3) walks to one that is at most two steps away, and skips the
+//                 Bandage that turn. Never for a clean guest carrying three Lanterns: getting out
+//                 comes first.
+//   Switchboard   a clean guest standing in it rings it, at most once per round, and only when the
+//                 answer could have changed since the table last heard it (a trade or a death since)
+//                 and the number can settle something for that guest: they already know someone is
+//                 possessed, or only one or two guests are left to wonder about. (Ringing whenever
+//                 possible cost the clean side about a point of wins: most answers changed nothing a
+//                 bot does.) One step away and with two actions to spare, it makes the detour.
+//                 Every clean guest hears the count (it is public) and
+//                 checks it against what they know: if the count equals the possessed guests they
+//                 already know about, everyone else is certainly clean (for now — a trade with anyone
+//                 not certainly clean undoes that); if the unknown guests are exactly as many as the
+//                 possessed ones not yet known, they are all possessed. Possessed guests never ring —
+//                 they have nothing to learn.
+//   Hand Mirror   used outside meetings: in the game a meeting starts the moment you walk in, and the
+//                 mirror is played from your hand. A clean guest sharing a room with a guest it does
+//                 not know about uses it on the carrier (the guest it brings Lanterns to), or failing
+//                 that on the guest there holding the most Lanterns — the guests the Lanterns flow to
+//                 (never on a guest holding no Lantern), at most once a round per guest looked at.
+//                 A Possession card seen that way tells the bot the truth (the engine records it), which
+//                 steers who it treats as the carrier and whom it attacks. Possessed bots do not use
+//                 it: here the table talk already says who carries the Lanterns and possessed guests
+//                 already know each other, so it would tell them nothing they act on (a real player
+//                 might still use one to look innocent or to dodge a Lantern block; bots don't bluff).
+//   Espresso      drunk only when it will be used: the moment the bot is out of actions and still has
+//                 something to do this turn (search, open, move, a room's job, a card).
 import { rules, applyMode } from '../../src/data/rules.js';
 import { hotel } from '../../src/data/hotel.js';
 import { roster } from '../../src/data/characters.js';
@@ -36,8 +72,38 @@ const COMPARE = process.argv.includes('--compare');
 // 'cautious' (--cautious) — they only open doors once nothing known is left to search.
 const EXPLORE = !process.argv.includes('--cautious');
 const MAX_TURNS = 600;          // a safety net: with the dawn deadline no match should get near it
+const INFIRMARY_REACH = 2;      // bot habit, not a rule: how many steps a badly hurt guest walks for treatment
 const lanterns = hand => hand.filter(c => c.type === 'lantern');
 const rnd = arr => arr[Math.floor(Math.random() * arr.length)];
+
+// What the bots remember between turns, reset for every match. Only what that guest saw for
+// themselves or what the whole table heard (the public log) — never a hidden role.
+let memo;
+const freshMemo = () => ({
+  events: 0,              // trades and deaths so far (both public)
+  eventsAtCall: 0,        // ...when the table last heard the Switchboard's count (the start: 1)
+  rang: new Map(),        // playerId -> round they last rang the Switchboard
+  mirrored: new Map(),    // playerId -> Map(targetId -> round they last looked at them)
+  trusted: new Map(),     // playerId -> Set of guests they are CERTAIN are clean (from the Switchboard)
+  gained: 0,              // extra actions from Espresso this turn
+});
+const trustOf = p => { if (!memo.trusted.has(p.id)) memo.trusted.set(p.id, new Set()); return memo.trusted.get(p.id); };
+const hasEspresso = p => p.hand.some(c => c.type === 'espresso');
+
+// Espresso: make sure I can pay `cost` action points, drinking one only when I am out of them —
+// so the extra actions are always spent on the step the bot is about to take.
+function spend(st, p, m, cost) {
+  if (p.actionPoints >= cost) return true;
+  const esp = p.hand.find(c => c.type === 'espresso');
+  if (!esp) return false;
+  const r = A.useEspresso(st, p, esp.id);
+  if (!r.ok) return false;
+  m.espresso++; m.espressoAP += r.gained; memo.gained += r.gained;
+  return p.actionPoints >= cost;
+}
+// The same player as the engine's checks should see them if an Espresso would be drunk first.
+const ready = p => (p.actionPoints > 0 || !hasEspresso(p) ? p
+  : { ...p, actionPoints: rules.cards.espresso.extraActions - rules.actionCost.espresso });
 
 // Shortest room path, honouring locked rooms and barricades. A locked room is allowed only as the
 // final step when the bot can open it.
@@ -61,12 +127,13 @@ function pathTo(st, from, targets, canOpen = false) {
 
 // Rooms with a closed door that can still be opened (the edge of the explored hotel).
 const roomsWithClosedDoors = st => [...new Set(openDoors(floor).map(d => d.room))].filter(r => !S.isLocked(st, r));
+const roomsWithJob = job => floor.roomList.filter(r => r.job === job);
 
 // Open a closed door of the room I stand in (1 AP). Counts how the hotel grows and checks, every
 // time, that it has not closed itself off before the Fire Exit is on the board.
 function openHere(st, p, m) {
-  const doors = S.openableDoors(st, floor, p);
-  if (!doors.length) return false;
+  const doors = S.openableDoors(st, floor, ready(p));
+  if (!doors.length || !spend(st, p, m, rules.actionCost.open)) return false;
   const r = A.openDoor(st, floor, p, rnd(doors).id);
   if (!r.ok) { m.jammed++; return true; }
   m.opened++;
@@ -81,9 +148,19 @@ function carrierOf(st, me) {
     .sort((a, b) => lanterns(b.hand).length - lanterns(a.hand).length || a.index - b.index)[0] || null;
 }
 
-// The card a bot gives in a trade.
+// The card a bot parts with first when its hand is too full: the least useful to it.
+function spare(p) {
+  const loose = p.hand.filter(c => c.type !== 'lantern' && c.type !== 'possession');
+  const keepLast = new Set(['espresso', 'handMirror']);
+  return loose.find(c => c.type === 'barricade') || loose.find(c => c.type === 'lockPick')
+    || (p.possessed && loose.find(c => c.type === 'handMirror'))
+    || loose.find(c => !keepLast.has(c.type)) || loose[0] || null;
+}
+
+// The card a bot gives in a trade (null: nothing to give — cards that get used up can empty a hand).
 function giveCard(st, me, partner) {
   const hand = A.tradeableCards(me);
+  if (!hand.length) return null;
   if (me.possessed) {
     const pc = hand.find(c => c.type === 'possession');
     if (pc && !partner.possessed) return pc.id;
@@ -104,6 +181,19 @@ function giveCard(st, me, partner) {
   return rnd(hand).id;
 }
 
+// Something public happened that can change how many guests are possessed. After a trade, a guest
+// who was certainly clean stays so only if the other side was certainly clean too.
+function heard(st, P, Q) {
+  memo.events++;
+  if (!Q) return;
+  for (const [id, sure] of memo.trusted) {
+    const safe = g => g.id === id || sure.has(g.id);
+    const [okP, okQ] = [safe(P), safe(Q)];
+    if (!okQ) sure.delete(P.id);
+    if (!okP) sure.delete(Q.id);
+  }
+}
+
 function meet(st, p, m) {
   const cands = S.pendingEncounters(st, floor, p);
   if (!cands.length) return;
@@ -117,60 +207,166 @@ function meet(st, p, m) {
     (p.possessed && !Q.possessed && !p.hand.some(c => c.type === 'possession') && lanterns(Q.hand).length >= 2));
   if (attack) {
     const r = A.resolveAttack(st, floor, p, Q, weapon.id);
-    if (r.ok) { m.attacks++; if (r.killed) m.deaths++; }
+    if (r.ok) { m.attacks++; if (r.killed) { m.deaths++; heard(st, Q); } }
     return;
   }
-  const r = A.resolveTrade(st, floor, p, Q, giveCard(st, p, Q), giveCard(st, Q, p));
+  const [cardP, cardQ] = [giveCard(st, p, Q), giveCard(st, Q, p)];
+  if (!cardP || !cardQ) { m.emptyHanded++; return; }   // the rules do not say; here the meeting just ends
+  const r = A.resolveTrade(st, floor, p, Q, cardP, cardQ);
   if (!r.ok) return;
   m.trades++;
+  heard(st, p, Q);
   if (r.given[p.id] === 'possession' || r.given[Q.id] === 'possession') m.attempts++;
   m.possessed += r.possessed.length;
   m.blocked += r.blocks.length;
   m.burned += r.lanternsBurned || 0;
 }
 
+// --- Rooms with jobs and the new cards ------------------------------------------------------------
+// A search's result: count what was drawn, and settle any card that did not fit.
+function takeFinds(st, p, r, m) {
+  if (r.kind !== 'card' && r.kind !== 'cards') return;
+  const drawn = r.kind === 'cards' ? r.cards : [r.card];
+  for (const c of drawn) { m[`drawn:${c.type}`]++; if (c.type === 'lantern') m.found++; }
+  if (r.kind === 'cards') { m.linenSearches++; m.linenCards += drawn.length; }
+  // Keep a Lantern (drop something else); otherwise leave the new card.
+  for (const c of r.overflow || []) {
+    const drop = c.type === 'lantern' ? spare(p) : null;
+    A.resolveFullHand(st, p, c, drop ? 'take' : 'leave', drop?.id);
+    if (!drop && r.kind === 'cards') m.linenLeft++;
+  }
+}
+
+// Infirmary: a known one close enough for a badly hurt guest to walk to, or null.
+function infirmaryNear(st, p) {
+  if (p.health > rules.maxHealth - rules.infirmaryHeal) return null;
+  const ids = roomsWithJob('infirmary').map(r => r.id);
+  const path = ids.length ? pathTo(st, p.currentRoom, ids) : null;
+  return path && path.length > 1 && path.length - 1 <= INFIRMARY_REACH ? path[path.length - 1] : null;
+}
+
+// Switchboard: worth ringing if the answer could have changed since the table last heard it, and the
+// number can settle something for me: I already know someone is possessed (the count may then clear
+// everyone else), or only one or two guests are left to wonder about. At most once a round.
+function worthRinging(st, p) {
+  if (p.possessed || memo.rang.get(p.id) === st.round || memo.events === memo.eventsAtCall) return false;
+  const sure = trustOf(p);
+  const others = st.players.filter(q => q.alive && q.id !== p.id);
+  const suspects = others.filter(q => !p.knows.has(q.id) && !sure.has(q.id)).length;
+  return suspects > 0 && (others.some(q => p.knows.has(q.id)) || suspects <= 2);
+}
+function switchboardNextDoor(st, p) {
+  const sw = roomsWithJob('switchboard')[0];
+  if (!sw || sw.id === p.currentRoom || !worthRinging(st, p)) return null;
+  if (p.actionPoints < rules.actionCost.move + rules.actionCost.switchboard) return null;
+  const path = pathTo(st, p.currentRoom, [sw.id]);
+  return path?.length === 2 ? sw.id : null;
+}
+function ring(st, p, m) {
+  const r = A.useSwitchboard(st, floor, p);
+  if (!r.ok) return;
+  m.switchCalls++;
+  memo.rang.set(p.id, st.round);
+  memo.eventsAtCall = memo.events;
+  // Everyone hears the number. Each clean guest checks it against what they already know.
+  let learned = false;
+  for (const b of st.players) {
+    if (!b.alive || b.possessed) continue;
+    const others = st.players.filter(q => q.alive && q.id !== b.id);
+    const sure = trustOf(b);
+    const hidden = r.count - others.filter(q => b.knows.has(q.id)).length;
+    const suspects = others.filter(q => !b.knows.has(q.id) && !sure.has(q.id));
+    if (!suspects.length) continue;
+    if (hidden <= 0) { for (const q of suspects) sure.add(q.id); learned = true; }
+    else if (hidden === suspects.length) { for (const q of suspects) b.knows.add(q.id); m.switchUnmasked += suspects.length; learned = true; }
+  }
+  if (learned) m.switchLearned++;
+}
+
+// Hand Mirror, outside meetings: on the carrier, or the guest here holding the most Lanterns.
+function lookInMirror(st, p, m) {
+  const mirror = p.hand.find(c => c.type === 'handMirror');
+  if (!mirror || p.possessed) return false;
+  const looked = memo.mirrored.get(p.id) || new Map();
+  const sure = trustOf(p);
+  const here = S.playersInRoom(st, p.currentRoom, p.id)
+    .filter(q => !p.knows.has(q.id) && !sure.has(q.id) && looked.get(q.id) !== st.round);
+  const carrier = carrierOf(st, p);
+  const holders = here.filter(q => lanterns(q.hand).length);    // nobody is a carrier without a Lantern
+  const target = holders.find(q => q.id === carrier?.id)
+    || holders.sort((a, b) => lanterns(b.hand).length - lanterns(a.hand).length)[0];
+  if (!target || !spend(st, p, m, rules.actionCost.useCard)) return false;
+  const r = A.useHandMirror(st, floor, p, mirror.id, target.id);
+  if (!r.ok) return false;
+  looked.set(target.id, st.round); memo.mirrored.set(p.id, looked);
+  m.mirrors++;
+  if (r.unmasked) m.mirrorUnmasked++;
+  else if (target.possessed) m.mirrorMissed++;     // possessed, but holding no Possession card
+  return true;
+}
+
 function botTurn(st, p, m) {
+  memo.gained = 0;
   const bd = p.hand.find(c => c.type === 'bandage');
-  if (bd && p.health < rules.maxHealth) A.useBandage(st, p, bd.id);
+  const escaper = !p.possessed && lanterns(p.hand).length >= rules.lanternsToEscape;
+  const clinic = !escaper && (floor.rooms.get(p.currentRoom).job === 'infirmary' || infirmaryNear(st, p));
+  if (bd && p.health < rules.maxHealth && !clinic) { A.useBandage(st, p, bd.id); m.bandages++; }
   let guard = 0;
-  while (p.actionPoints > 0 && !st.finished && guard++ < 12) {
+  while ((p.actionPoints > 0 || hasEspresso(p)) && !st.finished && guard++ < 20) {
     const here = p.currentRoom;
+    const room = floor.rooms.get(here);
     const opener = p.hand.find(c => c.type === 'masterKey') || p.hand.find(c => c.type === 'lockPick');
     const carrier = carrierOf(st, p);
+    const escaping = !p.possessed && lanterns(p.hand).length >= rules.lanternsToEscape;
     let targets;
-    if (!p.possessed && lanterns(p.hand).length >= rules.lanternsToEscape) {
+    // The rooms with jobs, and the Hand Mirror, where I stand.
+    if (!escaping && room.job === 'infirmary' && p.health < rules.maxHealth && A.canUseRoom(st, floor, ready(p)).ok
+      && spend(st, p, m, rules.actionCost.infirmary)) {
+      const r = A.useInfirmary(st, floor, p);
+      if (r.ok) { m.infirmaryUses++; m.healthRestored += r.healed; }
+      continue;
+    }
+    if (!escaping && room.job === 'switchboard' && worthRinging(st, p) && A.canUseRoom(st, floor, ready(p)).ok
+      && spend(st, p, m, rules.actionCost.switchboard)) { ring(st, p, m); continue; }
+    if (!escaping && lookInMirror(st, p, m)) continue;
+    if (escaping) {
       // Three Lanterns: to the Fire Exit — or, until it has turned up, keep opening doors.
       if (floor.exitRoom) targets = [floor.exitRoom];
       else { if (openHere(st, p, m)) continue; targets = roomsWithClosedDoors(st); }
     } else {
-      if (A.canSearch(st, floor, p).ok) {
-        const r = A.search(st, floor, p);
-        if (r.kind === 'card') {
-          if (r.card.type === 'lantern') m.found++;
-          if (r.full) {
-            // Keep a Lantern (drop something else); otherwise leave the new card.
-            const drop = r.card.type === 'lantern' && p.hand.find(c => c.type !== 'lantern' && c.type !== 'possession');
-            A.resolveFullHand(st, p, r.card, drop ? 'take' : 'leave', drop?.id);
-          }
-        }
+      if (A.canSearch(st, floor, ready(p)).ok && spend(st, p, m, rules.actionCost.search)) {
+        takeFinds(st, p, A.search(st, floor, p), m);
         continue;
       }
       const lockedNear = S.adjacentLockedRooms(st, floor, p).filter(r => !st.searchedRooms.has(r));
-      if (lockedNear.length && opener) { A.useUnlock(st, floor, p, opener.id, lockedNear[0]); continue; }
+      if (lockedNear.length && opener && spend(st, p, m, rules.actionCost.useCard)) { A.useUnlock(st, floor, p, opener.id, lockedNear[0]); continue; }
+      const clinic = infirmaryNear(st, p);
+      const bringing = !p.possessed && lanterns(p.hand).length && carrier && carrier.id !== p.id;
+      const phone = !p.possessed && !bringing ? switchboardNextDoor(st, p) : null;
+      if (clinic) targets = [clinic];                  // badly hurt: to the Infirmary nearby
+      else if (phone) targets = [phone];               // a one-step detour to ring the Switchboard
       // Clean guests explore while the Fire Exit has not turned up: open a closed door of this room
       // (the room behind is searched next), since searching alone never finds the way out.
-      if (!p.possessed && !floor.exitRoom && EXPLORE && openHere(st, p, m)) continue;
-      if (p.possessed) {
+      else if (!p.possessed && !floor.exitRoom && EXPLORE && openHere(st, p, m)) continue;
+      else if (p.possessed) {
         targets = st.players.filter(q => q.alive && !q.possessed && !floor.rooms.get(q.currentRoom).safe).map(q => q.currentRoom);
         if (!targets.length) { if (openHere(st, p, m)) continue; targets = roomsWithClosedDoors(st); }
-      } else if (lanterns(p.hand).length && carrier && carrier.id !== p.id) {
+      } else if (bringing) {
         targets = [carrier.currentRoom];          // bring my Lanterns to the carrier
       } else {
         targets = [...st.roomDrops.keys()];
-        if (!targets.length) targets = floor.roomList.filter(r => r.searchable && !st.searchedRooms.has(r.id)
-          && (!r.dark || p.hand.some(c => c.type === 'flashlight')) && (!S.isLocked(st, r.id) || opener)).map(r => r.id);
-        // ...and, while the exit is still hidden, rooms with a closed door to open are as good a goal.
-        if (!floor.exitRoom && EXPLORE) targets = [...targets, ...roomsWithClosedDoors(st)];
+        if (!targets.length) {
+          targets = floor.roomList.filter(r => r.searchable && !st.searchedRooms.has(r.id)
+            && (!r.dark || p.hand.some(c => c.type === 'flashlight')) && (!S.isLocked(st, r.id) || opener)).map(r => r.id);
+          // ...and, while the exit is still hidden, rooms with a closed door to open are as good a goal.
+          if (!floor.exitRoom && EXPLORE) targets = [...targets, ...roomsWithClosedDoors(st)];
+          // A Linen Store's draw gives two cards: worth one extra step.
+          const linen = targets.filter(id => floor.rooms.get(id).job === 'linenStore');
+          if (linen.length && linen.length < targets.length) {
+            const toLinen = pathTo(st, here, linen, !!opener), toAny = pathTo(st, here, targets, !!opener);
+            if (toLinen && toAny && toLinen.length <= toAny.length + 1) targets = linen;
+          }
+        }
         // Nothing known left to search: explore — open a door here, or walk to a room that has one.
         if (!targets.length) {
           if (openHere(st, p, m)) continue;
@@ -187,24 +383,36 @@ function botTurn(st, p, m) {
     const path = pathTo(st, here, targets, !!opener);
     const step = path && path.length > 1 ? path[1] : null;
     if (!step) { m.stuckTurns++; break; }
-    if (S.isLocked(st, step)) { if (opener) { A.useUnlock(st, floor, p, opener.id, step); continue; } break; }
+    if (S.isLocked(st, step)) { if (opener && spend(st, p, m, rules.actionCost.useCard)) { A.useUnlock(st, floor, p, opener.id, step); continue; } break; }
+    if (!spend(st, p, m, rules.actionCost.move)) break;
     S.enterRoom(st, floor, p, step);
     if (floor.rooms.get(step).isExit && S.checkWin(st, floor, p)) return;
     meet(st, p, m);
   }
 }
 
+// Card types in the draw deck, for the "in hand at the start / drawn" counts.
+const DECK_TYPES = Object.keys(rules.deck);
+
 function match(seed) {
   const st = S.createState(floor, roster.slice(0, PLAYERS), seed, { mode: 'hotseat' });
-  const m = { meetings: 0, trades: 0, attacks: 0, deaths: 0, attempts: 0, possessed: 0, blocked: 0, burned: 0, found: 0, stuckTurns: 0, opened: 0, jammed: 0, closedOff: 0 };
+  memo = freshMemo();
+  const m = { meetings: 0, trades: 0, attacks: 0, deaths: 0, attempts: 0, possessed: 0, blocked: 0, burned: 0, found: 0, stuckTurns: 0, opened: 0, jammed: 0, closedOff: 0,
+    linenSearches: 0, linenCards: 0, linenLeft: 0, infirmaryUses: 0, healthRestored: 0, bandages: 0,
+    switchCalls: 0, switchLearned: 0, switchUnmasked: 0, mirrors: 0, mirrorUnmasked: 0, mirrorMissed: 0,
+    espresso: 0, espressoAP: 0, espressoUnused: 0, emptyHanded: 0 };
+  for (const t of DECK_TYPES) {
+    m[`dealt:${t}`] = st.players.reduce((n, q) => n + q.hand.filter(c => c.type === t).length, 0);
+    m[`drawn:${t}`] = 0;
+  }
   let turns = 0;
   while (!st.finished && turns++ < MAX_TURNS) {
     const p = S.activePlayer(st);
     botTurn(st, p, m);
+    if (memo.gained) m.espressoUnused += Math.min(Math.max(0, p.actionPoints), memo.gained);
     if (st.finished) break;
     while (A.overHandLimit(p) > 0) {
-      const shed = p.hand.find(c => c.type === 'barricade') || p.hand.find(c => c.type === 'lockPick')
-        || p.hand.find(c => c.type !== 'possession' && c.type !== 'lantern') || p.hand.find(c => c.type === 'lantern');
+      const shed = spare(p) || p.hand.find(c => c.type === 'lantern');
       if (!shed || !A.discardCard(st, p, shed.id).ok) break;
     }
     if (S.endTurn(st, floor).finished) break;
@@ -227,18 +435,29 @@ function match(seed) {
       : !cleanCanReach ? 'cleanLockedOut'
         : 'inPlay';
   m.tiles = floor.roomList.length - 1;
+  // The rooms with jobs that made it onto the board, and the new cards anyone ever held.
+  m.linenOnBoard = roomsWithJob('linenStore').length;
+  m.infirmaryOnBoard = roomsWithJob('infirmary').length;
+  m.switchOnBoard = roomsWithJob('switchboard').length;
+  m.mirrorsHeld = m['dealt:handMirror'] + m['drawn:handMirror'];
+  m.espressoHeld = m['dealt:espresso'] + m['drawn:espresso'];
   return { won: st.won, dawn: !!st.dawn, dawnState, rounds: Math.min(st.round, rules.roundLimit), finished: st.finished, m, where,
     possessedAtEnd: st.players.filter(q => q.alive && q.possessed).length,
     possessionCardsLeft: st.players.filter(q => q.alive).reduce((n, q) => n + q.hand.filter(c => c.type === 'possession').length, 0),
     cleanAlive: st.players.filter(q => q.alive && !q.possessed).length };
 }
 
+// "Used" key -> "was there to use" key, for the share of matches where it was available and used.
+const USE_VS_CHANCE = [['linenSearches', 'linenOnBoard'], ['infirmaryUses', 'infirmaryOnBoard'],
+  ['switchCalls', 'switchOnBoard'], ['mirrors', 'mirrorsHeld'], ['espresso', 'espressoHeld']];
+
 function run(label, block, dealt) {
   rules.lanternBlock = block; rules.lanternsDealtEach = dealt;
   const out = { label, humans: 0, hotel: 0, never: 0, rounds: [], roundsH: [], roundsP: [], sums: {}, perRound: {},
     dawn: 0, dawnStates: { stuck: 0, cleanLockedOut: 0, inPlay: 0 }, hotelOther: 0, lanternsAtDawn: [],
     exitRounds: [], exitNever: 0, tiles: [], closedOff: 0, meetingsPer: [],
-    neverWhy: { starved: 0, hoarded: 0, other: 0 }, hoardSum: 0, firstPossRound: [] };
+    neverWhy: { starved: 0, hoarded: 0, other: 0 }, hoardSum: 0, firstPossRound: [],
+    anyIn: {}, chance: {}, usedWhenThere: {} };
   for (let i = 1; i <= N; i++) {
     const r = match(i * 7919 + 13);
     if (r.won === 'humans') out.humans++; else if (r.won === 'possessed') out.hotel++; else out.never++;
@@ -247,7 +466,13 @@ function run(label, block, dealt) {
     if (r.dawn) { out.dawn++; out.dawnStates[r.dawnState]++; out.lanternsAtDawn.push(r.where); }
     else if (r.won === 'possessed') out.hotelOther++;
     if (r.finished) { out.rounds.push(r.rounds); (r.won === 'humans' ? out.roundsH : out.roundsP).push(r.rounds); }
-    for (const [k, v] of Object.entries(r.m)) { out.sums[k] = (out.sums[k] || 0) + v; out.perRound[k] = (out.perRound[k] || 0) + v / r.rounds; }
+    for (const [k, v] of Object.entries(r.m)) {
+      out.sums[k] = (out.sums[k] || 0) + v; out.perRound[k] = (out.perRound[k] || 0) + v / r.rounds;
+      if (v > 0) out.anyIn[k] = (out.anyIn[k] || 0) + 1;
+    }
+    for (const [used, there] of USE_VS_CHANCE) {
+      if (r.m[there] > 0) { out.chance[there] = (out.chance[there] || 0) + 1; if (r.m[used] > 0) out.usedWhenThere[used] = (out.usedWhenThere[used] || 0) + 1; }
+    }
     if (!r.finished) {
       // Can the clean side still reach three Lanterns without taking them off a possessed guest?
       const reachable = r.where.clean + r.where.deck + r.where.floor;
@@ -299,6 +524,39 @@ const lines = [
 for (const [name, val] of lines) console.log(name.padEnd(64) + val);
 console.log('\n| | |\n| --- | --- |');
 for (const [name, val] of lines) console.log(`| ${name.trim()} | ${val} |`);
+
+// Rooms with jobs and the new cards: averages per match; "in X%" = the share of matches where it
+// happened at least once, and — for a room or card — the share of the matches where it was there to
+// use (the room on the board, the card in someone's hand).
+const inPct = k => pct(v.anyIn[k] || 0);
+const whenThere = (used, there) => (v.chance[there] ? `${Math.round((v.usedWhenThere[used] || 0) / v.chance[there] * 100)}%` : '—');
+const use = (used, there, what) => `${avg(v, used)} (in ${inPct(used)} of matches; ${whenThere(used, there)} of those with ${what})`;
+const NAMES = Object.fromEntries(DECK_TYPES.map(t => [t, rules.cards[t].name]));
+const jobs = [
+  ['Linen Stores on the board (of 2)', `${avg(v, 'linenOnBoard')} (at least one in ${inPct('linenOnBoard')})`],
+  ['Linen Store searches (2-card draws)', use('linenSearches', 'linenOnBoard', 'one on the board')],
+  ['  … cards drawn there / left behind (hand full)', `${avg(v, 'linenCards')} / ${avg(v, 'linenLeft')}`],
+  ['Infirmaries on the board (of 2)', `${avg(v, 'infirmaryOnBoard')} (at least one in ${inPct('infirmaryOnBoard')})`],
+  ['Infirmary treatments', use('infirmaryUses', 'infirmaryOnBoard', 'one on the board')],
+  ['  … health restored / Bandages used (for comparison)', `${avg(v, 'healthRestored')} / ${avg(v, 'bandages')}`],
+  ['Switchboard on the board', `in ${inPct('switchOnBoard')}`],
+  ['Switchboard calls', use('switchCalls', 'switchOnBoard', 'it on the board')],
+  ['  … calls that told a clean guest something new', `${avg(v, 'switchLearned')} (in ${inPct('switchLearned')})`],
+  ['  … possessed guests worked out from the count', `${avg(v, 'switchUnmasked')}`],
+  ['Hand Mirrors in hand at the start / drawn by searching', `${avg(v, 'dealt:handMirror')} / ${avg(v, 'drawn:handMirror')}`],
+  ['Hand Mirrors used', use('mirrors', 'mirrorsHeld', 'one in a hand')],
+  ['  … unmasked a possessed guest', `${avg(v, 'mirrorUnmasked')} (in ${inPct('mirrorUnmasked')})`],
+  ['  … possessed, but holding no Possession card (looked clean)', `${avg(v, 'mirrorMissed')}`],
+  ['Espressos in hand at the start / drawn by searching', `${avg(v, 'dealt:espresso')} / ${avg(v, 'drawn:espresso')}`],
+  ['Espressos drunk', use('espresso', 'espressoHeld', 'one in a hand')],
+  ['  … extra actions gained / left unused at the end of the turn', `${avg(v, 'espressoAP')} / ${avg(v, 'espressoUnused')}`],
+  ['Meetings where a guest had no card to give (no trade made)', `${v.sums.emptyHanded} in ${N} matches`],
+  ['Cards drawn by searching, per match', DECK_TYPES.map(t => `${NAMES[t]} ${avg(v, `drawn:${t}`)}`).join(', ')],
+];
+console.log('\nRooms with jobs and new cards (per match)\n');
+for (const [name, val] of jobs) console.log(name.padEnd(64) + val);
+console.log('\n| | |\n| --- | --- |');
+for (const [name, val] of jobs) console.log(`| ${name.trim()} | ${val} |`);
 
 if (COMPARE) {
   const variants = [

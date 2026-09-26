@@ -15,6 +15,6 @@ for rec in info:
         med = np.median(lit[mask], axis=0).astype(int)
         key = (rec['x'], m['base'])
         res[key] = (med, int(mask.sum()))
-guest = {-2.5: 'Victor', -1.5: 'Eleanor', -0.5: 'Marcus'}
+guest = {-2.5: 'Victor', -1.5: 'Eleanor', -0.5: 'Marcus', 0.5: 'Beatrice', 1.5: 'Henry', 2.5: 'Clara'}
 for (x, base), (med, n) in sorted(res.items()):
     print(f"{guest.get(x, x):7s} base {base} -> lit #{''.join('%02x' % v for v in med)}  ({n} px)")

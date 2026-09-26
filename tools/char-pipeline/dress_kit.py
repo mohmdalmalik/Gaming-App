@@ -20,6 +20,8 @@
 #   lips(g, Li)             small closed smiling lips (upper lip with a soft bow, fuller lower lip)
 #   earrings(g, E)          'stud' / 'ball' (pearl or gold sphere at the lobe), optional 'drop'
 #   eye_shine(g, Sh)        a small painted white glint on each eye;  jaw_lift(g, skull, J): jawline climbing to the ear
+#   soft_normals(g, Sn)     (via CFG['soft_normals'], applied in finish) even, glowing face shading: face normals bent
+#                           toward a smooth front-facing ellipsoid (the lower face no longer shades like stubble)
 #   coil_bun(g, Bn)         a twisted chignon: a rope coiled in a tightening spiral round an axis + a filling core
 #   finish(g, RIG, out)     guest_kit join -> bake -> rig -> animate -> eyeCentre (one eye, glTF space) -> export
 #
@@ -692,6 +694,28 @@ def _taubin(ob, passes, lam=0.5, mu=-0.53):
             for vt, co in new.items(): vt.co = co
     bm.to_mesh(ob.data); bm.free(); ob.data.update()
 
+def loop_keys(g, centre, axis, radii, start=90.0, sweep=320.0, rope=((0.0, 0.02), (0.15, 0.04), (0.85, 0.04), (1.0, 0.02)),
+              rise=0.0, up=(0, 0, 1), tilt=0.0, n=14, flat=None):
+    """Roll keys (x, dy, pct, r[, flat]) for sculpt_hair['rolls'] along an elliptical LOOP: a chignon / curl / twist
+    section. centre (x, dy from the head axis, pct), axis (the loop's normal, e.g. pointing out of the back of the head),
+    radii (a across, b up, metres), start / sweep (degrees; 0 = +across, 90 = up), rope [(t, radius)] along the loop,
+    rise (metres the loop climbs along the axis from start to end: overlapping loops), tilt (degrees about the up
+    vector). Several loops with a small blend k (0.004) keep a crease between them (overlapping twisted loops)."""
+    A = Vector(axis).normalized(); U0 = Vector(up)
+    U = (U0 - A * U0.dot(A)).normalized(); R = U.cross(A).normalized()
+    if tilt:
+        from mathutils import Matrix as _M
+        rot = _M.Rotation(math.radians(tilt), 3, U); A = rot @ A; R = rot @ R
+    C = Vector((centre[0], g.Y0 + centre[1], g.zp(centre[2])))
+    rr = L.smooth_profile(list(rope), [i / (n - 1) for i in range(n)])
+    out = []
+    for i in range(n):
+        t = i / (n - 1); ang = math.radians(start + sweep * t)
+        p = C + R * (math.cos(ang) * radii[0]) + U * (math.sin(ang) * radii[1]) + A * (rise * t)
+        k = (float(p.x), float(p.y - g.Y0), float((1.0 - p.z / g.H) * 100.0), float(rr[i]))
+        out.append(k + ((flat,) if flat else ()))
+    return out
+
 def valley(a, b, radius, lift=0.0, t0=0.08, t1=0.92, n=9):
     """Groove keys running in the valley between two roll key lists (same direction): midpoints of the two
     curves (resampled by parameter), pushed out by the mean roll radius (+ lift) away from the head axis
@@ -790,10 +814,40 @@ def lift_ao(g, scale):
         c = col.data[vi].color; r = max(1e-4, c[0]); r2 = 1 - (1 - r) * s        # lift the grey (AO) part, keep tint ratios
         col.data[vi].color = (r2, min(1.0, r2 * c[1] / r), min(1.0, r2 * c[2] / r), 1.0)
 
+def soft_normals(g, Sn):
+    """Even, glowing face shading (the sheets' vinyl-toy look): bend the shading normals of the SKIN on the front of the
+    head toward the normals of a smooth ellipsoid, so the lower face / jaw stop facing down into shadow. Geometry is
+    unchanged (custom split normals; the glTF exporter writes them). Sn: centre (x, dy from the head axis, pct), radii
+    (rx, ry, rz) m, amount (0..1), z_top / z_bot (pct: the band it applies to, faded over `fade` m), front (m in front
+    of the head axis where it starts), keep=[(x, dy, pct, r)] spheres left alone (e.g. the nose ball)."""
+    me = g.mesh.data; zp = g.zp
+    c = Vector((Sn['centre'][0], g.Y0 + Sn['centre'][1], zp(Sn['centre'][2]))); rx, ry, rz = Sn['radii']
+    zt, zb = zp(Sn.get('z_top', 12.0)), zp(Sn.get('z_bot', 30.0)); fd = Sn.get('fade', 0.03); amt = Sn.get('amount', 0.6)
+    y_start = g.Y0 - Sn.get('front', 0.05)
+    keep = [(Vector((x, g.Y0 + dy, zp(p))), r) for x, dy, p, r in Sn.get('keep', [])]
+    skin = {i for i, m in enumerate(me.materials) if m and m.name == Sn.get('mat', 'Skin')}
+    vw = {}
+    for v in me.vertices:
+        p = v.co
+        w = sm((zt - p.z) / fd + 0.5) * sm((p.z - zb) / fd + 0.5) * sm((y_start - p.y) / 0.04)
+        for kc, kr in keep: w *= sm(((p - kc).length - kr) / (0.5 * kr))
+        if w > 1e-3: vw[v.index] = w * amt
+    normals = [Vector(n.vector) for n in me.corner_normals]
+    for poly in me.polygons:
+        if poly.material_index not in skin: continue
+        for li in poly.loop_indices:
+            vi = me.loops[li].vertex_index; w = vw.get(vi)
+            if not w: continue
+            d = me.vertices[vi].co - c
+            en = Vector((d.x / (rx * rx), d.y / (ry * ry), d.z / (rz * rz))).normalized()
+            normals[li] = (normals[li] * (1 - w) + en * w).normalized()
+    me.normals_split_custom_set(normals)
+
 def finish(g, R, out):
     """guest_kit's finish, plus eyeCentre = ONE eye centre (her left eye, +x) in glTF space (Y up, face toward
     +Z) in the armature extras: portrait.mjs reads |eyeCentre[0]| as the eye's x offset."""
     GK.join(g)
+    if g.C.get('soft_normals'): soft_normals(g, g.C['soft_normals'])     # before the bake: the AO rays use these normals
     t0 = time.time(); GK.bake(g); print(f'REPORT ao_seconds={time.time() - t0:.1f}')
     lift_ao(g, g.C.get('ao_scale', {}))
     GK.rig(g, R); GK.animate(g, R)

@@ -29,13 +29,15 @@ sm = GK.sm
 CFG = dict(
     z_hair_top=0.0, z_skull_top=3.0, z_hairline=7.3, z_brow=12.7, z_eye=16.8, z_nose=19.3, z_mouth=22.4, z_chin=26.9, z_ear=19.6,
     head_y=0.02, z_shoulder_top=31.5,
-    ear_style='round', ear_h=0.110, ear_w=0.078, ear_out=0.018, ear_y=0.0, ear_tilt=0.55, ear_thick=0.026, ear_rim=0.007, ear_bowl=0.010, ear_sink=0.020,
-    eye_x=0.063, eye_w=0.037, eye_h=0.060, eye_lift=0.003,
+    ear_style='round', ear_h=0.074, ear_w=0.052, ear_out=0.002, ear_y=0.004, ear_tilt=0.30, ear_thick=0.026, ear_rim=0.007, ear_bowl=0.010, ear_sink=0.020,
+    eye_x=0.063, eye_w=0.040, eye_h=0.067, eye_lift=0.003,
     brow=dict(x0=0.030, x1=0.104, z=12.7, thick=0.024, arch=0.005, drop_in=0.002, drop_out=0.022,
               profile=[(0.0, 0.60), (0.05, 0.95), (0.20, 1.0), (0.60, 0.88), (0.90, 0.55), (1.0, 0.25)], flat=0.5),
     nose_w=0.056, nose_h=0.042, nose_d=0.030, nose_out=0.012, nose_top=1.3,
     lips=dict(z=22.4, w=0.090, rise=0.010, upper=0.010, lower=0.015, bow=0.002, flat=0.45),
-    tint=dict(spots=[(0.085, 21.0, 0.035, 0.030, 1.0), (0.0, 19.3, 0.020, 0.020, 0.4)], g=0.22, b=0.18),
+    tint=dict(spots=[(0.080, 20.9, 0.024, 0.020, 1.0), (0.0, 19.3, 0.018, 0.016, 0.3)], g=0.36, b=0.28),       # soft rosy blush discs
+    soft_normals=dict(centre=(0.0, 0.03, 25.0), radii=(0.20, 0.24, 0.55), amount=1.0, z_top=12.5, z_bot=30.0, fade=0.03, front=0.04,
+                      keep=[(0.0, -0.215, 19.3, 0.034)]),
     groove_dark=(0.010, 0.65),
     ao_skip=('Brow', 'Eye', 'Lips', 'Pearl', 'Shine'), ao_scale={'Skin': 0.20, 'Dress': 0.85},
     sheen={'Shoe': (0.34, [((0.2, -0.45, 0.87), 14.0, 1.0), ((0.0, -1.0, 0.3), 16.0, 0.8), ((0.9, 0.0, 0.45), 16.0, 0.5), ((-0.9, 0.0, 0.45), 16.0, 0.5)]),
@@ -44,19 +46,19 @@ CFG = dict(
            'Pearl': (0.70, (-0.3, -0.6, 0.75), 3.0)},
 )
 COLOURS = dict(
-    skin='#ffb084', hair='#8c6d65', brow='#2e1d16', eye='#0b0b0d', lips='#b03a42',
-    dress='#3f4560', gold='#d8b077', pearl='#f6f1e8', shoe='#5f5a58', shine='#f4f1ee',
+    skin='#ffb98e', hair='#8c6d65', brow='#2e1d16', eye='#0b0b0d', lips='#b03a42',
+    dress=GK.PALETTE['navy'], gold='#d8b077', pearl='#f6f1e8', shoe=GK.PALETTE['shoe_black'], shine='#f4f1ee',
 )
 
 # ---- skull tables by f (0 chin .. 1 skull top): a soft oval face, full cheeks, small round chin
-W  = [(0, 0.0), (0.02, 0.046), (0.05, 0.062), (0.10, 0.085), (0.16, 0.104), (0.23, 0.121), (0.28, 0.132), (0.34, 0.134),
+W  = [(0, 0.0), (0.015, 0.050), (0.04, 0.072), (0.08, 0.094), (0.13, 0.110), (0.19, 0.123), (0.25, 0.131), (0.31, 0.135), (0.36, 0.135),
       (0.42, 0.133), (0.52, 0.128), (0.62, 0.121), (0.70, 0.114), (0.80, 0.100), (0.88, 0.080), (0.94, 0.055), (0.98, 0.030), (1, 0.0)]
 DF = [(0, 0.0), (0.017, 0.130), (0.04, 0.165), (0.08, 0.183), (0.12, 0.190), (0.20, 0.198), (0.30, 0.203), (0.45, 0.205),
       (0.60, 0.202), (0.75, 0.196), (0.85, 0.182), (0.93, 0.150), (0.98, 0.070), (1, 0.0)]
 DB = [(0, 0.0), (0.05, 0.030), (0.15, 0.062), (0.30, 0.112), (0.45, 0.155), (0.60, 0.165), (0.75, 0.160), (0.85, 0.140),
       (0.93, 0.110), (0.98, 0.060), (1, 0.0)]
-E  = [(0, 1.9), (0.10, 2.0), (0.20, 2.2), (0.30, 2.4), (0.50, 2.45), (0.70, 2.4), (0.90, 2.2), (1, 2.1)]
-BULGES = [dict(x=0.088, z=20.8, sx=0.045, sz=0.036, a=0.020),      # full rosy cheeks
+E  = [(0, 2.0), (0.08, 2.2), (0.18, 2.35), (0.30, 2.45), (0.50, 2.45), (0.70, 2.4), (0.90, 2.2), (1, 2.1)]
+BULGES = [dict(x=0.086, z=21.4, sx=0.046, sz=0.040, a=0.020),      # full rosy cheeks, widest at cheek / mouth level
           dict(x=0.0, z=17.8, sx=0.015, sz=0.022, a=0.010),        # soft nose bridge
           dict(x=0.0, z=25.6, sx=0.040, sz=0.015, a=0.004)]        # small round chin
 
@@ -102,25 +104,40 @@ SCULPT = dict(
             dict(c=(0.0, 0.070, 11.0), r=(0.180, 0.130, 0.100), k=0.03),            # the round back dome above the chignon
             dict(c=(-0.130, 0.02, 11.5), r=(0.090, 0.140, 0.060), k=0.03),          # fill under the wave, her right
             dict(c=(0.110, 0.02, 11.5), r=(0.070, 0.130, 0.060), k=0.03),           # fill, her left
+            dict(c=(-0.030, -0.100, 3.2), r=(0.120, 0.090, 0.050), k=0.04),          # the sweep's crest: a fuller, higher top-front
+            dict(c=(0.125, -0.010, 11.0), r=(0.080, 0.130, 0.075), k=0.04),          # her left side: fuller, rounder
             dict(c=(-0.010, 0.120, 17.5), r=(0.150, 0.100, 0.075), k=0.03),          # nape: side hair sweeping into the chignon
             dict(c=(-0.125, 0.120, 19.0), r=(0.065, 0.070, 0.075), k=0.03, cut=False),  # behind her right ear, into the chignon
             dict(c=(0.110, 0.120, 18.5), r=(0.055, 0.065, 0.065), k=0.03, cut=False)],  # behind her left ear
-    rolls=[dict(keys=[(x * (1 + 0.04 * (abs(x) > 0.12)), dy, p, r, fl) for x, dy, p, r in k], k=0.007)
+    rolls=[dict(keys=[(x * (1 + 0.04 * (abs(x) > 0.12)), dy, p, r, fl) for x, dy, p, r in k], k=0.020)
            for k, fl in ((WAVE1, 0.80), (WAVE2, 0.78), (WAVE3, 0.78), (WAVE4, 0.78), (LEFT1, 0.80), (LEFT2, 0.78), (LEFT3, 0.78))] + [
         # wisps in front of the ears
         dict(keys=[(-0.148, -0.080, 13.8, 0.010), (-0.150, -0.082, 15.8, 0.010), (-0.145, -0.080, 17.2, 0.006), (-0.139, -0.080, 17.9, 0.003)], k=0.004, n=16),
         dict(keys=[(0.140, -0.080, 13.0, 0.009), (0.146, -0.072, 15.5, 0.009), (0.140, -0.066, 17.2, 0.004)], k=0.004, n=16),
     ],
     grooves=[dict(keys=[(0.072, -0.165, 3.2, 0.002), (0.072, -0.12, 1.6, 0.005), (0.068, -0.04, 0.9, 0.005), (0.060, 0.05, 1.4, 0.004), (0.050, 0.11, 3.0, 0.002)], depth=0.004, k=0.003)] +      # the side part
-            [dict(keys=DK.valley(p, q, 0.014, t0=0.2), depth=0.015, k=0.004) for p, q in ((WAVE1, WAVE2), (WAVE2, WAVE3), (WAVE3, WAVE4), (LEFT1, LEFT2), (LEFT2, LEFT3))] +
+            [dict(keys=DK.valley(p, q, 0.006, t0=0.2), depth=0.0045, k=0.003) for p, q in ((WAVE1, WAVE2), (WAVE2, WAVE3), (WAVE3, WAVE4), (LEFT1, LEFT2), (LEFT2, LEFT3))] +
             [dict(keys=[(0.02, 0.07, 0.6, 0.006), (-0.07, 0.07, 1.8, 0.008), (-0.12, 0.12, 5.0, 0.009), (-0.12, 0.17, 9.0, 0.009), (-0.07, 0.20, 12.0, 0.007)], depth=0.007, k=0.004),
              dict(keys=[(0.05, 0.03, 0.8, 0.006), (0.10, 0.02, 3.5, 0.008), (0.13, 0.08, 7.5, 0.009), (0.11, 0.15, 11.0, 0.008), (0.06, 0.19, 13.5, 0.006)], depth=0.007, k=0.004)] +
             [dict(keys=[(x * 0.6, 0.12, 3.0, 0.003), (x * 0.9, 0.175, 6.0, 0.009), (x, 0.197, 9.5, 0.010), (x * 0.8, 0.195, 12.5, 0.008), (x * 0.55, 0.18, 14.5, 0.003)],
                   depth=0.0035, k=0.004) for x in (-0.15, -0.09, -0.03, 0.03, 0.09, 0.15)],
-    box=((-0.30, 0.02 - 0.27, zp(29.0)), (0.27, 0.02 + 0.25, zp(-1.0))), voxel=0.004, tris=10000, smooth=5, post_smooth=3,
+    box=((-0.30, 0.02 - 0.27, zp(30.0)), (0.27, 0.02 + 0.33, zp(-1.0))), voxel=0.004, tris=12000, smooth=5, post_smooth=3,
 )
 
-# ---- chignon: a thick rope coiled in a tightening spiral, axis pointing back and a little down
+# ---- chignon as overlapping twisted loops (sculpted into the hair volume, creases kept between them): a big outer
+# loop wrapping round from the top, an upper loop lying over it, a small knot, and a filling core. dress_kit.loop_keys
+# kwargs (expanded in build(), where the head axis is known).
+BUN_AX = (0.0, 1.0, -0.04)
+BUN_CORE = dict(c=(-0.035, 0.168, 21.6), r=(0.098, 0.100, 0.086), k=0.03, cut=False)
+BUN_LOOPS = [       # stacked outward like a dome (round in profile), each off-centre so they overlap like twisted loops
+    dict(centre=(-0.032, 0.190, 21.6), axis=BUN_AX, radii=(0.088, 0.070), start=95, sweep=330,
+         rope=((0.0, 0.022), (0.12, 0.040), (0.80, 0.040), (1.0, 0.024)), rise=0.018, n=16),
+    dict(centre=(-0.018, 0.232, 20.8), axis=BUN_AX, radii=(0.056, 0.042), start=210, sweep=300, tilt=10,
+         rope=((0.0, 0.020), (0.15, 0.036), (0.80, 0.036), (1.0, 0.020)), rise=0.014, n=14),
+    dict(centre=(-0.046, 0.258, 22.2), axis=BUN_AX, radii=(0.026, 0.020), start=30, sweep=320,
+         rope=((0.0, 0.016), (0.2, 0.024), (0.8, 0.024), (1.0, 0.014)), rise=0.004, n=12, crease=False),
+]
+# ---- chignon (old coil version, kept for reference: dress_kit.coil_bun): a thick rope coiled in a tightening spiral, axis pointing back and a little down
 BUN = dict(centre=(-0.050, 0.150, 20.4), axis=(0.0, 1.0, -0.10), up=(0, 0, 1), turns=-1.5, r_out=0.086, r_in=0.020,
            depth=0.060, lean=0.0, start=math.radians(205), squash=(1.40, 0.92), tighten=0.9, drift=0.040, drift_x=0.012,
            rope=[(0.0, 0.032), (0.10, 0.050), (0.45, 0.048), (0.80, 0.038), (1.0, 0.020)],
@@ -141,9 +158,9 @@ A = dict(
     sleeve_end=58.8, cuff_end=58.8, sleeve=None, n=16,
     stations=[('end', 0.062, 0.058), (56.0, 0.070, 0.064), (52.0, 0.078, 0.072), (49.5, 0.082, 0.076), (46.0, 0.088, 0.082),
               (42.0, 0.092, 0.087), (38.5, 0.094, 0.090), (('j', -0.005), 0.088, 0.088), (('j', 0.02), 0.075, 0.078), (('j', 0.035), 0.040, 0.045)],
-    hand=dict(palm_len=0.088, palm_w=0.096, palm_t=0.050, out=0.004, finger_out=0.004,
-              fingers=[(-0.032, 0.0130, 0.076, 0.85), (-0.011, 0.0138, 0.082, 0.95), (0.010, 0.0134, 0.079, 0.95), (0.030, 0.0120, 0.068, 0.90)],
-              thumb=(-0.041, 0.010, 0.024, 0.0136, 0.058, 0.35)),
+    hand=dict(palm_len=0.094, palm_w=0.102, palm_t=0.052, out=0.004, finger_out=0.004,
+              fingers=[(-0.034, 0.0136, 0.086, 1.35), (-0.012, 0.0144, 0.092, 1.50), (0.011, 0.0140, 0.089, 1.50), (0.032, 0.0126, 0.076, 1.40)],
+              thumb=(-0.044, 0.011, 0.026, 0.0145, 0.062, 0.55)),
 )
 SLV = dict(kind='cap', end=36.9, slant=0.024, lip=0.005, n=24, cap_in=0.030,
            stations=[('end', 0.120, 0.116), (35.8, 0.120, 0.118), (('j', 0.012), 0.118, 0.118), (('j', 0.030), 0.110, 0.112), (('j', 0.046), 0.092, 0.100), (('j', 0.060), 0.066, 0.078), (('j', 0.070), 0.026, 0.036)])
@@ -160,16 +177,27 @@ LEGS = dict(leg_x=0.095, leg_y=0.0, n=14,
             stations=[(61.0, 0.120, 0.125), (70.0, 0.108, 0.112), (80.0, 0.090, 0.094), (86.0, 0.098, 0.102), (91.0, 0.088, 0.094), (94.0, 0.078, 0.084), (96.0, 0.072, 0.078)])
 SHOES = dict(leg_x=0.095, y=0.0, len=0.25, w=0.088, heel=0.066, heel_h=0.036, heel_len=0.044, collar=0.088, vamp=0.060,
              splay=0.26, out=0.010, foot_top=0.105, ball=0.12, mat='shoe')
-JAW = dict(top=21.5, lift=0.030, y0=-0.10, y1=0.02)          # jawline rising from the chin toward the ear lobe
-SHINE = dict(r=0.0065, dx=0.30, dz=0.42, mat='shine')      # the eyes' soft glint (upper right as seen on the sheet)
-EAR = dict(kind='stud', r=0.015, x=0.165, dy=-0.02, z=22.3, mat='pearl')
+JAW = dict(top=22.0, lift=0.024, y0=-0.01, y1=0.09)          # jawline rising from the chin toward the ear lobe
+SHINE = dict(r=0.0035, dx=-0.30, dz=0.45, mirror=True, mat='shine')      # a tiny glint, upper-inner on each eye
+EAR = dict(kind='stud', r=0.014, x=0.146, dy=-0.004, z=21.6, mat='pearl')
 RIG = dict(hip=63.0, knee=80.0, ankle=95.0, waist=47.4, shoulder_top=31.5, neck_y=0.015, hand_end=66.0, leg_x=0.095,
            heel=0.066, ball=0.12, arm=A, walk_kw=dict(skirt=True))
 
 def build(g):
     g.set_head(W, DF, DB, E, BULGES)
-    DK.sculpt_hair(g, SCULPT)
-    DK.coil_bun(g, BUN)
+    hs = dict(SCULPT); hs['masses'] = SCULPT['masses'] + [BUN_CORE]
+    hs['rolls'] = SCULPT['rolls'] + [dict(keys=DK.loop_keys(g, **{k: v for k, v in lp.items() if k != 'crease'}), k=0.004) for lp in BUN_LOOPS]
+    # creases between the loops: shallow grooves along each loop's inner and outer edge (projected onto the surface)
+    gr = []
+    for i_lp, lp in enumerate(BUN_LOOPS):
+        lp = dict(lp); crease = lp.pop('crease', True)
+        if not crease: continue
+        rmax = max(r for _, r in lp['rope'])
+        for side in ((0.85,) if i_lp == 0 else (-0.85, 0.85)):
+            q = dict(lp, radii=(lp['radii'][0] + side * rmax, lp['radii'][1] + side * rmax), rope=((0.0, 0.003), (0.15, 0.006), (0.85, 0.006), (1.0, 0.003)))
+            if q['radii'][1] > 0.01: gr.append(dict(keys=DK.loop_keys(g, **q), depth=0.007, k=0.003, n=40))
+    hs['grooves'] = SCULPT['grooves'] + gr
+    DK.sculpt_hair(g, hs)
     skull = GK.head(g, nlon=48, nlat=34, cull_in=g.hair_covers)
     DK.jaw_lift(g, skull, JAW)
     GK.ears(g); DK.decimate_parts(g, 'Ear', 0.55); GK.eyes(g); DK.eye_shine(g, SHINE); GK.brows(g); GK.nose(g)

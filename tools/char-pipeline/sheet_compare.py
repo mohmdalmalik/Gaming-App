@@ -119,8 +119,9 @@ if __name__ == '__main__':
     if guest == 'victor': views.append(('face-side', 'face-90', 'face-side', 'HEAD SIDE'))
     rows = [('RENDER', prefix)] if not old else [('OLD', old), ('NEW', prefix)]
     def fscale(pref):
-        """Victor's sheet has its own face-panel scale: match the eye spacing of the HEAD FRONT panel."""
-        if guest != 'victor': return None
+        """Face-panel scale from the eye spacing of the HEAD FRONT panel (each sheet's close-ups have their own zoom;
+        Marcus keeps the constant it was calibrated with)."""
+        if guest == 'marcus': return None
         ref = np.asarray(Image.open(P / 'face-front.png').convert('RGB')).astype(float)
         ren = np.asarray(Image.open(f'{pref}-face-0.png').convert('RGB')).astype(float)
         return eye_gap(ref) / eye_gap(ren)

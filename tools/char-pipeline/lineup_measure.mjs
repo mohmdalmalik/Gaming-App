@@ -18,6 +18,17 @@ const chrome = [process.env.CHROME_PATH, '/opt/pw-browsers/chromium-1194/chrome-
 const browser = await chromium.launch({ executablePath: chrome, headless: true, args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--no-sandbox'] });
 const page = await (await browser.newContext({ viewport: { width: 1194, height: 834 }, deviceScaleFactor: 2, hasTouch: true })).newPage();
 await page.route(`${CDN}**`, r => { const rel = r.request().url().slice(CDN.length).split('?')[0]; const f = path.join(threeDir, rel); r.fulfill(fs.existsSync(f) ? { status: 200, contentType: 'application/javascript', body: fs.readFileSync(f) } : { status: 404, body: 'x' }); });
+// --inject outfit=path.glb: serve characters.js with that outfit's `model` set (in memory only: nothing on disk changes),
+// to see a guest in the lobby before the game is wired to its model
+const INJ = opt('inject', null);
+if (INJ) {
+  const [outfit, glb] = INJ.split('=');
+  await page.route('**/src/data/characters.js', r => {
+    let js = fs.readFileSync(path.join(REPO, 'src/data/characters.js'), 'utf8');
+    js = js.replace(new RegExp(`(\\b${outfit}\\s*:\\s*\\{)`), `$1 model: '${glb}', modelHeight: 1.66,`);
+    r.fulfill({ status: 200, contentType: 'application/javascript', body: js });
+  });
+}
 await page.goto('http://127.0.0.1:8123/?mode=hotseat&players=6&seed=4242', { waitUntil: 'domcontentloaded' });
 await page.waitForFunction(() => window.__game && !document.getElementById('btn-begin').disabled, null, { timeout: 60000 });
 await page.click('#btn-begin');
@@ -54,7 +65,7 @@ const info = await page.evaluate(() => {
     const mats = Array.isArray(o.material) ? o.material : [o.material];
     const rec = { x: +wp.x.toFixed(2), mats: [] };
     const nm = mats.map((src, i) => {
-      const id = [30 + gi * 7, 70 + i * 20, 200];
+      const id = [20 + (gi % 30) * 7, 60 + Math.floor(gi / 30) * 60 + i * 12, 200];   // unique per mesh up to 90 meshes
       rec.mats.push({ base: '#' + src.color.getHexString(), id });
       const b = new Basic({ fog: false }); b.toneMapped = false; b.side = src.side;
       b.color.setRGB(id[0] / 255, id[1] / 255, id[2] / 255, 'srgb');

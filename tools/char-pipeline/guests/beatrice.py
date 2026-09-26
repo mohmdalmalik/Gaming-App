@@ -33,10 +33,10 @@ CFG = dict(
     z_hair_top=0.0, z_skull_top=3.2, z_hairline=5.5, z_brow=11.8, z_eye=16.8, z_nose=19.2, z_mouth=22.3, z_chin=28.3, z_ear=19.6,
     head_y=0.046, z_shoulder_top=32.0,
     ear_style='round', ear_seg=(20, 14), ear_h=0.094, ear_w=0.070, ear_out=0.008, ear_y=0.010, ear_tilt=0.60, ear_thick=0.028, ear_rim=0.008, ear_bowl=0.011, ear_sink=0.020,
-    eye_x=0.068, eye_w=0.042, eye_h=0.072, eye_lift=0.003,
-    brow=dict(x0=0.040, x1=0.125, z=11.8, thick=0.024, arch=0.012, drop_in=0.004, drop_out=0.012,
+    eye_x=0.070, eye_w=0.046, eye_h=0.078, eye_lift=0.003,
+    brow=dict(x0=0.044, x1=0.118, z=12.1, thick=0.030, arch=0.010, drop_in=0.004, drop_out=0.012,
               profile=[(0.0, 0.55), (0.06, 0.95), (0.30, 1.0), (0.75, 0.88), (0.94, 0.62), (1.0, 0.35)], flat=0.5),
-    nose_w=0.054, nose_h=0.046, nose_d=0.030, nose_out=0.008, nose_top=1.25,
+    nose_w=0.064, nose_h=0.050, nose_d=0.032, nose_out=0.008, nose_top=1.25,
     lips=dict(z=22.4, w=0.122, rise=0.012, upper=0.012, lower=0.020, bow=0.003, flat=0.5, mat='lips'),
     tint=dict(spots=[(0.095, 20.5, 0.040, 0.034, 1.0), (0.0, 19.2, 0.020, 0.020, 0.4)], g=0.18, b=0.16),
     groove_dark=(0.010, 0.60),
@@ -46,14 +46,17 @@ CFG = dict(
            'Gold': (0.55, [((0.0, -1.0, 0.25), 6.0, 1.0), ((-0.6, -0.6, 0.3), 8.0, 0.6), ((0.6, -0.6, 0.3), 8.0, 0.6)])},
 )
 COLOURS = dict(
-    skin='#d08864', hair='#5e4f4c', brow='#3a2c29', eye='#0b0b0d', lips='#7c3a3e',
-    dress='#2f5a4c', gold='#b79770', shoe=GK.PALETTE['shoe_black'], sole='#1a1818', shine='#f4f1ee',
+    # lobby-measured (lineup_measure.mjs --inject dressEmerald=...), solved at the palette's mid light level and nudged
+    # a little warmer for the neutral preview: in the lobby dress ~#10291f..#2c453e (sheet #1a332c), hair ~#26170f
+    # (sheet #2f201d), skin ~#9d512c..#eb875e, gold ~#9a6e31 (sheet #b38042), berry lips ~#511212
+    skin='#d08874', hair='#4f4a52', brow='#3a2c29', eye='#0b0b0d', lips='#7a4652',
+    dress='#36524f', gold='#d3b182', shoe=GK.PALETTE['shoe_black'], sole='#1a1818', shine='#f4f1ee',
 )
 
 # ---- skull (f: 0 chin .. 1 skull top): soft round face, full cheeks, round chin
-W  = [(0, 0.0), (0.02, 0.058), (0.05, 0.080), (0.10, 0.104), (0.16, 0.124), (0.24, 0.139), (0.32, 0.146), (0.42, 0.147),
+W  = [(0, 0.0), (0.02, 0.052), (0.05, 0.076), (0.10, 0.100), (0.16, 0.121), (0.24, 0.137), (0.32, 0.146), (0.42, 0.147),
       (0.52, 0.144), (0.62, 0.138), (0.72, 0.130), (0.82, 0.116), (0.90, 0.095), (0.95, 0.070), (0.99, 0.030), (1, 0.0)]
-DF = [(0, 0.0), (0.02, 0.140), (0.05, 0.168), (0.10, 0.186), (0.18, 0.197), (0.30, 0.203), (0.45, 0.205),
+DF = [(0, 0.0), (0.02, 0.150), (0.05, 0.176), (0.10, 0.190), (0.18, 0.197), (0.30, 0.203), (0.45, 0.205),
       (0.60, 0.202), (0.75, 0.194), (0.86, 0.176), (0.94, 0.140), (0.99, 0.060), (1, 0.0)]
 DB = [(0, 0.0), (0.05, 0.030), (0.15, 0.070), (0.30, 0.120), (0.45, 0.160), (0.60, 0.172), (0.75, 0.166), (0.86, 0.146),
       (0.94, 0.112), (0.99, 0.060), (1, 0.0)]
@@ -73,50 +76,53 @@ def env(th, p, k=1.0):
     """Point (x, dy, pct) on the bob envelope at longitude th (0 front, +pi/2 her left, pi back) scaled by k."""
     a, bk, fr = ENV_A(p), ENV_BK(p), ENV_FR(p); b = (bk + fr) / 2; dc = (bk - fr) / 2
     return (k * a * math.sin(th), dc - k * b * math.cos(th), p)
-def roll(th0, p0, p1, sweep, wig, r, k=0.90, n=7, flat=0.70, grow=0.35):
-    """An S-wave lock from (th0, p0) down to p1, drifting `sweep` rad and wiggling `wig` rad; radius r (tapering in at
-    the top, a rounded bulge at the bottom end: the bob's scalloped edge)."""
+def s_curve(th0, p0, p1, sweep, wig, r=0.014, k=1.0, n=9):
+    """Groove keys (x, dy, pct, r) along an S-curve on the bob envelope: from (th0, p0) down to p1, drifting `sweep`
+    rad and wiggling `wig` rad (the waves); sculpt_hair snaps them onto the hair surface."""
     keys = []
     for i in range(n):
-        t = i / (n - 1); th = th0 + sweep * t + wig * math.sin(2 * math.pi * t * 0.85)
-        p = p0 + (p1 - p0) * t
-        rr = r * (grow + (1 - grow) * sm(t / 0.35)) * (1.0 + 0.18 * sm((t - 0.75) / 0.25))
-        x, dy, pp = env(th, p, k); keys.append((x, dy, pp, rr, flat))
+        t = i / (n - 1); th = th0 + sweep * t + wig * math.sin(2 * math.pi * t * 0.9)
+        x, dy, pp = env(th, p0 + (p1 - p0) * t, k); keys.append((x, dy, pp, r * (0.25 + 0.75 * sm(t / 0.3))))
     return keys
-BACK_ROLLS = [roll(math.radians(a), 2.5, 26.8, math.radians(sw), math.radians(14), 0.060, k=0.965, flat=0.55) for a, sw in
-              ((100, 16), (128, 12), (156, 6), (-176, 0), (-148, -6), (-120, -12), (-94, -16))]
-# the side-swept front: from the part (her left, x +0.05) across the forehead to her right, then down her right side
-# the side-swept front: from the part (her left, x +0.06) forward over the forehead, dipping over her right brow
-# (to ~12 %), then round her right temple and down that side; a second, higher wave behind it; her left side's wave
-FRONT_ROLL = [(0.070, -0.060, 0.8, 0.012, 0.7), (0.035, -0.170, 2.2, 0.044, 0.66), (-0.030, -0.215, 5.0, 0.052, 0.64),
-              (-0.100, -0.195, 8.2, 0.054, 0.64), (-0.160, -0.150, 11.2, 0.052, 0.64), (-0.215, -0.080, 13.5, 0.050, 0.64),
-              (-0.258, -0.005, 17.0, 0.050, 0.64), (-0.268, 0.060, 21.5, 0.048, 0.64), (-0.235, 0.100, 25.5, 0.044, 0.64)]
-FRONT_ROLL2 = [(0.075, -0.020, 0.3, 0.012, 0.7), (0.040, -0.100, 0.6, 0.040, 0.66), (-0.040, -0.130, 1.8, 0.046, 0.66),
-               (-0.120, -0.110, 4.4, 0.048, 0.66), (-0.195, -0.050, 7.8, 0.048, 0.66), (-0.250, 0.020, 11.5, 0.046, 0.66)]
-LEFT_ROLL = [(0.075, -0.100, 1.2, 0.012, 0.7), (0.120, -0.175, 4.5, 0.044, 0.66), (0.175, -0.150, 7.8, 0.050, 0.64),
-             (0.225, -0.090, 11.5, 0.050, 0.64), (0.255, -0.020, 15.5, 0.048, 0.64), (0.262, 0.045, 20.5, 0.046, 0.64), (0.225, 0.085, 25.0, 0.042, 0.64)]
+# creases radiating from the crown whorl (top of the back) down round the back and sides
+BACK_GROOVES = [s_curve(math.radians(a), 3.0, 27.5, math.radians(sw * 1.8), math.radians(17)) for a, sw in
+                ((70, 22), (98, 18), (126, 12), (154, 6), (-178, 0), (-150, -6), (-122, -12), (-94, -18), (-66, -22))]
+# the side sweep from the part (her left, x +0.05) forward and over to her right, parallel creases down the front / her right
+def sweep_curve(p_part, r=0.014):
+    return [(0.05, -0.14 + 0.03 * p_part, p_part, r * 0.25), (-0.02, -0.205, p_part + 2.5, r), (-0.10, -0.19, p_part + 5.0, r),
+            (-0.17, -0.14, p_part + 8.0, r), (-0.225, -0.07, p_part + 11.5, r), (-0.255, 0.005, p_part + 15.5, r),
+            (-0.255, 0.07, p_part + 20.0, r)]
+FRONT_GROOVES = [sweep_curve(3.0), sweep_curve(6.0)]
+LEFT_GROOVES = [[(0.08, -0.13, 3.0, 0.004), (0.13, -0.17, 4.0, 0.014), (0.19, -0.13, 8.0, 0.014), (0.24, -0.07, 12.5, 0.014),
+                 (0.26, 0.00, 17.0, 0.014), (0.255, 0.07, 22.0, 0.014)]]
+# the scalloped lower rim: soft lobes round the bottom of the bob
+RIM_LOBES = [dict(c=(0.26 * math.sin(math.radians(a)), 0.075 - 0.215 * math.cos(math.radians(a)), 24.0), r=(0.070, 0.070, 0.052), k=0.03)
+             for a in (60, 90, 120, 150, 180, 210, 240, 270, 300)]
 
 def hairline(u):
     """Lower edge of the hair by longitude u (0 front, 0.25 her right, 0.5 back, 0.75 her left): the fringe (5.5),
     the temples (down to 16 in front of the ear), above the ear (15.5), then the bob's curtain behind it (27.5)."""
     u %= 1.0; a = abs(((u + 0.5) % 1.0) - 0.5); right = u < 0.5; ss = sm
-    z = 5.5 + (3.5 if right else 0.5) * ss(a / 0.08)
-    z += (16.5 - z) * ss((a - 0.10) / 0.07)                   # temples, down beside the face to the ear's top
+    z = 4.9 + (3.0 if right else 0.6) * ss(a / 0.08)
+    z += (15.5 - z) * ss((a - 0.045) / 0.065)                 # arched: down past the temples to the ear's top
     z += (15.0 - z) * ss((a - 0.205) / 0.02)                  # over the ear
     z += (27.5 - z) * ss((a - 0.27) / 0.05)                   # the curtain behind the ear
     return z
 
 SCULPT = dict(
-    cap=dict(thick=[(0, 0.020), (3, 0.030), (6, 0.034), (10, 0.030), (14, 0.024), (18, 0.020), (24, 0.016), (28, 0.012)], hairline=hairline, edge_k=0.014),
-    masses=[dict(c=(-0.008, 0.012, 5.5), r=(0.185, 0.185, 0.090), k=0.04),            # the crown (reaches the hair top)
-            dict(c=(-0.010, 0.075, 16.5), r=(0.255, 0.198, 0.098), k=0.05),           # the bob's body (the waves make the outline)
-            dict(c=(-0.185, 0.080, 20.0), r=(0.090, 0.130, 0.068), k=0.04),           # her right side fullness
-            dict(c=(0.175, 0.080, 20.0), r=(0.086, 0.130, 0.068), k=0.04)],           # her left side
-    rolls=[dict(keys=k, k=0.012, n=44) for k in BACK_ROLLS] + [dict(keys=k, k=0.012, n=40) for k in (FRONT_ROLL, FRONT_ROLL2, LEFT_ROLL)],
-    grooves=[dict(keys=DK.valley([q[:4] for q in a], [q[:4] for q in b], 0.014, t0=0.30, t1=0.97), depth=0.012, k=0.005)
-             for a, b in zip(BACK_ROLLS[:-1], BACK_ROLLS[1:])] +
-            [dict(keys=DK.valley([q[:4] for q in FRONT_ROLL], [q[:4] for q in FRONT_ROLL2], 0.012, t0=0.15, t1=0.9), depth=0.012, k=0.004)],
-    box=((-0.36, 0.046 - 0.25, zp(30.0)), (0.34, 0.046 + 0.36, zp(-1.0))), voxel=0.0045, tris=10500, smooth=5, post_smooth=3,
+    cap=dict(thick=[(0, 0.024), (3, 0.034), (6, 0.040), (10, 0.032), (14, 0.024), (18, 0.020), (24, 0.016), (28, 0.012)], hairline=hairline, edge_k=0.030),
+    masses=[dict(c=(-0.010, 0.030, 6.0), r=(0.195, 0.200, 0.100), k=0.05),            # the round crown (reaches the hair top)
+            dict(c=(-0.012, 0.070, 17.5), r=(0.285, 0.230, 0.102), k=0.05),           # the bob's body
+            dict(c=(-0.180, 0.065, 22.0), r=(0.110, 0.150, 0.072), k=0.04),           # her right side, down toward the chin
+            dict(c=(0.170, 0.065, 22.0), r=(0.105, 0.150, 0.072), k=0.04),            # her left side
+            dict(c=(0.0, 0.180, 22.5), r=(0.170, 0.110, 0.070), k=0.04),              # the full round back, low
+            dict(c=(-0.195, 0.000, 12.5), r=(0.095, 0.160, 0.072), k=0.05),           # fullness hugging the temples (her right)
+            dict(c=(0.185, 0.000, 12.5), r=(0.090, 0.160, 0.072), k=0.05),            # (her left)
+            dict(c=(-0.010, -0.080, 2.8), r=(0.130, 0.110, 0.045), k=0.05),           # the front of the crown rolling forward
+            ],
+    rolls=[],
+    grooves=[dict(keys=k, depth=0.009, k=0.005) for k in BACK_GROOVES + FRONT_GROOVES + LEFT_GROOVES],
+    box=((-0.36, 0.046 - 0.25, zp(30.0)), (0.34, 0.046 + 0.36, zp(-1.0))), voxel=0.0045, tris=10500, smooth=7, post_smooth=4,
 )
 
 # ---- body
@@ -129,7 +135,7 @@ BOD = dict(profiles=[(50.0, 0.246, 0.236, 0.92, 0.000), (48.5, 0.238, 0.230, 0.9
                      (39.0, 0.302, 0.284, 0.84, -0.002), (37.0, 0.318, 0.258, 0.82, 0.008), (35.0, 0.336, 0.226, 0.82, 0.018),
                      (33.8, 0.330, 0.200, 0.86, 0.022), (32.8, 0.270, 0.176, 0.92, 0.024), (31.8, 0.190, 0.150, 1.0, 0.026),
                      (31.0, 0.150, 0.134, 1.0, 0.027), (30.6, 0.140, 0.128, 1.0, 0.028)],
-           neck=dict(kind='crew', side=30.8, front=31.6, back=30.9), waist=48.5, ncol=48, nrow=18, lip=0.006)
+           neck=dict(kind='crew', side=31.4, front=32.3, back=31.4), waist=48.5, ncol=48, nrow=18, lip=0.006)
 A = dict(
     shoulder=(0.172, 35.0), shoulder_y=0.010, elbow=(0.238, 0.012, 50.0), wrist=(0.290, -0.030, 59.6),
     sleeve_end=59.6, cuff_end=59.6, sleeve=None, n=16,

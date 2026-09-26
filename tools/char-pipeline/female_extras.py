@@ -32,7 +32,7 @@ def long_hair(g, Hs):
       face     dict(z_top=fn(x)->pct (the hairline across the forehead / temples), w=[(pct, half width)], y=[(pct, y
                offset from the head axis: the keep-out's back face)], k) — no hair in front of that plane
       ears     dict(r=(rx, ry, rz), dx (beyond the skull side), dy, z pct) — clearance round each ear (optional)
-      cheek    dict(y, thin, z=(top pct, bottom pct)) — in front of the plane y (offset from the head axis) between those
+      cheek    dict(y (or [(pct, y)]), thin, z=(top pct, bottom pct)) — in front of the plane y (offset from the head axis) between those
                heights the hair may only hug the skull (within `thin`): flat temple strands, no mass beside the cheeks
       neck     dict(r (radius), y (centre offset), z_top pct, k) — a vertical cylinder below the chin kept clear
       body     [dict(c=(x, dy, pct), r=(rx, ry, rz))] — ellipsoids (shoulders / upper back) the hair rests on
@@ -50,7 +50,7 @@ def long_hair(g, Hs):
     c0 = np.array([cx_, Y0 + cdy, zp(cpct)])
     R_at = MX.radial_env(g, T, c0, blur=Hs.get('blur', 1.5))
     WV = Hs.get('waves', [])
-    def wave_disp(u, pct):
+    def wave_disp(u, pct, dark=False):
         d = np.zeros_like(u)
         for w in WV:
             m = w['mask'](u, pct)
@@ -61,7 +61,8 @@ def long_hair(g, Hs):
                 f = np.where(t < a, np.sin(rise * math.pi / 2) ** w.get('p', 1.5), np.sin(fall * math.pi / 2) ** 0.7)
             else:
                 f = 0.5 - 0.5 * np.cos(2 * math.pi * t)
-            d += w['amp'] * m * (f - w.get('bias', 0.5))
+            if dark: d = np.maximum(d, w.get('dark', 1.0) * m * np.clip(1.0 - f / w.get('dark_at', 0.35), 0.0, 1.0))
+            else: d += w['amp'] * m * (f - w.get('bias', 0.5))
         return d
     def base_env(P):
         u, v, r = MX.radial_uv(c0, P); d = (r - R_at(u, v)) * 0.9
@@ -89,9 +90,10 @@ def long_hair(g, Hs):
         kos.append(neck_ko)
     if Hs.get('cheek'):
         Ck = Hs['cheek']; Rs_at = MX.radial_skull(g, c0)
+        CY = DK._np_table(GK.Table([(zp(p), y) for p, y in Ck['y']])) if isinstance(Ck['y'], (list, tuple)) else (lambda z: Ck['y'])
         def cheek_ko(P):
             u, v, r = MX.radial_uv(c0, P); sk = (r - Rs_at(u, v)) * 0.9
-            a = P[:, 1] - (Y0 + Ck['y']); b = Ck['thin'] - sk
+            a = P[:, 1] - (Y0 + CY(P[:, 2])); b = Ck['thin'] - sk
             z0, z1 = zp(Ck['z'][0]), zp(Ck['z'][1])
             c = np.maximum(P[:, 2] - z0, z1 - P[:, 2])
             return DK.smax(DK.smax(a, b, 0.006), c, 0.01)
@@ -115,8 +117,10 @@ def long_hair(g, Hs):
             pts.append(tuple(q - nn * lift(r))); rad.append(max(1e-3, r)); fl.append(min(1.0, max(0.2, f))); nrm.append(tuple(nn))
         return np.array(pts), np.array(rad), np.array(fl)
     rolls = [(curve(R_['keys'], R_.get('n', 40), lambda r, s=R_.get('sink', 0.5): r * s), R_.get('k', 0.008), R_.get('over', False)) for R_ in Hs.get('rolls', [])]
-    grooves = [(curve(G_['keys'], G_.get('n', 30), lambda r, d=G_.get('depth', 0.006): d - r), G_.get('k', 0.004)) for G_ in Hs.get('grooves', [])]
-    inset = Hs.get('inset', 0.0); zb = zp(Hs.get('bottom', 34.0)); zt = zp(Hs.get('top', 0.0))
+    inset = Hs.get('inset', 0.0)
+    # grooves: the carving tube's centre sits (depth - radius) below the BASE surface (the envelope minus inset)
+    grooves = [(curve(G_['keys'], G_.get('n', 30), lambda r, d=G_.get('depth', 0.006): inset + d - r), G_.get('k', 0.004)) for G_ in Hs.get('grooves', [])]
+    zb = zp(Hs.get('bottom', 34.0)); zt = zp(Hs.get('top', 0.0))
     def sdf(P):
         s = base_env(P) + inset
         for (pts, rad, fl), k, over in rolls:
@@ -142,11 +146,13 @@ def long_hair(g, Hs):
         if keepout(np.array([[p.x, p.y, p.z]]))[0] < margin: return False
         return p.z > zp(hl(p)) if hl else True
     g.hair_covers = covered; g.hair_sdf = sdf
-    if grooves:
+    if grooves or WV:
         def gam(p):
             P = np.array([[p.x, p.y, p.z]]); best = 0.0
             for (pts, rad, fl), k in grooves:
                 d = DK.sd_tube(P, pts, rad)[0]; best = max(best, float(np.clip(1.0 - (d + 0.002) / 0.008, 0.0, 1.0)))
+            if WV:                                                          # the wave troughs (between the locks) read darker
+                u, v, r = MX.radial_uv(c0, P); best = max(best, float(wave_disp(u, (g.H - P[:, 2]) / g.H * 100.0, dark=True)[0]))
             return best * 0.010
         g.hair_groove = gam
     return g.add(ob, Hs.get('mat', 'hair'), 'head')

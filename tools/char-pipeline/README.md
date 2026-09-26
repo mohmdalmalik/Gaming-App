@@ -130,5 +130,7 @@ Kit API (`g = Guest(name, CFG, COLOURS)`; heights in CFG/specs are % of standing
 - finish: `finish(g, RIG, out)` = join (prints tris by part) -> AO + skin tint + material sheen baked into COLOR_0 ->
   rig (Victor's bone names/hierarchy) -> `guest_anim` Walk/Idle (`RIG['walk_kw']`, e.g. `skirt=True`) -> extras
   (`strideLength`, `contactStride`, `walkClipSeconds`) -> the same glTF export settings as Victor.
-Budgets: <= 32k triangles, GLB <= 1.2 MB (Marcus: 31.4k tris, 1.19 MB). Hair: prefer wide soft `grooves` (width >= 2x the
+Budgets: <= 32k triangles, GLB <= 1.2 MB (Marcus: 31.6k tris, 1.20 MB). Hair: `hair_shell(..., lock_fields=[dict(keys, half, height, soft)], lock_base=...)` raises sculpted lock PLANES that
+step down onto each other with rounded edges (Marcus: 4 locks); `wrap_collar(..., tuck=)` tucks a collar's back edge into
+the body. Prefer wide soft `grooves` (width >= 2x the
 shell's vertex spacing) over narrow ribbon locks, which crinkle the surface.

@@ -306,12 +306,18 @@ def moustache(g, mat='brow'):
 #              the thickness may grow by `slope` per metre above the hairline (short sides, full top)
 #   grooves  : soft channels along curves given as (u, pct) keys (the sheet's sculpted lock lines)
 #   disp     : optional callback disp(u, v, p) -> extra radial offset (bespoke volume)
+#   lock_fields: sculpted lock PLANES: each dict(keys=[(u, pct)...], half=half-width, height, soft=edge rounding, n);
+#              a lock raises the surface by `height` over a band `half` either side of its centre curve with a rounded
+#              edge `soft` wide; overlapping locks take the MAX, so a higher lock steps down onto the one below with its
+#              own rounded edge (the sheets' layered clay locks). lock_base (m) lowers the whole shell where the locks
+#              are, so they restore the measured silhouette instead of growing it.
 #   thin_below: optional thin_below(u) -> pct: the thickness grows (slope) only above this height instead of above
 #              the hairline (a flat sideburn in front of the ear under a full top)
 # The lower edge curls under into the skin (rounded lip); the shell's open rim ends inside the skull.
 # =============================================================================================
 def hair_shell(g, wr, wl, front, back, expo, hairline, edge, slope=0.9, t_min=0.010, grooves=(), disp=None,
-               centre=(0.0, 0.02, 14.0), nlon=88, nrows=40, top=0.2, lip=0.8, name='Hair', mat='hair', thin_below=None):
+               centre=(0.0, 0.02, 14.0), nlon=88, nrows=40, top=0.2, lip=0.8, name='Hair', mat='hair', thin_below=None,
+               lock_fields=(), lock_base=0.0):
     zp = g.zp; Y0 = g.Y0
     TWR, TWL, TF, TB, TE = (Table([(zp(p), v) for p, v in t]) for t in (wr, wl, front, back, expo))
     z_top = zp(top)
@@ -358,8 +364,30 @@ def hair_shell(g, wr, wl, front, back, expo, hairline, edge, slope=0.9, t_min=0.
         dense = L.catmull_rom([tuple(k) for k in keys], gr.get('n', 24))
         pts = [raw_pt(u % 1.0, v_at(u % 1.0, zpc)) for u, zpc in dense]
         G.append((pts, gr['depth'], gr['width']))
+    LF = []
+    for lf in lock_fields:
+        keys = [list(k) for k in lf['keys']]
+        for i in range(1, len(keys)):
+            while keys[i][0] - keys[i - 1][0] > 0.5: keys[i][0] -= 1.0
+            while keys[i][0] - keys[i - 1][0] < -0.5: keys[i][0] += 1.0
+        dense = L.catmull_rom([tuple(k) for k in keys], lf.get('n', 40))
+        LF.append(([raw_pt(u % 1.0, v_at(u % 1.0, zpc)) for u, zpc in dense], lf['half'], lf['height'], lf.get('soft', 0.012), lf.get('taper', 0.25)))
+    def lock_amt(p):
+        best_h = 0.0; cover = 0.0
+        for pts, half, hgt, soft, tp in LF:
+            best, bi = 1e9, 0
+            for i in range(len(pts) - 1):
+                a, b = pts[i], pts[i + 1]; ab = b - a; L2 = ab.length_squared
+                t = 0.0 if L2 < 1e-12 else max(0.0, min(1.0, (p - a).dot(ab) / L2))
+                dd = (a + ab * t - p).length
+                if dd < best: best, bi = dd, i + t
+            s_ = bi / (len(pts) - 1)
+            along = sm(s_ / tp) * sm((1.0 - s_) / tp)                      # the lock grows out of the cap at both ends
+            m = sm((half - best) / soft + 0.5) * along
+            best_h = max(best_h, hgt * m); cover = max(cover, m)
+        return best_h - lock_base * cover
     def groove_off(p):
-        return -groove_amt(p)
+        return -groove_amt(p) + (lock_amt(p) if LF else 0.0)
     def groove_amt(p):
         off = 0.0
         for pts, depth, width in G:
@@ -447,6 +475,12 @@ def slab(g, name, outline, surf, lift, thick, mat, wfn, cuts=4, sign=-1, sink=0.
     it lies on. Its top stands `lift + thick` off the surface (toward -Y for front surfaces, sign=-1; +Y for
     back ones), its underside `sink` inside it; vertical walls give the crisp lit/shaded edge of a lapel or
     pocket flap."""
+    if cuts == 0 and not max_edge:                  # long thin strips: densify only along the edges (one row of faces)
+        dense = []
+        for (x0, z0), (x1, z1) in zip(outline, outline[1:] + outline[:1]):
+            k = max(1, int(math.hypot(x1 - x0, z1 - z0) / 0.015))
+            dense += [(x0 + (x1 - x0) * i / k, z0 + (z1 - z0) * i / k) for i in range(k)]
+        outline = dense
     area = sum(x0 * z1 - x1 * z0 for (x0, z0), (x1, z1) in zip(outline, outline[1:] + outline[:1]))
     if area < 0: outline = list(reversed(outline))
     bm = bmesh.new(); vs = [bm.verts.new(Vector((x, 0.0, z))) for x, z in outline]
@@ -559,7 +593,7 @@ def lapels(g, J):
         ztop = lambda f: zf + (zt - zf) * sm((f - op) / W_.get('v_width', 1.0))
         return wrap_collar(g, 'JacketCollar', La.get('mat', 'jacket'), R, C['neck_y'] + W_.get('dy', 0.0), op, ztop, g.jacket_top - 0.03,
                            W_['tip'], W_.get('th_side', 1.6), thick=W_.get('thick', 0.008), gap=W_.get('gap', 0.010),
-                           wfn=lambda co: {'spine': 1.0})
+                           wfn=lambda co: {'spine': 1.0}, tuck=W_.get('tuck', 0.0))
     # jacket collar round the back of the neck, stepping down at the front to meet the collar leaves
     C = g.C; NY = C['neck_y']; R = C['neck_r'] + La.get('collar_gap', 0.028)
     zt_b, zt_f = zp(La['collar_top']), zp(La.get('collar_front', 34.0)); op = La.get('collar_open', 0.75)
@@ -591,7 +625,7 @@ def ring_wall(name, cy, R, thick, z_bot, z_top, open_=0.0, n=40):
     return L.new_object(name, bm, smooth=True)
 
 def wrap_collar(g, name, mat, R, cy, open_, z_top, z_bot_side, tip, th_side, thick=0.006, gap=0.003, wfn=None,
-                nth=30, nt=7, tip_round=0.35):
+                nth=30, nt=7, tip_round=0.35, tuck=0.0):
     """ONE smooth collar surface (no slabs meeting at angles): it wraps round the back of the neck on a cylinder
     (radius R about (0, cy)) and, at the front, turns down onto the chest as a point / leaf. Columns run from the
     front gap (angle open_ from the front, toward +X) round the back to the other side. Each column goes from its
@@ -626,7 +660,10 @@ def wrap_collar(g, name, mat, R, cy, open_, z_top, z_bot_side, tip, th_side, thi
         for k in range(nt + 1):
             t = k / nt; p = bot.lerp(top, t)
             d = Vector((p.x, p.y - cy, 0.0)); d = d.normalized() if d.length > 1e-6 else Vector((0, -1, 0))
-            r = surf_r(d, p.z, extra, sm((th_side + 0.15 - f) / 0.35)); pts.append(Vector((d.x * r, cy + d.y * r, p.z)))
+            wing = sm((th_side - f) / max(1e-6, 0.5 * (th_side - open_)))  # only the front wing follows the chest
+            r = surf_r(d, p.z, extra, wing)
+            r -= tuck * (1.0 - wing) * (1.0 - t) ** 2                      # sides/back: the lower edge tucks into the body
+            pts.append(Vector((d.x * r, cy + d.y * r, p.z)))
         return pts
     bm = bmesh.new()
     O = [[bm.verts.new(p) for p in column(th, 0.0)] for th in ths]
@@ -681,13 +718,13 @@ def back_seam(g, J):
     zp = g.zp; bs = lambda x, z: g.back_y(x, z)
     if 'vent' in J:
         zv = zp(J['vent'])
-        slab(g, 'Vent', [(-0.004, g.z_hem + 0.001), (0.030, g.z_hem + 0.001), (0.030, zv - 0.02), (-0.004, zv)], bs, 0.0, 0.004, J.get('mat', 'jacket'), g.jw, cuts=2, sign=1)
-        slab(g, 'Seam', [(-0.003, zv - 0.005), (0.003, zv - 0.005), (0.003, g.jacket_top - 0.03), (-0.003, g.jacket_top - 0.03)], bs, 0.0, 0.0025, J.get('mat', 'jacket'), g.jw, cuts=1, sign=1)
+        slab(g, 'Vent', [(-0.004, g.z_hem + 0.001), (0.030, g.z_hem + 0.001), (0.030, zv - 0.02), (-0.004, zv)], bs, 0.0, 0.004, J.get('mat', 'jacket'), g.jw, sign=1, cuts=0)
+        slab(g, 'Seam', [(-0.003, zv - 0.005), (0.003, zv - 0.005), (0.003, g.jacket_top - 0.03), (-0.003, g.jacket_top - 0.03)], bs, 0.0, 0.0025, J.get('mat', 'jacket'), g.jw, sign=1, cuts=0)
 
 def shirt_front(g, S):
     """The shirt V between the lapels: a thin panel just in front of the jacket surface."""
     pts = [(x, g.zp(p)) for x, p in S['v']]
-    return slab(g, 'ShirtV', pts, lambda x, z: g.chest_y(x, min(z, g.jacket_top)), 0.004, 0.002, 'shirt', g.jw, max_edge=S.get('max_edge', 0.034))
+    return slab(g, 'ShirtV', pts, lambda x, z: g.chest_y(x, min(z, g.jacket_top)), S.get('lift', 0.004), 0.002, 'shirt', g.jw, max_edge=S.get('max_edge', 0.034))
 
 def collar(g, S):
     """Shirt collar. With S['wrap'] (dict: top, v, tip, th_side, open, gap) ONE smooth wrapped surface (band + points,
@@ -700,7 +737,7 @@ def collar(g, S):
         def wfn(co):
             a = sm((co.z - (zj - 0.03)) / 0.05); return {'neck': 0.3 + 0.5 * a, 'spine': 0.7 - 0.5 * a}
         return wrap_collar(g, 'ShirtCollar', 'shirt', R, C['neck_y'], op, ztop, zj - W_.get('below', 0.03), W_['tip'], W_.get('th_side', 1.5),
-                           thick=W_.get('thick', 0.005), gap=W_.get('gap', 0.004), wfn=wfn)
+                           thick=W_.get('thick', 0.005), gap=W_.get('gap', 0.004), wfn=wfn, tuck=W_.get('tuck', 0.0))
     C = g.C; NY = C['neck_y']; R = C['neck_r'] + 0.012; zt = g.zp(S['collar_top']); zv = g.zp(S.get('collar_v', 33.6))
     band = ring_wall('CollarBand', NY, R, 0.007, lambda th: g.jacket_top - 0.02,
                      lambda th: zv + (zt - zv) * sm((math.pi - abs(math.pi - th)) / S.get('v_width', 0.9)), open_=S.get('v_open', 0.16), n=40)

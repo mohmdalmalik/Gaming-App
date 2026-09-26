@@ -13,6 +13,7 @@ export const PORTRAIT_ART = {
   // Victor (tuxedo): supplied portraits. The public strip always requests `normal`, so his hidden
   // role never leaks; his own active-player panel uses `possessed` when he is possessed.
   tuxedo: { normal: 'assets/portraits/victor.jpg', possessed: 'assets/portraits/victor-possessed.jpg' },
+  suit: { normal: 'assets/portraits/marcus.jpg', possessed: 'assets/portraits/marcus-possessed.jpg' },
 };
 
 export function makePortrait(doc, player, { possessed = false } = {}) {

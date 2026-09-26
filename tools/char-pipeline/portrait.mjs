@@ -28,7 +28,8 @@ const OUT = path.join(HERE, 'shots'); fs.mkdirSync(OUT, { recursive: true });
 // Eye centres in glTF space (Y up, face toward +Z). From make_victor.py CFG: eye_x = ±0.071,
 // z_eye = zp(17.3) = 1.373, face plane 0.233 in front of the skull axis (+0.004 lift). eye_x = ±0.074 since pass 8.
 const EC = glbEyes(GLB);
-const EYE_X = EC ? Math.abs(EC[0]) : 0.074, EYE_Y = EC ? EC[1] : 1.373, EYE_Z = EC ? EC[2] : 0.237;
+const EYE_X = EC && Math.abs(EC[0]) > 0.02 ? Math.abs(EC[0]) : 0.072,   // eyeCentre may be the midpoint between the eyes (x = 0)
+      EYE_Y = EC ? EC[1] : 1.373, EYE_Z = EC ? EC[2] : 0.237;
 const YAW = 14;   // a touch of 3/4 turn (degrees) — the target HUD portrait is not dead-on
 const points = [[-EYE_X, EYE_Y, EYE_Z], [EYE_X, EYE_Y, EYE_Z]].map(p => p.join(',')).join(';');
 

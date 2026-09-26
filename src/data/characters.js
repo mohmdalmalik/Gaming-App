@@ -20,7 +20,8 @@ export const bodyTypes = {
 
 export const outfits = {
   // Men: period suits and evening wear.
-  suit: { name: 'Suit with tie', body: 'male', jacket: '#2b3a55', trousers: '#2b3a55', shirt: '#e9e6dc', neckwear: 'tie', neckwearColor: '#8a1c2b', lapels: null },
+  suit: { name: 'Suit with tie', body: 'male', jacket: '#2b3a55', trousers: '#2b3a55', shirt: '#e9e6dc', neckwear: 'tie', neckwearColor: '#8a1c2b', lapels: null,
+    model: 'assets/characters/marcus.glb', modelHeight: 1.66, strideLength: 1.169 },   // Marcus (tools/char-pipeline/guests/marcus.py)
   tuxedo: { name: 'Tuxedo with bow tie', body: 'male', jacket: '#15151a', trousers: '#15151a', shirt: '#f3f1ea', neckwear: 'bow', neckwearColor: '#15151a', lapels: '#3a3a44',
     // Real rounded 3D guest (glTF with Idle/Walk clips). When present, characterView.js loads this
     // instead of building the placeholder box figure. Only Victor has one for this first review.

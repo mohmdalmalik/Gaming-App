@@ -4,7 +4,7 @@
 import { rules } from '../data/rules.js';
 import { CARDS, takeCard, isWeapon, countableCount, shuffle } from './cards.js';
 import {
-  checkWin, logPublic, convertToPossessed, isLocked, unlockRoom, placeBarricade, isBarricaded,
+  checkWin, canEscape, logPublic, convertToPossessed, isLocked, unlockRoom, placeBarricade, isBarricaded,
   adjacentLockedRooms,
 } from './state.js';
 import { openFrontierDoor } from './hotel.js';
@@ -31,6 +31,25 @@ export function openDoor(state, floor, player, doorId) {
   if (res.room.locked && rules.lockedDoorsEnabled) state.lockedRooms.add(res.room.id);
   logPublic(state, `${player.name} opened a door: ${res.room.name}.`);
   return { ok: true, room: res.room, doorway: res.doorway, connected: res.connected, locked: isLocked(state, res.room.id) };
+}
+
+// --- Escape ----------------------------------------------------------------------------------
+// A clean guest carrying three Lanterns, standing in the Fire Exit, spends `escapeCost` (1) AP to
+// escape: the clean side wins at once — even on the last turn before dawn. A guest who arrives with
+// no action points left can escape on their next turn (the Fire Exit is a safe zone meanwhile).
+// Refused without spending anything, and with one reason for everyone who is not let out
+// ('notLetOut'), so a refusal never tells the table why.
+export function escape(state, floor, player) {
+  if (state.finished) return { ok: false, reason: 'finished' };
+  if (!player.alive) return { ok: false, reason: 'dead' };
+  if (!floor.rooms.get(player.currentRoom)?.isExit) return { ok: false, reason: 'notInExit' };
+  if (player.actionPoints < rules.actionCost.escape) return { ok: false, reason: 'ap' };
+  if (!canEscape(state, floor, player)) return { ok: false, reason: 'notLetOut' };
+  player.actionPoints -= rules.actionCost.escape;
+  state.escaped.add(player.id);
+  state.won = 'humans'; state.finished = true;
+  logPublic(state, `${player.name} escaped through the Fire Exit.`);
+  return { ok: true, win: 'humans' };
 }
 
 // --- Deck ------------------------------------------------------------------------------------

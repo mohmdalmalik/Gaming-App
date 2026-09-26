@@ -75,7 +75,8 @@ readout at the top of the screen, for measuring speed on the iPad.
 - **Meetings** (hot-seat) — walk in on a guest you have not met in that room this round and you
   must Trade or Attack. In a trade each side picks a card in private and sees only what they
   received. Give a Lantern and a Possession card cannot take you. The lobby is safe.
-- **Escape** — a clean guest carrying three Lanterns walks into the Fire Exit.
+- **Escape** — a clean guest carrying three Lanterns walks into the Fire Exit (1 AP) and taps
+  **Escape** (1 AP). Arrive with nothing left and you can escape on your next turn; the exit is safe.
 - **Dawn** (hot-seat) — the header reads "Round 3 of 8"; round 8 is marked as the final round.
   If nobody has escaped when it ends, dawn breaks and the hotel wins. Practice has no deadline.
 - **End turn** — refills action points to 4; if you hold more than 6 ordinary cards you discard

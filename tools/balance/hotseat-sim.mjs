@@ -384,6 +384,7 @@ function botTurn(st, p, m) {
     if (!escaping && lookInMirror(st, p, m)) continue;
     if (escaping) {
       // Three Lanterns: to the Fire Exit — or, until it has turned up, keep opening doors.
+      if (S.canEscape(st, floor, p)) { if (A.escape(st, floor, p).ok) return; break; }   // already there
       if (floor.exitRoom) targets = [floor.exitRoom];
       else { if (openHere(st, p, m)) continue; targets = roomsWithClosedDoors(st); }
     } else {
@@ -441,7 +442,8 @@ function botTurn(st, p, m) {
     if (S.isLocked(st, step)) { if (opener && spend(st, p, m, rules.actionCost.useCard)) { A.useUnlock(st, floor, p, opener.id, step); continue; } break; }
     if (!spend(st, p, m, rules.actionCost.move)) break;
     S.enterRoom(st, floor, p, step);
-    if (floor.rooms.get(step).isExit && S.checkWin(st, floor, p)) return;
+    // In the Fire Exit with three Lanterns: Escape (1 AP) — or next turn, if this move used the last one.
+    if (floor.rooms.get(step).isExit && S.canEscape(st, floor, p)) { if (A.escape(st, floor, p).ok) return; break; }
     meet(st, p, m);
   }
 }

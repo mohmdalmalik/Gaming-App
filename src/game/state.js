@@ -173,6 +173,8 @@ export function endTurn(state, floor) {
 }
 
 // --- Escape and winning -----------------------------------------------------------------------
+// Whether this guest is someone the Fire Exit lets out: alive, clean, three Lanterns, standing in it.
+// Escaping itself is an action (escape() in actions.js, rules.escapeCost), so it also needs the AP.
 export const canEscape = (state, floor, player) =>
   player.alive && !player.possessed && hasEscapeLanterns(player.hand)
   && !!floor.rooms.get(player.currentRoom)?.isExit;
@@ -182,15 +184,11 @@ export const canEscape = (state, floor, player) =>
 export const dawnHasBroken = state => !state.practice && state.round > rules.roundLimit;
 export const isFinalRound = state => !state.practice && state.round === rules.roundLimit;
 
-// Decide the game. `enteredExitBy` is the guest who just stepped into the exit, if any. The exit
-// is resolved FIRST: a clean guest carrying three Lanterns escapes before anything else can
-// happen to them there — even on the last turn before dawn.
-export function checkWin(state, floor, enteredExitBy = null) {
+// Decide the game. An escape ends it the moment it happens (escape() in actions.js); this checks the
+// hotel's ways to win. Walking into the Fire Exit no longer escapes by itself: it is a safe zone, and
+// escaping there costs an action.
+export function checkWin(state, floor) {
   if (state.finished) return state.won;
-  if (enteredExitBy && canEscape(state, floor, enteredExitBy)) {
-    state.escaped.add(enteredExitBy.id);
-    state.won = 'humans'; state.finished = true; return 'humans';
-  }
   if (state.practice) return null;     // alone, the only ending is getting out
   const alive = state.players.filter(p => p.alive);
   // The possessed side wins once no living clean guest remains.

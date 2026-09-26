@@ -215,6 +215,30 @@ console.log(`       lobby view: ${perf.calls} draw calls, ${perf.tris} triangles
 check(perf.calls <= 120, `draw calls within budget (${perf.calls} ≤ 120)`);
 check(perf.tris <= 150000, `triangles within budget (${perf.tris} ≤ 150k)`);
 
+console.log('\n7b. locked rooms look locked');
+{
+  const r = await game(() => { const g = window.__game;
+    g.revealTile('corridorE', 'hall'); g.revealTile('cloakroom', 'corridorE');
+    const views = [...g.doorways.views.values()].filter(v => v.kind === 'open' && [v.doorway.a, v.doorway.b].includes('cloakroom'));
+    return { locked: g.state.lockedRooms.has('cloakroom'), n: views.length,
+      shut: views.every(v => v.leaf && v.leaf.userData.target === 0 && v.leaf.userData.pads.every(p => p.visible) && v.leaf.userData.leaf.material.map && v.warn.visible) };
+  });
+  check(r.locked && r.n >= 1 && r.shut, `a doorway into a locked room keeps a shut, padlocked door (${r.n} doorway${r.n === 1 ? '' : 's'})`);
+  await game(() => { const g = window.__game;
+    g.state.lockedRooms.delete('cloakroom'); g.refresh();
+    for (const v of g.doorways.views.values()) v.sync?.(); });
+  // (software rendering in the test runs few frames a second: allow the swing time to finish)
+  await page.waitForFunction(() => [...window.__game.doorways.views.values()]
+    .filter(v => v.kind === 'open' && [v.doorway.a, v.doorway.b].includes('cloakroom'))
+    .every(v => v.leaf.userData.swing > 0.9), null, { timeout: 8000 }).catch(() => {});
+  const u = await game(() => { const g = window.__game;
+    const views = [...g.doorways.views.values()].filter(v => v.kind === 'open' && [v.doorway.a, v.doorway.b].includes('cloakroom'));
+    return { ok: views.every(v => v.leaf.userData.swing > 0.9 && v.leaf.userData.pads.every(p => !p.visible) && !v.warn.visible),
+      info: views.map(v => [v.leaf.userData.swing.toFixed(2), v.leaf.userData.target, v.locked, v.warn.visible, v.leaf.userData.pads.map(p => p.visible)]) };
+  });
+  check(u.ok, `once it is opened, the door swings open and the padlocks go ${u.ok ? '' : JSON.stringify(u.info)}`);
+}
+
 console.log('\n8. console');
 await dressed();
 const noisy = consoleMessages.filter(x => !/favicon/i.test(x));

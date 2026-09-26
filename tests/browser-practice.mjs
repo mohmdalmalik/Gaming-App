@@ -332,7 +332,11 @@ await put(await game(() => [...window.__game.floor.rooms.get(window.__game.floor
 await game(() => window.__game.moveToRoom(window.__game.floor.exitRoom));
 await settle();
 await page.waitForTimeout(300);
-check(await game(() => window.__game.isFinished()), 'entering the fire exit with three Lanterns ends the practice run');
+check(!(await game(() => window.__game.isFinished())), 'walking into the fire exit does not escape by itself');
+check(await page.evaluate(() => { const b = document.getElementById('btn-room'); return !b.hidden && !b.disabled && b.textContent.includes('Escape'); }), 'an Escape button (1 action) appears there');
+await tap('#btn-room');
+await page.waitForTimeout(300);
+check(await game(() => window.__game.isFinished()), 'Escape with three Lanterns ends the practice run');
 check(await visible('#end-overlay') && /fire exit/i.test(await page.textContent('#end-title')), 'the end screen says so');
 await shot('pr-03-end');
 await tap('#btn-restart');

@@ -150,6 +150,34 @@ function doorTexture() {
   return t;
 }
 
+// A LOCKED door's face: dark oxblood boards held by two riveted iron straps, with a brass lock plate
+// and keyhole — so a locked room reads as locked from across the hotel, not as another walnut door.
+function lockedDoorTexture() {
+  const W = 128, H = 256;
+  const c = document.createElement('canvas');
+  c.width = W; c.height = H;
+  const g = c.getContext('2d');
+  g.fillStyle = '#4a1814'; g.fillRect(0, 0, W, H);
+  for (let x = 0; x < W; x += 32) {                                       // vertical boards
+    g.fillStyle = x % 64 ? '#55201a' : '#461612'; g.fillRect(x + 1, 0, 30, H);
+    g.fillStyle = '#2a0d0a'; g.fillRect(x, 0, 2, H);
+  }
+  for (const y of [46, 196]) {                                            // iron straps with rivets
+    g.fillStyle = '#26262b'; g.fillRect(0, y, W, 20);
+    g.fillStyle = '#3c3c44'; g.fillRect(0, y, W, 4);
+    g.fillStyle = '#8a8a94';
+    for (let x = 10; x < W; x += 24) { g.beginPath(); g.arc(x, y + 10, 3, 0, Math.PI * 2); g.fill(); }
+  }
+  g.fillStyle = '#c9a24e'; g.fillRect(W / 2 - 18, 108, 36, 52);          // brass lock plate
+  g.fillStyle = '#8c6c2c'; g.fillRect(W / 2 - 18, 156, 36, 4);
+  g.fillStyle = '#1a0c06';                                                 // keyhole
+  g.beginPath(); g.arc(W / 2, 126, 6, 0, Math.PI * 2); g.fill();
+  g.fillRect(W / 2 - 3, 126, 6, 18);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+
 const INTO = { north: [0, 1], south: [0, -1], east: [-1, 0], west: [1, 0] };   // into the room from its wall
 
 // Doors and doorways. A CLOSED door (one that leads to a room not yet revealed) is a walnut door
@@ -157,7 +185,7 @@ const INTO = { north: [0, 1], south: [0, -1], east: [-1, 0], west: [1, 0] };   /
 // swings the leaf into the new room, and from then on it is an open doorway. A gold ring (a slow
 // pulse; the tests know it as `blink`) sits on the active guest's side of every door they can use
 // this turn — to open, or to walk through. A jammed door keeps its leaf, and no cue.
-export function createDoorwayViews(floor, cfg, scene) {
+export function createDoorwayViews(floor, cfg, scene, { isLocked = () => false } = {}) {
   const views = new Map();
   const t = cfg.walls.thickness, H = cfg.walls.height;
   const warm = new THREE.Color(cfg.palette.frontier);
@@ -174,6 +202,13 @@ export function createDoorwayViews(floor, cfg, scene) {
   const leafMat = new THREE.MeshBasicMaterial({ map: doorFace, color: new THREE.Color('#ffffff') });
   const leafJammedMat = new THREE.MeshBasicMaterial({ map: doorFace, color: new THREE.Color('#8a7a70') });
   const knobMat = new THREE.MeshBasicMaterial({ color: new THREE.Color('#b8923f') });
+  const lockedMat = new THREE.MeshBasicMaterial({ map: lockedDoorTexture() });
+  // A padlock hung on each face of a locked door: brass body and a steel shackle.
+  const padBodyGeo = new THREE.BoxGeometry(0.16, 0.17, 0.06);
+  const padShackleGeo = new THREE.TorusGeometry(0.055, 0.014, 6, 14, Math.PI);
+  const padBodyMat = new THREE.MeshBasicMaterial({ color: new THREE.Color('#d4aa4f') });
+  const padShackleMat = new THREE.MeshBasicMaterial({ color: new THREE.Color('#9da0a8') });
+  const lockGlowMat = new THREE.MeshBasicMaterial({ map: radial, color: new THREE.Color('#c0392b'), transparent: true, opacity: 0.35, depthWrite: false, toneMapped: false, blending: THREE.AdditiveBlending });
   const LEAF_H = 2.02;
 
   // A door leaf hinged at one jamb: a pivot group so it can swing open.
@@ -191,7 +226,20 @@ export function createDoorwayViews(floor, cfg, scene) {
     knob.scale.set(0.06, 0.06, 0.06);
     knob.position.set(along ? w - 0.12 : ix * 0.05, 1.0, along ? iz * 0.05 : w - 0.12);
     pivot.add(leaf, knob);
-    pivot.userData = { leaf, knob, swing: 0, target: 0, room: room.id, side: d.side, along };
+    // The padlocks (shown only while the room behind is locked), one on each face at hand height.
+    const pads = [1, -1].map(f => {
+      const g = new THREE.Group();
+      const body = new THREE.Mesh(padBodyGeo, padBodyMat);
+      const shackle = new THREE.Mesh(padShackleGeo, padShackleMat);
+      shackle.position.y = 0.085;
+      if (!along) { body.rotation.y = Math.PI / 2; shackle.rotation.y = Math.PI / 2; }
+      g.add(body, shackle);
+      g.position.set(along ? w / 2 : f * 0.06, 1.05, along ? f * 0.06 : w / 2);
+      g.visible = false;
+      pivot.add(g);
+      return g;
+    });
+    pivot.userData = { leaf, knob, pads, swing: 0, target: 0, room: room.id, side: d.side, along };
     scene.add(pivot);
     return pivot;
   }
@@ -259,13 +307,42 @@ export function createDoorwayViews(floor, cfg, scene) {
     strip.position.set(d.center[0], 0.02, d.center[1]);
     scene.add(strip);
     const { glow, blink } = makeCues(d);
-    if (leaf) { leaf.userData.leaf.material = leafMat; leaf.userData.target = 1; }
+    // A doorway into a LOCKED room keeps a door in it — the locked kind, shut — until the room is
+    // opened with a key or a pick; then it swings open like any other. (A locked room revealed next
+    // to other rooms gets one in every doorway, even where no door was opened.)
+    const lockedNow = () => isLocked(d.a) || isLocked(d.b);
+    if (!leaf && lockedNow()) leaf = makeLeaf({ ...d, side: d.sideA }, floor.rooms.get(d.a));
+    // a red warning glow on the floor on the unlocked side
+    const warn = new THREE.Mesh(unitPlane, lockGlowMat);
+    warn.renderOrder = 2;
+    scene.add(warn);
     const view = {
-      kind: 'open', doorway: d, strip, leaf, glow, blink,
-      setState() {},
+      kind: 'open', doorway: d, strip, leaf, glow, blink, warn, locked: null,
+      sync() {
+        const locked = lockedNow();
+        if (locked === this.locked || !leaf) { warn.visible = !!locked; return; }
+        this.locked = locked;
+        const u = leaf.userData;
+        u.leaf.material = locked ? lockedMat : leafMat;
+        u.knob.visible = !locked;
+        for (const p of u.pads) p.visible = locked;
+        u.target = locked ? 0 : 1;
+        u.locked = locked;
+        warn.visible = locked;
+        if (locked) {
+          // the glow sits on the side of the room that is NOT locked
+          const openSide = isLocked(d.a) ? d.b : d.a;
+          const [ix, iz] = INTO[d.sideFor(openSide)];
+          const deep = 1.0;
+          warn.scale.set(along ? d.width + 0.6 : deep, 1, along ? deep : d.width + 0.6);
+          warn.position.set(d.center[0] + ix * (t + deep / 2), 0.036, d.center[1] + iz * (t + deep / 2));
+        }
+      },
+      setState() { this.sync(); },
       setUsable(v, fromRoom) { blink.visible = v; glow.visible = v; placeRing(blink, d, fromRoom); },
-      dispose() { scene.remove(strip, glow, blink); if (leaf) scene.remove(leaf); },
+      dispose() { scene.remove(strip, glow, blink, warn); if (leaf) scene.remove(leaf); },
     };
+    view.sync();
     return view;
   }
 
@@ -311,7 +388,8 @@ export function createDoorwayViews(floor, cfg, scene) {
         leaf.rotation.y = ang;
         const rv = roomViews.get(u.room);
         const h = rv ? rv.sideHeight(u.side) : H;
-        leaf.scale.y = Math.max(0.02, Math.min(1, h / LEAF_H));
+        // A locked door stays at least chest high, padlock showing, even where the wall is cut down.
+        leaf.scale.y = Math.max(u.locked ? 1.3 / LEAF_H : 0.02, Math.min(1, h / LEAF_H));
         leaf.visible = !!rv?.group.visible;
       }
     },

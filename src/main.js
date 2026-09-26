@@ -15,7 +15,7 @@ import {
   isBarricaded,
 } from './game/state.js';
 import {
-  search, useBandage, useUnlock, useBarricade, resolveFullHand, resolveTrade, resolveAttack,
+  search, escape, useBandage, useUnlock, useBarricade, resolveFullHand, resolveTrade, resolveAttack,
   discardCard, overHandLimit, tradeableCards, openDoor,
   canUseRoom, useInfirmary, useSwitchboard, useHandMirror, useEspresso,
 } from './game/actions.js';
@@ -94,7 +94,7 @@ function trackDressing(promise) {
   promise.catch(err => console.warn('room dressing failed:', err && err.message))
     .finally(() => { dressing.delete(promise); if (!dressing.size) dressingDone = true; });
 }
-const doorways = createDoorwayViews(floor, cfg, view.scene);
+const doorways = createDoorwayViews(floor, cfg, view.scene, { isLocked: id => !!state?.lockedRooms?.has(id) });
 const characters = cast.map(def => createCharacterView(def, cfg, view.scene));
 const searchMarks = createSearchMarks(floor, view.scene);
 const pathPreview = createPathPreview(view.scene, view.camera, view.renderer.domElement, container);
@@ -265,17 +265,16 @@ function doEndTurn() {
   endTurnNow();
 }
 
-// The active guest finished walking into a room. ORDER MATTERS: the exit is resolved FIRST —
-// a clean guest carrying three Lanterns escapes before any meeting can be forced there.
+// The active guest finished walking into a room. The Fire Exit is a safe zone (never a meeting);
+// escaping there is a separate action, the Escape button (1 AP).
 function onArrive() {
   const player = activePlayer(state);
   const room = floor.rooms.get(player.currentRoom);
   pendingArrival = null;
   if (room?.isExit) {
-    if (checkWin(state, floor, player)) { syncViews(false); refresh(); showEnd(); return; }
     // The same words for everyone, so the shared screen gives nothing away about who is carrying
     // what or who is possessed.
-    hud.toast(`The fire exit — it opens only for a clean guest carrying ${rules.lanternsToEscape} Lanterns.`);
+    hud.toast(`The fire exit — a clean guest carrying ${rules.lanternsToEscape} Lanterns can escape here (${rules.actionCost.escape} action).`);
   }
   const candidates = pendingEncounters(state, floor, player);
   if (!candidates.length) { refresh(); return; }
@@ -326,11 +325,20 @@ function runTrade(A, B, { first, second }, onDone = afterMeeting) {
         const events = resolveTrade(state, floor, A, B, cardA, cardB);
         handoff.passTo(first, 'Back to you', () => {
           const got = events.ok ? events.received[first.id] : null;
-          const lines = [events.ok
-            ? (got ? `You received ${aCard(got)} from ${second.name}.` : `The card ${second.name} gave you burned away in your Lantern's light.`)
-            : 'The trade could not be made.'];
+          // A Possession card is explained by the engine's own note ("…You are now POSSESSED"), so it
+          // gets no separate "You received" line.
+          const lines = !events.ok ? ['The trade could not be made.']
+            : got === 'possession' ? []
+              : [got ? `You received ${aCard(got)} from ${second.name}.` : `The card ${second.name} gave you burned away in your Lantern's light.`];
           const mine = first.notes.splice(0, first.notes.length);
-          handoff.privateNote(first, [...lines, ...mine], () => meeting.tradeDone(A, B, onDone));
+          // Told privately just now that they were converted: no second role screen at their next turn.
+          if (events.possessed?.some(e => e.newly === first.id)) first.roleChangePending = false;
+          // The device must end with the guest whose turn it is. In a lobby trade the other guest picks
+          // first and reads their result last, so the device is handed back before the game carries on.
+          const active = activePlayer(state);
+          const finish = () => meeting.tradeDone(A, B, onDone);
+          handoff.privateNote(first, [...lines, ...mine], () => (first === active
+            ? finish() : handoff.passTo(active, `The trade is done — back to ${active.name}'s turn`, finish)));
         });
       });
     });
@@ -513,6 +521,14 @@ function onRoom() {
   if (!running || state.finished || uiBusy() || activeMover().walking) return;
   if (HOTSEAT && !inActionPhase) return;
   const player = activePlayer(state);
+  // The Fire Exit: escaping is its own action (1 AP). The refusal reads the same for everyone.
+  if (floor.rooms.get(player.currentRoom)?.isExit) {
+    const r = escape(state, floor, player);
+    if (r.ok) { syncViews(false); refresh(); showEnd(); return; }
+    hud.toast(r.reason === 'ap' ? 'No actions left — you can escape on your next turn.'
+      : `The fire exit opens only for a clean guest carrying ${rules.lanternsToEscape} Lanterns.`);
+    return;
+  }
   const gate = canUseRoom(state, floor, player);
   if (!gate.ok) { hud.toast(ROOM_FAIL[gate.reason] || 'Cannot use this room now.'); return; }
   if (gate.job === 'infirmary') {
@@ -765,7 +781,7 @@ function buildStartScreen() {
   if (sub) {
     sub.textContent = HOTSEAT
       ? `Hot-seat · ${rules.playerCount} guests, one device · one is secretly possessed · find ${rules.lanternsToEscape} Lanterns and get one clean guest out before dawn (${rules.roundLimit} rounds)`
-      : `Practice mode · explore the hotel alone, find ${rules.lanternsToEscape} Lanterns, reach the fire exit`;
+      : `Practice mode · explore the hotel alone, find ${rules.lanternsToEscape} Lanterns, escape through the fire exit`;
   }
   document.title = HOTSEAT ? `Hotel Escape — Hot-seat (${rules.playerCount})` : 'Hotel Escape — Practice';
   if (!host) return;
@@ -860,6 +876,7 @@ window.__game = {
   lanterns: () => activePlayer(state).hand.filter(c => c.type === 'lantern').length,
   lockedRooms: () => [...state.lockedRooms],
   canEscape: () => canEscape(state, floor, activePlayer(state)),
+  escape: () => onRoom(),
   openHand: () => hand.open(state, floor),
   rotate: steps => rig.rotate(steps),
   toggleMap: () => map.toggle(state, movers),

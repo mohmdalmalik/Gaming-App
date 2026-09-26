@@ -9,7 +9,7 @@ Guests are trapped on a hotel floor. Lanterns are the way out: a clean guest car
 
 ## Turn
 - 4 action points (AP), never carried over.
-- Open a closed door of your room: 1 AP (see Doors and exploring). Move into an adjacent room through an open doorway: 1 AP. Search: 1 AP. Use a card: 1 AP (Espresso: free). Use a room's job (Infirmary, Switchboard): 1 AP. Repositioning inside a room: free.
+- Open a closed door of your room: 1 AP (see Doors and exploring). Move into an adjacent room through an open doorway: 1 AP. Escape from the Fire Exit: 1 AP. Search: 1 AP. Use a card: 1 AP (Espresso: free). Use a room's job (Infirmary, Switchboard): 1 AP. Repositioning inside a room: free.
 - 45-second timer for the active player's actions. It pauses during meetings and pass-the-device screens. When it runs out, the turn ends. ?timer=off disables it.
 - A round = every living guest takes one turn.
 - Dawn deadline: the match lasts at most 8 rounds. The round is shown as "Round 3 of 8", and the final round before dawn is clearly marked.
@@ -44,7 +44,7 @@ Guests are trapped on a hotel floor. Lanterns are the way out: a clean guest car
 ## Lanterns and escape
 - Lanterns do double duty: given in a trade they block a possession attempt, and three of them open the fire exit.
 - Lanterns are never dealt. They are found only by searching.
-- The Fire Exit is revealed like any other room, when the door to it is opened. A clean guest holding three Lanterns who enters it escapes immediately, before any meeting. A possessed guest can hold Lanterns but can never escape.
+- The Fire Exit is revealed like any other room, when the door to it is opened. Walking into the Fire Exit is a normal move (1 AP). Escaping is a separate action: a clean guest with three Lanterns standing in the Fire Exit spends 1 AP to escape. If you arrive with no AP left, you can escape on your next turn — the Fire Exit stays a safe zone meanwhile; dawn can still beat you. A possessed guest can hold Lanterns but can never escape.
 
 ## Winning
 - Clean side: one clean guest escapes with three Lanterns.

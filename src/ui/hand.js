@@ -79,7 +79,7 @@ export function createHand(doc, cfg, { onUseBandage, onUnlock, onBarricade, onEs
     const noAp = p.actionPoints < rules.actionCost.useCard;
     if (card.type === 'lantern') {
       const held = p.hand.filter(c => c.type === 'lantern').length;
-      line(`<b>Escape:</b> you hold ${held} of ${rules.lanternsToEscape}. A clean guest carrying ${rules.lanternsToEscape} Lanterns who walks into the fire exit escapes at once.${p.possessed ? ' While you are possessed it will not open for you.' : ''}`);
+      line(`<b>Escape:</b> you hold ${held} of ${rules.lanternsToEscape}. A clean guest carrying ${rules.lanternsToEscape} Lanterns escapes from the fire exit with the Escape button (${rules.actionCost.escape} action).${p.possessed ? ' While you are possessed it will not open for you.' : ''}`);
       if (!state.practice) {
         line('<b>In a trade:</b> in an ordinary trade it goes to the other guest like any card — pass them to one guest. If they handed you a Possession card, your Lantern blocks it: both cards are used up and you learn who tried.', 'd-tag');
       }

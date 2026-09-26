@@ -328,7 +328,11 @@ await game(() => window.__game.moveToRoom(window.__game.floor.exitRoom));
 await settle();
 await page.waitForTimeout(300);
 check(!(await game(() => window.__game.meetingOpen())), 'no meeting is forced in the exit');
-check(await game(() => window.__game.isFinished() && window.__game.state.won === 'humans'), 'a clean guest with three Lanterns escapes: the guests win');
+check(!(await game(() => window.__game.isFinished())), 'walking in does not escape by itself');
+check(await page.evaluate(() => { const b = document.getElementById('btn-room'); return !b.hidden && !b.disabled && /Escape/.test(b.textContent); }), 'the Escape button shows in the exit');
+await tap('#btn-room');
+await page.waitForTimeout(300);
+check(await game(() => window.__game.isFinished() && window.__game.state.won === 'humans'), 'a clean guest with three Lanterns presses Escape (1 action): the guests win');
 check(/got out/i.test(await page.textContent('#end-title')), 'the end screen says so');
 await shot('hs-06-escaped');
 // A possessed guest cannot.
@@ -409,7 +413,14 @@ await next();
 await page.click('#offer-cards .card-tile[data-card-id="p1"]'); await page.waitForTimeout(80);
 await next();
 check(await kind() === 'note' && /Lantern/.test(await page.textContent('#handoff-notes')), 'the guest who chose first privately reads what they received — a Lantern');
+await next();
+{
+  const active = await game(() => window.__game.activePlayer().name);
+  check(await kind() === 'pass' && (await page.textContent('#handoff-title')).includes(active),
+    `then the device goes back to the guest whose turn it is (${active}) before the game carries on`);
+}
 await next(); await tap('#encounter-actions .btn.primary');
+check(await game(() => window.__game.inActionPhase() && !window.__game.handoffOpen()), 'and their turn carries on');
 check(await game(() => window.__game.state.players[0].hand.some(c => c.id === 'q1') && window.__game.state.players[1].hand.some(c => c.id === 'p1')), 'the cards swapped — a Lantern passes to a teammate like any card');
 
 console.log('\n10. the clock');

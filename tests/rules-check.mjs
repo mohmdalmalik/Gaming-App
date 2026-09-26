@@ -13,7 +13,7 @@ import {
 } from '../src/game/state.js';
 import {
   search, canSearch, useBandage, useUnlock, useBarricade, resolveFullHand, discardCard, overHandLimit,
-  resolveTrade, resolveAttack, tradeableCards, drawCard, dropEverything, openDoor,
+  resolveTrade, resolveAttack, tradeableCards, drawCard, dropEverything, openDoor, escape,
   canUseRoom, useInfirmary, useSwitchboard, useHandMirror, useEspresso,
 } from '../src/game/actions.js';
 
@@ -45,6 +45,9 @@ const hs = (seed = 1) => {
 };
 const hsx = seed => { const s = hs(seed); ensureRoom(s, 'exit'); return s; };   // ...with the Fire Exit placed
 const possessed = s => s.players.find(p => p.possessed);
+const S_active = s => activePlayer(s);
+// Make one guest (not `keep`) the only possessed guest, so nobody else converts anyone in a staging.
+const possessedFix = (s, keep) => { s.players.forEach(p => { p.possessed = false; }); s.players.find(p => p !== keep).possessed = true; };
 const cleanOnes = s => s.players.filter(p => !p.possessed);
 const deckTotal = Object.values(rules.deck).reduce((a, b) => a + b, 0);
 
@@ -486,7 +489,8 @@ console.log('\nescape and winning');
   const K = cleanOnes(s)[0];
   K.currentRoom = floor.exitRoom; s.discovered.add(floor.exitRoom);
   K.hand = K.hand.filter(c => c.type !== 'lantern');
-  check(!canEscape(s, floor, K) && checkWin(s, floor, K) === null, 'entering the exit with no Lanterns does nothing');
+  check(!canEscape(s, floor, K) && checkWin(s, floor) === null, 'standing in the exit with no Lanterns does nothing');
+  check(escape(s, floor, K).reason === 'notLetOut' && K.actionPoints === 4, 'Escape is refused without three Lanterns, and costs nothing');
   K.hand.push({ id: 'b1', type: 'lantern' }, { id: 'b2', type: 'lantern' });
   check(!canEscape(s, floor, K), 'two Lanterns are not enough');
   K.hand.push({ id: 'b3', type: 'lantern' });
@@ -494,14 +498,46 @@ console.log('\nescape and winning');
   // ORDER: the exit is resolved before any meeting.
   const other = cleanOnes(s)[1]; other.currentRoom = floor.exitRoom;
   check(pendingEncounters(s, floor, K).length === 0, 'the exit is safe: no meeting can be forced there');
-  check(checkWin(s, floor, K) === 'humans' && s.finished && s.escaped.has(K.id), 'a clean guest with three Lanterns escapes and the guests win');
+  check(rules.escapeCost === 1 && rules.actionCost.escape === 1, 'escaping costs 1 action point');
+  check(!s.finished && checkWin(s, floor) === null, 'walking in does not escape by itself: escaping is its own action');
+  K.actionPoints = 0;
+  check(escape(s, floor, K).reason === 'ap' && !s.finished, 'with no action points left there is no escape this turn');
+  K.actionPoints = 2;
+  const r = escape(s, floor, K);
+  check(r.ok && K.actionPoints === 1 && s.finished && s.won === 'humans' && s.escaped.has(K.id), 'Escape spends 1 action point and the guests win');
+  check(s.log.at(-1).text.includes('escaped'), 'the table sees the escape in the public log');
+}
+{
+  // Arriving with no action points left: escape on the next turn; the exit is safe meanwhile.
+  const s = hsx(31);
+  const K = cleanOnes(s)[0];
+  s.activeIndex = K.index;
+  K.hand = [{ id: 'n1', type: 'lantern' }, { id: 'n2', type: 'lantern' }, { id: 'n3', type: 'lantern' }];
+  K.currentRoom = floor.exitRoom; K.actionPoints = 0;
+  check(escape(s, floor, K).reason === 'ap', 'arrived with 0 action points: not yet');
+  const V = possessed(s); V.currentRoom = floor.exitRoom;
+  check(pendingEncounters(s, floor, V).length === 0, 'the Fire Exit stays a safe zone: nobody can force a meeting on the waiting guest');
+  for (let i = 0; i < s.players.length; i++) endTurn(s, floor);
+  check(S_active(s) === K && K.actionPoints === 4 && escape(s, floor, K).ok && s.won === 'humans', 'on their next turn they spend 1 action point and escape');
+}
+{
+  // Dawn can still beat a guest who reaches the exit with nothing left on the last turn.
+  const s = hsx(32);
+  const K = cleanOnes(s)[0];
+  s.players.forEach(p => { p.possessed = false; }); possessedFix(s, K);
+  K.hand = [{ id: 'd1', type: 'lantern' }, { id: 'd2', type: 'lantern' }, { id: 'd3', type: 'lantern' }];
+  K.currentRoom = floor.exitRoom;
+  while (!(s.round === rules.roundLimit && s.activeIndex === K.index)) endTurn(s, floor);
+  K.actionPoints = 0;
+  while (!checkWin(s, floor)) endTurn(s, floor);
+  check(s.dawn && s.won === 'possessed' && !s.escaped.size, 'reaching the exit with no action points on the last turn: dawn breaks first');
 }
 {
   const s = hsx(21);
   const V = possessed(s);
   V.currentRoom = floor.exitRoom;
   V.hand.push({ id: 'b1', type: 'lantern' }, { id: 'b2', type: 'lantern' }, { id: 'b3', type: 'lantern' });
-  check(!canEscape(s, floor, V) && checkWin(s, floor, V) === null, 'a possessed guest holding three Lanterns can never escape');
+  check(!canEscape(s, floor, V) && escape(s, floor, V).reason === 'notLetOut' && !s.finished, 'a possessed guest holding three Lanterns can never escape');
 }
 {
   const s = hs(22);
@@ -529,7 +565,7 @@ console.log('\nescape and winning');
   s4.activeIndex = K.index;
   K.hand = [{ id: 'e1', type: 'lantern' }, { id: 'e2', type: 'lantern' }, { id: 'e3', type: 'lantern' }];
   K.currentRoom = floor.exitRoom;
-  check(checkWin(s4, floor, K) === 'humans' && !s4.dawn, 'a clean guest who escapes during round 8 wins — dawn has not broken yet');
+  check(escape(s4, floor, K).ok && s4.won === 'humans' && !s4.dawn, 'a clean guest who escapes during round 8 wins — dawn has not broken yet');
   // Dead guests don't stretch the night: a round is one turn for every LIVING guest.
   const s5 = hs(30);
   s5.players.forEach(p => { p.possessed = false; }); s5.players[0].possessed = true;
@@ -563,9 +599,9 @@ console.log('\nescape and winning');
   check(rules.practiceSeed == null, 'practice builds a new random hotel every match');
   ensureRoom(s, 'exit');
   p.currentRoom = floor.exitRoom;
-  check(checkWin(s, floor, p) === null, 'the exit does nothing without three Lanterns');
+  check(!escape(s, floor, p).ok && !s.finished, 'the exit does nothing without three Lanterns');
   p.hand.push({ id: 'b1', type: 'lantern' }, { id: 'b2', type: 'lantern' }, { id: 'b3', type: 'lantern' });
-  check(checkWin(s, floor, p) === 'humans', 'with three Lanterns, practice is complete');
+  check(escape(s, floor, p).ok && s.won === 'humans', 'with three Lanterns, Escape (1 action) completes practice');
   applyMode('hotseat', 6);
 }
 

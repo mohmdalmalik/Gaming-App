@@ -3,7 +3,7 @@
 // hand opener with a live count, the turn-action buttons (with costs / reasons), a move-confirm
 // bar and toasts. Portraits are illustrated placeholders (see ui/portrait.js) so real art can
 // drop in later without changing this logic. Possession is never revealed on the public strip.
-import { activePlayer, nextPlayer, playersInRoom } from './game/state.js';
+import { activePlayer, nextPlayer, playersInRoom, canEscape } from './game/state.js';
 import { canSearch, canUseRoom } from './game/actions.js';
 import { rules } from './data/rules.js';
 import { countableCount } from './game/cards.js';
@@ -196,9 +196,19 @@ export function createHud(doc, cfg) {
         : (SEARCH_REASON[gate.reason] || 'Unavailable');
 
       // A room with a job: its button shows only while standing in one (Infirmary, Switchboard).
+      // The Fire Exit uses the same button for Escape. In hot-seat it looks the same for every guest
+      // standing there (whether it would let them out stays private until they try); practice has
+      // nothing to hide, so it says when Lanterns are missing.
       const job = ROOM_JOB[room?.job];
-      el.roomJob.hidden = !job;
-      if (job) {
+      el.roomJob.hidden = !job && !room?.isExit;
+      if (room?.isExit) {
+        const short = p.actionPoints < rules.actionCost.escape;
+        const missing = state.practice && !canEscape(state, floor, p);
+        el.roomJobMain.textContent = 'Escape';
+        el.roomJob.disabled = state.finished || short || missing;
+        el.roomJobSub.textContent = state.finished ? '—' : short ? 'No actions left'
+          : missing ? `Need ${rules.lanternsToEscape} Lanterns` : plural(rules.actionCost.escape);
+      } else if (job) {
         const use = canUseRoom(state, floor, p);
         el.roomJobMain.textContent = job.name;
         el.roomJob.disabled = !use.ok;

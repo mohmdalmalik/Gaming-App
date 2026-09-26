@@ -48,9 +48,10 @@ export const rules = {
   possessionSupply: 3,      // the Possessed guest starts with this many Possession cards
 
   // --- Lanterns and escape ------------------------------------------------------------------
-  // A clean guest holding this many Lanterns who enters the exit escapes at once. Lanterns are
+  // A clean guest holding this many Lanterns, standing in the Fire Exit, may escape (escapeCost). Lanterns are
   // never dealt — they are found only by searching.
   lanternsToEscape: 3,
+  escapeCost: 1,            // APPROVED: escaping is its own action — walk in (a normal move), then 1 AP to escape
   lanternsDealtEach: 0,     // APPROVED: 0. The simulator compares 1 (one Lantern dealt to each guest).
   // What happens to a Lantern that blocks a possession attempt.
   //   'discard'  APPROVED: used up — the Lantern and the Possession card are both discarded.
@@ -130,6 +131,7 @@ function derive() {
     espresso: rules.espressoCost,
     infirmary: rules.infirmaryCost,
     switchboard: rules.switchboardCost,
+    escape: rules.escapeCost,
     attack: rules.attackCost,
   };
   rules.handSize = rules.startingHandSize;

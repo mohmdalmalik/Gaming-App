@@ -865,6 +865,8 @@ console.log('\nHand Mirror');
   check(r.target === V.id && ids(r.hand) === vBefore, 'it shows the target’s whole hand');
   check(r.hand.filter(c => c.type === 'possession').length === 2 && r.unmasked, 'Possession cards included');
   check(ids(V.hand) === vBefore, 'the target keeps every card');
+  check(V.notes.some(n => n.includes(A.name) && n.includes('Hand Mirror')) && !A.notes.length,
+    'the target is told privately (on their own next screen) that their hand was seen');
   check(A.knows.has(V.id), 'a clean guest who sees a Possession card now knows the target is possessed');
   const line = s.log.at(-1).text;
   const others = Object.values(rules.cards).map(c => c.name).filter(nm => nm !== 'Hand Mirror');

@@ -1,6 +1,9 @@
 // Balance simulation (dev tool, not part of the game).
 //   node tools/balance/hotseat-sim.mjs [matches] [players]            the rules as they stand
 //   node tools/balance/hotseat-sim.mjs [matches] [players] --compare  plus three Lantern variants
+//   node tools/balance/hotseat-sim.mjs [matches] [players] --before   plus the same bots, seeds and
+//        hotels on the rules BEFORE Part 2 (the 40-card deck, the five job rooms as plain rooms), so the
+//        effect of the Part 2 changes is measured like for like
 //
 // Plays whole matches through the PURE rules engine — no browser — with simple bots, each in a new
 // random hotel that grows as the bots open doors. By default it reports the approved rules: who
@@ -18,7 +21,10 @@
 // "carrier" — the clean-looking guest holding the most Lanterns — and bring Lanterns to them,
 // standing in for the talking a real table does. Nobody knows who is possessed except a guest
 // who blocked them with a Lantern, saw a Possession card in a Hand Mirror, or worked it out from
-// the Switchboard's count. Bots never waste a turn and never bluff, so read the numbers as "the
+// the Switchboard's count. A second shortcut, carried over unchanged from the earlier bots so the
+// comparison stays fair: POSSESSED bots know every guest's role (who is on their side, whom to hunt)
+// and see a target's Lantern count before attacking. So the Hand Mirror and Switchboard numbers below
+// measure what they do for the CLEAN side only. Bots never waste a turn and never bluff, so read the numbers as "the
 // rules played competently and mechanically", not as a prediction of a real evening.
 //
 // Rooms with jobs and the new cards — what the bots do with them:
@@ -68,7 +74,7 @@ import { hotel } from '../../src/data/hotel.js';
 import { roster } from '../../src/data/characters.js';
 import { config } from '../../src/config.js';
 import { createHotel, openDoors, exitPlaced } from '../../src/game/hotel.js';
-import { weaponsIn } from '../../src/game/cards.js';
+import { weaponsIn, makeRng } from '../../src/game/cards.js';
 import * as S from '../../src/game/state.js';
 import * as A from '../../src/game/actions.js';
 
@@ -83,13 +89,17 @@ const EXPLORE = !process.argv.includes('--cautious');
 const MAX_TURNS = 600;          // a safety net: with the dawn deadline no match should get near it
 const INFIRMARY_REACH = 2;      // bot habit, not a rule: how many steps a badly hurt guest walks for treatment
 const lanterns = hand => hand.filter(c => c.type === 'lantern');
-const rnd = arr => arr[Math.floor(Math.random() * arr.length)];
+// The bots' own choices (which door, which card) come from a generator seeded per match, so the same
+// command gives the same numbers every time.
+let botRng = makeRng(1);
+const rnd = arr => arr[Math.floor(botRng() * arr.length)];
 
 // What the bots remember between turns, reset for every match. Only what that guest saw for
 // themselves or what the whole table heard (the public log) — never a hidden role.
 let memo;
 const freshMemo = () => ({
   events: 0,              // trades and deaths so far (both public)
+  switchUnmasked: new Set(),  // possessed guests some clean guest worked out from the Switchboard
   eventsAtCall: 0,        // ...when the table last heard the Switchboard's count (the start: 1)
   rang: new Map(),        // playerId -> round they last rang the Switchboard
   trades: new Map(),      // playerId -> trades they have made so far (public: "X and Y traded")
@@ -194,6 +204,8 @@ function giveCard(st, me, partner) {
     const plain = hand.filter(c => c.type !== 'lantern');
     if (plain.length) return rnd(plain).id;
   }
+  // A guest I know is possessed may try a Possession card on me: a Lantern blocks it — the carrier too.
+  if (me.knows.has(partner.id) && lan.length) return lan[0].id;
   // The carrier keeps their Lanterns and gives something else if they can.
   if (carrier?.id === me.id) {
     const plain = hand.filter(c => c.type !== 'lantern');
@@ -308,9 +320,13 @@ function ring(st, p, m) {
     const suspects = others.filter(q => !b.knows.has(q.id) && !sure.has(q.id));
     if (!suspects.length) continue;
     if (hidden <= 0) { for (const q of suspects) sure.add(q.id); learned = true; }
-    else if (hidden === suspects.length) { for (const q of suspects) b.knows.add(q.id); m.switchUnmasked += suspects.length; learned = true; }
+    else if (hidden === suspects.length) {
+      for (const q of suspects) { b.knows.add(q.id); memo.switchUnmasked.add(q.id); }
+      learned = true;
+    }
   }
   if (learned) m.switchLearned++;
+  m.switchUnmasked = memo.switchUnmasked.size;     // distinct guests, however many listeners worked each out
 }
 
 // Hand Mirror, outside meetings, on a guest here I know nothing certain about: the carrier first (the
@@ -321,13 +337,17 @@ function ring(st, p, m) {
 function lookInMirror(st, p, m) {
   const mirror = p.hand.find(c => c.type === 'handMirror');
   if (!mirror || p.possessed) return false;
+  // Not in the lobby: it is a safe zone (no forced meetings, trades only by agreement), and at the
+  // start everyone is there holding nothing yet, so a look would be a blind guess.
+  if (floor.rooms.get(p.currentRoom)?.safe) return false;
   const sure = trustOf(p);
   const here = S.playersInRoom(st, p.currentRoom, p.id)
     .filter(q => !p.knows.has(q.id) && !sure.has(q.id) && !stillSeen(p, q));
   if (!here.length) return false;
   const carrier = carrierOf(st, p);
   const target = here.find(q => q.id === carrier?.id)
-    || [...here].sort((a, b) => lanterns(b.hand).length - lanterns(a.hand).length || a.index - b.index)[0];
+    || here.filter(q => lanterns(q.hand).length === Math.max(...here.map(x => lanterns(x.hand).length)))
+      .reduce((pick, q, i) => (botRng() < 1 / (i + 1) ? q : pick), null);   // ties broken at random
   if (!spend(st, p, m, rules.actionCost.useCard)) return false;
   const r = A.useHandMirror(st, floor, p, mirror.id, target.id);
   if (!r.ok) return false;
@@ -432,6 +452,7 @@ const DECK_TYPES = Object.keys(rules.deck);
 function match(seed) {
   const st = S.createState(floor, roster.slice(0, PLAYERS), seed, { mode: 'hotseat' });
   memo = freshMemo();
+  botRng = makeRng((seed * 2654435761) ^ 0xb07b07);
   const m = { meetings: 0, trades: 0, attacks: 0, deaths: 0, attempts: 0, possessed: 0, blocked: 0, burned: 0, found: 0, stuckTurns: 0, opened: 0, jammed: 0, closedOff: 0,
     linenSearches: 0, linenCards: 0, linenLeft: 0, infirmaryUses: 0, healthRestored: 0, bandages: 0,
     switchCalls: 0, switchLearned: 0, switchUnmasked: 0, mirrors: 0, mirrorOnPossessed: 0, mirrorUnmasked: 0, mirrorMissed: 0,
@@ -593,6 +614,34 @@ console.log('\nRooms with jobs and new cards (per match)\n');
 for (const [name, val] of jobs) console.log(name.padEnd(64) + val);
 console.log('\n| | |\n| --- | --- |');
 for (const [name, val] of jobs) console.log(`| ${name.trim()} | ${val} |`);
+
+if (process.argv.includes('--before')) {
+  // Before Part 2: the old 40-card deck, and the five rooms with jobs as plain rooms of the same shapes
+  // (the five ordinary tiles they replaced had exactly those doorway shapes). Same bots, same seeds.
+  const deck = rules.deck, data = floor.data;
+  rules.deck = { lantern: 12, bandage: 7, flashlight: 5, knife: 4, barricade: 4, lockPick: 4, revolver: 2, masterKey: 2 };
+  floor.data = { ...data, tiles: data.tiles.map(t => ({ ...t, job: undefined })) };
+  const before = run('Before Part 2', 'discard', 0);
+  rules.deck = deck; floor.data = data;
+  const rows = [
+    ['Clean guests win', x => pct(x.humans)],
+    ['The hotel wins', x => pct(x.hotel)],
+    ['  … by possessing or killing every clean guest', x => pct(x.hotelOther)],
+    ['  … at dawn', x => pct(x.dawn)],
+    ['Match length, median rounds', x => String(median(x.rounds))],
+    ['Fire Exit revealed: median round (never)', x => `${median(x.exitRounds)} (${x.exitNever})`],
+    ['Tiles explored per match: median', x => String(median(x.tiles))],
+    ['Meetings per match: median (average)', x => `${median(x.meetingsPer)} (${avg(x, 'meetings')})`],
+    ['Meetings per round', x => perRound(x, 'meetings')],
+    ['Hotel closed itself off', x => `${x.closedOff}`],
+    ['Possession attempts / succeeded / blocked', x => `${avg(x, 'attempts')} / ${avg(x, 'possessed')} / ${avg(x, 'blocked')}`],
+    ['Lanterns found / burned', x => `${avg(x, 'found')} / ${avg(x, 'burned')}`],
+    ['Attacks / deaths', x => `${avg(x, 'attacks')} / ${avg(x, 'deaths')}`],
+  ];
+  console.log('\nBefore and after Part 2 (same bots, seeds and hotels):\n');
+  console.log('| | Before Part 2 | Part 2 (the game) |\n| --- | --- | --- |');
+  for (const [name, f] of rows) console.log(`| ${name.trim()} | ${f(before)} | ${f(approved)} |`);
+}
 
 if (COMPARE) {
   const variants = [

@@ -286,6 +286,9 @@ function onArrive() {
 // The arriving guest picks ONE guest to meet, then Trade or Attack. A trade is made with each
 // side choosing in private (the device changes hands); an attack is public.
 function startMeeting(P, candidates) {
+  // The meeting panel is public: close anything private first (a hand sheet opened mid-walk would
+  // otherwise stay readable underneath it).
+  hand.close(); map.close();
   hud.hideConfirm(); selectedMove = null;
   const met = Q => {
     lockEncounter(state, P.currentRoom, P.index, Q.index);
@@ -472,6 +475,8 @@ const MIRROR_FAIL = {
   notTogether: 'That guest is not in this room any more.',
 };
 function onHandMirror(cardId, targetId) {
+  // Not mid-walk: walking into a room with a guest starts a meeting first, before anything else.
+  if (activeMover().walking || pendingArrival) { hud.toast('Wait until you have arrived.'); return; }
   const player = activePlayer(state);
   const r = useHandMirror(state, floor, player, cardId, targetId);
   if (!r.ok) { hud.toast(MIRROR_FAIL[r.reason] || 'Cannot use that now.'); return; }

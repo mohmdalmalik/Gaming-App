@@ -414,6 +414,9 @@ html, body {
 .hand-detail .d-tag { font-size: 13px; line-height: 1.4; color: var(--ivory-dim); }
 .hand-detail .d-empty { color: var(--muted); font-size: 15px; margin: auto 0; }
 .hand-detail .btn { align-self: flex-start; }
+/* Hand Mirror: one short name button per guest in the room, wrapping two or three to a row. */
+.hand-detail .d-targets { display: flex; flex-wrap: wrap; gap: 8px; }
+.hand-detail .d-targets .btn { align-self: auto; min-height: 44px; padding: 8px 14px; }
 .lantern-track { display: flex; align-items: center; gap: 8px; margin-top: 2px; }
 .lantern-track .pip { width: 24px; height: 24px; border-radius: 6px; border: 1px solid var(--line); display: flex; align-items: center; justify-content: center; font-size: 14px; color: var(--brass-dim); }
 .lantern-track .pip.on { color: var(--brass-bright); border-color: var(--brass); background: rgba(201,162,78,0.16); }

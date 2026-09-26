@@ -186,6 +186,8 @@ export function useHandMirror(state, floor, player, cardId, targetId) {
   const shown = target.hand.map(c => ({ ...c }));
   const unmasked = shown.some(c => c.type === 'possession');
   if (unmasked && !player.possessed) player.knows.add(target.id);
+  // The target showed their hand, so they know it was seen: told on their own next private screen.
+  target.notes.push(`${player.name} looked at your whole hand with a Hand Mirror.`);
   logPublic(state, `${player.name} used a Hand Mirror on ${target.name}.`);
   return { ok: true, target: target.id, hand: shown, unmasked };
 }

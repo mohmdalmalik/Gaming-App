@@ -121,10 +121,17 @@ export function createHand(doc, cfg, { onUseBandage, onUnlock, onBarricade, onEs
       // One button per other living guest in this room; what they hold is shown in private.
       const others = playersInRoom(state, p.currentRoom, p.id);
       if (!others.length) { line(state.practice ? 'There is no one else here.' : 'No other guest in this room.', 'd-tag'); return; }
-      if (noAp) line('No actions left this turn.', 'd-tag');
+      // Short name buttons, so a full lobby (five other guests) fits without scrolling.
+      line(noAp ? 'No actions left this turn.' : `Whose hand? · ${rules.actionCost.useCard} action`, 'd-tag');
+      const row = doc.createElement('div'); row.className = 'd-targets';
       for (const q of others) {
-        actionBtn(`Look at ${q.name}'s hand · ${rules.actionCost.useCard} action`, noAp, () => onHandMirror(card.id, q.id));
+        const btn = doc.createElement('button');
+        btn.type = 'button'; btn.className = 'btn primary'; btn.textContent = q.name; btn.disabled = noAp;
+        btn.setAttribute('aria-label', `Look at ${q.name}'s hand`);
+        btn.addEventListener('click', e => { e.preventDefault(); onHandMirror(card.id, q.id); });
+        row.appendChild(btn);
       }
+      detail.appendChild(row);
       return;
     }
     if (card.type === 'espresso') {

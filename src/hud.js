@@ -114,18 +114,19 @@ export function createHud(doc, cfg) {
   }
 
   // An Espresso can lift a turn above the usual action points: the extra ones get their own
-  // "bonus" pips after the normal row, and the label says how many extra ("6 (+2)").
+  // "bonus" pips after the normal row, and the label is just the number (the copper pips already
+  // show the extra; a longer label ran out of the panel on an iPad mini). The hand sheet says "6 (+2)".
   function renderAp(n) {
     const base = rules.actionPointsPerTurn;
     const total = Math.max(base, n);
     el.apPips.innerHTML = '';
-    el.apPips.classList.toggle('many', total > base + 2);
+    el.apPips.classList.toggle('many', total > base);   // smaller pips, so the row stays in the panel
     for (let i = 0; i < total; i++) {
       const pip = doc.createElement('span');
       pip.className = 'pip' + (i < n ? ' full' : '') + (i >= base ? ' bonus' : '');
       el.apPips.appendChild(pip);
     }
-    el.ap.textContent = n > base ? `${n} (+${n - base})` : `${n} / ${base}`;
+    el.ap.textContent = n > base ? `${n}` : `${n} / ${base}`;
     el.ap.classList.toggle('empty', n === 0);
     el.ap.classList.toggle('bonus', n > base);
   }

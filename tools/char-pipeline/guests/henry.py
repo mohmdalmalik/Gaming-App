@@ -32,8 +32,8 @@ sm = GK.sm
 CFG = dict(
     z_hair_top=0.0, z_skull_top=4.5, z_hairline=8.0, z_brow=13.5, z_eye=19.8, z_nose=23.1, z_mouth=26.3, z_chin=31.4, z_ear=22.2,
     head_y=0.03, z_shoulder_top=35.3,
-    ear_style='round', ear_seg=(16, 12), ear_h=0.140, ear_w=0.114, ear_out=0.020, ear_y=0.022, ear_tilt=0.72, ear_thick=0.034, ear_rim=0.010, ear_bowl=0.016, ear_sink=0.022,
-    eye_x=0.064, eye_w=0.040, eye_h=0.058, eye_lift=0.003,
+    ear_style='round', ear_seg=(22, 16), ear_h=0.138, ear_w=0.112, ear_out=0.020, ear_y=0.026, ear_tilt=0.70, ear_thick=0.036, ear_rim=0.012, ear_bowl=0.020, ear_sink=0.022,
+    eye_x=0.064, eye_w=0.040, eye_h=0.058, eye_lift=0.005,
     brow=dict(x0=0.038, x1=0.128, z=13.4, thick=0.036, arch=0.010, drop_in=0.000, drop_out=0.022,
               profile=[(0.0, 0.40), (0.05, 0.85), (0.14, 0.97), (0.45, 1.0), (0.85, 0.92), (0.95, 0.75), (1.0, 0.35)], flat=0.5),
     nose_w=0.082, nose_h=0.080, nose_d=0.066, nose_out=0.038, nose_top=1.15,
@@ -46,10 +46,13 @@ CFG = dict(
     ao_skip=('Brow', 'Eye', 'Mouth', 'Glasses'), ao_scale={'Skin': 0.45, 'Jacket': 0.65},
 )
 COLOURS = dict(
-    skin='#ffb08a', hair='#e0d4cf', brow='#9a8a86', mouth='#4a2418', eye='#0b0b0d', glasses='#3a2218',
-    jacket='#fbe7d3', trouser='#4e4c4e', button='#1b1a1a', shade='#cdb9a4', horn='#dccab4',
-    shirt='#fbf6f0', tie='#4a4545',
-    shoe='#646266', sole='#1a1818',
+    # Black cloth / leather use the lobby-measured in-game palette (guest_kit.PALETTE): under the hotel's warm light they
+    # read black like Victor's and Marcus's (cool charcoal in the neutral preview: expected). The ivory jacket and the
+    # silver hair are compromises that read ivory / grey (not yellow / white) in both lights.
+    skin='#ffb08a', hair='#a4a1aa', brow='#8e868a', mouth='#4a2418', eye='#0b0b0d', glasses='#3a2218',
+    jacket='#fbe7d3', trouser='#34363e', button='#16161a', shade='#cdb9a4', horn='#dccab4',
+    shirt='#fbf6f0', tie='#34363e',
+    shoe=GK.PALETTE['shoe_black'], sole='#1a1818',
 )
 
 # ---- skull tables by f (0 chin .. 1 skull top): a round soft face, full low cheeks/jowls
@@ -60,7 +63,7 @@ DF = [(0, 0.0), (0.02, 0.095), (0.037, 0.135), (0.074, 0.180), (0.13, 0.204), (0
 DB = [(0, 0.0), (0.02, 0.030), (0.06, 0.052), (0.12, 0.075), (0.20, 0.102), (0.30, 0.130), (0.42, 0.158), (0.55, 0.176),
       (0.68, 0.181), (0.78, 0.174), (0.87, 0.155), (0.93, 0.125), (0.98, 0.070), (1, 0.0)]
 E  = [(0, 2.0), (0.08, 2.15), (0.25, 2.5), (0.45, 2.55), (0.65, 2.5), (0.85, 2.35), (1, 2.2)]
-BULGES = [dict(x=0.105, z=24.8, sx=0.060, sz=0.050, a=0.040),      # full rosy cheeks beside the smile
+BULGES = [dict(x=0.110, z=25.6, sx=0.062, sz=0.042, a=0.050),      # full rosy cheeks beside the smile
           dict(x=0.0, z=21.2, sx=0.016, sz=0.024, a=0.026),        # nose bridge rising into the ball
           dict(x=0.0, z=29.0, sx=0.050, sz=0.020, a=0.006)]        # soft chin
 
@@ -82,7 +85,8 @@ HAIR = dict(
     # sculpted lock PLANES (guest_kit lock_fields), like Marcus's: the part is on his LEFT (u ~0.85); the hair sweeps from
     # it up into the crest over his left temple and over the top / forehead down to his right side and back. Later
     # (front) locks stand higher, so each steps down onto the one behind it with its own rounded edge.
-    lock_fields=[dict(keys=[(0.60, 2.0), (0.55, 7.0), (0.51, 12.0), (0.50, 17.0), (0.50, 21.5)], half=0.060, height=0.014, soft=0.016),       # back
+    lock_fields=[dict(keys=[(0.57, 2.5), (0.54, 8.0), (0.515, 14.0), (0.50, 19.0), (0.50, 22.5)], half=0.055, height=0.012, soft=0.020),      # back, his left half
+                 dict(keys=[(0.43, 2.5), (0.46, 8.0), (0.485, 14.0), (0.50, 19.0), (0.50, 22.5)], half=0.055, height=0.020, soft=0.020),      # back, his right half (overlaps)
                  dict(keys=[(0.44, 2.0), (0.39, 6.5), (0.35, 12.0), (0.33, 16.0), (0.32, 19.5)], half=0.050, height=0.022, soft=0.016),       # his right side
                  dict(keys=[(0.70, 3.5), (0.67, 8.5), (0.63, 14.0), (0.61, 17.0), (0.60, 20.0)], half=0.050, height=0.022, soft=0.016),       # his left side
                  dict(keys=[(0.25, 8.0), (0.14, 4.6), (0.04, 2.6), (0.94, 1.6), (0.84, 1.4), (0.75, 2.8), (0.68, 5.5)], half=0.048, height=0.036, soft=0.014),  # top band
@@ -94,9 +98,8 @@ HAIR = dict(
              dict(keys=[(0.28, 9.5), (0.34, 12.5), (0.39, 16.5)], depth=0.007, width=0.013, n=30),
              dict(keys=[(0.23, 12.5), (0.29, 14.2), (0.35, 17.0), (0.40, 20.5)], depth=0.007, width=0.013, n=30),
              dict(keys=[(0.74, 9.0), (0.68, 12.0), (0.63, 16.0), (0.59, 20.0)], depth=0.007, width=0.013, n=30),                                  # lock line, his right side
-             dict(keys=[(0.45, 6.0), (0.47, 12.0), (0.49, 18.5)], depth=0.008, width=0.013, n=30),                                 # the back: planes converging
-             dict(keys=[(0.55, 6.0), (0.53, 12.0), (0.51, 18.5)], depth=0.008, width=0.013, n=30)],
-    slope=1.6, t_min=0.010, centre=(0.0, 0.02, 14.5), nlon=92, nrows=42, top=0.2, lip=0.6,
+             dict(keys=[(0.47, 5.0), (0.49, 12.0), (0.50, 19.0)], depth=0.005, width=0.018, n=30)],                                # one soft line where the two back planes meet
+    slope=1.6, t_min=0.010, centre=(0.0, 0.02, 14.5), nlon=88, nrows=42, top=0.2, lip=0.6,
 )
 def _a(u): return abs(((u + 0.5) % 1.0) - 0.5)
 def _keys(a, keys):
@@ -109,9 +112,9 @@ def hairline(u):
     of the ear, over the ear, then down behind it to the nape."""
     u %= 1.0; a = _a(u)
     if u < 0.5:
-        return _keys(a, [(0.0, 6.4), (0.05, 7.6), (0.10, 9.0), (0.16, 11.2), (0.19, 13.8), (0.212, 18.6), (0.225, 19.2), (0.238, 17.4), (0.30, 17.4),
+        return _keys(a, [(0.0, 7.1), (0.05, 8.1), (0.10, 9.3), (0.16, 11.2), (0.19, 13.8), (0.212, 18.6), (0.225, 19.2), (0.238, 17.4), (0.30, 17.4),
                          (0.35, 19.2), (0.43, 21.8), (0.5, 24.0)])
-    return _keys(a, [(0.0, 6.4), (0.05, 5.9), (0.10, 5.8), (0.13, 6.6), (0.165, 10.5), (0.19, 13.0), (0.205, 17.0), (0.225, 17.8), (0.238, 17.0), (0.30, 17.0),
+    return _keys(a, [(0.0, 7.1), (0.05, 6.6), (0.10, 6.4), (0.13, 7.0), (0.165, 10.5), (0.19, 13.0), (0.205, 17.0), (0.225, 17.8), (0.238, 17.0), (0.30, 17.0),
                      (0.35, 19.2), (0.43, 21.8), (0.5, 24.0)])
 def thin_below(u):
     """The sideburns stay flat up to the temple; the full side hair starts above 12 %."""
@@ -155,7 +158,7 @@ A = dict(
     stations=[('end', 0.134, 0.130), (58.0, 0.136, 0.134), (53.0, 0.140, 0.140), (47.0, 0.148, 0.150), (42.0, 0.152, 0.154),
               (('j', -0.01), 0.154, 0.158), (('j', 0.018), 0.132, 0.142), (('j', 0.034), 0.070, 0.080)],
     cuff_wd=(0.120, 0.116), cufflink=True, sleeve_buttons=1, button_angle=60.0,
-    hand=dict(finger_n=8, palm_len=0.108, palm_w=0.128, palm_t=0.078, out=0.014, finger_out=0.015,      # Marcus's chunky curled hands, a touch fuller
+    hand=dict(finger_n=7, palm_len=0.108, palm_w=0.128, palm_t=0.078, out=0.014, finger_out=0.015,      # Marcus's chunky curled hands, a touch fuller
               fingers=[(-0.044, 0.0225, 0.100, 1.20), (-0.015, 0.0232, 0.106, 1.30), (0.014, 0.0225, 0.102, 1.35), (0.043, 0.0205, 0.090, 1.35)],   # relaxed, only softly curled
               thumb=(-0.057, 0.017, 0.026, 0.0235, 0.074, 0.55)),
 )

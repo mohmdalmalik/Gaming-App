@@ -6,6 +6,7 @@
 #                        the hairline, the ears, the neck, the shoulders) so the hair frames the face and hangs round the
 #                        neck as a curtain; plus rounded wave ROLLS (flattened tubes lying on the envelope) and carved
 #                        GROOVES between them. Polygonised with dress_kit's surface nets (sdf_object), smoothed.
+#   lock_tube / spiral_curl  crisp sculpted locks / snail curls as their own smooth meshes on the long_hair envelope
 #   ball_earrings(g, E)  gold / pearl ball earrings hanging just under the ear lobe (a tiny stem into the lobe)
 # Heights are PERCENT OF STANDING HEIGHT FROM THE TOP, x/y in metres; Blender Z up, the guest faces -Y, HER right is -X.
 # Longitude u: 0 front, 0.25 her right (-X), 0.5 back, 0.75 her left (+X).
@@ -157,6 +158,10 @@ def long_hair(g, Hs):
         # culled skull edge never shows as a stepped line along the hairline
         return bool(sdf(np.array([[p.x, p.y, p.z]]))[0] < -margin)
     g.hair_covers = covered; g.hair_sdf = sdf
+    def env_point(u, pct):
+        """Point on the hair envelope (the measured silhouette) at longitude u and height pct + outward normal."""
+        return MX.radial_point(g, R_at, c0, u % 1.0, pct)
+    g.hair_env_point = env_point
     if grooves or grooves_o or WV:
         def gam(p):
             P = np.array([[p.x, p.y, p.z]]); best = 0.0
@@ -176,3 +181,42 @@ def ball_earrings(g, E):
         g.add(L.uvsphere(f'Earring{s}', E['r'], c, u=14, v=10), E.get('mat', 'gold'), 'head')
         if E.get('stem'):
             g.add(L.tube(f'EarStem{s}', [tuple(c), tuple(c + Vector((0, 0, E['r'] + E['stem'])))], [0.003, 0.003], n=6), E.get('mat', 'gold'), 'head')
+
+
+def _unwrap(keys):
+    ks = [list(k) for k in keys]
+    for i in range(1, len(ks)):
+        while ks[i][0] - ks[i - 1][0] > 0.5: ks[i][0] -= 1.0
+        while ks[i][0] - ks[i - 1][0] < -0.5: ks[i][0] += 1.0
+    return ks
+
+def lock_tube(g, name, keys, n_samples=40, n_ring=14, mat='hair', drop=0.0):
+    """A crisp sculpted lock as its OWN smooth mesh lying on the hair envelope (long_hair must run first): keys
+    (u, pct, width across the surface, thickness along the normal, lift of the centre above the envelope). A separate
+    tube keeps a clean rounded silhouette, a smooth bright top (the bake's sheen) and a dark undercut where it meets
+    the hair / skin below (the bake's occlusion) — the sheets' glossy rolled waves. drop: m the lock's centre moves
+    straight down along its length (a roll that hangs over the forehead)."""
+    pts, nrm, ws, ts = [], [], [], []
+    ks = _unwrap(keys); dense = L.catmull_rom([tuple(k) for k in ks], n_samples)
+    for i, k in enumerate(dense):
+        p, n = g.hair_env_point(k[0], k[1])
+        pts.append(tuple(p + n * k[4])); nrm.append(tuple(n)); ws.append(max(0.004, k[2])); ts.append(max(0.003, k[3]))
+    return g.add(L.ribbon_tube(name, pts, nrm, ws, ts, n=n_ring), mat, 'head')
+
+def spiral_curl(g, name, u, pct, r0, turns=1.2, rope=((0.0, 0.020), (0.3, 0.022), (0.8, 0.016), (1.0, 0.008)), lift=0.0,
+                tight=0.7, start=0.0, tilt=0.0, flat=0.75, n=48, n_ring=12, mat='hair', sign=1):
+    """A snail-shell curl lying on the hair envelope at (u, pct): a flattened tube along a tightening spiral in the
+    surface's tangent plane (radius r0 -> r0 * (1 - tight)), `turns` turns from angle `start` (deg; 0 = toward the
+    back/along +u), rotated by `tilt` deg; sign flips the winding (mirror for the other side)."""
+    P, N = g.hair_env_point(u, pct)
+    up = Vector((0, 0, 1)); t1 = up.cross(N).normalized(); t2 = N.cross(t1).normalized()
+    if tilt:
+        a = math.radians(tilt); t1, t2 = t1 * math.cos(a) + t2 * math.sin(a), -t1 * math.sin(a) + t2 * math.cos(a)
+    th0 = math.radians(start); pts, rad = [], []
+    rr = L.smooth_profile(list(rope), [i / (n - 1) for i in range(n)])
+    for i in range(n):
+        t = i / (n - 1); th = th0 + sign * 2 * math.pi * turns * t; r = r0 * (1.0 - tight * t)
+        q = P + N * (lift + rr[i] * (1.0 - flat) * 0.5) + t1 * (r * math.cos(th)) + t2 * (r * math.sin(th))
+        pts.append(q); rad.append(rr[i])
+    ws = [2 * r for r in rad]; ts = [2 * r * flat for r in rad]
+    return g.add(L.ribbon_tube(name, [tuple(p) for p in pts], [tuple(N)] * n, ws, ts, n=n_ring), mat, 'head')

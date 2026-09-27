@@ -95,7 +95,7 @@ WAVES = [
     # the sides: S-wave locks stacked down to the shoulders, their crest lines dropping toward the back
     dict(phase=lambda u, p: (p - 10.0 - 18.0 * (_an(u) - 0.2) / 0.25) / 8.5,
          mask=lambda u, p: _smn((_an(u) - 0.19) / 0.04) * _smn((0.36 - _an(u)) / 0.05) * _smn((p - 10.0) / 3.0) * _smn((35.0 - p) / 2.0),
-         amp=0.050, shape='saw', crest=0.62, p=1.2, bias=0.45, dark=1.0, dark_at=0.30),
+         amp=0.022, shape='saw', crest=0.62, p=1.2, bias=0.45, dark=0.6, dark_at=0.30),
 ]
 ROLLS = [
     # THE BIG WAVE: a tall, thick rounded roll rising from the side part over her left temple, arcing up and over the
@@ -103,7 +103,7 @@ ROLLS = [
     # Mostly above the scalp (sink 0.15); its underside overhangs the forehead (the bake shades the undercut).
     dict(keys=[(0.85, 7.0, 0.016, 0.9), (0.875, 4.2, 0.034, 0.85), (0.925, 2.6, 0.044, 0.82), (0.99, 3.2, 0.048, 0.80), (0.06, 5.0, 0.048, 0.80),
                (0.12, 9.0, 0.046, 0.80), (0.17, 12.2, 0.042, 0.82), (0.212, 14.0, 0.036, 0.85), (0.232, 16.8, 0.026, 0.9), (0.245, 19.5, 0.012, 0.9)],
-         sink=0.15, k=0.012, over=True, n=48),
+         sink=0.45, k=0.012, over=True, n=48),        # the volume under the crisp wave tube (WAVE_TUBE, built after the hair)
     # the next wave behind it, and one more over the top toward the back of her right side
     dict(keys=[(0.28, 9.5, 0.014, 0.8), (0.20, 7.0, 0.028, 0.70), (0.10, 4.6, 0.030, 0.70), (0.00, 3.2, 0.030, 0.70), (0.93, 2.2, 0.026, 0.72),
                (0.89, 1.2, 0.014, 0.8)], sink=0.40, k=0.010),
@@ -117,7 +117,6 @@ ROLLS = [
 ]
 GROOVES = [
     # the crease behind the big wave (separates the roll from the hair behind it: the sheet's shadow line above the wave)
-    dict(keys=[(0.975, 0.9, 0.006), (0.02, 0.9, 0.014), (0.09, 1.9, 0.016), (0.15, 4.2, 0.015), (0.20, 7.2, 0.012), (0.23, 10.8, 0.006)], depth=0.030, k=0.006, over=True),
     # the side part over her left temple, and the channel behind the big wave
     dict(keys=[(0.85, 7.5, 0.006), (0.86, 5.0, 0.008), (0.875, 2.8, 0.008), (0.90, 1.0, 0.006)], depth=0.006, k=0.005),
     # the back: S-curved lock lines flowing from the crown down to the shoulder ends (between broad lock planes)
@@ -135,8 +134,23 @@ HAIR = dict(
     ears=dict(r=(0.034, 0.040, 0.050), dx=0.012, dy=0.026, z=21.0),
     neck=dict(r=0.064, y=-0.012, z_top=28.5, k=0.02),
     body=[dict(c=(0.0, -0.03, 39.0), r=(0.245, 0.135, 0.110))],
-    bottom=34.8, rolls=ROLLS, waves=WAVES, grooves=GROOVES, ko_k=0.040, voxel=0.005, tris=9000, smooth=4, post_smooth=2, taubin=6,
+    bottom=34.8, rolls=ROLLS, waves=WAVES, grooves=GROOVES, ko_k=0.040, voxel=0.005, tris=8200, smooth=4, post_smooth=2, taubin=6,
 )
+
+# ---- crisp locks as their own smooth meshes on the envelope (female_extras.lock_tube / spiral_curl):
+# keys (u, pct, width across the surface, thickness along the normal, lift of the centre above the envelope)
+WAVE_TUBE = [(0.855, 5.5, 0.020, 0.016, 0.004), (0.875, 3.2, 0.052, 0.036, 0.012), (0.93, 2.0, 0.066, 0.044, 0.016), (0.00, 3.0, 0.072, 0.048, 0.017),
+             (0.06, 5.0, 0.072, 0.048, 0.017), (0.12, 8.2, 0.068, 0.046, 0.016), (0.17, 11.4, 0.060, 0.042, 0.014), (0.205, 14.2, 0.048, 0.036, 0.011),
+             (0.225, 17.2, 0.032, 0.026, 0.008), (0.235, 19.6, 0.014, 0.012, 0.003)]
+# stacked C-curl rolls down each side (horizontal crests curving back and down), her right (u < 0.5) and left
+SIDE_TUBES = [
+    [(0.215, 20.5, 0.016, 0.012, 0.0), (0.25, 21.0, 0.044, 0.030, 0.004), (0.30, 22.2, 0.050, 0.034, 0.005), (0.35, 24.2, 0.046, 0.032, 0.004), (0.39, 26.5, 0.020, 0.014, 0.0)],
+    [(0.215, 27.0, 0.016, 0.012, 0.0), (0.25, 27.8, 0.046, 0.032, 0.004), (0.30, 29.2, 0.052, 0.036, 0.005), (0.35, 31.0, 0.046, 0.032, 0.004), (0.38, 32.8, 0.020, 0.014, 0.0)],
+    [(0.26, 13.5, 0.016, 0.012, 0.0), (0.30, 14.5, 0.042, 0.028, 0.004), (0.35, 16.5, 0.046, 0.030, 0.004), (0.40, 19.5, 0.040, 0.028, 0.003), (0.43, 22.0, 0.016, 0.012, 0.0)],
+]
+SIDE_TUBES += [[(1.0 - u, p, w, t, l) for u, p, w, t, l in k] for k in SIDE_TUBES]
+CURLS = [dict(u=0.33, pct=27.0, r0=0.042, turns=1.1, start=40.0, sign=1, n=36, n_ring=10), dict(u=0.67, pct=27.0, r0=0.042, turns=1.1, start=140.0, sign=-1, n=36, n_ring=10),
+         dict(u=0.42, pct=29.5, r0=0.036, turns=1.0, start=20.0, sign=1, n=32, n_ring=10), dict(u=0.58, pct=29.5, r0=0.036, turns=1.0, start=160.0, sign=-1, n=32, n_ring=10)]
 
 # ---- body
 NECK = dict(rings=[(26.0, 0.110, 0.106, 1.0, 0.024), (29.0, 0.114, 0.110, 1.0, 0.020), (31.0, 0.118, 0.114, 1.0, 0.016),
@@ -179,6 +193,8 @@ RIG = dict(hip=62.0, knee=79.5, ankle=95.0, waist=47.8, shoulder_top=32.3, neck_
 def build(g):
     g.set_head(W, DF, DB, E, BULGES)
     FX.long_hair(g, HAIR)
+    FX.lock_tube(g, 'HairWave', WAVE_TUBE, n_samples=56, n_ring=16)
+    for i, c in enumerate(CURLS): FX.spiral_curl(g, f'HairCurl{i}', **c)
     GK.head(g, nlon=48, nlat=34, cull_in=g.hair_covers)
     GK.ears(g); DK.decimate_parts(g, 'Ear', 0.55); GK.eyes(g); GK.brows(g); GK.nose(g)
     DK.lips(g, g.C['lips']); FX.ball_earrings(g, EAR)

@@ -336,3 +336,29 @@ def radial_grooves(g, grooves, centre=(0.0, 0.02, 14.5), R=0.2, keep_prev=False)
         return off
     prev = getattr(g, 'hair_groove', None)
     g.hair_groove = (lambda p: amt(p) + prev(p)) if (keep_prev and prev) else amt
+
+def blur_colours(g, mat_name, iters=2, k=0.5):
+    """Smooth the baked vertex colours (COLOR_0) of one material over the mesh edges: the bake samples crease / groove
+    darkening per vertex, which prints a sawtooth where a crease crosses the grid diagonally; a couple of neighbour
+    averages turn it into a clean soft line. Runs on the joined mesh after the bake."""
+    import bmesh
+    me = g.mesh.data; col = me.color_attributes.get('Col')
+    if col is None: return
+    slot = {i for i, m in enumerate(me.materials) if m and m.name == mat_name}
+    bm = bmesh.new(); bm.from_mesh(me)
+    vs = set()
+    for f in bm.faces:
+        if f.material_index in slot: vs.update(v.index for v in f.verts)
+    nb = {i: [] for i in vs}
+    for e in bm.edges:
+        a, b = e.verts[0].index, e.verts[1].index
+        if a in vs and b in vs: nb[a].append(b); nb[b].append(a)
+    bm.free()
+    C = {i: Vector(col.data[i].color[:3]) for i in vs}
+    for _ in range(iters):
+        N = {}
+        for i in vs:
+            if not nb[i]: N[i] = C[i]; continue
+            avg = sum((C[j] for j in nb[i]), Vector()) / len(nb[i]); N[i] = C[i].lerp(avg, k)
+        C = N
+    for i in vs: col.data[i].color = (C[i].x, C[i].y, C[i].z, 1.0)

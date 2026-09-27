@@ -222,6 +222,7 @@ log('16b. double tap search: ap', s0.ap, '->', s1.ap, 'handoff', await h.kind())
 if (await h.handoffOpen()) await h.tap('#btn-handoff-next');
 // confirm-move double tap
 await h.put('hall', 4); await h.snapCam(); await page.waitForTimeout(300);
+await game(() => { window.__game.state.barricades?.clear?.(); window.__game.refresh(); });
 const dN = await game(id => { const g = window.__game, d = g.floor.rooms.get('hall').doorways.find(d => d.a === id || d.b === id); const b = g.doorways.views.get(d.id)?.blink?.position; return b ? g.groundToScreen(b.x, b.z) : g.groundToScreen(d.center[0], d.center[1]); }, walkTo);
 await page.touchscreen.tap(dN.x, dN.y); await page.waitForTimeout(200);
 log('16c. confirm bar', await h.visible('#confirm-bar'), await page.textContent('#confirm-text'));
@@ -260,7 +261,7 @@ await h.put(nbExit, 1); await h.setHand(0, [C('l1', 'lantern'), C('l2', 'lantern
 await game(() => window.__game.moveToRoom('exit')); await h.settle(); await page.waitForTimeout(600);
 log('19. exit with 0 AP', JSON.stringify(await st()), 'toast', await toast(), 'btn', await page.textContent('#btn-room').catch(() => ''));
 await S('19-exit-0ap');
-await h.tap('#btn-room'); await page.waitForTimeout(200); log('19b. escape at 0 AP toast', await toast());
+if (!(await page.$eval('#btn-room', b => b.disabled))) await h.tap('#btn-room'); await page.waitForTimeout(200); log('19b. escape at 0 AP toast', await toast());
 await h.tap('#btn-end-turn'); await page.waitForTimeout(400);
 log('19c. next turn', JSON.stringify(await st()), await page.textContent('#btn-room').catch(() => ''));
 await S('19-exit-next-turn');

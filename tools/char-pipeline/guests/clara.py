@@ -60,7 +60,7 @@ CFG = dict(
            'Gold': (0.72, [((0.0, -1.0, 0.25), 6.0, 1.0), ((-0.6, -0.6, 0.3), 8.0, 0.6), ((0.6, -0.6, 0.3), 8.0, 0.6)])},
 )
 COLOURS = dict(
-    skin='#ffb084', hair='#7a4a44', brow='#3a221c', eye='#0b0b0d', lips='#962430',
+    skin='#ffb084', hair='#7a4a44', brow='#3a221c', eye='#0b0b0d', lips='#9e4b5f',
     dress='#4a2230', sash='#381a24', gold='#e8b25c', shoe=GK.PALETTE['shoe_black'],
 )
 
@@ -207,6 +207,12 @@ LEGS = dict(leg_x=0.090, leg_y=0.0, n=14,
 SHOES = dict(leg_x=0.090, y=0.0, len=0.265, w=0.090, heel=0.075, heel_h=0.042, heel_len=0.046, collar=0.090, vamp=0.058,
              splay=0.28, out=0.012, foot_top=0.108, ball=0.125, mat='shoe')
 EAR = dict(r=0.0175, x=0.156, dy=0.030, z=22.9, stem=0.004, mat='gold')
+# round 3 (face finish, measured on the sheet's head front, eye-aligned; head-frame pct): a soft button nose grown out
+# of the face (sheet: 0.36 of the eye gap wide, centre 19.45 %) and a small closed smile (0.71 of the eye gap corner to
+# corner, parting 22.17 %, corners 0.012 up, upper lip 0.011 / lower 0.013 high)
+NOSE = dict(z=19.45, rx=0.025, rz_up=0.033, rz_dn=0.019, h=0.011, m=1.6)
+LIPS = dict(z=22.17, w=0.082, rise=0.0124, p_line=2.0, upper=0.0135, lower=0.014, bow=0.2, puff_u=0.0022, puff_l=0.0032,
+            crease=dict(len=0.004, up=0.003, w=0.0016))
 RIG = dict(hip=62.0, knee=79.5, ankle=95.0, waist=47.8, shoulder_top=32.3, neck_y=0.018, hand_end=68.5, leg_x=0.090,
            heel=0.075, ball=0.125, arm=A, walk_kw=dict(skirt=True))
 
@@ -216,9 +222,9 @@ def build(g):
     FX.long_hair(g, HAIR)
     FX.lock_tube(g, 'HairWave', WAVE_TUBE, n_samples=56, n_ring=16)
     for i, c in enumerate(CURLS): FX.spiral_curl(g, f'HairCurl{i}', **c)
-    GK.head(g, nlon=48, nlat=34, cull_in=g.hair_covers)
-    GK.ears(g); DK.decimate_parts(g, 'Ear', 0.55); GK.eyes(g); GK.brows(g); GK.nose(g)
-    DK.lips(g, g.C['lips']); FX.ball_earrings(g, EAR)
+    skull = GK.head(g, nlon=48, nlat=34, cull_in=g.hair_covers)
+    GK.ears(g); DK.decimate_parts(g, 'Ear', 0.55); GK.eyes(g); GK.brows(g); DK.soft_nose(g, skull, NOSE)
+    DK.smile_lips(g, skull, LIPS); FX.ball_earrings(g, EAR)
     del g.zp                                                    # back to the body frame
     DK.neck_yoke(g, NECK)
     DK.bodice(g, BOD)

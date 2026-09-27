@@ -52,7 +52,7 @@ COLOURS = dict(
     # lobby-measured (lineup_measure.mjs --inject dressEmerald=...), solved at the palette's mid light level and nudged
     # a little warmer for the neutral preview: in the lobby dress ~#10291f..#2c453e (sheet #1a332c), hair ~#26170f
     # (sheet #2f201d), skin ~#9d512c..#eb875e, gold ~#9a6e31 (sheet #b38042), berry lips ~#511212
-    skin='#d0865c', hair='#5a4a44', brow='#3a2c29', eye='#0b0b0d', lips='#80403c',
+    skin='#d0865c', hair='#5a4a44', brow='#3a2c29', eye='#0b0b0d', lips='#724553',
     dress='#36524f', gold='#d3b182', shoe=GK.PALETTE['shoe_black'], sole='#1a1818', shine='#9c9794',
 )
 
@@ -223,6 +223,12 @@ SHOES = dict(leg_x=0.100, y=0.0, len=0.24, w=0.086, heel=0.062, heel_h=0.034, he
 JAW = dict(top=24.3, lift=0.026, y0=-0.10, y1=0.02)
 SHINE = dict(r=0.0065, dx=0.30, dz=0.45, mat='shine')      # the sheet's soft glint (glossy eyes)
 EAR = dict(kind='ball', r=0.023, x=0.182, dy=-0.020, z=23.2, mat='gold')
+# round 3 (face finish, measured on the sheet's head front, eye-aligned): a soft broad button nose grown out of the
+# face (sheet: 0.47 of the eye gap wide, centre 20.1 %) and a small closed smile (0.89 of the eye gap corner to corner,
+# parting 23.05 %, corners 0.017 up, upper lip 0.014 / lower 0.016 high)
+NOSE = dict(z=20.1, rx=0.036, rz_up=0.044, rz_dn=0.027, h=0.015, m=1.6)
+LIPS = dict(z=23.05, w=0.120, rise=0.017, p_line=2.0, upper=0.017, lower=0.017, bow=0.2, puff_u=0.0030, puff_l=0.0042,
+            crease=dict(len=0.005, up=0.0035, w=0.0018))
 RIG = dict(hip=62.0, knee=79.0, ankle=95.5, waist=48.5, shoulder_top=32.0, neck_y=0.030, hand_end=70.0, leg_x=0.100,
            heel=0.062, ball=0.115, arm=A, walk_kw=dict(skirt=True))
 
@@ -313,8 +319,8 @@ def build(g):
     band_hair(g, SCULPT)
     skull = GK.head(g, nlon=48, nlat=34, cull_in=g.hair_covers)
     DK.jaw_lift(g, skull, JAW)
-    GK.ears(g); GK.eyes(g); DK.eye_shine(g, SHINE); GK.brows(g); GK.nose(g)
-    DK.lips(g, g.C['lips']); DK.earrings(g, EAR)
+    GK.ears(g); GK.eyes(g); DK.eye_shine(g, SHINE); GK.brows(g); DK.soft_nose(g, skull, NOSE)
+    DK.smile_lips(g, skull, LIPS); DK.earrings(g, EAR)
     DK.neck_yoke(g, NECK)
     DK.bodice(g, BOD)
     GK.arms(g, A); GK.hands(g, A)

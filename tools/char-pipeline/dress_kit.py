@@ -18,6 +18,8 @@
 #   legs(g, Lg)             bare legs (skin) from inside the skirt to the ankle
 #   pumps(g, S)             low-heeled court shoes: sole + block heel + low upper, the skin instep showing
 #   lips(g, Li)             small closed smiling lips (upper lip with a soft bow, fuller lower lip)
+#   soft_nose / smile_lips  (opt-in) a button nose and a closed-smile mouth GROWN OUT of the skin as height fields
+#                           on the skull mesh (face_relief), with smooth normals set after the join: no crease/ring
 #   earrings(g, E)          'stud' / 'ball' (pearl or gold sphere at the lobe), optional 'drop'
 #   eye_shine(g, Sh)        a small painted white glint on each eye;  jaw_lift(g, skull, J): jawline climbing to the ear
 #   shade (g.post_bake)     per-material colour multipliers after the bake (e.g. the neck's shadow under the chin)
@@ -466,6 +468,167 @@ def lips(g, Li):
         pts = [tuple(g.on_face(t * hw * (0.96 if sgn < 0 else 1.0), line(t) + sgn * (rd * 0.95 - (Li.get('bow', 0.0) * (1 - abs(t)) ** 8 if sgn > 0 else 0)), lift)) for t, rd in zip(ts, rad)]
         tb = L.tube(nm, pts, [max(0.0012, q) for q in rad], n=10); g.flatten_to_face(tb, Li.get('flat', 0.45))
         g.add(tb, mat, 'head')
+
+# ---- FACE RELIEF (opt-in; the women's round-3 faces): features that GROW OUT of the skin instead of sitting on it.
+# Each is a height field over the real skull mesh (ray-cast onto its facets, so the skull can never poke through),
+# with smooth shading normals (the skull's interpolated normals tilted by the height's slope) that equal the skin's
+# at the rim: no crease, no outline, no dark ring. The normals are installed after the join (finish()).
+def _skull_sampler(g, skull):
+    """(x, z) -> (point on the skull mesh's front, its interpolated smooth normal)."""
+    cache = getattr(g, '_skull_samplers', None)
+    if cache is None: cache = g._skull_samplers = {}
+    if skull.name in cache: return cache[skull.name]
+    from mathutils.bvhtree import BVHTree
+    from mathutils.geometry import barycentric_transform
+    me = skull.data
+    V = [v.co.copy() for v in me.vertices]; VN = [Vector(n.vector) for n in me.vertex_normals]
+    tris = []
+    for p in me.polygons:
+        vs = list(p.vertices)
+        for i in range(1, len(vs) - 1): tris.append((vs[0], vs[i], vs[i + 1]))
+    tree = BVHTree.FromPolygons(V, tris)
+    E1, E2, E3 = Vector((1, 0, 0)), Vector((0, 1, 0)), Vector((0, 0, 1))
+    def at(x, z):
+        hit, _, idx, _ = tree.ray_cast(Vector((x, g.Y0 - 1.0, z)), Vector((0, 1, 0)), 2.0)
+        if hit is None: return None, None
+        a, b, c = tris[idx]; w = barycentric_transform(hit, V[a], V[b], V[c], E1, E2, E3)
+        n = (VN[a] * w.x + VN[b] * w.y + VN[c] * w.z).normalized()
+        if n.y > 0: n = -n
+        return hit, n
+    cache[skull.name] = at
+    return at
+
+def face_relief(g, skull, name, mat, pts, faces, hfn, lift=0.0004, bone='head'):
+    """pts [(x, z)] on the face, faces (index tuples), hfn(x, z) -> height (m) above the skin. Builds the mesh on the
+    skull, oriented outward, and records its smooth normals for finish() (g.relief_normals)."""
+    at = _skull_sampler(g, skull); e = 0.0004
+    P, N = [], []
+    for x, z in pts:
+        b, n = at(x, z)
+        if b is None: b = g.on_face(x, z); n = g.face_normal(x, z)
+        h = hfn(x, z); P.append(b + n * (lift + h))
+        hx = (hfn(x + e, z) - hfn(x - e, z)) / (2 * e); hz = (hfn(x, z + e) - hfn(x, z - e)) / (2 * e)
+        ny = min(-1e-3, n.y); tx = Vector((1.0, n.x / -ny, 0.0)); tz = Vector((0.0, n.z / -ny, 1.0))
+        N.append((n - tx * (hx / tx.length_squared) - tz * (hz / tz.length_squared)).normalized())
+    bm = bmesh.new(); bv = [bm.verts.new(p) for p in P]
+    for f in faces:
+        q = [P[i] for i in f]; fn = (q[1] - q[0]).cross(q[2] - q[0])
+        if fn.dot(sum((N[i] for i in f), Vector())) < 0: f = tuple(reversed(f))
+        bm.faces.new([bv[i] for i in f])
+    ob = L.new_object(name, bm, smooth=True)
+    rn = getattr(g, 'relief_normals', None)
+    if rn is None: rn = g.relief_normals = {}
+    for v, n in zip(ob.data.vertices, N): rn[_co_key(v.co)] = n
+    return g.add(ob, mat, bone)
+
+def _co_key(co): return (round(co.x, 5), round(co.y, 5), round(co.z, 5))
+
+def relief_normals(g):
+    """After the join: give the face-relief vertices their recorded smooth normals (everything else keeps its own)."""
+    rn = getattr(g, 'relief_normals', None)
+    if not rn: return
+    me = g.mesh.data; normals = [Vector(n.vector) for n in me.corner_normals]; hit = 0
+    vk = {}
+    for v in me.vertices:
+        n = rn.get(_co_key(v.co))
+        if n is not None: vk[v.index] = n
+    for li, lp in enumerate(me.loops):
+        n = vk.get(lp.vertex_index)
+        if n is not None: normals[li] = n; hit += 1
+    me.normals_split_custom_set(normals)
+    print(f'REPORT relief_normals: {len(vk)} verts ({hit} corners)')
+
+def soft_nose(g, skull, N):
+    """A soft button nose that swells out of the face (no ball, no crease): height h * (1 - rho^k)^m over an ellipse
+    rx wide, rz_up above / rz_dn below the centre (a longer blend up into the bridge, a rounder underside).
+    N: x, z (pct, centre = the highest point), rx, rz_up, rz_dn, h, k (3), m (2), drop (m: the tip sits this much below
+    the ellipse centre), rings, segs, mat."""
+    cx = N.get('x', 0.0); zc = g.zp(N['z']); rx, ru, rd, A = N['rx'], N['rz_up'], N['rz_dn'], N['h']
+    k, m = N.get('k', 3.0), N.get('m', 2.0)
+    def rz(dz): return rd + (ru - rd) * sm(0.5 + dz / (0.8 * rd))
+    def hfn(x, z):
+        dz = z - zc; r2 = ((x - cx) / rx) ** 2 + (dz / rz(dz)) ** 2
+        return A * (1.0 - r2 ** (k / 2)) ** m if r2 < 1.0 else 0.0
+    NR, NS = N.get('rings', 10), N.get('segs', 28)
+    pts = [(cx, zc)]
+    for i in range(1, NR + 1):
+        rho = (i / NR) ** N.get('ring_pow', 0.85)
+        for j in range(NS):
+            th = 2 * math.pi * j / NS; s = math.sin(th)
+            r_z = ru if s > 0 else rd
+            pts.append((cx + rx * rho * math.cos(th), zc + r_z * rho * s))
+    faces = []
+    for j in range(NS): faces.append((0, 1 + j, 1 + (j + 1) % NS))
+    for i in range(1, NR):
+        a0, b0 = 1 + (i - 1) * NS, 1 + i * NS
+        for j in range(NS):
+            j1 = (j + 1) % NS; faces.append((a0 + j, b0 + j, b0 + j1, a0 + j1))
+    g.nose_hfn = hfn
+    return face_relief(g, skull, 'Nose', N.get('mat', 'skin'), pts, faces, hfn, lift=N.get('lift', 0.0004))
+
+def smile_lips(g, skull, Li):
+    """A small closed smile grown out of the face (the sheets' lips): one mesh, upper + lower lip sharing the parting.
+    Li: z (pct of the parting's centre), w (corner to corner), rise (corners above the parting centre), p_line (the
+    parting's curve |t|^p), upper / lower (lip heights at the centre, m), bow (0..1 dip of the upper lip's centre),
+    puff_u / puff_l (relief, m), part (relief at the parting as a share of the puff), crease=dict(len, up, w) (a short
+    upturned crease beyond each corner), nt (columns), rows (per lip), mat, and the colour shaping for the bake:
+    part_dark, part_w, upper_k, crease_dark (applied through g.post_bake)."""
+    zm = g.zp(Li['z']); hw = Li['w'] * 0.5; rise = Li['rise']; pl = Li.get('p_line', 2.0)
+    Up, Lo, bow = Li['upper'], Li['lower'], Li.get('bow', 0.25)
+    pu, plo, pf = Li.get('puff_u', 0.0022), Li.get('puff_l', 0.0032), Li.get('part', 0.25)
+    def line(t): return zm + rise * abs(t) ** pl
+    def th_u(a): return Up * max(0.0, 1 - a * a) ** Li.get('env_u', 0.85) * (1 - bow * math.exp(-(a / 0.11) ** 2))
+    def th_l(a): return Lo * max(0.0, 1 - a * a) ** Li.get('env_l', 0.65)
+    def B(s):                                  # relief across a lip: low at the parting, full mid-lip, tangent at the edge
+        s = min(1.0, max(0.0, s)); return (1 - s * s) ** 1.6 * (pf + (1 - pf) * sm(s / 0.5))
+    def hfn(x, z):
+        t = x / hw; a = abs(t)
+        if a >= 1.0: return 0.0
+        d = z - line(t); E = (1 - a * a) ** 0.5
+        if d >= 0: tu = th_u(a); return pu * E * B(d / tu) if tu > 1e-6 else 0.0
+        tl = th_l(a); return plo * E * B(-d / tl) if tl > 1e-6 else 0.0
+    NT, R = Li.get('nt', 24), Li.get('rows', 5)
+    srow = [(j / R) ** 1.25 for j in range(R + 1)]           # denser at the parting (its dark line)
+    pts, cols = [], []
+    for i in range(1, NT):
+        t = -1 + 2 * i / NT; t = math.copysign(abs(t) ** 0.9, t); a = abs(t); x = t * hw; col = []
+        for s in reversed(srow[1:]): col.append(len(pts)); pts.append((x, line(t) - s * th_l(a)))
+        col.append(len(pts)); pts.append((x, line(t)))
+        for s in srow[1:]: col.append(len(pts)); pts.append((x, line(t) + s * th_u(a)))
+        cols.append(col)
+    faces = []
+    for c0, c1 in zip(cols, cols[1:]):
+        for j in range(len(c0) - 1): faces.append((c0[j], c1[j], c1[j + 1], c0[j + 1]))
+    for sgn, col in ((-1, cols[0]), (1, cols[-1])):
+        ci = len(pts); pts.append((sgn * hw, line(1.0)))
+        for j in range(len(col) - 1): faces.append((ci, col[j], col[j + 1]))
+    ob = face_relief(g, skull, 'Lips', Li.get('mat', 'lips'), pts, faces, hfn, lift=Li.get('lift', 0.0004))
+    # the upturned creases beyond the corners
+    Cr = Li.get('crease')
+    if Cr:
+        n = 8; cpts, cfaces = [], []
+        for sgn in (-1, 1):
+            base = len(cpts)
+            for i in range(n + 1):
+                u = i / n; x = sgn * (hw + Cr['len'] * u - 0.0015); z = line(1.0) + Cr['up'] * u ** 1.4 + 0.0003
+                dx = sgn * Cr['len']; dz = Cr['up'] * 1.4 * max(u, 0.05) ** 0.4
+                ln = math.hypot(dx, dz); nx, nz = -dz / ln, dx / ln
+                w = Cr['w'] * 0.5 * (1.0 - 0.8 * u)
+                cpts += [(x + nx * w, z + nz * w), (x - nx * w, z - nz * w)]
+            for i in range(n): cfaces.append((base + 2 * i, base + 2 * i + 2, base + 2 * i + 3, base + 2 * i + 1))
+        face_relief(g, skull, 'LipCrease', Li.get('mat', 'lips'), cpts, cfaces, lambda x, z: 0.0, lift=0.0006)
+    # colour shaping after the bake: the dark parting line, a deeper upper lip, the creases
+    pd, pw, uk, cd = Li.get('part_dark', 0.60), Li.get('part_w', 0.0015), Li.get('upper_k', 0.80), Li.get('crease_dark', 0.55)
+    def shade_fn(co):
+        a = abs(co.x) / hw
+        if a > 1.0: return cd + (1 - cd) * 0.5 * sm((abs(co.x) - hw) / max(1e-4, Cr['len'] if Cr else 0.004))
+        d = co.z - line(min(1.0, a)); w = pw * (0.6 + 0.4 * (1 - a * a))
+        k = 1.0 - pd * math.exp(-(d / w) ** 2)
+        k *= 1.0 - (1.0 - uk) * sm(d / w)
+        return (k, k * 0.92, k * 0.92)
+    g.post_bake = list(getattr(g, 'post_bake', [])) + [(Li.get('mat', 'lips').capitalize(), shade_fn)]
+    g.lip_line = line
+    return ob
 
 def earrings(g, E):
     """E: kind ('stud' | 'ball' | 'drop'), r (radius), x (|x| of the centre), dy (y offset from the head axis),
@@ -980,6 +1143,7 @@ def finish(g, R, out):
     """guest_kit's finish, plus eyeCentre = ONE eye centre (her left eye, +x) in glTF space (Y up, face toward
     +Z) in the armature extras: portrait.mjs reads |eyeCentre[0]| as the eye's x offset."""
     GK.join(g)
+    if getattr(g, 'relief_normals', None): relief_normals(g)             # face relief (soft_nose / smile_lips) only
     if g.C.get('soft_normals'): soft_normals(g, g.C['soft_normals'])     # before the bake: the AO rays use these normals
     t0 = time.time(); GK.bake(g); print(f'REPORT ao_seconds={time.time() - t0:.1f}')
     lift_ao(g, g.C.get('ao_scale', {}))

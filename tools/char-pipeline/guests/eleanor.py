@@ -49,7 +49,7 @@ CFG = dict(
            'Pearl': (0.70, (-0.3, -0.6, 0.75), 3.0)},
 )
 COLOURS = dict(
-    skin='#ffb382', hair='#9a7a70', brow='#2e1d16', eye='#0b0b0d', lips='#b03a42',
+    skin='#ffb382', hair='#9a7a70', brow='#2e1d16', eye='#0b0b0d', lips='#c8596b',
     dress=GK.PALETTE['navy'], gold='#d8b077', pearl='#f6f1e8', shoe=GK.PALETTE['shoe_black'], shine='#f4f1ee',
 )
 
@@ -213,7 +213,13 @@ LEGS = dict(leg_x=0.095, leg_y=0.0, n=14,
             stations=[(61.0, 0.120, 0.125), (70.0, 0.108, 0.112), (80.0, 0.090, 0.094), (86.0, 0.098, 0.102), (91.0, 0.088, 0.094), (94.0, 0.078, 0.084), (96.0, 0.072, 0.078)])
 SHOES = dict(leg_x=0.095, y=0.0, len=0.25, w=0.088, heel=0.066, heel_h=0.036, heel_len=0.044, collar=0.088, vamp=0.060,
              splay=0.26, out=0.010, foot_top=0.105, ball=0.12, mat='shoe')
-JAW = dict(top=22.0, lift=0.012, y0=-0.02, y1=0.09)          # jawline rising from the chin toward the ear lobe
+JAW = dict(top=22.0, lift=0.012, y0=-0.02, y1=0.09)
+# round 3 (face finish, measured on the sheet's head front, eye-aligned): a soft button nose grown out of the face
+# (sheet: 0.40 of the eye gap wide, centre 19.0 %, its shaded underside ~0.06 m below the eyes) and a small closed
+# smile (0.72 of the eye gap corner to corner, parting 21.85 %, corners 0.010 up, upper lip 0.009 / lower 0.013 high)
+NOSE = dict(z=19.0, rx=0.027, rz_up=0.036, rz_dn=0.021, h=0.012, m=1.6)
+LIPS = dict(z=21.85, w=0.084, rise=0.010, p_line=2.0, upper=0.012, lower=0.014, bow=0.2, puff_u=0.0022, puff_l=0.0032,
+            crease=dict(len=0.004, up=0.003, w=0.0016))          # jawline rising from the chin toward the ear lobe
 SHINE = dict(r=0.0035, dx=-0.30, dz=0.45, mirror=True, mat='shine')      # a tiny glint, upper-inner on each eye
 EAR = dict(kind='stud', r=0.016, x=0.154, dy=-0.008, z=22.0, mat='pearl')
 RIG = dict(hip=63.0, knee=80.0, ankle=95.0, waist=47.4, shoulder_top=31.5, neck_y=0.015, hand_end=66.0, leg_x=0.095,
@@ -246,8 +252,8 @@ def build(g):
         dict(axis=((bc[0], g.Y0 + bc[1], g.zp(bc[2])), BUN_AX), period=0.028, turn=1.0, radius=0.10)])]   # the chignon's twists
     skull = GK.head(g, nlon=48, nlat=34, cull_in=g.hair_covers)
     DK.jaw_lift(g, skull, JAW)
-    GK.ears(g); DK.decimate_parts(g, 'Ear', 0.55); GK.eyes(g); DK.eye_shine(g, SHINE); GK.brows(g); GK.nose(g)
-    DK.lips(g, g.C['lips']); DK.earrings(g, EAR)
+    GK.ears(g); DK.decimate_parts(g, 'Ear', 0.55); GK.eyes(g); DK.eye_shine(g, SHINE); GK.brows(g); DK.soft_nose(g, skull, NOSE)
+    DK.smile_lips(g, skull, LIPS); DK.earrings(g, EAR)
     DK.neck_yoke(g, NECK)
     DK.bodice(g, BOD)
     GK.arms(g, A); DK.soft_hands(g, A)

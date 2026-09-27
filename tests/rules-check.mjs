@@ -10,6 +10,7 @@ import {
   createState, activePlayer, nextPlayer, endTurn, enterRoom, checkWin, canEscape, openableDoors,
   usableDoorways, pendingEncounters, lockEncounter, hasEncounterLock, playersInRoom, canAffordRoute,
   isLocked, isBarricaded, doorwayPassable, placeBarricade, adjacentLockedRooms, convertToPossessed, dawnHasBroken, isFinalRound,
+  canTradeVoluntarily,
 } from '../src/game/state.js';
 import {
   search, canSearch, useBandage, useUnlock, useBarricade, resolveFullHand, discardCard, overHandLimit,
@@ -387,6 +388,13 @@ console.log('\nmeetings');
   const A = s.players[0], B = s.players[1], C = s.players[2];
   A.currentRoom = B.currentRoom = C.currentRoom = lobby;
   check(pendingEncounters(s, floor, A).length === 0, 'the lobby never forces a meeting');
+  check(!canTradeVoluntarily(s, floor, A), 'the lobby allows no trades either, not even voluntary ones');
+  const sx = hsx(16); const X = sx.players[0], Y = sx.players[1];
+  X.currentRoom = Y.currentRoom = 'exit';
+  check(pendingEncounters(sx, floor, X).length === 0 && canTradeVoluntarily(sx, floor, X),
+    'the Fire Exit is safe too, but guests there may still trade if both agree');
+  Y.currentRoom = 'corridorE';
+  check(!canTradeVoluntarily(sx, floor, X), 'with nobody else there, no trade is offered');
   A.currentRoom = B.currentRoom = C.currentRoom = 'corridorE';
   check(pendingEncounters(s, floor, A).length === 2, 'entering a room with two guests: a meeting, with a choice of whom');
   lockEncounter(s, 'corridorE', A.index, B.index);

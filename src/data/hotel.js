@@ -73,7 +73,8 @@ export const hotel = {
     id: 'hall',
     name: 'Fourth Floor Landing',
     role: 'lobby',
-    safe: true,             // safe zone: no forced meetings, no attacks; voluntary trades only
+    safe: true,             // safe zone: no meetings, no attacks
+    noTrade: true,          // ...and no trades either (the Fire Exit, also safe, still allows voluntary trades)
     // Warm, cosy landing: index 0 is the ceiling fill, the rest sit by the lamps (dressing.js).
     mood: { color: '#ffe0b0', intensity: 1.55, ambient: 1.05, lights: [[0, 0], [3.4, 2.3], [-3.3, 3.2], [0, -3.2]] },
     // Where the guests stand at the start (relative to the lobby centre): six spots.

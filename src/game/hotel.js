@@ -121,6 +121,7 @@ function placeRoom(floor, def, cell, rot) {
     dark: !!def.dark,
     locked: !!def.locked,       // a locked tile: locked the moment it is revealed
     safe: !!def.safe,
+    noTrade: !!def.noTrade,     // no trades at all here, not even voluntary ones (the lobby)
     searchable: def.searchable !== false && !def.isExit,
     searchPoint: def.searchPoint || null,
     job: def.job || null,       // a room with a job: 'linenStore' | 'infirmary' | 'switchboard'

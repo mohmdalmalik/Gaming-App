@@ -17,7 +17,18 @@ W, H = im.size
 ex = (eyes[0][0] + eyes[1][0]) / 2; ey = (eyes[0][1] + eyes[1][1]) / 2
 eye_gap = abs(eyes[1][0] - eyes[0][0])
 cw = min(W, int(eye_gap * 3.5)); ch = min(H, int(cw * 4 / 3))
-cx0 = int(ex - cw / 2); cy0 = int(ey - ch * 0.37)
+eye_frac = 0.37
+# The women's hairstyles are their silhouette: frame the whole hairdo (eyes a little lower, zoomed out
+# just enough that the top of the hair clears the frame). The men keep the tighter crop the owner approved.
+if name in ('eleanor', 'clara', 'beatrice'):
+    a = im.load(); bg = a[2, 2]
+    def is_bg(p): return sum(abs(p[i] - bg[i]) for i in range(3)) < 24
+    band = range(int(ex - eye_gap * 1.6), int(ex + eye_gap * 1.6), 3)
+    top = next((y for y in range(0, int(ey)) if any(not is_bg(a[x, y]) for x in band if 0 <= x < W)), 0)
+    eye_frac = 0.46
+    need = (ey - top) / (eye_frac - 0.03)            # frame height that leaves a 3% margin above the hair
+    if need > ch: ch = min(H, int(need)); cw = min(W, int(ch * 3 / 4))
+cx0 = int(ex - cw / 2); cy0 = int(ey - ch * eye_frac)
 cx0 = max(0, min(W - cw, cx0)); cy0 = max(0, min(H - ch, cy0))
 box = (cx0, cy0, cx0 + cw, cy0 + ch)
 bust = im.crop(box).resize((576, 768), Image.LANCZOS)

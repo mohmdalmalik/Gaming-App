@@ -3,7 +3,7 @@
 // hand opener with a live count, the turn-action buttons (with costs / reasons), a move-confirm
 // bar and toasts. Portraits are illustrated placeholders (see ui/portrait.js) so real art can
 // drop in later without changing this logic. Possession is never revealed on the public strip.
-import { activePlayer, nextPlayer, playersInRoom, canEscape } from './game/state.js';
+import { activePlayer, nextPlayer, playersInRoom, canEscape, canTradeVoluntarily } from './game/state.js';
 import { canSearch, canUseRoom } from './game/actions.js';
 import { rules } from './data/rules.js';
 import { countableCount } from './game/cards.js';
@@ -215,10 +215,9 @@ export function createHud(doc, cfg) {
         el.roomJobSub.textContent = use.ok ? job.does() : (ROOM_REASON[use.reason] || 'Unavailable');
       }
 
-      // Voluntary trade: only in the lobby (a safe zone) when someone else is there to trade with.
-      const safeRoom = !!room?.safe;
-      el.trade.hidden = state.practice
-        || !(safeRoom && !state.finished && playersInRoom(state, p.currentRoom, p.id).length > 0);
+      // Voluntary trade: only in a safe zone that allows it (the Fire Exit, never the lobby), with
+      // someone else there to trade with.
+      el.trade.hidden = !canTradeVoluntarily(state, floor, p);
 
       // Public card count excludes Possession cards, so it never reveals a role.
       renderHand(countableCount(p.hand));

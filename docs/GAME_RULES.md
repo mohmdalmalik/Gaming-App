@@ -22,7 +22,7 @@ Guests are trapped on a hotel floor. Lanterns are the way out: a clean guest car
 - Entering a room that holds a guest you have not met in that room this round forces a meeting. If several are there, choose one.
 - The entering guest chooses TRADE or ATTACK.
 - The same two guests cannot be forced to meet again in the same room in the same round. Meeting in a different room triggers a new meeting.
-- The lobby is a safe zone: no forced meetings, no attacks. Guests there may trade voluntarily if both agree; normal trade rules apply, including possession.
+- The lobby is a safe zone: no meetings, no trades and no attacks.
 
 ### Trade
 - Both guests secretly choose one card to give; the cards swap at the same time. In hot-seat the device is passed so the other guest chooses in private. Results are private: each guest sees only what they received.

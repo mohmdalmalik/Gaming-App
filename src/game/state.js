@@ -245,6 +245,15 @@ export function encounterKey(roomId, i, j) {
 export const hasEncounterLock = (state, roomId, i, j) => state.encounterLocks.has(encounterKey(roomId, i, j));
 export const lockEncounter = (state, roomId, i, j) => state.encounterLocks.add(encounterKey(roomId, i, j));
 
+// May `player` propose a voluntary trade right now? Only in a safe zone that allows trading (the Fire
+// Exit — never the lobby), with another living guest there to trade with.
+export function canTradeVoluntarily(state, floor, player) {
+  if (state.practice || state.finished || !player.alive) return false;
+  const room = floor.rooms.get(player.currentRoom);
+  if (!room?.safe || room.noTrade) return false;
+  return playersInRoom(state, player.currentRoom, player.id).length > 0;
+}
+
 // Guests `player` must meet, having just entered their room: everyone else alive in the room
 // they have not already met there this round. The lobby (a safe zone) never forces a meeting.
 export function pendingEncounters(state, floor, player) {

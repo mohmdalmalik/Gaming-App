@@ -1085,6 +1085,14 @@ rounds, exit median round 4, 13 tiles, 15 meetings (5.37 a round), never closed 
    closes (nobody else should ever see your cards).
 
 
+# Approved rule change — no trading in the lobby (2026-09-27)
+- Owner-approved before/after: "The lobby is a safe zone: no forced meetings, no attacks. Guests there may
+  trade voluntarily if both agree…" → "The lobby is a safe zone: no meetings, no trades and no attacks."
+- The Fire Exit (also a safe zone) keeps voluntary trades, by the owner's choice.
+- Data: the lobby tile has `noTrade: true` (src/data/hotel.js); rule: `canTradeVoluntarily` in
+  src/game/state.js (used by the HUD's Trade button and by the trade action). Tests: rules-check
+  "meetings", browser-hotseat section 9 (no Trade button in the lobby; the full private trade in the Fire Exit).
+
 # The six guests, modelled to the owner's sheets (2026-09-27) — current
 
 **Status: all six guests are in the game with their own models and portraits; polish rounds continue.**

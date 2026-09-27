@@ -391,17 +391,23 @@ check(/Dawn breaks/.test(await page.textContent('#end-title')), `the end screen 
 check(/Possessed:/.test(await page.textContent('#end-summary')), 'and reveals who was possessed');
 await shot('hs-09-dawn');
 
-console.log('\n9. a voluntary trade in the lobby');
+console.log('\n9. no trading in the lobby; a voluntary trade in the Fire Exit');
 await load('mode=hotseat&players=6&seed=4242');
 await tap('#btn-begin'); await throughRoles(); await intoTurn();
+check(!(await visible('#btn-trade')), 'the lobby offers no Trade button, even with every guest standing there');
 await game(() => {
-  const s = window.__game.state;
+  const g = window.__game, s = g.state;
+  g.revealTile('exit');
   s.players.forEach((p, i) => { p.possessed = i === 5; });
   s.players[0].hand = [{ id: 'p1', type: 'lantern' }]; s.players[1].hand = [{ id: 'q1', type: 'knife' }];
-  s.players.forEach((p, i) => { if (i > 1) p.currentRoom = 'corridorW'; });
-  window.__game.refresh();
+  g.refresh();
 });
-check(await visible('#btn-trade'), 'a Trade button is offered in the lobby with someone there');
+{
+  const exit = await game(() => window.__game.floor.exitRoom);
+  for (let i = 0; i < 6; i++) await place(i, i > 1 ? 'corridorW' : exit);
+  await page.waitForTimeout(300);
+}
+check(await visible('#btn-trade'), 'the Fire Exit (also safe) still offers a Trade button with someone there');
 await tap('#btn-trade');
 check(await kind() === 'pass', 'the other guest is handed the device');
 await next();

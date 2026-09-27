@@ -12,7 +12,7 @@ import { buildGrid } from './game/grid.js';
 import {
   createState, resetState, endTurn, activePlayer, nextPlayer, checkWin, canEscape,
   usableDoorways, openableDoors, pendingEncounters, lockEncounter, playersInRoom, isLocked,
-  isBarricaded,
+  isBarricaded, canTradeVoluntarily,
 } from './game/state.js';
 import {
   search, escape, useBandage, useUnlock, useBarricade, resolveFullHand, resolveTrade, resolveAttack,
@@ -352,11 +352,12 @@ function runAttack(P, Q) {
   });
 }
 
-// Voluntary trade in the lobby: the other guest must agree, in private, before anyone chooses.
+// Voluntary trade in a safe zone that allows it (the Fire Exit; never the lobby): the other guest
+// must agree, in private, before anyone chooses.
 function onTrade() {
   if (!running || state.finished || uiBusy() || activeMover().walking || PRACTICE) return;
   const P = activePlayer(state);
-  if (!floor.rooms.get(P.currentRoom)?.safe) return;
+  if (!canTradeVoluntarily(state, floor, P)) return;
   const others = playersInRoom(state, P.currentRoom, P.id);
   if (!others.length) return;
   hud.hideConfirm(); selectedMove = null;

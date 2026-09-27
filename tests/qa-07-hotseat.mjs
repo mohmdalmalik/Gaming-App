@@ -102,6 +102,9 @@ async function clearScreens(seed) {
     if (await game(() => window.__game.cardViewOpen())) { await h.tap('#btn-hand-close'); continue; }
     return 'clear';
   }
+  const st = await page.evaluate(() => ({ handoff: window.__game.handoffKind(), title: document.getElementById('handoff-title').textContent, meeting: window.__game.meetingOpen(), mtitle: document.getElementById('encounter-title').textContent, mbody: document.getElementById('encounter-body').textContent.slice(0, 120), mbtns: [...document.querySelectorAll('#encounter-actions .btn')].map(b => b.textContent + (b.disabled ? '(off)' : '')), full: window.__game.fullHandOpen(), discard: !document.getElementById('discard-overlay').hidden, dsub: document.getElementById('discard-sub').textContent, notice: window.__game.noticeOpen() }));
+  note(seed, 'SCREEN LOOP: ' + JSON.stringify(st));
+  await h.shot(`hs-${seed}-loop`);
   return 'loop';
 }
 

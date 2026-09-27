@@ -1096,6 +1096,12 @@ rounds, exit median round 4, 13 tiles, 15 meetings (5.37 a round), never closed 
   rotations; the ceiling lamps no longer wash the tops of heads out (guest_kit bake `up_dark`), crisper
   hair locks, Marcus's smile, Beatrice's open forehead, Henry's full back hair, Clara's rolled wave and
   spiral curls, Eleanor's glossy hair bands. Honest estimates ~84–90% per guest.
+- Women's faces reworked (owner: "face looks longer, eyes wide and low, eyebrows not accurate"): measured
+  on eye-aligned tiles against each sheet — rounder U-shaped chins (no jaw corner), nose raised off the
+  mouth, eyes sized/placed to the sheet, thick soft sheet-shaped brows (a small inner lift kept so they
+  read friendly, not cross, from the high game camera). Eleanor also got a compact off-centre updo;
+  Beatrice a diagonal hairline with stacked S-waves and jaw-level curls. Clara's head sits 3 cm lower
+  (height 1.632 m, `modelHeight` 1.63). Men unchanged (owner approved).
 - Cards: the owner's finished designs are the card faces (assets/cards/face/, CARD_FACE in
   src/ui/cards.js) and the keyhole design is the card back; Lock Pick awaits an owner design (assembled in
   the same style meanwhile, tools/card-pipeline/make_lockpick_face.py).

@@ -42,9 +42,10 @@ CFG = dict(
     head_y=0.03, z_shoulder_top=32.3,
     ear_style='round', ear_h=0.088, ear_w=0.062, ear_out=0.006, ear_y=0.030, ear_tilt=0.35, ear_thick=0.024, ear_rim=0.007, ear_bowl=0.010, ear_sink=0.020,
     eye_x=0.058, eye_w=0.037, eye_h=0.061, eye_lift=0.003,
-    # brows: the sheet's thick soft arch: a blunt inner end a touch below the peak, the peak about half way out, the
-    # outer end tapering a little lower than the inner (no inner-up 'worried' slant)
-    brow=dict(x0=0.040, x1=0.098, z=13.65, thick=0.030, arch=0.016, drop_in=-0.008, drop_out=0.010,
+    # brows (round 3): the sheet's thick soft arch: a blunt inner end about level with the peak, the outer end curving
+    # down lower than the inner. Together with the brow-ridge bulge (BULGES) they read level and friendly from the high
+    # game camera, where the forehead's curve would otherwise lift the outer ends into a cross 'V'.
+    brow=dict(x0=0.040, x1=0.098, z=13.65, thick=0.030, arch=0.016, drop_in=-0.012, drop_out=0.010,
               profile=[(0.0, 0.80), (0.05, 0.98), (0.20, 1.0), (0.60, 0.96), (0.85, 0.84), (0.97, 0.68), (1.0, 0.58)], flat=0.5),
     nose_w=0.054, nose_h=0.044, nose_d=0.032, nose_out=0.014, nose_top=1.3,
     lips=dict(z=22.05, w=0.083, rise=0.014, upper=0.011, lower=0.015, bow=0.002, flat=0.45),
@@ -78,11 +79,11 @@ DF = _tab([(27.0, 0.0), (26.8, 0.070), (26.4, 0.112), (25.8, 0.145), (25.0, 0.16
           [(0.50, 0.203), (0.62, 0.197), (0.75, 0.186), (0.85, 0.168), (0.93, 0.138), (0.98, 0.066), (1, 0.0)], 18.0)
 DB = _tab([(27.0, 0.0), (26.5, 0.030), (25.2, 0.062), (23.0, 0.112), (20.5, 0.150)],
           [(0.35, 0.155), (0.45, 0.155), (0.60, 0.165), (0.75, 0.160), (0.85, 0.140), (0.93, 0.110), (0.98, 0.060), (1, 0.0)], 19.0)
-E  = _tab([(27.0, 2.3), (25.5, 2.55), (23.5, 2.65), (21.5, 2.6), (19.8, 2.5), (17.0, 2.6), (14.5, 2.75), (12.5, 2.6)],     # a flatter brow band:
+E  = _tab([(27.0, 2.3), (25.5, 2.42), (23.5, 2.58), (21.5, 2.6), (19.8, 2.5), (17.0, 2.6), (14.5, 2.75), (12.5, 2.6)],     # a flatter brow band:
           [(0.70, 2.4), (0.90, 2.2), (1, 2.1)], 11.0)                                                               # the brows read level from above
 BULGES = [dict(x=0.105, z=23.0, sx=0.058, sz=0.052, a=0.024),      # full rosy cheeks, carried down into the round jaw (less forward: nose and lips lead in profile)
           dict(x=0.0, z=18.0, sx=0.015, sz=0.020, a=0.010),        # soft nose bridge
-          dict(x=0.085, z=13.6, sx=0.030, sz=0.020, a=0.008),      # soft brow ridge: the outer brows sit forward (friendly from above)
+          dict(x=0.085, z=13.6, sx=0.030, sz=0.020, a=0.013),      # soft brow ridge: the outer brows sit forward (friendly from above)
           dict(x=0.0, z=25.3, sx=0.050, sz=0.020, a=0.006)]        # small round chin
 
 # ---- hair (female_extras.long_hair): envelope measured on the FRONT (wr her right / wl her left) and SIDE panels

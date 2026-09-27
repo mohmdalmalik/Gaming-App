@@ -34,7 +34,7 @@ export const outfits = {
   dressEmerald: { name: 'Emerald A-line gown', body: 'female', bodice: '#1f6b4a', skirt: '#1f6b4a', skirtStyle: 'aline', sleeves: 'long', sash: '#c9a86a',
     model: 'assets/characters/beatrice.glb', modelHeight: 1.66, strideLength: 1.032 },   // Beatrice (tools/char-pipeline/guests/beatrice.py)
   dressBurgundy: { name: 'Burgundy column dress', body: 'female', bodice: '#6b1f30', skirt: '#6b1f30', skirtStyle: 'column', sleeves: 'short', sash: '#2a1418',
-    model: 'assets/characters/clara.glb', modelHeight: 1.66, strideLength: 1.069 },   // Clara (tools/char-pipeline/guests/clara.py)
+    model: 'assets/characters/clara.glb', modelHeight: 1.63, strideLength: 1.069 },   // Clara (tools/char-pipeline/guests/clara.py)
   dressMidnight: { name: 'Midnight blue ballgown', body: 'female', bodice: '#1d2a5e', skirt: '#24357a', skirtStyle: 'full', sleeves: 'cap', sash: '#d9c27a',
     model: 'assets/characters/eleanor.glb', modelHeight: 1.66, strideLength: 1.0344 },   // Eleanor (tools/char-pipeline/guests/eleanor.py)
 };

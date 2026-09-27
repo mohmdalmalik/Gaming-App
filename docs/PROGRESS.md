@@ -1092,8 +1092,13 @@ rounds, exit median round 4, 13 tiles, 15 meetings (5.37 a round), never closed 
 - Victor rebuilt with the shared kit; Marcus, Henry (suited) and Eleanor, Clara, Beatrice (dress) new.
 - Honest similarity to the sheets ~80–88% per view; hair gloss is the common remaining gap (matte
   materials by design). Colours solved for the lobby light (`lineup.mjs` checks all six in the real game).
-- In progress when this was written: Eleanor/Beatrice brows from the game camera, Beatrice's hair
-  silhouette (rounder curls, scalloped edge).
+- Quality round 2 (2026-09-27): every guest re-checked against the sheets and at all four camera
+  rotations; the ceiling lamps no longer wash the tops of heads out (guest_kit bake `up_dark`), crisper
+  hair locks, Marcus's smile, Beatrice's open forehead, Henry's full back hair, Clara's rolled wave and
+  spiral curls, Eleanor's glossy hair bands. Honest estimates ~84–90% per guest.
+- Cards: the owner's finished designs are the card faces (assets/cards/face/, CARD_FACE in
+  src/ui/cards.js) and the keyhole design is the card back; Lock Pick awaits an owner design (assembled in
+  the same style meanwhile, tools/card-pipeline/make_lockpick_face.py).
 - How to rebuild / compare: README "Character pipeline", `tools/char-pipeline/README.md`.
 
 # Fix — stuck in front of a locked door (2026-09-26)

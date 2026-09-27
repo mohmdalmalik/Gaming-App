@@ -1110,6 +1110,10 @@ rounds, exit median round 4, 13 tiles, 15 meetings (5.37 a round), never closed 
   read friendly, not cross, from the high game camera). Eleanor also got a compact off-centre updo;
   Beatrice a diagonal hairline with stacked S-waves and jaw-level curls. Clara's head sits 3 cm lower
   (height 1.632 m, `modelHeight` 1.63). Men unchanged (owner approved).
+- Women round 3 (owner: "still off; portraits not as good as the men"): portraits now frame the whole
+  hairdo (portrait_post.py, women only); soft blended noses and closed-smile lips built as relief on the
+  skull (dress_kit `soft_nose` / `smile_lips`, opt-in), sheet-sampled lip colours, slimmer necks with an
+  earlier shoulder flare. Comparison: tools/char-pipeline/shots/women-portraits-before-after.png.
 - Cards: the owner's finished designs are the card faces (assets/cards/face/, CARD_FACE in
   src/ui/cards.js) and the keyhole design is the card back; Lock Pick awaits an owner design (assembled in
   the same style meanwhile, tools/card-pipeline/make_lockpick_face.py).

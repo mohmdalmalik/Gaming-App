@@ -618,7 +618,7 @@ def smile_lips(g, skull, Li):
             for i in range(n): cfaces.append((base + 2 * i, base + 2 * i + 2, base + 2 * i + 3, base + 2 * i + 1))
         face_relief(g, skull, 'LipCrease', Li.get('mat', 'lips'), cpts, cfaces, lambda x, z: 0.0, lift=0.0006)
     # colour shaping after the bake: the dark parting line, a deeper upper lip, the creases
-    pd, pw, uk, cd = Li.get('part_dark', 0.60), Li.get('part_w', 0.0015), Li.get('upper_k', 0.80), Li.get('crease_dark', 0.55)
+    pd, pw, uk, cd = Li.get('part_dark', 0.68), Li.get('part_w', 0.0015), Li.get('upper_k', 0.80), Li.get('crease_dark', 0.55)
     def shade_fn(co):
         a = abs(co.x) / hw
         if a > 1.0: return cd + (1 - cd) * 0.5 * sm((abs(co.x) - hw) / max(1e-4, Cr['len'] if Cr else 0.004))

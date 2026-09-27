@@ -161,7 +161,9 @@ node tools/char-pipeline/preview_glb.mjs --glb assets/characters/eleanor.glb --o
 Parts: `neck_yoke`, `bodice` (bateau / crew / scoop / v neckline), `sleeves` (cap / short / long + puff + cuff; never
 narrower than the arm under it), `belt` (metal + buckle / sash + knot + tails), `skirt` (bell / a-line / column or a
 measured profile; soft folds, wavy hem, walk-safe weights `sway` / `follow`), `legs`, `pumps`, `lips`, `earrings`,
-`eye_shine`, `jaw_lift`, `coil_bun`, and `sculpt_hair` — hair as a signed-distance volume (cap + ellipsoid masses +
+`eye_shine`, `jaw_lift`, `coil_bun`, the opt-in `soft_nose` / `smile_lips` (round 3: a button nose and a closed smile grown out
+of the skin as height fields on the skull mesh via `face_relief`; their smooth normals are set after the join, so there is no crease or
+dark ring; `smile_lips` also darkens the parting / creases through `g.post_bake`), and `sculpt_hair` — hair as a signed-distance volume (cap + ellipsoid masses +
 ribbon "rolls" along curves + grooves projected onto the surface) meshed by surface nets, smoothed and decimated with
 the grooves protected. Build time ~2 min (the hair volume). Eleanor: 31.8k tris, 1.17 MB.
 Eleanor's head close-up on the sheet is turned ~9 deg: compare it with `face@9`, and at 423 px/m (her head is smaller

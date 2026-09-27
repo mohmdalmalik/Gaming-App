@@ -184,15 +184,18 @@ SCULPT = dict(
 )
 
 # ---- body
-NECK = dict(rings=[(24.0, 0.150, 0.138, 1.0, 0.035), (28.0, 0.152, 0.140, 1.0, 0.032), (30.0, 0.156, 0.144, 1.0, 0.030),
-                   (31.0, 0.160, 0.146, 1.0, 0.028), (32.0, 0.176, 0.150, 0.98, 0.026), (33.6, 0.240, 0.160, 0.92, 0.018)],
-            split=29.8, blend=0.02, n=28)
+# round 3: the sheet's neck is ~20 % slimmer (0.85 of the eye gap under the chin) and flares into the shoulders just
+# above the neckline (head front, eye-aligned)
+NECK = dict(rings=[(24.0, 0.122, 0.124, 1.0, 0.035), (28.0, 0.123, 0.124, 1.0, 0.032), (29.3, 0.127, 0.126, 1.0, 0.030),
+                   (30.2, 0.146, 0.134, 1.0, 0.028), (31.0, 0.180, 0.145, 1.0, 0.026), (31.8, 0.204, 0.150, 1.0, 0.024),
+                   (33.0, 0.232, 0.160, 1.0, 0.020)],     # an ellipse just inside the (boxier) bodice top: no poke-through
+            split=29.3, blend=0.02, n=28)
 BOD = dict(profiles=[(50.0, 0.246, 0.236, 0.92, 0.000), (48.5, 0.238, 0.230, 0.92, 0.000), (47.0, 0.242, 0.234, 0.90, 0.000),
                      (45.0, 0.258, 0.248, 0.88, 0.000), (43.0, 0.276, 0.272, 0.86, -0.002), (41.0, 0.290, 0.290, 0.85, -0.004),
                      (39.0, 0.302, 0.284, 0.84, -0.002), (37.0, 0.318, 0.258, 0.82, 0.008), (35.0, 0.336, 0.226, 0.82, 0.018),
                      (33.8, 0.330, 0.200, 0.86, 0.022), (32.8, 0.286, 0.184, 0.92, 0.024), (31.8, 0.226, 0.170, 0.98, 0.026),
                      (31.0, 0.198, 0.160, 1.0, 0.027), (30.6, 0.190, 0.156, 1.0, 0.028)],
-           neck=dict(kind='crew', side=31.6, front=32.8, back=31.5), waist=48.5, ncol=48, nrow=18, lip=0.006)
+           neck=dict(kind='crew', side=31.0, front=32.0, back=31.2), waist=48.5, ncol=48, nrow=18, lip=0.006)     # round 3: raised ~0.7 % (sheet head front: chin -> neckline 0.59 of the eye gap)
 A = dict(
     shoulder=(0.172, 35.0), shoulder_y=0.010, elbow=(0.238, 0.012, 50.0), wrist=(0.290, -0.030, 59.6),
     sleeve_end=59.6, cuff_end=59.6, sleeve=None, n=16,
@@ -224,10 +227,10 @@ JAW = dict(top=24.3, lift=0.026, y0=-0.10, y1=0.02)
 SHINE = dict(r=0.0065, dx=0.30, dz=0.45, mat='shine')      # the sheet's soft glint (glossy eyes)
 EAR = dict(kind='ball', r=0.023, x=0.182, dy=-0.020, z=23.2, mat='gold')
 # round 3 (face finish, measured on the sheet's head front, eye-aligned): a soft broad button nose grown out of the
-# face (sheet: 0.47 of the eye gap wide, centre 20.1 %) and a small closed smile (0.89 of the eye gap corner to corner,
+# face (sheet: 0.47 of the eye gap wide, centre ~19.8 %, clear of the upper lip) and a small closed smile (0.89 of the eye gap corner to corner,
 # parting 23.05 %, corners 0.017 up, upper lip 0.014 / lower 0.016 high)
-NOSE = dict(z=20.1, rx=0.036, rz_up=0.044, rz_dn=0.027, h=0.015, m=1.6)
-LIPS = dict(z=23.05, w=0.120, rise=0.017, p_line=2.0, upper=0.017, lower=0.017, bow=0.2, puff_u=0.0030, puff_l=0.0042,
+NOSE = dict(z=19.75, rx=0.036, rz_up=0.040, rz_dn=0.027, h=0.014, m=1.6)
+LIPS = dict(z=23.05, w=0.120, rise=0.017, p_line=2.0, upper=0.0195, lower=0.020, bow=0.2, puff_u=0.0030, puff_l=0.0042,
             crease=dict(len=0.005, up=0.0035, w=0.0018))
 RIG = dict(hip=62.0, knee=79.0, ankle=95.5, waist=48.5, shoulder_top=32.0, neck_y=0.030, hand_end=70.0, leg_x=0.100,
            heel=0.062, ball=0.115, arm=A, walk_kw=dict(skirt=True))

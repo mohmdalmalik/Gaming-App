@@ -173,10 +173,11 @@ CURLS = [dict(u=0.33, pct=27.0, r0=0.042, turns=1.1, start=40.0, sign=1, n=36, n
          dict(u=0.42, pct=29.5, r0=0.036, turns=1.0, start=20.0, sign=1, n=32, n_ring=10), dict(u=0.58, pct=29.5, r0=0.036, turns=1.0, start=160.0, sign=-1, n=32, n_ring=10)]
 
 # ---- body
-NECK = dict(rings=[(26.0, 0.116, 0.112, 1.0, 0.024), (29.0, 0.124, 0.118, 1.0, 0.020), (31.0, 0.128, 0.122, 1.0, 0.016),
-                   (32.0, 0.128, 0.120, 1.0, 0.013), (32.8, 0.172, 0.136, 0.96, 0.010), (33.5, 0.240, 0.156, 0.92, 0.007),
-                   (34.3, 0.290, 0.172, 0.90, 0.003), (35.5, 0.300, 0.192, 0.85, -0.004)],
-            split=31.0, blend=0.02, n=28)
+# round 3: the sheet's neck is ~11 % slimmer and flares into the shoulders ~0.8 % higher (head front, eye-aligned)
+NECK = dict(rings=[(26.0, 0.104, 0.104, 1.0, 0.024), (29.0, 0.110, 0.108, 1.0, 0.020), (30.4, 0.115, 0.112, 1.0, 0.017),
+                   (31.3, 0.130, 0.120, 1.0, 0.014), (32.1, 0.172, 0.136, 0.96, 0.010), (32.8, 0.240, 0.156, 0.92, 0.007),
+                   (33.6, 0.290, 0.172, 0.90, 0.003), (35.5, 0.300, 0.192, 0.85, -0.004)],
+            split=30.4, blend=0.02, n=28)
 BOD = dict(profiles=[(50.0, 0.246, 0.206, 0.92, -0.018), (47.8, 0.240, 0.200, 0.92, -0.020), (46.0, 0.244, 0.204, 0.90, -0.020),
                      (44.0, 0.262, 0.228, 0.88, -0.022), (42.0, 0.282, 0.254, 0.86, -0.024), (40.0, 0.298, 0.272, 0.85, -0.024),
                      (38.0, 0.306, 0.272, 0.83, -0.020), (36.0, 0.318, 0.252, 0.80, -0.012), (34.5, 0.330, 0.224, 0.80, -0.004),
@@ -209,9 +210,9 @@ SHOES = dict(leg_x=0.090, y=0.0, len=0.265, w=0.090, heel=0.075, heel_h=0.042, h
 EAR = dict(r=0.0175, x=0.156, dy=0.030, z=22.9, stem=0.004, mat='gold')
 # round 3 (face finish, measured on the sheet's head front, eye-aligned; head-frame pct): a soft button nose grown out
 # of the face (sheet: 0.36 of the eye gap wide, centre 19.45 %) and a small closed smile (0.71 of the eye gap corner to
-# corner, parting 22.17 %, corners 0.012 up, upper lip 0.011 / lower 0.013 high)
-NOSE = dict(z=19.45, rx=0.025, rz_up=0.033, rz_dn=0.019, h=0.011, m=1.6)
-LIPS = dict(z=22.17, w=0.082, rise=0.0124, p_line=2.0, upper=0.0135, lower=0.014, bow=0.2, puff_u=0.0022, puff_l=0.0032,
+# corner, parting 22.17 %, corners 0.012 up (0.014 here: still a smile from the high game camera), upper lip 0.011 / lower 0.013 high)
+NOSE = dict(z=19.45, rx=0.026, rz_up=0.029, rz_dn=0.021, h=0.0105, m=1.6)
+LIPS = dict(z=22.17, w=0.082, rise=0.014, p_line=1.8, upper=0.0135, lower=0.014, bow=0.2, puff_u=0.0022, puff_l=0.0032,
             crease=dict(len=0.004, up=0.003, w=0.0016))
 RIG = dict(hip=62.0, knee=79.5, ankle=95.0, waist=47.8, shoulder_top=32.3, neck_y=0.018, hand_end=68.5, leg_x=0.090,
            heel=0.075, ball=0.125, arm=A, walk_kw=dict(skirt=True))

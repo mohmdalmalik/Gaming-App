@@ -20,6 +20,7 @@
 #   lips(g, Li)             small closed smiling lips (upper lip with a soft bow, fuller lower lip)
 #   earrings(g, E)          'stud' / 'ball' (pearl or gold sphere at the lobe), optional 'drop'
 #   eye_shine(g, Sh)        a small painted white glint on each eye;  jaw_lift(g, skull, J): jawline climbing to the ear
+#   hair_bands (g.hair_band_specs)  glossy light/dark colour bands along hair rolls, painted after the bake
 #   soft_hands(g, A)        guest_kit.hands' fingers/thumb with a rounded tapered palm + wrist ball (same A['hand'])
 #   soft_normals(g, Sn)     (via CFG['soft_normals'], applied in finish) even, glowing face shading: face normals bent
 #                           toward a smooth front-facing ellipsoid (the lower face no longer shades like stubble)
@@ -668,6 +669,8 @@ def sdf_object(g, name, sdf, lo, hi, voxel, drop=None, smooth=4, target_tris=Non
     F = np.empty(len(G))
     for s in range(0, len(G), chunk): F[s:s + chunk] = sdf(G[s:s + chunk])
     F = F.reshape(n)
+    edge = min(F[0].min(), F[-1].min(), F[:, 0].min(), F[:, -1].min(), F[:, :, 0].min(), F[:, :, -1].min())
+    if edge < 0: print(f'REPORT WARNING {name}: the volume touches its box (the mesh would be open there): enlarge box')
     V, Q = surface_nets(F, lo, voxel)
     bm = bmesh.new(); vs = [bm.verts.new(tuple(p)) for p in V]
     for q in Q:
@@ -880,6 +883,49 @@ def soft_normals(g, Sn):
             normals[li] = (normals[li] * (1 - w) + en * w).normalized()
     me.normals_split_custom_set(normals)
 
+def hair_bands(g, Hb):
+    """Soft glossy colour BANDS that follow hair rolls (the sheets' sculpted sweep with its fine light lines, a chignon's
+    twists), painted into the baked vertex colour instead of cut as geometry (cut grooves read as dark scratches from the
+    game's high camera). Hb:
+      families = [[(N,3) world points, ...], ...]  ordered roll centre lines per family (neighbours in order, e.g. the
+                 wave's rolls front to back); 'curves' = one family. A vertex takes the family of its nearest line and a
+                 continuous roll index s there (inverse-distance weights), so the bands run smoothly along the rolls.
+      light / dark  darkening off each roll's crest / extra darkening in the valleys between rolls (0..1; colours stay <= 1,
+                    so give the material a slightly lighter base)
+      lines, line_w, line_amt  optional fine light lines: `lines` per roll, their width (fraction of a roll) and strength
+                    (0..1: how far back toward the full colour)
+      reach (m): the effect fades out beyond this distance from every line;  mat ('Hair');  mask(co) -> 0..1 optional.
+    Set g.hair_band_specs = [Hb, ...] in build(); dress_kit.finish() applies them after the bake."""
+    me = g.mesh.data; col = me.color_attributes.get('Col')
+    if col is None: return
+    mi = {i for i, m in enumerate(me.materials) if m and m.name == Hb.get('mat', 'Hair')}
+    vs = set()
+    for poly in me.polygons:
+        if poly.material_index in mi: vs.update(poly.vertices)
+    vs = sorted(vs)
+    if not vs: return
+    P = np.array([tuple(me.vertices[i].co) for i in vs])
+    fams = Hb.get('families') or [Hb['curves']]
+    best_d = np.full(len(P), 1e9); S = np.zeros(len(P))
+    for fam in fams:
+        D = np.stack([_sd_tube(P, np.asarray(c, float), np.zeros(len(c))) for c in fam], 1)
+        W = 1.0 / np.maximum(1e-4, D) ** 4; s_ = (W * np.arange(len(fam))[None, :]).sum(1) / W.sum(1)
+        dmin = D.min(1); take = dmin < best_d; best_d[take] = dmin[take]; S[take] = s_[take]
+    ph = S - np.floor(S)                                        # 0 on a roll line .. 0.5 midway between two
+    f = np.cos(2 * np.pi * ph)                                  # +1 crest .. -1 valley
+    # vertex colours cannot exceed 1: the crest keeps the full colour, everything else is darkened (raise the material's
+    # base colour a little to compensate): off-crest by `light`, the valleys by a further `dark`
+    m = (1.0 - Hb.get('light', 0.15) * (1.0 - ((1 + f) / 2) ** 2)) * (1.0 - Hb.get('dark', 0.20) * ((1 - f) / 2) ** 1.3)
+    if Hb.get('lines'):
+        q = S * Hb['lines']; q = np.abs(q - np.round(q)); lw = Hb.get('line_w', 0.08)
+        m = np.maximum(m, m + (1.0 - m) * Hb.get('line_amt', 0.6) * np.clip(1 - q / lw, 0, 1) ** 2)
+    fade = np.clip(1.0 - (best_d - Hb.get('reach', 0.06)) / 0.03, 0.0, 1.0)
+    if Hb.get('mask'): fade *= np.array([Hb['mask'](me.vertices[i].co) for i in vs])
+    m = 1.0 + (m - 1.0) * fade
+    for i, k in zip(vs, m):
+        c = col.data[i].color; col.data[i].color = (min(1.0, c[0] * k), min(1.0, c[1] * k), min(1.0, c[2] * k), 1.0)
+    print(f'REPORT hair_bands: {len(vs)} verts, multiplier p10 {np.percentile(m, 10):.2f} median {np.median(m):.2f} p90 {np.percentile(m, 90):.2f}')
+
 def finish(g, R, out):
     """guest_kit's finish, plus eyeCentre = ONE eye centre (her left eye, +x) in glTF space (Y up, face toward
     +Z) in the armature extras: portrait.mjs reads |eyeCentre[0]| as the eye's x offset."""
@@ -887,6 +933,7 @@ def finish(g, R, out):
     if g.C.get('soft_normals'): soft_normals(g, g.C['soft_normals'])     # before the bake: the AO rays use these normals
     t0 = time.time(); GK.bake(g); print(f'REPORT ao_seconds={time.time() - t0:.1f}')
     lift_ao(g, g.C.get('ao_scale', {}))
+    for hb in getattr(g, 'hair_band_specs', []): hair_bands(g, hb)
     GK.rig(g, R); GK.animate(g, R)
     pts = getattr(g, 'eye_pts', None)
     if pts:

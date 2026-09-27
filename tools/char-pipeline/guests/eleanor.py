@@ -38,7 +38,7 @@ CFG = dict(
     tint=dict(spots=[(0.080, 20.9, 0.024, 0.020, 1.0), (0.0, 19.3, 0.018, 0.016, 0.3)], g=0.36, b=0.28),       # soft rosy blush discs
     soft_normals=dict(centre=(0.0, 0.03, 25.0), radii=(0.20, 0.24, 0.55), amount=1.0, z_top=12.5, z_bot=30.0, fade=0.03, front=0.04,
                       keep=[(0.0, -0.215, 19.3, 0.034)]),
-    groove_dark=(0.010, 0.35),
+    groove_dark=(0.010, 0.0),       # no dark crease lines (they read as scratches from the game camera): hair_bands instead
     ao_skip=('Brow', 'Eye', 'Lips', 'Pearl', 'Shine'), ao_scale={'Skin': 0.20, 'Dress': 0.85},
     sheen={'Shoe': (0.34, [((0.2, -0.45, 0.87), 14.0, 1.0), ((0.0, -1.0, 0.3), 16.0, 0.8), ((0.9, 0.0, 0.45), 16.0, 0.5), ((-0.9, 0.0, 0.45), 16.0, 0.5)]),
            'Hair': (0.38, [((-0.1, -0.45, 0.89), 2.2, 1.0), ((0.5, -0.6, 0.6), 5.0, 0.45)]),
@@ -46,7 +46,7 @@ CFG = dict(
            'Pearl': (0.70, (-0.3, -0.6, 0.75), 3.0)},
 )
 COLOURS = dict(
-    skin='#ffb98e', hair='#7c6259', brow='#2e1d16', eye='#0b0b0d', lips='#b03a42',
+    skin='#ffb382', hair='#7c6259', brow='#2e1d16', eye='#0b0b0d', lips='#b03a42',
     dress=GK.PALETTE['navy'], gold='#d8b077', pearl='#f6f1e8', shoe=GK.PALETTE['shoe_black'], shine='#f4f1ee',
 )
 
@@ -110,19 +110,18 @@ SCULPT = dict(
             dict(c=(-0.010, 0.120, 17.5), r=(0.150, 0.100, 0.075), k=0.03),          # nape: side hair sweeping into the chignon
             dict(c=(-0.125, 0.120, 19.0), r=(0.065, 0.070, 0.075), k=0.03, cut=False),  # behind her right ear, into the chignon
             dict(c=(0.110, 0.120, 18.5), r=(0.055, 0.065, 0.065), k=0.03, cut=False)],  # behind her left ear
-    rolls=[dict(keys=[(x * (1 + 0.04 * (abs(x) > 0.12)), dy, p, r * (0.45 if i == 0 else 0.75 if i == 1 else 1.0), fl) for i, (x, dy, p, r) in enumerate(k)], k=0.028)
+    rolls=[dict(keys=[(x * (1 + 0.04 * (abs(x) > 0.12)), dy, p, r * (0.45 if i == 0 else 0.75 if i == 1 else 1.0), fl) for i, (x, dy, p, r) in enumerate(k)], k=0.042)
            for k, fl in ((WAVE1, 0.80), (WAVE2, 0.78), (WAVE3, 0.78), (WAVE4, 0.78), (LEFT1, 0.80), (LEFT2, 0.78))] + [
         # wisps in front of the ears
         dict(keys=[(-0.148, -0.080, 13.8, 0.010), (-0.150, -0.082, 15.8, 0.010), (-0.145, -0.080, 17.2, 0.006), (-0.139, -0.080, 17.9, 0.003)], k=0.004, n=16),
         dict(keys=[(0.140, -0.080, 13.0, 0.009), (0.146, -0.072, 15.5, 0.009), (0.140, -0.066, 17.2, 0.004)], k=0.004, n=16),
     ],
     grooves=[dict(keys=[(0.072, -0.165, 3.2, 0.002), (0.072, -0.12, 1.6, 0.005), (0.068, -0.04, 0.9, 0.005), (0.060, 0.05, 1.4, 0.004), (0.050, 0.11, 3.0, 0.002)], depth=0.004, k=0.003)] +      # the side part
-            [dict(keys=DK.valley(p, q, 0.005, t0=0.10, t1=0.40), depth=0.0035, k=0.003) for p, q in ((WAVE1, WAVE2), (WAVE2, WAVE3), (LEFT1, LEFT2))] +
             [dict(keys=[(0.02, 0.07, 0.6, 0.006), (-0.07, 0.07, 1.8, 0.008), (-0.12, 0.12, 5.0, 0.009), (-0.12, 0.17, 9.0, 0.009), (-0.07, 0.20, 12.0, 0.007)], depth=0.007, k=0.004),
              dict(keys=[(0.05, 0.03, 0.8, 0.006), (0.10, 0.02, 3.5, 0.008), (0.13, 0.08, 7.5, 0.009), (0.11, 0.15, 11.0, 0.008), (0.06, 0.19, 13.5, 0.006)], depth=0.007, k=0.004)] +
             [dict(keys=[(x * 0.95, 0.185, 8.0, 0.003), (x, 0.197, 10.0, 0.009), (x * 0.8, 0.195, 12.5, 0.008), (x * 0.55, 0.18, 14.5, 0.003)],     # low on the back only (a smooth crown from above)
                   depth=0.0035, k=0.004) for x in (-0.15, -0.09, -0.03, 0.03, 0.09, 0.15)],
-    box=((-0.30, 0.02 - 0.27, zp(30.0)), (0.27, 0.02 + 0.33, zp(-1.0))), voxel=0.004, tris=11700, smooth=5, post_smooth=3,
+    box=((-0.30, 0.02 - 0.27, zp(30.0)), (0.27, 0.02 + 0.33, zp(-4.0))), voxel=0.004, tris=11700, smooth=5, post_smooth=3,
 )
 
 # ---- chignon as overlapping twisted loops (sculpted into the hair volume, creases kept between them): a big outer
@@ -199,6 +198,12 @@ def build(g):
             if q['radii'][1] > 0.01: gr.append(dict(keys=DK.loop_keys(g, **q), depth=0.007, k=0.003, n=40))
     hs['grooves'] = SCULPT['grooves'] + gr
     DK.sculpt_hair(g, hs)
+    # glossy bands following the sweep's rolls and the chignon's loops (painted after the bake, see dress_kit.hair_bands)
+    g.hair_band_specs = [
+        dict(families=[[DK._curve(g, k, 60)[0] for k in (WAVE1, WAVE2, WAVE3, WAVE4)], [DK._curve(g, k, 60)[0] for k in (LEFT1, LEFT2)]],
+             light=0.30, dark=0.30, lines=2, line_w=0.10, line_amt=0.18, reach=0.06),
+        dict(families=[[DK._curve(g, DK.loop_keys(g, **{a: b for a, b in lp.items() if a != 'crease'}), 60)[0] for lp in BUN_LOOPS]],
+             light=0.25, dark=0.35, lines=2, line_w=0.10, line_amt=0.15, reach=0.05)]
     skull = GK.head(g, nlon=48, nlat=34, cull_in=g.hair_covers)
     DK.jaw_lift(g, skull, JAW)
     GK.ears(g); DK.decimate_parts(g, 'Ear', 0.55); GK.eyes(g); DK.eye_shine(g, SHINE); GK.brows(g); GK.nose(g)

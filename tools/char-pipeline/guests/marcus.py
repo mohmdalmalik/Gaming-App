@@ -25,16 +25,19 @@ def zp(p): return H * (1 - p / 100)
 CFG = dict(
     z_hair_top=0.2, z_skull_top=2.9, z_hairline=8.1, z_brow=13.1, z_eye=17.8, z_nose=20.9, z_mouth=24.8, z_chin=31.6, z_ear=20.2,
     head_y=0.06, z_shoulder_top=35.3,
-    ear_style='round', ear_seg=(22, 16), ear_h=0.140, ear_w=0.110, ear_out=0.024, ear_y=0.034, ear_tilt=0.78, ear_thick=0.034, ear_rim=0.010, ear_bowl=0.016, ear_sink=0.022,
+    ear_style='round', ear_seg=(20, 14), ear_h=0.140, ear_w=0.110, ear_out=0.024, ear_y=0.034, ear_tilt=0.78, ear_thick=0.034, ear_rim=0.010, ear_bowl=0.016, ear_sink=0.022,
     eye_x=0.0635, eye_w=0.038, eye_h=0.088, eye_lift=0.003,
-    brow=dict(x0=0.032, x1=0.113, z=12.8, thick=0.036, arch=0.017, drop_in=0.004, drop_out=0.017,
+    brow=dict(x0=0.032, x1=0.113, z=12.8, thick=0.039, arch=0.015, drop_in=-0.004, drop_out=0.017,
               profile=[(0.0, 0.30), (0.05, 0.82), (0.14, 0.97), (0.45, 1.0), (0.85, 0.90), (0.95, 0.72), (1.0, 0.30)], flat=0.5),
-    nose_w=0.086, nose_h=0.072, nose_d=0.066, nose_out=0.040, nose_top=1.15,
+    nose_w=0.081, nose_h=0.068, nose_d=0.062, nose_out=0.035, nose_top=1.15,
     mouth=dict(w=0.150, z=24.8, rise=0.022, sag=0.005, thick=0.009),
     neck_r=0.094, neck_y=0.028,
     tint=dict(spots=[(0.110, 23.0, 0.045, 0.035, 1.0), (0.0, 20.9, 0.03, 0.025, 0.55)], g=0.07, b=0.12),
-    groove_dark=(0.008, 0.45),
-    sheen={'Shoe': (0.34, [((0.2, -0.45, 0.87), 14.0, 1.0), ((0.0, -1.0, 0.3), 16.0, 0.8), ((0.9, 0.0, 0.45), 16.0, 0.5), ((-0.9, 0.0, 0.45), 16.0, 0.5)]), 'Hair': (0.50, (-0.2, -0.40, 0.89), 2.0)},
+    groove_dark=(0.008, 0.50),
+    # the crown faces the hall's overhead lamps (2-5x the light on the sides): author it darker and a touch warmer so
+    # the top of the hair still reads dark brown from the practice camera, while the sides keep their value
+    up_dark={'Hair': (0.89, 0.7, (0.97, 1.0, 1.03))},
+    sheen={'Shoe': (0.34, [((0.2, -0.45, 0.87), 14.0, 1.0), ((0.0, -1.0, 0.3), 16.0, 0.8), ((0.9, 0.0, 0.45), 16.0, 0.5), ((-0.9, 0.0, 0.45), 16.0, 0.5)]), 'Hair': (0.55, (-0.15, -0.85, 0.35), 2.0)},
 )
 COLOURS = dict(
     # Skin and tie keep the neutral-preview tuning (they read right in the lobby: skin median ~#b15a1a, tie ~#680d0d).
@@ -75,12 +78,12 @@ HAIR = dict(          # silhouette extents measured on the FRONT (widths) and SI
     grooves=[dict(keys=[(0.20, 12.5), (0.27, 14.6), (0.34, 16.8), (0.41, 19.0)], depth=0.008, width=0.012, n=40)],
     # the sculpted lock planes, sweeping from the part (his left, u ~0.85) over the top to his right side and back;
     # later (front) locks stand higher, so each steps down onto the one behind it with its own rounded edge
-    lock_fields=[dict(keys=[(0.64, 4.5), (0.56, 7.0), (0.52, 12.0), (0.50, 18.0), (0.50, 23.0)], half=0.055, height=0.010, soft=0.013),
-                 dict(keys=[(0.74, 2.6), (0.62, 1.6), (0.48, 2.8), (0.40, 6.5), (0.37, 11.5), (0.36, 17.0)], half=0.042, height=0.021, soft=0.013),
-                 dict(keys=[(0.80, 3.4), (0.90, 1.4), (0.00, 1.0), (0.10, 1.8), (0.20, 4.2), (0.28, 8.0), (0.34, 12.5)], half=0.038, height=0.032, soft=0.013),
-                 dict(keys=[(0.86, 6.0), (0.94, 3.8), (0.02, 3.2), (0.09, 4.2), (0.16, 6.8), (0.23, 10.2), (0.29, 13.8)], half=0.032, height=0.043, soft=0.013)],
-    lock_base=0.028,
-    slope=lambda u: 0.9 - 0.62 * GK.sm((abs(((u + 0.5) % 1.0) - 0.5) - 0.13) / 0.03) * GK.sm((0.26 - abs(((u + 0.5) % 1.0) - 0.5)) / 0.02), t_min=0.010, centre=(0.0, 0.02, 14.5), nlon=80, nrows=38, top=0.3, lip=0.6,
+    lock_fields=[dict(keys=[(0.64, 4.5), (0.56, 7.0), (0.52, 12.0), (0.50, 18.0), (0.50, 23.0)], half=0.055, height=0.010, soft=0.010),
+                 dict(keys=[(0.74, 2.6), (0.62, 1.6), (0.48, 2.8), (0.40, 6.5), (0.37, 11.5), (0.36, 17.0)], half=0.042, height=0.021, soft=0.010),
+                 dict(keys=[(0.80, 3.4), (0.90, 1.4), (0.00, 1.0), (0.10, 1.8), (0.20, 4.2), (0.28, 8.0), (0.34, 12.5)], half=0.038, height=0.032, soft=0.010),
+                 dict(keys=[(0.86, 6.0), (0.94, 3.8), (0.02, 3.2), (0.09, 4.2), (0.16, 6.8), (0.23, 10.2), (0.29, 13.8)], half=0.032, height=0.043, soft=0.010)],
+    lock_base=0.028, lock_crease=0.009, lock_crease_geo=0.004,
+    slope=lambda u: 0.9 - 0.62 * GK.sm((abs(((u + 0.5) % 1.0) - 0.5) - 0.13) / 0.03) * GK.sm((0.26 - abs(((u + 0.5) % 1.0) - 0.5)) / 0.02), t_min=0.010, centre=(0.0, 0.02, 14.5), nlon=92, nrows=42, top=0.3, lip=0.6,
 )
 # rounded locks lying on the cap: the front roll sweeping from his left temple across the forehead to his right
 # side (the sheet's big wave), keys (u, pct, width, thickness, lift)
@@ -119,13 +122,13 @@ J = dict(
     waist=55.0, hem_hips=0.5, nj=52, ring_dz=0.020, open_apex=60.8, open_hem=0.030, corner=0.050,
     lapel=dict(outline=[(0.004, 52.6), (0.188, 38.4), (0.176, 36.9), (0.146, 37.4), (0.112, 35.2), (0.106, 38.4), (0.076, 45.0)],
                collar=[(0.150, 36.9), (0.180, 36.5), (0.150, 34.0), (0.118, 33.4), (0.104, 34.6), (0.114, 35.4)],
-               wrap=dict(top=31.8, front=32.8, open=0.78, v_width=1.2, tip=(0.160, 36.9), th_side=1.55, gap=0.027, gap_neck=0.022, thick=0.007, tuck=0.030),
+               wrap=dict(top=31.8, front=32.8, open=0.78, v_width=1.2, tip=(0.160, 36.9), th_side=1.55, gap=0.027, gap_neck=0.022, thick=0.007, tuck=0.030, nth=24),
                thick=0.012, lift=0.002, edge_shade=[0, 1, 2, 3], shade_w=0.006, collar_top=31.4, collar_front=34.4, collar_open=0.80, collar_gap=0.020, collar_dy=0.0),
     flaps=[(0.104, 0.224, 56.8, 59.7)], welt=(0.125, 0.192, 46.6, 0.010, 0.008), flap_thick=0.009,
     buttons=[(0.0, 55.6), (0.0, 60.0)], button_r=0.0125, vent=57.0,
 )
-SH = dict(max_edge=0.034, lift=0.008, v=[(-0.098, 33.6), (0.098, 33.6), (0.104, 38.4), (0.084, 45.0), (0.006, 51.8), (-0.006, 51.8), (-0.084, 45.0), (-0.104, 38.4)], collar_top=29.8, collar_v=31.2, v_width=0.60, v_open=0.30,
-          wrap=dict(top=29.2, v=33.2, open=0.10, v_width=0.85, tip=(0.085, 36.0), th_side=1.0, below=0.012, tuck=0.012, gap=0.008, gap_neck=0.010, thick=0.005),
+SH = dict(max_edge=0.045, lift=0.008, v=[(-0.098, 33.6), (0.098, 33.6), (0.104, 38.4), (0.084, 45.0), (0.006, 51.8), (-0.006, 51.8), (-0.084, 45.0), (-0.104, 38.4)], collar_top=29.8, collar_v=31.2, v_width=0.60, v_open=0.30,
+          wrap=dict(top=29.2, v=33.2, open=0.10, v_width=0.85, tip=(0.085, 36.0), th_side=1.0, below=0.012, tuck=0.012, gap=0.008, gap_neck=0.010, thick=0.005, nth=24),
           point=[(0.010, 33.4), (0.048, 30.9), (0.110, 31.8), (0.100, 37.4)])
 TIE = dict(knot=(33.3, 36.8), knot_w=(0.030, 0.062), blade=[(-0.017, 36.6), (0.017, 36.6), (0.042, 49.4), (0.0, 52.6), (-0.042, 49.4)], thick=0.009)
 A = dict(
@@ -134,7 +137,7 @@ A = dict(
     stations=[('end', 0.132, 0.128), (58.0, 0.134, 0.132), (53.0, 0.138, 0.138), (47.0, 0.146, 0.148), (42.0, 0.150, 0.152),
               (('j', -0.01), 0.152, 0.156), (('j', 0.018), 0.132, 0.142), (('j', 0.034), 0.070, 0.080)],
     cuff_wd=(0.118, 0.114), cufflink=True, sleeve_buttons=3, button_angle=60.0,
-    hand=dict(finger_n=8, palm_len=0.106, palm_w=0.124, palm_t=0.074, out=0.014, finger_out=0.015,
+    hand=dict(finger_n=7, palm_len=0.106, palm_w=0.124, palm_t=0.074, out=0.014, finger_out=0.015,
               fingers=[(-0.043, 0.0205, 0.100, 1.75), (-0.015, 0.0212, 0.106, 1.85), (0.014, 0.0205, 0.102, 1.85), (0.042, 0.0185, 0.090, 1.75)],
               thumb=(-0.056, 0.016, 0.026, 0.0225, 0.074, 0.55)),
 )
@@ -150,7 +153,7 @@ def build(g):
     g.set_head(W, DF, DB, E, BULGES)
     GK.hair_shell(g, hairline=hairline, edge=edge, thin_below=thin_below, **HAIR)
     for name, keys in LOCKS.items(): GK.hair_lock(g, name, keys)
-    GK.head(g, nlon=52, nlat=36, cull_in=g.hair_covers)
+    GK.head(g, nlon=48, nlat=34, cull_in=g.hair_covers)
     GK.ears(g); GK.eyes(g); GK.brows(g); GK.nose(g); GK.mouth(g)
     GK.neck(g)
     GK.jacket(g, J); GK.lapels(g, J); GK.pockets(g, J); GK.buttons(g, J); GK.back_seam(g, J)

@@ -40,16 +40,19 @@ CFG = dict(
     lips=dict(z=23.1, w=0.122, rise=0.017, upper=0.012, lower=0.020, bow=0.003, flat=0.5, mat='lips'),
     tint=dict(spots=[(0.100, 21.4, 0.042, 0.034, 1.0), (0.0, 19.6, 0.020, 0.020, 0.4)], g=0.10, b=0.08),
     groove_dark=(0.010, 0.60),
+    # the crown faces the hall's overhead lamps (2-5x the light on the sides): authored darker so the top of the
+    # hair still reads dark chocolate from the practice camera (the sheen lobes face the front, not the lamps)
+    up_dark={'Hair': (0.92, 0.6, (0.97, 1.0, 1.03))},
     ao_skip=('Brow', 'Eye', 'Lips', 'Gold', 'Shine'), ao_scale={'Skin': 0.30, 'Dress': 0.85},
     sheen={'Shoe': (0.34, [((0.2, -0.45, 0.87), 14.0, 1.0), ((0.0, -1.0, 0.3), 16.0, 0.8), ((0.9, 0.0, 0.45), 16.0, 0.5), ((-0.9, 0.0, 0.45), 16.0, 0.5)]),
-           'Hair': (0.62, [((-0.1, -0.45, 0.89), 3.0, 1.0), ((0.5, -0.6, 0.6), 6.0, 0.45)]),
+           'Hair': (0.62, [((-0.1, -0.90, 0.35), 3.0, 1.0), ((0.5, -0.75, 0.3), 6.0, 0.45)]),
            'Gold': (0.55, [((0.0, -1.0, 0.25), 6.0, 1.0), ((-0.6, -0.6, 0.3), 8.0, 0.6), ((0.6, -0.6, 0.3), 8.0, 0.6)])},
 )
 COLOURS = dict(
     # lobby-measured (lineup_measure.mjs --inject dressEmerald=...), solved at the palette's mid light level and nudged
     # a little warmer for the neutral preview: in the lobby dress ~#10291f..#2c453e (sheet #1a332c), hair ~#26170f
     # (sheet #2f201d), skin ~#9d512c..#eb875e, gold ~#9a6e31 (sheet #b38042), berry lips ~#511212
-    skin='#d0865c', hair='#564842', brow='#3a2c29', eye='#0b0b0d', lips='#80403c',
+    skin='#d0865c', hair='#4e403b', brow='#3a2c29', eye='#0b0b0d', lips='#80403c',
     dress='#36524f', gold='#d3b182', shoe=GK.PALETTE['shoe_black'], sole='#1a1818', shine='#f4f1ee',
 )
 
@@ -103,8 +106,8 @@ def hairline(u):
     """Lower edge of the hair by longitude u (0 front, 0.25 her right, 0.5 back, 0.75 her left): the fringe (5.5),
     the temples (down to 16 in front of the ear), above the ear (15.5), then the bob's curtain behind it (27.5)."""
     u %= 1.0; a = abs(((u + 0.5) % 1.0) - 0.5); right = u < 0.5; ss = sm
-    z = 5.8 + (3.0 if right else 0.6) * ss(a / 0.08)
-    z += (15.5 - z) * ss((a - 0.045) / 0.065)                 # arched: down past the temples to the ear's top
+    z = 4.9 + (3.0 if right else 0.6) * ss(a / 0.08)
+    z += (15.5 - z) * ss((a - 0.060) / 0.070)                 # arched: down past the temples to the ear's top (clear of the brows)
     z += (15.0 - z) * ss((a - 0.205) / 0.02)                  # over the ear
     z += (27.0 - z) * ss((a - 0.27) / 0.05)                   # the curtain behind the ear (the curl ends hang lower)
     return z
@@ -127,18 +130,19 @@ def s_band(th0, p0, p1, sweep, amp, half, n=11):
         x, dy, pp = env(th, p0 + (p1 - p0) * t, 1.0); keys.append((x, dy, pp, half * (0.40 + 0.60 * sm(t / 0.40))))
     return keys
 BACK_ANGLES = ((84, 36), (112, 27), (140, 16), (168, 5), (-164, -5), (-136, -16), (-108, -27), (-80, -36))
-BACK_BANDS = [dict(keys=band_keys(math.radians(a), 3.0, 27.0, math.radians(sw), math.radians(15), 0.075), height=h, soft=0.012, taper=(0.12, 0.10))
+BACK_BANDS = [dict(keys=band_keys(math.radians(a), 3.0, 27.0, math.radians(sw), math.radians(15), 0.075), height=h, soft=0.010, taper=(0.12, 0.10))
               for (a, sw), h in zip(BACK_ANGLES, (0.026, 0.014, 0.026, 0.014, 0.026, 0.014, 0.026, 0.016))]
 # the front: the big side-swept wave from the part (her left) over the forehead to her right side, a second wave above it,
 # and her left side's lock falling from the part
 def sweep_band(p_part, half, dx=0.0):
-    return [(0.055 + dx, -0.15 + 0.03 * p_part, p_part, half * 0.5), (-0.02, -0.205, p_part + 2.5, half), (-0.10, -0.19, p_part + 5.0, half),
-            (-0.17, -0.14, p_part + 8.0, half), (-0.225, -0.07, p_part + 11.5, half), (-0.255, 0.005, p_part + 15.5, half),
+    # (the forehead keys sit high, so the wave leaves the sheet's open forehead between the brows and the hair)
+    return [(0.055 + dx, -0.15 + 0.03 * p_part, p_part, half * 0.5), (-0.02, -0.205, p_part + 1.8, half), (-0.10, -0.19, p_part + 3.8, half),
+            (-0.17, -0.14, p_part + 6.8, half), (-0.225, -0.07, p_part + 10.8, half), (-0.255, 0.005, p_part + 15.5, half),
             (-0.255, 0.07, p_part + 20.0, half)]
-FRONT_BANDS = [dict(keys=sweep_band(3.0, 0.050), height=0.026, soft=0.012, taper=(0.10, 0.12)),
-               dict(keys=sweep_band(0.3, 0.046), height=0.024, soft=0.012, taper=(0.10, 0.20)),
+FRONT_BANDS = [dict(keys=sweep_band(3.0, 0.050), height=0.026, soft=0.010, taper=(0.10, 0.12), cut=True),
+               dict(keys=sweep_band(0.3, 0.046), height=0.024, soft=0.010, taper=(0.10, 0.20), cut=True),
                dict(keys=[(0.07, -0.13, 2.0, 0.030), (0.13, -0.17, 4.8, 0.050), (0.19, -0.13, 8.5, 0.055), (0.24, -0.07, 13.0, 0.058),
-                          (0.26, 0.00, 17.5, 0.058), (0.255, 0.07, 22.5, 0.055)], height=0.030, soft=0.012, taper=(0.10, 0.15))]
+                          (0.26, 0.00, 17.5, 0.058), (0.255, 0.07, 22.5, 0.055)], height=0.030, soft=0.010, taper=(0.10, 0.15), cut=True)]
 
 SCULPT = dict(
     cap=dict(thick=[(0, 0.024), (3, 0.034), (6, 0.040), (10, 0.032), (14, 0.024), (18, 0.020), (24, 0.016), (28, 0.012)], hairline=hairline, edge_k=0.030),
@@ -231,7 +235,7 @@ def band_hair(g, Hs):
     bands = []
     for B in Hs.get('bands', []):
         pts, half, _ = DK._curve(g, B['keys'], B.get('n', 36))
-        bands.append((snap(pts), half, B['height'], B.get('soft', 0.012), B.get('taper', (0.15, 0.15)), B.get('dome', 0.35)))
+        bands.append((snap(pts), half, B['height'], B.get('soft', 0.012), B.get('taper', (0.15, 0.15)), B.get('dome', 0.35), B.get('cut', False)))
     lb = Hs.get('lock_base', 0.0)
     def dist_param(P, pts, half):
         lo = pts.min(0) - half.max() - 0.02; hi = pts.max(0) + half.max() + 0.02
@@ -248,9 +252,10 @@ def band_hair(g, Hs):
     def ss(x): x = np.clip(x, 0.0, 1.0); return x * x * (3 - 2 * x)
     def bump(P):
         h = np.zeros(len(P)); cov = np.zeros(len(P))
-        for pts, half, hgt, soft, (t0, t1), dome in bands:
+        for pts, half, hgt, soft, (t0, t1), dome, cut in bands:
             d, sp, hw = dist_param(P, pts, half)
             along = ss(sp / t0) * ss((1.0 - sp) / t1)
+            if cut: along = along * ss(-cutf(P) / 0.012)      # 'cut' bands stop at the hairline (keep the forehead open)
             edge = ss((hw - d) / soft + 0.5)
             prof = 1.0 - dome * np.clip(d / np.maximum(hw, 1e-4), 0, 1) ** 2
             h = np.maximum(h, hgt * edge * prof * along); cov = np.maximum(cov, edge * along)
@@ -265,7 +270,7 @@ def band_hair(g, Hs):
     # the bake darkens a little along each band's edge (the crease where it steps onto its neighbour)
     def gam(p):
         P = np.array([[p.x, p.y, p.z]]); best = 0.0
-        for pts, half, hgt, soft, _, _ in bands:
+        for pts, half, hgt, soft, _, _, _ in bands:
             d, sp, hw = dist_param(P, pts, half); x = abs(d[0] - hw[0])
             if sp[0] > 0.12 and sp[0] < 0.9: best = max(best, float(np.clip(1.0 - x / soft, 0.0, 1.0)))
         return best * 0.010

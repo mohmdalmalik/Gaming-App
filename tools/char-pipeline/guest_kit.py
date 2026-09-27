@@ -346,7 +346,7 @@ def moustache(g, mat='brow'):
 # =============================================================================================
 def hair_shell(g, wr, wl, front, back, expo, hairline, edge, slope=0.9, t_min=0.010, grooves=(), disp=None,
                centre=(0.0, 0.02, 14.0), nlon=88, nrows=40, top=0.2, lip=0.8, name='Hair', mat='hair', thin_below=None,
-               lock_fields=(), lock_base=0.0, lock_crease=0.0):
+               lock_fields=(), lock_base=0.0, lock_crease=0.0, lock_crease_geo=0.0):
     zp = g.zp; Y0 = g.Y0
     TWR, TWL, TF, TB, TE = (Table([(zp(p), v) for p, v in t]) for t in (wr, wl, front, back, expo))
     z_top = zp(top)
@@ -416,7 +416,9 @@ def hair_shell(g, wr, wl, front, back, expo, hairline, edge, slope=0.9, t_min=0.
             best_h = max(best_h, hgt * m); cover = max(cover, m)
         return best_h - lock_base * cover
     def groove_off(p):
-        return -groove_amt(p) + (lock_amt(p) if LF else 0.0)
+        # lock_crease_geo > 0: also cut a real (smooth, gaussian) crease of that depth along each lock edge, so the step
+        # between locks catches the matte game light as a shadowed line, not only as painted colour
+        return -groove_amt(p) + (lock_amt(p) - (lock_crease_geo * edge_unit(p) if lock_crease_geo else 0.0) if LF else 0.0)
     def groove_amt(p):
         off = 0.0
         for pts, depth, width in G:
@@ -430,6 +432,22 @@ def hair_shell(g, wr, wl, front, back, expo, hairline, edge, slope=0.9, t_min=0.
                 s = bi / (len(pts) - 1); taper = math.sin(math.pi * s) ** 0.6
                 off += depth * taper * gauss(best, width)
         return off
+    def lock_edge_amt(p):
+        # lock_crease > 0: a soft crease line along each lock's edge (where it steps onto its neighbour), reported as
+        # groove depth so the bake's groove_dark prints it: the step then reads in flat (matte) game light too
+        return lock_crease * edge_unit(p)
+    def edge_unit(p):
+        best = 0.0
+        for pts, half, hgt, soft, tp in LF:
+            bd, bi = 1e9, 0
+            for i in range(len(pts) - 1):
+                a, b = pts[i], pts[i + 1]; ab = b - a; L2 = ab.length_squared
+                t = 0.0 if L2 < 1e-12 else max(0.0, min(1.0, (p - a).dot(ab) / L2))
+                dd = (a + ab * t - p).length
+                if dd < bd: bd, bi = dd, i + t
+            s_ = bi / (len(pts) - 1); along = sm(s_ / tp) * sm((1.0 - s_) / tp)
+            best = max(best, along * math.exp(-((bd - half) / max(1e-4, soft * 0.6)) ** 2))
+        return best
     def outer(u, v, with_detail=True):
         d = dirv(u, v); rs = g.skull_r(c0, d); re = env_r(d); p = c0 + d * re
         if with_detail:
@@ -470,20 +488,6 @@ def hair_shell(g, wr, wl, front, back, expo, hairline, edge, slope=0.9, t_min=0.
         u = (math.atan2(-(p.y - c0.y), p.x - c0.x) - math.pi / 2) / (2 * math.pi) % 1.0
         return p.z > zp(hairline(u)) + margin
     g.hair_covers = covered
-    def lock_edge_amt(p):
-        # lock_crease > 0: a soft crease line along each lock's edge (where it steps onto its neighbour), reported as
-        # groove depth so the bake's groove_dark prints it: the step then reads in flat (matte) game light too
-        best = 0.0
-        for pts, half, hgt, soft, tp in LF:
-            bd, bi = 1e9, 0
-            for i in range(len(pts) - 1):
-                a, b = pts[i], pts[i + 1]; ab = b - a; L2 = ab.length_squared
-                t = 0.0 if L2 < 1e-12 else max(0.0, min(1.0, (p - a).dot(ab) / L2))
-                dd = (a + ab * t - p).length
-                if dd < bd: bd, bi = dd, i + t
-            s_ = bi / (len(pts) - 1); along = sm(s_ / tp) * sm((1.0 - s_) / tp)
-            best = max(best, along * math.exp(-((bd - half) / max(1e-4, soft * 0.6)) ** 2))
-        return lock_crease * best
     g.hair_groove = (lambda p: groove_amt(p) + lock_edge_amt(p)) if (lock_crease and LF) else (lambda p: groove_amt(p))   # metres of groove depth at p (the bake darkens the grooves)
     def surface(u, zpct, detail=False):
         """Point on the hair surface (without grooves unless detail) at longitude u and height pct, and its outward normal."""
@@ -1109,8 +1113,10 @@ def bake(g, n_rays=32, max_dist=0.26, strength=0.50):
         if mname == 'Hair' and getattr(g, 'hair_groove', None) and C.get('groove_dark'):
             gd = min(1.0, g.hair_groove(v.co) / C['groove_dark'][0]); m_ = 1.0 - C['groove_dark'][1] * gd; r *= m_; g_ *= m_; b *= m_
         if mname in up_dark:                  # (amount, power): darker where the surface faces UP (the crown faces the hall's
-            amt, pw = up_dark[mname]          # overhead lamps: 2-5x the light of the sides; without this it reads pale/grey)
-            m_ = 1.0 - amt * max(0.0, n.z) ** pw; r *= m_; g_ *= m_; b *= m_
+            ud = up_dark[mname]; amt, pw = ud[0], ud[1]   # overhead lamps: 2-5x the light of the sides; without this it reads pale/grey)
+            wr, wg, wb = ud[2] if len(ud) > 2 else (1.0, 1.0, 1.0)   # optional per-channel weights (<1 red, >1 blue = warmer crown)
+            u_ = max(0.0, n.z) ** pw
+            r *= max(0.0, 1.0 - amt * wr * u_); g_ *= max(0.0, 1.0 - amt * wg * u_); b *= max(0.0, 1.0 - amt * wb * u_)
         if mname in sheen:                    # (floor, [(direction, power, amount), ...]) or (floor, direction, power)
             sh = sheen[mname]; lobes = sh[1] if isinstance(sh[1], list) else [(sh[1], sh[2], 1.0)]
             hl = min(1.0, sum(amt * max(0.0, n.dot(Vector(hd).normalized())) ** pw for hd, pw, amt in lobes))

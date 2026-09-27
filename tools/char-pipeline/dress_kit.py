@@ -775,6 +775,7 @@ def sculpt_hair(g, Hs):
     """Hs: cap=dict(thick=[(pct, m)], hairline=fn(u)->pct, edge_k (rounding of the cut), blend), masses=[dict(c=(x, dy, pct),
     r=(rx, ry, rz), k)], rolls=[dict(keys=[(x, dy, pct, r[, flat])], k, n)], grooves=[dict(keys=[(x, dy, pct, r)], depth, k)]
     (groove keys are rough positions: they are projected onto the hair surface; depth = how deep the channel cuts),
+    keep_region=fn((N,3) world) -> 0..1 optional: where the decimation keeps an even mesh (painted hair_bands need vertices),
     box=(lo, hi) world, voxel, tris, smooth, mat, name. Sets g.hair_covers / g.hair_groove / g.hair_sdf."""
     zp = g.zp; Y0 = g.Y0
     Cp = Hs['cap']; TT = _np_table(Table([(zp(p), t) for p, t in Cp['thick']]))
@@ -818,11 +819,15 @@ def sculpt_hair(g, Hs):
     lo, hi = Hs['box']
     drop = lambda p: g.inside_skull(p, -0.004)
     def keep(P):                                       # (N,3) -> weight 1 near the grooves: decimation spares them (crisp channels)
-        if not snapped: return np.zeros(len(P))
-        d = np.min(np.stack([sd_tube(P, pts, rad) for pts, rad, k in snapped]), axis=0)
-        return 1.0 - np.clip(d, 0.0, 0.012) / 0.012
+        w = np.zeros(len(P))
+        if snapped:
+            d = np.min(np.stack([sd_tube(P, pts, rad) for pts, rad, k in snapped]), axis=0)
+            w = 1.0 - np.clip(d, 0.0, 0.012) / 0.012
+        if Hs.get('keep_region'):                      # optional (N,3) -> 0..1: keep an even mesh there (e.g. for hair_bands)
+            w = np.maximum(w, np.clip(Hs['keep_region'](P), 0.0, 1.0))
+        return w
     ob = sdf_object(g, Hs.get('name', 'Hair'), sdf, lo, hi, Hs.get('voxel', 0.005), drop=drop, smooth=Hs.get('smooth', 3), target_tris=Hs.get('tris', 7000),
-                    post_smooth=Hs.get('post_smooth', 2), keep=keep if Hs.get('keep_grooves', True) else None)
+                    post_smooth=Hs.get('post_smooth', 2), keep=keep if (Hs.get('keep_grooves', True) or Hs.get('keep_region')) else None)
     def covered(p, margin=0.02):
         P = np.array([[p.x, p.y, p.z]]); return bool(p.z > np.interp(u_of(P), hl_u, hl_z)[0] + margin)
     g.hair_covers = covered; g.hair_sdf = sdf
@@ -887,13 +892,16 @@ def hair_bands(g, Hb):
     """Soft glossy colour BANDS that follow hair rolls (the sheets' sculpted sweep with its fine light lines, a chignon's
     twists), painted into the baked vertex colour instead of cut as geometry (cut grooves read as dark scratches from the
     game's high camera). Hb:
-      families = [[(N,3) world points, ...], ...]  ordered roll centre lines per family (neighbours in order, e.g. the
-                 wave's rolls front to back); 'curves' = one family. A vertex takes the family of its nearest line and a
-                 continuous roll index s there (inverse-distance weights), so the bands run smoothly along the rolls.
+      families / curves  roll centre lines ((N,3) world points; families = [[...], ...] or curves = [...]). Each vertex
+                 finds its nearest centre-line point; the direction from it to the vertex vs the outward direction from
+                 `centre` (default the head at 12 %) tells crest (facing out) from flank / valley.
+      band = (c0, c1)  cos-angle range over which flank turns to crest (default (0.35, 0.9))
+      stripes = [dict(ref=(N,3) line, period, phase, max) | dict(axis=(centre, direction), period, turn, radius)]
+                 alternative to families: even parallel bands `period` apart following the reference line (up to `max`
+                 m from it), or a spiral round an axis (a chignon); each vertex uses the nearest stripe set.
       light / dark  darkening off each roll's crest / extra darkening in the valleys between rolls (0..1; colours stay <= 1,
                     so give the material a slightly lighter base)
-      lines, line_w, line_amt  optional fine light lines: `lines` per roll, their width (fraction of a roll) and strength
-                    (0..1: how far back toward the full colour)
+      lines (True), line_w, line_amt  optional fine light line on each crest: its width (in 1 - cos) and strength
       reach (m): the effect fades out beyond this distance from every line;  mat ('Hair');  mask(co) -> 0..1 optional.
     Set g.hair_band_specs = [Hb, ...] in build(); dress_kit.finish() applies them after the bake."""
     me = g.mesh.data; col = me.color_attributes.get('Col')
@@ -905,20 +913,42 @@ def hair_bands(g, Hb):
     vs = sorted(vs)
     if not vs: return
     P = np.array([tuple(me.vertices[i].co) for i in vs])
-    fams = Hb.get('families') or [Hb['curves']]
-    best_d = np.full(len(P), 1e9); S = np.zeros(len(P))
-    for fam in fams:
-        D = np.stack([_sd_tube(P, np.asarray(c, float), np.zeros(len(c))) for c in fam], 1)
-        W = 1.0 / np.maximum(1e-4, D) ** 4; s_ = (W * np.arange(len(fam))[None, :]).sum(1) / W.sum(1)
-        dmin = D.min(1); take = dmin < best_d; best_d[take] = dmin[take]; S[take] = s_[take]
-    ph = S - np.floor(S)                                        # 0 on a roll line .. 0.5 midway between two
-    f = np.cos(2 * np.pi * ph)                                  # +1 crest .. -1 valley
-    # vertex colours cannot exceed 1: the crest keeps the full colour, everything else is darkened (raise the material's
-    # base colour a little to compensate): off-crest by `light`, the valleys by a further `dark`
+    if Hb.get('stripes'):
+        # parallel stripes: contours of the distance to a reference line (a sweep's front roll), `period` apart; or,
+        # with axis=(centre, direction), a spiral round that axis (a chignon's twists)
+        best_d = np.full(len(P), 1e9); f = np.ones(len(P))
+        for St in Hb['stripes']:
+            if 'axis' in St:
+                c, ax = np.asarray(St['axis'][0], float), np.asarray(St['axis'][1], float); ax /= np.linalg.norm(ax)
+                v = P - c; h = v @ ax; rv = v - h[:, None] * ax; r = np.linalg.norm(rv, axis=1)
+                e1 = np.cross(ax, [0.0, 0.0, 1.0]); e1 /= max(1e-9, np.linalg.norm(e1)); e2 = np.cross(ax, e1)
+                th = np.arctan2(rv @ e2, rv @ e1)
+                ph = r / St['period'] + St.get('turn', 1.0) * th / (2 * np.pi)
+                dd = np.maximum(0.0, np.linalg.norm(v, axis=1) - St.get('radius', 0.1))
+            else:
+                ref = np.asarray(St['ref'], float); d = _sd_tube(P, ref, np.zeros(len(ref)))
+                ph = d / St['period'] + St.get('phase', 0.0); dd = np.maximum(0.0, d - St.get('max', 0.15))
+            k = dd < best_d
+            best_d[k] = dd[k]; f[k] = np.cos(2 * np.pi * ph[k])
+        Hb = dict(Hb, reach=Hb.get('reach', 0.0))
+    else:
+        lines_all = [np.asarray(c, float) for fam in (Hb.get('families') or [Hb['curves']]) for c in fam]
+        hc = np.array(Hb.get('centre', (0.0, g.Y0, g.zp(12.0))))
+        best_d = np.full(len(P), 1e9); Q = np.zeros_like(P)           # nearest centre-line point
+        for c in lines_all:
+            for i in range(len(c) - 1):
+                a_, b_ = c[i], c[i + 1]; ab = b_ - a_; L2 = max(1e-12, ab @ ab)
+                t = np.clip(((P - a_) @ ab) / L2, 0.0, 1.0); q = a_ + t[:, None] * ab; d = np.linalg.norm(P - q, axis=1)
+                k = d < best_d; best_d[k] = d[k]; Q[k] = q[k]
+        out = Q - hc; out /= np.maximum(1e-9, np.linalg.norm(out, axis=1))[:, None]
+        rv = P - Q; rv /= np.maximum(1e-9, np.linalg.norm(rv, axis=1))[:, None]
+        cth = np.sum(rv * out, axis=1)                              # 1 on a roll's crest .. 0 on its flank
+        c0, c1 = Hb.get('band', (0.35, 0.9))
+        f = 2 * np.clip((cth - c0) / (c1 - c0), 0, 1) ** 1.2 - 1
     m = (1.0 - Hb.get('light', 0.15) * (1.0 - ((1 + f) / 2) ** 2)) * (1.0 - Hb.get('dark', 0.20) * ((1 - f) / 2) ** 1.3)
-    if Hb.get('lines'):
-        q = S * Hb['lines']; q = np.abs(q - np.round(q)); lw = Hb.get('line_w', 0.08)
-        m = np.maximum(m, m + (1.0 - m) * Hb.get('line_amt', 0.6) * np.clip(1 - q / lw, 0, 1) ** 2)
+    if Hb.get('lines'):                                         # a fine light line on each crest
+        lw = Hb.get('line_w', 0.03)
+        m = np.maximum(m, m + (1.0 - m) * Hb.get('line_amt', 0.6) * np.clip(1 - (1 - f) / (2 * lw), 0, 1) ** 2)
     fade = np.clip(1.0 - (best_d - Hb.get('reach', 0.06)) / 0.03, 0.0, 1.0)
     if Hb.get('mask'): fade *= np.array([Hb['mask'](me.vertices[i].co) for i in vs])
     m = 1.0 + (m - 1.0) * fade

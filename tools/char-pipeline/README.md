@@ -133,7 +133,12 @@ Kit API (`g = Guest(name, CFG, COLOURS)`; heights in CFG/specs are % of standing
 Budgets: <= 32k triangles, GLB <= 1.2 MB (Marcus: 31.6k tris, 1.20 MB). Hair: `hair_shell(..., lock_fields=[dict(keys, half, height, soft)], lock_base=...)` raises sculpted lock PLANES that
 step down onto each other with rounded edges (Marcus: 4 locks); `wrap_collar(..., tuck=)` tucks a collar's back edge into
 the body. Prefer wide soft `grooves` (width >= 2x the
-shell's vertex spacing) over narrow ribbon locks, which crinkle the surface.
+shell's vertex spacing) over narrow ribbon locks, which crinkle the surface. `lock_crease=` (bake darkening, metres of
+"groove") and `lock_crease_geo=` (a real smooth crease, metres deep) mark each lock edge so it reads in the matte game light.
+Pale crown fix: the hall's overhead lamps light the top of the hair 2-5x more than the sides, so a mid hair base reads
+grey/white from the practice camera. Set CFG `up_dark={'Hair': (amount, power, (r, g, b weights))}` (Victor/Marcus
+`(0.89, 0.7, (0.97, 1.0, 1.03))`, Beatrice `(0.92, 0.6, ...)`) and point the hair `sheen` lobe at the front, not up;
+check with `capture.mjs --w 1180 --h 820 --dpr 1 --rot 4` (the sides keep their value).
 
 ### Henry (`guests/henry.py` + `male_extras.py`)
 `python3 tools/char-pipeline/make_guest.py henry` -> `assets/characters/henry.glb` (~31.5k tris, ~1.19 MB). Hair is the kit's

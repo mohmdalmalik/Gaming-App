@@ -18,6 +18,7 @@
 #          Arms: upper arm 0.088 wide hanging at x +-0.19, elbow 49 %, wrist 58.5 % at x +-0.285, hands to 66 %.
 #          Legs x +-0.10 (0.075 at the ankle), pumps 0.245 long, block heel 0.035, collar 94.5 %, toes turned out.
 import math
+import numpy as np
 import guest_kit as GK
 import dress_kit as DK
 import victor_lib as L
@@ -121,6 +122,7 @@ SCULPT = dict(
              dict(keys=[(0.05, 0.03, 0.8, 0.006), (0.10, 0.02, 3.5, 0.008), (0.13, 0.08, 7.5, 0.009), (0.11, 0.15, 11.0, 0.008), (0.06, 0.19, 13.5, 0.006)], depth=0.007, k=0.004)] +
             [dict(keys=[(x * 0.95, 0.185, 8.0, 0.003), (x, 0.197, 10.0, 0.009), (x * 0.8, 0.195, 12.5, 0.008), (x * 0.55, 0.18, 14.5, 0.003)],     # low on the back only (a smooth crown from above)
                   depth=0.0035, k=0.004) for x in (-0.15, -0.09, -0.03, 0.03, 0.09, 0.15)],
+    keep_region=lambda P: np.clip((P[:, 2] - zp(20.0)) / 0.05, 0, 1),     # an even mesh over the sweep, crown and chignon (for hair_bands)
     box=((-0.30, 0.02 - 0.27, zp(30.0)), (0.27, 0.02 + 0.33, zp(-4.0))), voxel=0.004, tris=11700, smooth=5, post_smooth=3,
 )
 
@@ -199,11 +201,11 @@ def build(g):
     hs['grooves'] = SCULPT['grooves'] + gr
     DK.sculpt_hair(g, hs)
     # glossy bands following the sweep's rolls and the chignon's loops (painted after the bake, see dress_kit.hair_bands)
-    g.hair_band_specs = [
-        dict(families=[[DK._curve(g, k, 60)[0] for k in (WAVE1, WAVE2, WAVE3, WAVE4)], [DK._curve(g, k, 60)[0] for k in (LEFT1, LEFT2)]],
-             light=0.30, dark=0.30, lines=2, line_w=0.10, line_amt=0.18, reach=0.06),
-        dict(families=[[DK._curve(g, DK.loop_keys(g, **{a: b for a, b in lp.items() if a != 'crease'}), 60)[0] for lp in BUN_LOOPS]],
-             light=0.25, dark=0.35, lines=2, line_w=0.10, line_amt=0.15, reach=0.05)]
+    bc = BUN_CORE['c']
+    g.hair_band_specs = [dict(light=0.30, dark=0.30, lines=True, line_w=0.05, line_amt=0.7, stripes=[
+        dict(ref=DK._curve(g, WAVE1, 60)[0], period=0.042, phase=0.0, max=0.17),          # the sweep: bands parallel to its front roll
+        dict(ref=DK._curve(g, LEFT1, 60)[0], period=0.038, phase=0.0, max=0.07),          # her left side
+        dict(axis=((bc[0], g.Y0 + bc[1], g.zp(bc[2])), BUN_AX), period=0.028, turn=1.0, radius=0.10)])]   # the chignon's twists
     skull = GK.head(g, nlon=48, nlat=34, cull_in=g.hair_covers)
     DK.jaw_lift(g, skull, JAW)
     GK.ears(g); DK.decimate_parts(g, 'Ear', 0.55); GK.eyes(g); DK.eye_shine(g, SHINE); GK.brows(g); GK.nose(g)

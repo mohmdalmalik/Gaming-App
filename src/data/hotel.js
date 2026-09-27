@@ -39,6 +39,8 @@ const corner = (where, kind, w = 0.9, h = 0.9, d = 0.9) => {
   const sx = where.includes('e') ? 1 : -1, sz = where.includes('s') ? 1 : -1;
   return { kind, pos: [sx * CORNER_AT, sz * CORNER_AT], size: [w, h, d] };
 };
+// The piece of furniture that holds the room's search spot: the search icon floats above it.
+const searchSpot = f => ({ ...f, search: true });
 // A piece against the middle of a wall with NO doorway (in the default orientation).
 const wall = (side, kind, len = 2.2, h = 0.9, depth = 0.7) => {
   const off = INNER - depth / 2 - 0.05;
@@ -97,68 +99,68 @@ export const hotel = {
   tiles: [
     // --- four-way ------------------------------------------------------------------------------
     { id: 'lounge', name: 'Lounge', doors: CROSS, searchPoint: 'the writing bureau', mood: WARM,
-      furniture: [corner('nw', 'sofa', 1.3, 0.9, 0.9), corner('ne', 'armchair'), corner('sw', 'table', 1.0, 0.75, 1.0), corner('se', 'plant', 0.6, 1.3, 0.6)] },
+      furniture: [corner('nw', 'sofa', 1.3, 0.9, 0.9), corner('ne', 'armchair'), searchSpot(corner('sw', 'table', 1.0, 0.75, 1.0)), corner('se', 'plant', 0.6, 1.3, 0.6)] },
     { id: 'ballroom', name: 'Ballroom', doors: CROSS, searchPoint: 'the band stand', mood: WARM,
-      furniture: [corner('nw', 'bandstand', 1.3, 0.5, 1.3), corner('ne', 'table'), corner('sw', 'table'), corner('se', 'table')] },
+      furniture: [searchSpot(corner('nw', 'bandstand', 1.3, 0.5, 1.3)), corner('ne', 'table'), corner('sw', 'table'), corner('se', 'table')] },
     { id: 'grandCorridor', name: 'Grand Corridor', doors: CROSS, searchPoint: 'the umbrella stand', mood: CORRIDOR,
-      furniture: [corner('nw', 'plant', 0.6, 1.3, 0.6), corner('se', 'plant', 0.6, 1.3, 0.6), corner('ne', 'bench', 1.2, 0.5, 0.5)] },
+      furniture: [corner('nw', 'plant', 0.6, 1.3, 0.6), corner('se', 'plant', 0.6, 1.3, 0.6), searchSpot(corner('ne', 'bench', 1.2, 0.5, 0.5))] },
     // Room with a job: 1 AP, once per player per turn — everyone learns how many guests are possessed.
     { id: 'switchboard', name: 'Switchboard', doors: CROSS, job: 'switchboard', searchPoint: "the operator's desk", mood: WARM,
-      furniture: [corner('nw', 'switchboard', 1.3, 1.5, 0.9), corner('ne', 'switchboard', 1.3, 1.5, 0.9), corner('sw', 'chair', 0.7, 0.9, 0.7), corner('se', 'filingCabinet', 0.7, 1.3, 0.7)],
+      furniture: [searchSpot(corner('nw', 'switchboard', 1.3, 1.5, 0.9)), corner('ne', 'switchboard', 1.3, 1.5, 0.9), corner('sw', 'chair', 0.7, 0.9, 0.7), corner('se', 'filingCabinet', 0.7, 1.3, 0.7)],
       colors: { switchboard: { color: '#4a3424', emissive: '#3a2208' } } },
 
     // --- T-junctions (the north side is a wall) -------------------------------------------------
     { id: 'dining', name: 'Dining Room', doors: TEE, searchPoint: 'the sideboard', mood: WARM,
-      furniture: [wall('north', 'sideboard', 2.4, 0.9, 0.6), corner('sw', 'table', 1.2, 0.75, 1.2), corner('se', 'table', 1.2, 0.75, 1.2), corner('nw', 'chair', 0.6, 0.9, 0.6)] },
+      furniture: [searchSpot(wall('north', 'sideboard', 2.4, 0.9, 0.6)), corner('sw', 'table', 1.2, 0.75, 1.2), corner('se', 'table', 1.2, 0.75, 1.2), corner('nw', 'chair', 0.6, 0.9, 0.6)] },
     { id: 'library', name: 'Library', doors: TEE, searchPoint: 'the bookcases', mood: QUIET,
-      furniture: [wall('north', 'bookcase', 3.0, 2.0, 0.5), corner('nw', 'bookcase', 1.3, 2.0, 0.5), corner('ne', 'bookcase', 1.3, 2.0, 0.5), corner('se', 'armchair')] },
+      furniture: [searchSpot(wall('north', 'bookcase', 3.0, 2.0, 0.5)), corner('nw', 'bookcase', 1.3, 2.0, 0.5), corner('ne', 'bookcase', 1.3, 2.0, 0.5), corner('se', 'armchair')] },
     { id: 'kitchen', name: 'Kitchen', doors: TEE, searchPoint: 'the kitchen counter', mood: COOL,
-      furniture: [wall('north', 'counter', 3.2, 0.95, 0.7), corner('nw', 'counter', 1.3, 0.95, 0.7), corner('sw', 'shelf', 1.0, 1.8, 0.5)] },
+      furniture: [searchSpot(wall('north', 'counter', 3.2, 0.95, 0.7)), corner('nw', 'counter', 1.3, 0.95, 0.7), corner('sw', 'shelf', 1.0, 1.8, 0.5)] },
     { id: 'serviceCorridor', name: 'Service Corridor', doors: TEE, searchPoint: 'the laundry cart', dark: true, mood: FLICKER,
-      furniture: [wall('north', 'cart', 1.2, 1.0, 0.8), corner('se', 'crate')] },
+      furniture: [searchSpot(wall('north', 'cart', 1.2, 1.0, 0.8)), corner('se', 'crate')] },
     { id: 'storage', name: 'Storage Room', doors: TEE, searchPoint: 'the storage shelves', dark: true, mood: DARK,
-      furniture: [wall('north', 'shelf', 3.0, 1.8, 0.5), corner('nw', 'crate'), corner('ne', 'crate'), corner('sw', 'crate', 0.8, 0.6, 0.8)] },
+      furniture: [searchSpot(wall('north', 'shelf', 3.0, 1.8, 0.5)), corner('nw', 'crate'), corner('ne', 'crate'), corner('sw', 'crate', 0.8, 0.6, 0.8)] },
     { id: 'corridorE', name: 'East Corridor', doors: TEE, searchPoint: 'the room-service trolley', mood: CORRIDOR,
-      furniture: [wall('north', 'console', 1.4, 0.8, 0.4), corner('sw', 'trolley', 0.8, 1.0, 1.1)] },
+      furniture: [wall('north', 'console', 1.4, 0.8, 0.4), searchSpot(corner('sw', 'trolley', 0.8, 1.0, 1.1))] },
     { id: 'corridorW', name: 'West Corridor', doors: TEE, searchPoint: 'the console table', mood: CORRIDOR,
-      furniture: [wall('north', 'console', 1.4, 0.8, 0.4), corner('se', 'plant', 0.6, 1.3, 0.6)] },
+      furniture: [searchSpot(wall('north', 'console', 1.4, 0.8, 0.4)), corner('se', 'plant', 0.6, 1.3, 0.6)] },
 
     // --- straight (east and west are walls) -----------------------------------------------------
     { id: 'corridorN', name: 'North Corridor', doors: STRAIGHT, searchPoint: 'the hall console', mood: CORRIDOR,
-      furniture: [wall('east', 'console', 1.4, 0.8, 0.4), corner('sw', 'plant', 0.6, 1.3, 0.6)] },
+      furniture: [searchSpot(wall('east', 'console', 1.4, 0.8, 0.4)), corner('sw', 'plant', 0.6, 1.3, 0.6)] },
     { id: 'corridorS', name: 'South Corridor', doors: STRAIGHT, searchPoint: 'the luggage trolley', mood: CORRIDOR,
-      furniture: [wall('west', 'trolley', 1.2, 1.0, 0.8), corner('ne', 'bench', 0.5, 0.5, 1.2)] },
+      furniture: [searchSpot(wall('west', 'trolley', 1.2, 1.0, 0.8)), corner('ne', 'bench', 0.5, 0.5, 1.2)] },
     { id: 'stairs', name: 'Service Stairs', doors: STRAIGHT, searchPoint: 'the stairwell bench', dark: true, mood: DARK,
-      furniture: [wall('east', 'stairs', 3.0, 0.9, 1.6), wall('west', 'bench', 1.4, 0.5, 0.5)] },
+      furniture: [wall('east', 'stairs', 3.0, 0.9, 1.6), searchSpot(wall('west', 'bench', 1.4, 0.5, 0.5))] },
     // Room with a job: 1 AP to restore 2 health (maximum 3).
     { id: 'infirmary2', name: 'Infirmary', doors: STRAIGHT, job: 'infirmary', searchPoint: 'the medicine cabinet', mood: CLINIC,
-      furniture: [wall('west', 'infirmaryBed', 2.0, 0.6, 1.8), wall('east', 'medicineCabinet', 1.4, 1.9, 0.5), corner('ne', 'stool', 0.7, 0.9, 0.7)],
+      furniture: [wall('west', 'infirmaryBed', 2.0, 0.6, 1.8), searchSpot(wall('east', 'medicineCabinet', 1.4, 1.9, 0.5)), corner('ne', 'stool', 0.7, 0.9, 0.7)],
       colors: { infirmaryBed: { color: '#e4e2dc' }, medicineCabinet: { color: '#d8e2e4', emissive: '#3a0c0c' } } },
 
     // --- corners (north and west are walls) ------------------------------------------------------
     { id: 'backCorridor', name: 'Back Stairs Passage', doors: CORNER, searchPoint: 'the stacked crates', dark: true, mood: FLICKER,
-      furniture: [corner('nw', 'crate'), wall('north', 'crate', 1.0, 0.8, 0.9)] },
+      furniture: [corner('nw', 'crate'), searchSpot(wall('north', 'crate', 1.0, 0.8, 0.9))] },
     { id: 'cloakroom', name: 'Cloakroom', doors: CORNER, searchPoint: 'the coat rail', locked: true, mood: QUIET,
-      furniture: [wall('north', 'rail', 3.0, 1.7, 0.6), wall('west', 'rail', 3.0, 1.7, 0.6), corner('se', 'bench', 1.2, 0.5, 0.5)] },
+      furniture: [searchSpot(wall('north', 'rail', 3.0, 1.7, 0.6)), wall('west', 'rail', 3.0, 1.7, 0.6), corner('se', 'bench', 1.2, 0.5, 0.5)] },
     { id: 'cornerCorridor', name: 'Corner Corridor', doors: CORNER, searchPoint: 'the window seat', mood: CORRIDOR,
-      furniture: [corner('nw', 'windowSeat', 1.3, 0.5, 1.3), corner('sw', 'plant', 0.6, 1.3, 0.6)] },
+      furniture: [searchSpot(corner('nw', 'windowSeat', 1.3, 0.5, 1.3)), corner('sw', 'plant', 0.6, 1.3, 0.6)] },
     // Room with a job: 1 AP to restore 2 health (maximum 3).
     { id: 'infirmary1', name: 'Infirmary', doors: CORNER, job: 'infirmary', searchPoint: 'the medicine cabinet', mood: CLINIC,
-      furniture: [wall('north', 'infirmaryBed', 2.0, 0.6, 1.8), wall('west', 'medicineCabinet', 1.4, 1.9, 0.5), corner('se', 'stool', 0.7, 0.9, 0.7)],
+      furniture: [wall('north', 'infirmaryBed', 2.0, 0.6, 1.8), searchSpot(wall('west', 'medicineCabinet', 1.4, 1.9, 0.5)), corner('se', 'stool', 0.7, 0.9, 0.7)],
       colors: { infirmaryBed: { color: '#e4e2dc' }, medicineCabinet: { color: '#d8e2e4', emissive: '#3a0c0c' } } },
 
     // --- dead ends (only the south side opens) ------------------------------------------------------
     // Rooms with a job: the first search here draws 2 cards instead of 1.
     { id: 'linenStore1', name: 'Linen Store', doors: DEAD, job: 'linenStore', searchPoint: 'the linen shelves', mood: QUIET,
-      furniture: [wall('north', 'linenShelf', 3.0, 1.8, 0.5), wall('west', 'linenShelf', 3.0, 1.8, 0.5), corner('se', 'laundryBasket', 0.7, 0.7, 0.7)],
+      furniture: [searchSpot(wall('north', 'linenShelf', 3.0, 1.8, 0.5)), wall('west', 'linenShelf', 3.0, 1.8, 0.5), corner('se', 'laundryBasket', 0.7, 0.7, 0.7)],
       colors: { linenShelf: { color: '#e8e0cc' } } },
     { id: 'linenStore2', name: 'Linen Store', doors: DEAD, job: 'linenStore', searchPoint: 'the linen press', mood: QUIET,
-      furniture: [wall('north', 'linenPress', 2.4, 1.6, 0.6), wall('east', 'linenShelf', 3.0, 1.8, 0.5), corner('sw', 'foldingTable', 0.9, 0.8, 1.0)],
+      furniture: [searchSpot(wall('north', 'linenPress', 2.4, 1.6, 0.6)), wall('east', 'linenShelf', 3.0, 1.8, 0.5), corner('sw', 'foldingTable', 0.9, 0.8, 1.0)],
       colors: { linenShelf: { color: '#e8e0cc' }, linenPress: { color: '#e8e0cc' } } },
     { id: 'suite416', name: 'Guest Suite 416', doors: DEAD, searchPoint: 'the bedside table', locked: true, mood: WARM,
-      furniture: [wall('north', 'bed', 2.0, 0.6, 1.8), wall('east', 'wardrobe', 1.4, 2.1, 0.6), corner('sw', 'chair', 0.7, 0.9, 0.7)] },
+      furniture: [searchSpot(wall('north', 'bed', 2.0, 0.6, 1.8)), wall('east', 'wardrobe', 1.4, 2.1, 0.6), corner('sw', 'chair', 0.7, 0.9, 0.7)] },
     { id: 'housekeeping', name: 'Housekeeping Store', doors: DEAD, searchPoint: 'the linen shelves', dark: true, mood: DARK,
-      furniture: [wall('north', 'shelf', 3.0, 1.8, 0.5), wall('east', 'shelf', 3.0, 1.8, 0.5), corner('sw', 'cart', 0.8, 1.0, 1.1)] },
+      furniture: [searchSpot(wall('north', 'shelf', 3.0, 1.8, 0.5)), wall('east', 'shelf', 3.0, 1.8, 0.5), corner('sw', 'cart', 0.8, 1.0, 1.1)] },
 
     // --- the way out ----------------------------------------------------------------------------------
     // A SAFE end-zone: entering it never forces a meeting. The glowing exit door is on the far wall.

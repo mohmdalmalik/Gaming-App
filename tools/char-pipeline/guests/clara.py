@@ -34,11 +34,11 @@ sm = GK.sm
 # written below (so the chin sits closer to the neckline, like the sheet); build() installs the offset on g.zp while
 # the head is built. Bake-time heights (tint, soft normals) and absolute ones (hair bottom / shoulder keep-out) add
 # HEAD_DZP (the same drop in pct of H) explicitly.
-HEAD_DROP = 0.018
+HEAD_DROP = 0.030
 HEAD_DZP = HEAD_DROP / H * 100.0
 
 CFG = dict(
-    z_hair_top=0.0, z_skull_top=3.5, z_hairline=9.5, z_brow=13.5, z_eye=17.0, z_nose=19.8, z_mouth=22.4, z_chin=26.85, z_ear=20.6,
+    z_hair_top=0.0, z_skull_top=3.5, z_hairline=9.5, z_brow=13.5, z_eye=17.0, z_nose=19.8, z_mouth=22.4, z_chin=27.4, z_ear=20.6,
     head_y=0.03, z_shoulder_top=32.3,
     ear_style='round', ear_h=0.088, ear_w=0.062, ear_out=0.006, ear_y=0.030, ear_tilt=0.35, ear_thick=0.024, ear_rim=0.007, ear_bowl=0.010, ear_sink=0.020,
     eye_x=0.058, eye_w=0.037, eye_h=0.066, eye_lift=0.003,
@@ -47,7 +47,7 @@ CFG = dict(
     nose_w=0.054, nose_h=0.044, nose_d=0.032, nose_out=0.010, nose_top=1.3,
     lips=dict(z=22.3, w=0.080, rise=0.014, upper=0.011, lower=0.015, bow=0.002, flat=0.45),
     tint=dict(spots=[(0.084, 20.8 + HEAD_DZP, 0.036, 0.030, 1.0), (0.0, 19.8 + HEAD_DZP, 0.020, 0.020, 0.4)], g=0.20, b=0.16),
-    soft_normals=dict(centre=(0.0, 0.03, 22.5 + HEAD_DZP), radii=(0.20, 0.24, 0.50), amount=1.0, z_top=12.5 + HEAD_DZP, z_bot=29.5 + HEAD_DZP, fade=0.03, front=0.04,
+    soft_normals=dict(centre=(0.0, 0.03, 22.0 + HEAD_DZP), radii=(0.17, 0.22, 0.30), amount=0.9, z_top=12.5 + HEAD_DZP, z_bot=29.5 + HEAD_DZP, fade=0.03, front=0.04,
                       keep=[(0.0, -0.22, 19.8 + HEAD_DZP, 0.036)]),       # dress_kit: even glowing face shading (no dark jaw)
     groove_dark=(0.010, 0.55),
     up_dark={'Hair': (0.75, 0.7, (0.92, 1.0, 1.05))},   # darker, warmer crown under the ceiling lamps (keeps her auburn)
@@ -62,14 +62,14 @@ COLOURS = dict(
 )
 
 # ---- skull tables by f (0 chin .. 1 skull top): a soft oval face, full cheeks, small round chin (Eleanor's, a touch longer)
-W  = [(0, 0.0), (0.02, 0.038), (0.05, 0.060), (0.09, 0.086), (0.14, 0.116), (0.20, 0.140), (0.26, 0.150), (0.32, 0.149),     # apple face: widest at
-      (0.42, 0.139), (0.52, 0.127), (0.62, 0.117), (0.70, 0.110), (0.80, 0.100), (0.88, 0.081), (0.94, 0.056), (0.98, 0.031), (1, 0.0)]   # mouth level, soft round chin
+W  = [(0, 0.0), (0.02, 0.040), (0.05, 0.063), (0.09, 0.087), (0.14, 0.110), (0.20, 0.129), (0.26, 0.142), (0.32, 0.147),     # apple face: widest at
+      (0.42, 0.140), (0.52, 0.136), (0.62, 0.129), (0.70, 0.121), (0.80, 0.106), (0.88, 0.081), (0.94, 0.056), (0.98, 0.031), (1, 0.0)]   # mouth level, soft round chin
 DF = [(0, 0.0), (0.03, 0.120), (0.08, 0.160), (0.14, 0.180), (0.22, 0.195), (0.35, 0.203), (0.50, 0.203),
       (0.62, 0.197), (0.75, 0.186), (0.85, 0.168), (0.93, 0.138), (0.98, 0.066), (1, 0.0)]
 DB = [(0, 0.0), (0.05, 0.030), (0.15, 0.062), (0.30, 0.112), (0.45, 0.155), (0.60, 0.165), (0.75, 0.160), (0.85, 0.140),
       (0.93, 0.110), (0.98, 0.060), (1, 0.0)]
 E  = [(0, 2.1), (0.10, 2.2), (0.20, 2.2), (0.30, 2.4), (0.50, 2.45), (0.70, 2.4), (0.90, 2.2), (1, 2.1)]
-BULGES = [dict(x=0.096, z=22.0, sx=0.056, sz=0.046, a=0.040),      # full rosy cheeks
+BULGES = [dict(x=0.100, z=22.4, sx=0.058, sz=0.048, a=0.050),      # full rosy cheeks
           dict(x=0.0, z=18.2, sx=0.015, sz=0.022, a=0.010),        # soft nose bridge
           dict(x=0.0, z=25.9, sx=0.050, sz=0.020, a=0.006)]        # small round chin
 
@@ -91,7 +91,7 @@ ENV = dict(
 def forehead(x):
     """Lowest point of the hair over the forehead / temples (pct) across x (her right negative): the wave hangs low on
     her right; the part side (her left) is higher; the temples drop to the flat strands in front of the ears."""
-    keys = [(-0.20, 19.5), (-0.145, 13.6), (-0.09, 11.8), (-0.03, 10.0), (0.02, 8.6), (0.06, 8.0), (0.10, 8.2), (0.13, 9.5), (0.16, 17.5), (0.20, 19.5)]
+    keys = [(-0.20, 19.5), (-0.17, 16.0), (-0.145, 13.2), (-0.09, 11.8), (-0.03, 10.0), (0.02, 8.6), (0.06, 8.0), (0.10, 8.4), (0.13, 10.2), (0.155, 13.5), (0.18, 18.0), (0.20, 19.5)]
     for (x0, z0), (x1, z1) in zip(keys, keys[1:]):
         if x <= x1: return z0 + (z1 - z0) * sm((x - x0) / (x1 - x0)) if x >= x0 else z0
     return keys[-1][1]
@@ -118,8 +118,8 @@ ROLLS = [
     dict(keys=[(0.20, 30.5, 0.010, 0.8), (0.25, 32.0, 0.024, 0.7), (0.32, 32.8, 0.028, 0.7), (0.40, 33.2, 0.028, 0.7), (0.50, 33.4, 0.028, 0.7),
                (0.60, 33.2, 0.028, 0.7), (0.68, 32.8, 0.028, 0.7), (0.75, 32.0, 0.024, 0.7), (0.80, 30.5, 0.010, 0.8)], sink=0.35, k=0.012, n=60),
     # flat strands at the temples, in front of the ears
-    dict(keys=[(0.20, 11.5, 0.012, 0.4), (0.21, 13.8, 0.018, 0.35), (0.22, 16.5, 0.017, 0.35), (0.228, 18.8, 0.012, 0.4)], sink=0.62, k=0.008, over=True, n=16),
-    dict(keys=[(0.80, 10.5, 0.012, 0.4), (0.79, 13.3, 0.018, 0.35), (0.78, 16.0, 0.017, 0.35), (0.772, 18.3, 0.012, 0.4)], sink=0.62, k=0.008, over=True, n=16),
+    dict(keys=[(0.215, 13.5, 0.010, 0.4), (0.222, 15.2, 0.016, 0.35), (0.228, 17.2, 0.015, 0.35), (0.232, 19.0, 0.010, 0.4)], sink=0.62, k=0.008, over=True, n=16),
+    dict(keys=[(0.785, 13.0, 0.010, 0.4), (0.778, 14.8, 0.016, 0.35), (0.772, 16.8, 0.015, 0.35), (0.768, 18.6, 0.010, 0.4)], sink=0.62, k=0.008, over=True, n=16),
     dict(keys=[(0.34, 7.0, 0.014, 0.8), (0.26, 3.8, 0.026, 0.70), (0.14, 1.8, 0.028, 0.70), (0.03, 0.9, 0.024, 0.72), (0.95, 0.6, 0.012, 0.8)], sink=0.45, k=0.010),
 ]
 GROOVES = [
@@ -160,7 +160,7 @@ CURLS = [dict(u=0.33, pct=27.0, r0=0.042, turns=1.1, start=40.0, sign=1, n=36, n
          dict(u=0.42, pct=29.5, r0=0.036, turns=1.0, start=20.0, sign=1, n=32, n_ring=10), dict(u=0.58, pct=29.5, r0=0.036, turns=1.0, start=160.0, sign=-1, n=32, n_ring=10)]
 
 # ---- body
-NECK = dict(rings=[(26.0, 0.114, 0.110, 1.0, 0.024), (29.0, 0.120, 0.116, 1.0, 0.020), (31.0, 0.124, 0.120, 1.0, 0.016),
+NECK = dict(rings=[(26.0, 0.116, 0.112, 1.0, 0.024), (29.0, 0.124, 0.118, 1.0, 0.020), (31.0, 0.128, 0.122, 1.0, 0.016),
                    (32.0, 0.128, 0.120, 1.0, 0.013), (32.8, 0.172, 0.136, 0.96, 0.010), (33.5, 0.240, 0.156, 0.92, 0.007),
                    (34.3, 0.290, 0.172, 0.90, 0.003), (35.5, 0.300, 0.192, 0.85, -0.004)],
             split=31.0, blend=0.02, n=28)

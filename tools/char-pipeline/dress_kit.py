@@ -777,6 +777,8 @@ def sculpt_hair(g, Hs):
     r=(rx, ry, rz), k)], rolls=[dict(keys=[(x, dy, pct, r[, flat])], k, n)], grooves=[dict(keys=[(x, dy, pct, r)], depth, k)]
     (groove keys are rough positions: they are projected onto the hair surface; depth = how deep the channel cuts),
     keep_region=fn((N,3) world) -> 0..1 optional: where the decimation keeps an even mesh (painted hair_bands need vertices),
+    warp=fn((N,3) world) -> (N,3) optional: masses / rolls are evaluated at warp(P) (reshape the volume, e.g. scale x > 1 to
+    narrow it); the skull cap and hairline cut are not warped, so the hair never exposes the head,
     box=(lo, hi) world, voxel, tris, smooth, mat, name. Sets g.hair_covers / g.hair_groove / g.hair_sdf."""
     zp = g.zp; Y0 = g.Y0
     Cp = Hs['cap']; TT = _np_table(Table([(zp(p), t) for p, t in Cp['thick']]))
@@ -790,15 +792,18 @@ def sculpt_hair(g, Hs):
     def cutf(P):
         """Positive below the hairline (where there must be no hair), smooth in height."""
         return np.interp(u_of(P), hl_u, hl_z) - P[:, 2]
+    warp = Hs.get('warp')                              # optional fn((N,3) world) -> (N,3) design space: reshapes the masses and rolls
+    g.hair_warp = warp                                  # (e.g. a narrower top) while the cap keeps following the skull
     def base(P):
         s = sd_skull(g, P) - TT(P[:, 2])
         s = smax(s, cutf(P), Cp.get('edge_k', 0.012))
+        Q = warp(P) if warp else P
         for M in Hs.get('masses', []):
-            m = sd_ellipsoid(P, (M['c'][0], Y0 + M['c'][1], zp(M['c'][2])), M['r'])
+            m = sd_ellipsoid(Q, (M['c'][0], Y0 + M['c'][1], zp(M['c'][2])), M['r'])
             if M.get('cut', True): m = smax(m, cutf(P) - M.get('below', 0.0), Cp.get('edge_k', 0.012))
             s = smin(s, m, M.get('k', 0.02))
         for (pts, rad, fl), k, cut in rolls:
-            t = sd_tube(P, pts, rad, fl if (fl < 0.999).any() else None, hc)
+            t = sd_tube(Q, pts, rad, fl if (fl < 0.999).any() else None, hc)
             s = smin(s, t, k)
         return s
     # grooves SNAP to the base surface: each curve point is projected radially from the head centre onto base = 0,
@@ -927,6 +932,7 @@ def hair_bands(g, Hb):
     vs = sorted(vs)
     if not vs: return
     P = np.array([tuple(me.vertices[i].co) for i in vs])
+    if getattr(g, 'hair_warp', None): P = g.hair_warp(P)          # bands follow the rolls in their design space
     if Hb.get('stripes'):
         # parallel stripes: contours of the distance to a reference line (a sweep's front roll), `period` apart; or,
         # with axis=(centre, direction), a spiral round that axis (a chignon's twists)

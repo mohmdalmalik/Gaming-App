@@ -54,14 +54,14 @@ COLOURS = dict(
 )
 
 # ---- skull tables by f (0 chin .. 1 skull top): a soft oval face, full cheeks, small round chin
-W  = [(0, 0.0), (0.015, 0.040), (0.04, 0.062), (0.08, 0.089), (0.12, 0.108), (0.17, 0.124), (0.22, 0.133), (0.27, 0.133), (0.32, 0.130),
-      (0.38, 0.127), (0.44, 0.124), (0.52, 0.120), (0.62, 0.115), (0.70, 0.110), (0.80, 0.100), (0.88, 0.080), (0.94, 0.055), (0.98, 0.030), (1, 0.0)]     # apple cheeks: widest at mouth level, a round short chin
+W  = [(0, 0.0), (0.015, 0.042), (0.04, 0.066), (0.08, 0.094), (0.12, 0.114), (0.17, 0.129), (0.22, 0.138), (0.27, 0.139), (0.32, 0.135),
+      (0.38, 0.128), (0.44, 0.124), (0.52, 0.120), (0.62, 0.115), (0.70, 0.110), (0.80, 0.100), (0.88, 0.080), (0.94, 0.055), (0.98, 0.030), (1, 0.0)]     # apple cheeks: widest at mouth level, a round short chin
 DF = [(0, 0.0), (0.017, 0.130), (0.04, 0.165), (0.08, 0.183), (0.12, 0.190), (0.20, 0.198), (0.30, 0.203), (0.45, 0.205),
       (0.60, 0.202), (0.75, 0.196), (0.85, 0.182), (0.93, 0.150), (0.98, 0.070), (1, 0.0)]
 DB = [(0, 0.0), (0.05, 0.030), (0.15, 0.062), (0.30, 0.112), (0.45, 0.155), (0.60, 0.165), (0.75, 0.160), (0.85, 0.140),
       (0.93, 0.110), (0.98, 0.060), (1, 0.0)]
 E  = [(0, 2.0), (0.08, 2.2), (0.18, 2.35), (0.30, 2.45), (0.50, 2.45), (0.70, 2.4), (0.90, 2.2), (1, 2.1)]
-BULGES = [dict(x=0.086, z=21.4, sx=0.046, sz=0.040, a=0.020),      # full rosy cheeks, widest at cheek / mouth level
+BULGES = [dict(x=0.088, z=21.4, sx=0.050, sz=0.042, a=0.026),      # full rosy cheeks, widest at cheek / mouth level
           dict(x=0.0, z=18.1, sx=0.015, sz=0.022, a=0.010),        # soft nose bridge
           dict(x=0.0, z=25.6, sx=0.040, sz=0.015, a=0.004)]        # small round chin
 
@@ -106,6 +106,28 @@ LEFT2 = [(0.050, -0.020, 3.4, 0.006), (0.092, -0.050, 3.0, 0.028), (0.136, -0.01
          (0.070, 0.170, 14.5, 0.016)]
 LEFT1, LEFT2 = _lower_front(LEFT1), _lower_front(LEFT2)
 
+Y_AX = CFG['head_y']
+def _hair_warp(P):
+    """Final head round: the sheet's updo is compact and asymmetric. Narrow the top of the volume (both sides, most at the
+    crown), pull her left side (+x, the viewer's right) in close to the head down to the ear, lower the top on that side;
+    her right side (the wave, viewer's left) keeps a fuller, lower volume. Scaling x up in design space shrinks the hair."""
+    x, y, z = P[:, 0], P[:, 1], P[:, 2]
+    pct = (1.0 - z / H) * 100.0
+    def ramp(a, b): return np.clip((pct - a) / (b - a), 0.0, 1.0)
+    left = x > 0
+    t = np.where(left, ramp(1.5, 14.0), ramp(0.5, 8.0)); t = t * t * (3 - 2 * t)   # 0 at the top .. 1 lower down (her right recovers sooner)
+    s_top = np.where(left, 0.26, 0.19)                          # shrink at the crown
+    s_low = np.where(left, 0.07, 0.07)                          # at 12-14 %
+    s = s_top + (s_low - s_top) * t
+    s *= 1.0 - np.clip((pct - 14.0) / 3.0, 0.0, 1.0)            # none below 17 % (ears, nape, chignon)
+    yb = y - Y_AX; back = np.clip(yb / 0.08, 0.0, 1.0)
+    s *= 1.0 - 0.55 * back                                      # the back of the head stays broad and round
+    tb = ramp(0.0, 12.0); tb = tb * tb * (3 - 2 * tb)
+    sy = 0.22 * (1.0 - tb) * (yb > 0)                           # but the crown slopes down toward the back (no flat top over the bun)
+    Q = P.copy(); Q[:, 0] = x / (1.0 - s); Q[:, 1] = np.where(yb > 0, Y_AX + yb / (1.0 - sy), y)
+    Q[:, 2] = z + 0.014 * np.clip(x / 0.10, 0.0, 1.0) * (1.0 - t)   # the top sits lower on her left (the part side)
+    return Q
+
 SCULPT = dict(
     cap=dict(thick=[(0, 0.012), (3, 0.02), (6, 0.032), (8, 0.035), (12, 0.028), (16, 0.022), (20, 0.018), (24, 0.015), (28, 0.012)], hairline=hairline, edge_k=0.012),
     masses=[dict(c=(-0.010, -0.014, 6.0), r=(0.140, 0.180, 0.092), k=0.03),           # the crown
@@ -129,6 +151,7 @@ SCULPT = dict(
              dict(keys=[(0.05, 0.03, 0.8, 0.006), (0.10, 0.02, 3.5, 0.008), (0.13, 0.08, 7.5, 0.009), (0.11, 0.15, 11.0, 0.008), (0.06, 0.19, 13.5, 0.006)], depth=0.007, k=0.004)] +
             [dict(keys=[(x * 0.95, 0.185, 8.0, 0.003), (x, 0.197, 10.0, 0.009), (x * 0.8, 0.195, 12.5, 0.008), (x * 0.55, 0.18, 14.5, 0.003)],     # low on the back only (a smooth crown from above)
                   depth=0.0035, k=0.004) for x in (-0.15, -0.09, -0.03, 0.03, 0.09, 0.15)],
+    warp=lambda P: _hair_warp(P),
     keep_region=lambda P: np.clip((P[:, 2] - zp(20.0)) / 0.05, 0, 1),     # an even mesh over the sweep, crown and chignon (for hair_bands)
     box=((-0.30, 0.02 - 0.27, zp(30.0)), (0.27, 0.02 + 0.33, zp(-4.0))), voxel=0.004, tris=11700, smooth=5, post_smooth=3,
 )
@@ -189,7 +212,7 @@ SHOES = dict(leg_x=0.095, y=0.0, len=0.25, w=0.088, heel=0.066, heel_h=0.036, he
              splay=0.26, out=0.010, foot_top=0.105, ball=0.12, mat='shoe')
 JAW = dict(top=22.0, lift=0.016, y0=0.0, y1=0.09)          # jawline rising from the chin toward the ear lobe
 SHINE = dict(r=0.0035, dx=-0.30, dz=0.45, mirror=True, mat='shine')      # a tiny glint, upper-inner on each eye
-EAR = dict(kind='stud', r=0.016, x=0.150, dy=-0.008, z=22.0, mat='pearl')
+EAR = dict(kind='stud', r=0.016, x=0.154, dy=-0.008, z=22.0, mat='pearl')
 RIG = dict(hip=63.0, knee=80.0, ankle=95.0, waist=47.4, shoulder_top=31.5, neck_y=0.015, hand_end=66.0, leg_x=0.095,
            heel=0.066, ball=0.12, arm=A, walk_kw=dict(skirt=True))
 

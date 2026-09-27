@@ -43,14 +43,14 @@ CFG = dict(
     groove_dark=(0.008, 0.60), smooth_angle=80.0,
     sheen={'Shoe': (0.34, [((0.2, -0.45, 0.87), 14.0, 1.0), ((0.0, -1.0, 0.3), 16.0, 0.8), ((0.9, 0.0, 0.45), 16.0, 0.5), ((-0.9, 0.0, 0.45), 16.0, 0.5)]),
            'Hair': (0.86, (-0.15, -0.85, 0.35), 2.0)},      # highlight toward the front, not up (the lamps are overhead)
-    up_dark={'Hair': (0.62, 0.6, (0.97, 1.0, 1.03))},   # darker crown under the hall's ceiling lamps (reads silver, not white)
+    up_dark={'Hair': (0.85, 0.7, (1.0, 0.97, 0.90))},   # darker crown under the hall's ceiling lamps (reads silver, not white)
     ao_skip=('Brow', 'Eye', 'Mouth', 'Glasses'), ao_scale={'Skin': 0.45, 'Jacket': 0.65},
 )
 COLOURS = dict(
     # Black cloth / leather use the lobby-measured in-game palette (guest_kit.PALETTE): under the hotel's warm light they
     # read black like Victor's and Marcus's (cool charcoal in the neutral preview: expected). The ivory jacket and the
     # silver hair are compromises that read ivory / grey (not yellow / white) in both lights.
-    skin='#ffb08a', hair='#b2acae', brow='#8e868a', mouth='#4a2418', eye='#0b0b0d', glasses='#3a2218',
+    skin='#ffb08a', hair='#9aa0b2', brow='#8e868a', mouth='#4a2418', eye='#0b0b0d', glasses='#3a2218',
     jacket='#fbe7d3', trouser='#34363e', button='#16161a', shade='#cdb9a4', horn='#dccab4',
     shirt='#fbf6f0', tie='#34363e',
     shoe=GK.PALETTE['shoe_black'], sole='#1a1818',

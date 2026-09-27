@@ -20,6 +20,7 @@
 #   lips(g, Li)             small closed smiling lips (upper lip with a soft bow, fuller lower lip)
 #   earrings(g, E)          'stud' / 'ball' (pearl or gold sphere at the lobe), optional 'drop'
 #   eye_shine(g, Sh)        a small painted white glint on each eye;  jaw_lift(g, skull, J): jawline climbing to the ear
+#   shade (g.post_bake)     per-material colour multipliers after the bake (e.g. the neck's shadow under the chin)
 #   hair_bands (g.hair_band_specs)  glossy light/dark colour bands along hair rolls, painted after the bake
 #   soft_hands(g, A)        guest_kit.hands' fingers/thumb with a rounded tapered palm + wrist ball (same A['hand'])
 #   soft_normals(g, Sn)     (via CFG['soft_normals'], applied in finish) even, glowing face shading: face normals bent
@@ -843,6 +844,19 @@ def sculpt_hair(g, Hs):
 # =============================================================================================
 # FINISH
 # =============================================================================================
+def shade(g, mat, fn):
+    """Multiply the baked vertex colour of material `mat` (e.g. 'Skin') by fn(co) -> factor (or (r, g, b) factors).
+    Guests list them in g.post_bake = [(mat, fn), ...]; dress_kit.finish applies them after the bake (e.g. the soft
+    shadow on the neck under the chin that marks where the face ends)."""
+    me = g.mesh.data; col = me.color_attributes.get('Col')
+    if col is None: return
+    mi = {i for i, m in enumerate(me.materials) if m and m.name == mat}; vs = set()
+    for poly in me.polygons:
+        if poly.material_index in mi: vs.update(poly.vertices)
+    for i in vs:
+        k = fn(me.vertices[i].co); k = (k, k, k) if not isinstance(k, (tuple, list)) else k
+        c = col.data[i].color; col.data[i].color = (c[0] * k[0], c[1] * k[1], c[2] * k[2], 1.0)
+
 def lift_ao(g, scale):
     """Soften the baked shading per material: red = 1 - (1 - red) * scale[name], green/blue keep their ratio to red
     (so a baked blush survives), e.g. {'Skin': 0.3} keeps a fair face bright under the hair's occlusion. Runs after
@@ -963,6 +977,7 @@ def finish(g, R, out):
     if g.C.get('soft_normals'): soft_normals(g, g.C['soft_normals'])     # before the bake: the AO rays use these normals
     t0 = time.time(); GK.bake(g); print(f'REPORT ao_seconds={time.time() - t0:.1f}')
     lift_ao(g, g.C.get('ao_scale', {}))
+    for mat, fn in getattr(g, 'post_bake', []): shade(g, mat, fn)
     for hb in getattr(g, 'hair_band_specs', []): hair_bands(g, hb)
     GK.rig(g, R); GK.animate(g, R)
     pts = getattr(g, 'eye_pts', None)

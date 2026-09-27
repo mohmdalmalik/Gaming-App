@@ -32,17 +32,17 @@ def zp(p): return H * (1 - p / 100)
 sm = GK.sm
 
 CFG = dict(
-    z_hair_top=0.0, z_skull_top=3.5, z_hairline=9.5, z_brow=13.0, z_eye=17.3, z_nose=20.3, z_mouth=23.3, z_chin=29.2, z_ear=21.0,
+    z_hair_top=0.0, z_skull_top=3.5, z_hairline=9.5, z_brow=13.5, z_eye=17.0, z_nose=19.8, z_mouth=22.4, z_chin=26.85, z_ear=20.6,
     head_y=0.03, z_shoulder_top=32.3,
     ear_style='round', ear_h=0.088, ear_w=0.062, ear_out=0.006, ear_y=0.030, ear_tilt=0.35, ear_thick=0.024, ear_rim=0.007, ear_bowl=0.010, ear_sink=0.020,
-    eye_x=0.066, eye_w=0.040, eye_h=0.062, eye_lift=0.003,
-    brow=dict(x0=0.034, x1=0.102, z=12.7, thick=0.028, arch=0.014, drop_in=-0.020, drop_out=0.022,
+    eye_x=0.058, eye_w=0.037, eye_h=0.066, eye_lift=0.003,
+    brow=dict(x0=0.028, x1=0.098, z=13.35, thick=0.028, arch=0.014, drop_in=-0.022, drop_out=0.012,
               profile=[(0.0, 0.55), (0.06, 0.95), (0.25, 1.0), (0.60, 0.88), (0.90, 0.55), (1.0, 0.25)], flat=0.5),
-    nose_w=0.054, nose_h=0.046, nose_d=0.032, nose_out=0.010, nose_top=1.3,
-    lips=dict(z=22.9, w=0.098, rise=0.014, upper=0.011, lower=0.015, bow=0.002, flat=0.45),
-    tint=dict(spots=[(0.090, 21.5, 0.038, 0.032, 1.0), (0.0, 20.3, 0.020, 0.020, 0.4)], g=0.20, b=0.16),
-    soft_normals=dict(centre=(0.0, 0.03, 23.5), radii=(0.20, 0.24, 0.50), amount=1.0, z_top=12.5, z_bot=31.0, fade=0.03, front=0.04,
-                      keep=[(0.0, -0.22, 20.3, 0.036)]),       # dress_kit: even glowing face shading (no dark jaw)
+    nose_w=0.054, nose_h=0.044, nose_d=0.032, nose_out=0.010, nose_top=1.3,
+    lips=dict(z=22.3, w=0.080, rise=0.014, upper=0.011, lower=0.015, bow=0.002, flat=0.45),
+    tint=dict(spots=[(0.084, 20.8, 0.036, 0.030, 1.0), (0.0, 19.8, 0.020, 0.020, 0.4)], g=0.20, b=0.16),
+    soft_normals=dict(centre=(0.0, 0.03, 22.5), radii=(0.20, 0.24, 0.50), amount=1.0, z_top=12.5, z_bot=29.5, fade=0.03, front=0.04,
+                      keep=[(0.0, -0.22, 19.8, 0.036)]),       # dress_kit: even glowing face shading (no dark jaw)
     groove_dark=(0.010, 0.55),
     up_dark={'Hair': (0.75, 0.7, (0.92, 1.0, 1.05))},   # darker, warmer crown under the ceiling lamps (keeps her auburn)
     ao_skip=('Brow', 'Eye', 'Lips', 'Gold'), ao_scale={'Skin': 0.18, 'Dress': 0.85},
@@ -63,9 +63,9 @@ DF = [(0, 0.0), (0.03, 0.120), (0.08, 0.160), (0.14, 0.180), (0.22, 0.195), (0.3
 DB = [(0, 0.0), (0.05, 0.030), (0.15, 0.062), (0.30, 0.112), (0.45, 0.155), (0.60, 0.165), (0.75, 0.160), (0.85, 0.140),
       (0.93, 0.110), (0.98, 0.060), (1, 0.0)]
 E  = [(0, 2.1), (0.10, 2.2), (0.20, 2.2), (0.30, 2.4), (0.50, 2.45), (0.70, 2.4), (0.90, 2.2), (1, 2.1)]
-BULGES = [dict(x=0.092, z=22.5, sx=0.052, sz=0.045, a=0.032),      # full rosy cheeks
-          dict(x=0.0, z=18.6, sx=0.015, sz=0.022, a=0.010),        # soft nose bridge
-          dict(x=0.0, z=27.8, sx=0.050, sz=0.020, a=0.006)]        # small round chin
+BULGES = [dict(x=0.088, z=21.6, sx=0.052, sz=0.042, a=0.032),      # full rosy cheeks
+          dict(x=0.0, z=18.2, sx=0.015, sz=0.022, a=0.010),        # soft nose bridge
+          dict(x=0.0, z=25.9, sx=0.050, sz=0.020, a=0.006)]        # small round chin
 
 # ---- hair (female_extras.long_hair): envelope measured on the FRONT (wr her right / wl her left) and SIDE panels
 ENV = dict(
@@ -131,9 +131,9 @@ HAIR = dict(
     face=dict(z_top=forehead, w=[(6.0, 0.10), (9.0, 0.125), (12.0, 0.132), (14.0, 0.126), (18.0, 0.128), (20.0, 0.142), (24.0, 0.145),
                                  (27.0, 0.130), (29.0, 0.105), (31.0, 0.075)],
               y=[(0.0, -0.020), (30.0, -0.020)], k=0.020),
-    cheek=dict(y=[(12.0, -0.045), (15.0, -0.005), (18.0, 0.015), (20.0, 0.038), (23.0, 0.045), (25.5, 0.030), (28.0, -0.030)], thin=-0.02, z=(11.5, 28.5)),
+    cheek=dict(y=[(12.0, -0.045), (15.0, -0.005), (18.0, 0.015), (20.0, 0.038), (23.0, 0.045), (25.5, 0.050), (27.5, 0.060), (29.5, 0.055), (32.0, 0.030)], thin=-0.02, z=(11.5, 33.0)),   # the side hair stays behind the (shorter) jaw
     ears=dict(r=(0.034, 0.040, 0.050), dx=0.012, dy=0.026, z=21.0),
-    neck=dict(r=0.064, y=-0.012, z_top=28.5, k=0.02),
+    neck=dict(r=0.064, y=-0.012, z_top=27.2, k=0.02),
     body=[dict(c=(0.0, -0.03, 39.0), r=(0.245, 0.135, 0.110))],
     bottom=34.8, rolls=ROLLS, waves=WAVES, grooves=GROOVES, ko_k=0.040, voxel=0.005, tris=8200, smooth=4, post_smooth=2, taubin=6,
 )
@@ -187,7 +187,7 @@ LEGS = dict(leg_x=0.090, leg_y=0.0, n=14,
             stations=[(62.0, 0.120, 0.125), (70.0, 0.108, 0.112), (80.0, 0.090, 0.094), (86.0, 0.094, 0.098), (91.0, 0.084, 0.090), (94.0, 0.074, 0.080), (96.0, 0.068, 0.074)])
 SHOES = dict(leg_x=0.090, y=0.0, len=0.265, w=0.090, heel=0.075, heel_h=0.042, heel_len=0.046, collar=0.090, vamp=0.058,
              splay=0.28, out=0.012, foot_top=0.108, ball=0.125, mat='shoe')
-EAR = dict(r=0.0175, x=0.156, dy=0.030, z=23.4, stem=0.004, mat='gold')
+EAR = dict(r=0.0175, x=0.156, dy=0.030, z=22.9, stem=0.004, mat='gold')
 RIG = dict(hip=62.0, knee=79.5, ankle=95.0, waist=47.8, shoulder_top=32.3, neck_y=0.018, hand_end=68.5, leg_x=0.090,
            heel=0.075, ball=0.125, arm=A, walk_kw=dict(skirt=True))
 

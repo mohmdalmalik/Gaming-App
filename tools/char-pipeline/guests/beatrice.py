@@ -30,15 +30,15 @@ def zp(p): return H * (1 - p / 100)
 sm = GK.sm
 
 CFG = dict(
-    z_hair_top=0.0, z_skull_top=3.2, z_hairline=5.5, z_brow=11.8, z_eye=16.8, z_nose=19.2, z_mouth=22.9, z_chin=29.2, z_ear=20.6,
+    z_hair_top=0.0, z_skull_top=3.2, z_hairline=5.5, z_brow=11.8, z_eye=16.8, z_nose=19.8, z_mouth=22.9, z_chin=28.8, z_ear=20.6,
     head_y=0.046, z_shoulder_top=32.0,
     ear_style='round', ear_seg=(20, 14), ear_h=0.118, ear_w=0.086, ear_out=0.010, ear_y=0.010, ear_tilt=0.60, ear_thick=0.028, ear_rim=0.008, ear_bowl=0.011, ear_sink=0.020,
-    eye_x=0.065, eye_w=0.033, eye_h=0.052, eye_lift=0.003,
-    brow=dict(x0=0.041, x1=0.110, z=13.0, thick=0.034, arch=0.016, drop_in=-0.016, drop_out=0.020,
+    eye_x=0.066, eye_w=0.046, eye_h=0.067, eye_lift=0.003,
+    brow=dict(x0=0.038, x1=0.112, z=12.83, thick=0.025, arch=0.018, drop_in=-0.020, drop_out=0.032,
               profile=[(0.0, 0.45), (0.08, 0.90), (0.30, 1.0), (0.70, 0.90), (0.93, 0.60), (1.0, 0.30)], flat=0.5),
     nose_w=0.074, nose_h=0.058, nose_d=0.040, nose_out=0.016, nose_top=1.25,
-    lips=dict(z=23.1, w=0.122, rise=0.017, upper=0.012, lower=0.020, bow=0.003, flat=0.5, mat='lips'),
-    tint=dict(spots=[(0.100, 21.4, 0.042, 0.034, 1.0), (0.0, 19.6, 0.020, 0.020, 0.4)], g=0.10, b=0.08),
+    lips=dict(z=23.1, w=0.128, rise=0.017, upper=0.013, lower=0.023, bow=0.003, flat=0.5, mat='lips'),
+    tint=dict(spots=[(0.100, 21.4, 0.042, 0.034, 1.0), (0.0, 20.2, 0.020, 0.020, 0.4)], g=0.10, b=0.08),
     groove_dark=(0.010, 0.60),
     # the crown faces the hall's overhead lamps (2-5x the light on the sides): authored darker so the top of the
     # hair still reads dark chocolate from the practice camera (the sheen lobes face the front, not the lamps)
@@ -53,12 +53,14 @@ COLOURS = dict(
     # a little warmer for the neutral preview: in the lobby dress ~#10291f..#2c453e (sheet #1a332c), hair ~#26170f
     # (sheet #2f201d), skin ~#9d512c..#eb875e, gold ~#9a6e31 (sheet #b38042), berry lips ~#511212
     skin='#d0865c', hair='#4e403b', brow='#3a2c29', eye='#0b0b0d', lips='#80403c',
-    dress='#36524f', gold='#d3b182', shoe=GK.PALETTE['shoe_black'], sole='#1a1818', shine='#f4f1ee',
+    dress='#36524f', gold='#d3b182', shoe=GK.PALETTE['shoe_black'], sole='#1a1818', shine='#9c9794',
 )
 
 # ---- skull (f: 0 chin .. 1 skull top): soft round face, full cheeks, round chin
 W  = [(0, 0.0), (0.02, 0.060), (0.05, 0.085), (0.10, 0.110), (0.16, 0.128), (0.24, 0.142), (0.32, 0.150), (0.42, 0.151),
       (0.52, 0.147), (0.62, 0.139), (0.72, 0.129), (0.82, 0.114), (0.90, 0.094), (0.95, 0.069), (0.99, 0.030), (1, 0.0)]
+# fuller, rounder lower face (owner: the face read too long): 3.5 % wider up to the cheekbones, easing out by the brow
+W  = [(f, w * (1.0 + 0.035 * min(1.0, max(0.0, (0.72 - f) / 0.20)))) for f, w in W]
 DF = [(0, 0.0), (0.02, 0.150), (0.05, 0.176), (0.10, 0.190), (0.18, 0.197), (0.30, 0.203), (0.45, 0.205),
       (0.60, 0.202), (0.75, 0.194), (0.86, 0.176), (0.94, 0.140), (0.99, 0.060), (1, 0.0)]
 DB = [(0, 0.0), (0.05, 0.030), (0.15, 0.070), (0.30, 0.120), (0.45, 0.160), (0.60, 0.172), (0.75, 0.166), (0.86, 0.146),
@@ -66,7 +68,7 @@ DB = [(0, 0.0), (0.05, 0.030), (0.15, 0.070), (0.30, 0.120), (0.45, 0.160), (0.6
 E  = [(0, 1.9), (0.10, 2.0), (0.20, 2.2), (0.35, 2.35), (0.50, 2.4), (0.70, 2.35), (0.90, 2.2), (1, 2.1)]
 BULGES = [dict(x=0.098, z=21.6, sx=0.048, sz=0.038, a=0.024),      # full cheeks
           dict(x=0.0, z=17.9, sx=0.015, sz=0.022, a=0.012),        # soft nose bridge
-          dict(x=0.0, z=28.2, sx=0.050, sz=0.016, a=0.006)]        # round chin
+          dict(x=0.0, z=27.8, sx=0.050, sz=0.016, a=0.006)]        # round chin
 
 # ---- HAIR (dress_kit.sculpt_hair). The bob envelope: half-width A, half-depth B and centre offset DY (behind the
 # head axis) by height, from the sheet; rolls (the S-waves) are laid on it, grooves carved in the valleys between.
@@ -106,8 +108,8 @@ def hairline(u):
     """Lower edge of the hair by longitude u (0 front, 0.25 her right, 0.5 back, 0.75 her left): the fringe (5.5),
     the temples (down to 16 in front of the ear), above the ear (15.5), then the bob's curtain behind it (27.5)."""
     u %= 1.0; a = abs(((u + 0.5) % 1.0) - 0.5); right = u < 0.5; ss = sm
-    z = 4.9 + (3.0 if right else 0.6) * ss(a / 0.08)
-    z += (15.5 - z) * ss((a - 0.060) / 0.070)                 # arched: down past the temples to the ear's top (clear of the brows)
+    z = 6.0 + (2.4 if right else 0.3) * ss(a / 0.08)
+    z += (15.5 - z) * ss((a - 0.085) / 0.060)                 # arched: down past the temples to the ear's top (clear of the brows' tails)
     z += (15.0 - z) * ss((a - 0.205) / 0.02)                  # over the ear
     z += (27.0 - z) * ss((a - 0.27) / 0.05)                   # the curtain behind the ear (the curl ends hang lower)
     return z
@@ -197,8 +199,8 @@ LEGS = dict(leg_x=0.100, leg_y=0.0, n=14,
 SHOES = dict(leg_x=0.100, y=0.0, len=0.24, w=0.086, heel=0.062, heel_h=0.034, heel_len=0.042, collar=0.086, vamp=0.058,
              splay=0.26, out=0.012, foot_top=0.100, ball=0.115, mat='shoe')
 JAW = dict(top=24.3, lift=0.026, y0=-0.10, y1=0.02)
-SHINE = dict(r=0.0060, dx=0.30, dz=0.42, mat='shine')
-EAR = dict(kind='ball', r=0.018, x=0.178, dy=-0.020, z=23.2, mat='gold')
+SHINE = dict(r=0.0065, dx=0.30, dz=0.45, mat='shine')      # the sheet's soft glint (glossy eyes)
+EAR = dict(kind='ball', r=0.023, x=0.182, dy=-0.020, z=23.2, mat='gold')
 RIG = dict(hip=62.0, knee=79.0, ankle=95.5, waist=48.5, shoulder_top=32.0, neck_y=0.030, hand_end=70.0, leg_x=0.100,
            heel=0.062, ball=0.115, arm=A, walk_kw=dict(skirt=True))
 
@@ -282,7 +284,7 @@ def build(g):
     band_hair(g, SCULPT)
     skull = GK.head(g, nlon=48, nlat=34, cull_in=g.hair_covers)
     DK.jaw_lift(g, skull, JAW)
-    GK.ears(g); GK.eyes(g); GK.brows(g); GK.nose(g)
+    GK.ears(g); GK.eyes(g); DK.eye_shine(g, SHINE); GK.brows(g); GK.nose(g)
     DK.lips(g, g.C['lips']); DK.earrings(g, EAR)
     DK.neck_yoke(g, NECK)
     DK.bodice(g, BOD)

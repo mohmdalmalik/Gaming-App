@@ -28,17 +28,18 @@ def zp(p): return H * (1 - p / 100)
 sm = GK.sm
 
 CFG = dict(
-    z_hair_top=0.0, z_skull_top=3.0, z_hairline=7.3, z_brow=12.7, z_eye=16.8, z_nose=19.3, z_mouth=22.4, z_chin=26.9, z_ear=19.6,
+    z_hair_top=0.0, z_skull_top=3.0, z_hairline=7.3, z_brow=12.7, z_eye=16.5, z_nose=19.65, z_mouth=22.2, z_chin=26.6,     # face rework: eyes up, shorter chin (measured vs the sheet's head front)
+    z_ear=19.6,
     head_y=0.02, z_shoulder_top=31.5,
     ear_style='round', ear_h=0.074, ear_w=0.052, ear_out=0.002, ear_y=0.004, ear_tilt=0.30, ear_thick=0.026, ear_rim=0.007, ear_bowl=0.010, ear_sink=0.020,
-    eye_x=0.063, eye_w=0.040, eye_h=0.067, eye_lift=0.003,
-    brow=dict(x0=0.030, x1=0.092, z=12.6, thick=0.018, arch=0.016, drop_in=-0.018, drop_out=0.012,     # inner ends raised: soft friendly arcs from the game camera too
-              profile=[(0.0, 0.55), (0.05, 0.90), (0.25, 1.0), (0.60, 0.88), (0.90, 0.55), (1.0, 0.25)], flat=0.5),
+    eye_x=0.058, eye_w=0.046, eye_h=0.057, eye_lift=0.003,
+    brow=dict(x0=0.028, x1=0.096, z=13.2, thick=0.025, arch=0.012, drop_in=-0.016, drop_out=0.010,     # face rework: thicker, closer above the eyes, inner end level, outer end tapering down (sheet)
+              profile=[(0.0, 0.75), (0.04, 0.98), (0.25, 1.0), (0.60, 0.85), (0.90, 0.50), (1.0, 0.22)], flat=0.5),     # rounded inner end, tapering outer end
     nose_w=0.056, nose_h=0.042, nose_d=0.030, nose_out=0.012, nose_top=1.3,
-    lips=dict(z=22.4, w=0.094, rise=0.015, upper=0.010, lower=0.015, bow=0.002, flat=0.45),
-    tint=dict(spots=[(0.080, 20.9, 0.024, 0.020, 1.0), (0.0, 19.3, 0.018, 0.016, 0.3)], g=0.36, b=0.28),       # soft rosy blush discs
+    lips=dict(z=22.2, w=0.094, rise=0.015, upper=0.010, lower=0.015, bow=0.002, flat=0.45),
+    tint=dict(spots=[(0.078, 20.6, 0.024, 0.020, 1.0), (0.0, 19.65, 0.018, 0.016, 0.3)], g=0.36, b=0.28),       # soft rosy blush discs
     soft_normals=dict(centre=(0.0, 0.03, 25.0), radii=(0.20, 0.24, 0.55), amount=1.0, z_top=12.5, z_bot=30.0, fade=0.03, front=0.04,
-                      keep=[(0.0, -0.215, 19.3, 0.034)]),
+                      keep=[(0.0, -0.215, 19.65, 0.034)]),
     up_dark={'Hair': (0.97, 0.45, (1.0, 1.0, 0.97))},      # the lobby's ceiling lamps: keep the crown chocolate brown (guest_kit bake; measured in the practice camera)
     groove_dark=(0.010, 0.0),       # no dark crease lines (they read as scratches from the game camera): hair_bands instead
     ao_skip=('Brow', 'Eye', 'Lips', 'Pearl', 'Shine'), ao_scale={'Skin': 0.20, 'Dress': 0.85},
@@ -53,15 +54,15 @@ COLOURS = dict(
 )
 
 # ---- skull tables by f (0 chin .. 1 skull top): a soft oval face, full cheeks, small round chin
-W  = [(0, 0.0), (0.015, 0.050), (0.04, 0.072), (0.08, 0.094), (0.13, 0.110), (0.19, 0.123), (0.25, 0.131), (0.31, 0.135), (0.36, 0.135),
-      (0.42, 0.133), (0.52, 0.128), (0.62, 0.121), (0.70, 0.114), (0.80, 0.100), (0.88, 0.080), (0.94, 0.055), (0.98, 0.030), (1, 0.0)]
+W  = [(0, 0.0), (0.015, 0.046), (0.04, 0.065), (0.08, 0.087), (0.13, 0.104), (0.19, 0.116), (0.25, 0.123), (0.31, 0.127), (0.36, 0.127),
+      (0.42, 0.126), (0.52, 0.123), (0.62, 0.118), (0.70, 0.112), (0.80, 0.100), (0.88, 0.080), (0.94, 0.055), (0.98, 0.030), (1, 0.0)]     # face rework: cheeks ~6 % narrower (sheet: eye spacing 0.46 of the cheek width)
 DF = [(0, 0.0), (0.017, 0.130), (0.04, 0.165), (0.08, 0.183), (0.12, 0.190), (0.20, 0.198), (0.30, 0.203), (0.45, 0.205),
       (0.60, 0.202), (0.75, 0.196), (0.85, 0.182), (0.93, 0.150), (0.98, 0.070), (1, 0.0)]
 DB = [(0, 0.0), (0.05, 0.030), (0.15, 0.062), (0.30, 0.112), (0.45, 0.155), (0.60, 0.165), (0.75, 0.160), (0.85, 0.140),
       (0.93, 0.110), (0.98, 0.060), (1, 0.0)]
 E  = [(0, 2.0), (0.08, 2.2), (0.18, 2.35), (0.30, 2.45), (0.50, 2.45), (0.70, 2.4), (0.90, 2.2), (1, 2.1)]
 BULGES = [dict(x=0.086, z=21.4, sx=0.046, sz=0.040, a=0.020),      # full rosy cheeks, widest at cheek / mouth level
-          dict(x=0.0, z=17.8, sx=0.015, sz=0.022, a=0.010),        # soft nose bridge
+          dict(x=0.0, z=18.1, sx=0.015, sz=0.022, a=0.010),        # soft nose bridge
           dict(x=0.0, z=25.6, sx=0.040, sz=0.015, a=0.004)]        # small round chin
 
 # ---- hair: a sculpted volume (dress_kit.sculpt_hair): a puffed mass over a thin cap, the side-part WAVE as rolls
@@ -74,10 +75,10 @@ def hairline(u):
     visible edge is the underside of the wave rolls; the cut sits a little above it (hidden under them)."""
     u %= 1.0; right = u < 0.5; a = _a(u); ss = sm
     if right:
-        keys = [(0.0, 6.0), (0.04, 7.0), (0.08, 9.0), (0.11, 11.5), (0.14, 14.0), (0.165, 16.0), (0.19, 15.8), (0.21, 15.5), (0.30, 15.5),
+        keys = [(0.0, 6.45), (0.04, 7.3), (0.08, 9.0), (0.11, 11.5), (0.14, 14.0), (0.165, 16.0), (0.19, 15.8), (0.21, 15.5), (0.30, 15.5),
                 (0.33, 18.0), (0.38, 24.0), (0.45, 27.0), (0.5, 27.3)]
     else:
-        keys = [(0.0, 6.0), (0.03, 5.8), (0.07, 6.5), (0.10, 8.0), (0.13, 11.0), (0.15, 14.0), (0.17, 16.0), (0.20, 15.8), (0.30, 15.8),
+        keys = [(0.0, 6.45), (0.03, 6.25), (0.07, 6.8), (0.10, 8.0), (0.13, 11.0), (0.15, 14.0), (0.17, 16.0), (0.20, 15.8), (0.30, 15.8),
                 (0.33, 18.0), (0.38, 24.0), (0.45, 27.0), (0.5, 27.3)]
     for (a0, z0), (a1, z1) in zip(keys, keys[1:]):
         if a <= a1: return z0 + (z1 - z0) * ss((a - a0) / (a1 - a0))
@@ -94,11 +95,16 @@ WAVE3 = [(0.020, 0.020, 3.6, 0.006), (-0.020, 0.0, 1.2, 0.030), (-0.085, 0.000, 
 WAVE4 = [(0.040, 0.060, 3.4, 0.006), (0.000, 0.070, 0.9, 0.030), (-0.070, 0.090, 2.0, 0.036), (-0.110, 0.130, 5.0, 0.036), (-0.100, 0.170, 8.5, 0.030),
          (-0.050, 0.190, 11.5, 0.016)]
 LEFT3 = [(0.040, 0.020, 3.4, 0.006), (0.070, 0.060, 1.9, 0.024), (0.105, 0.110, 4.6, 0.028), (0.098, 0.160, 8.5, 0.026), (0.050, 0.185, 11.5, 0.012)]
+# face rework: the forehead hairline sits ~0.45 % lower (the sheet's forehead is shorter): the rolls' front parts move down
+def _lower_front(k, amt=0.45):
+    return [(x, dy, p + amt * sm((-dy - 0.07) / 0.06), r) for x, dy, p, r in k]
+WAVE1, WAVE2, WAVE3 = _lower_front(WAVE1), _lower_front(WAVE2), _lower_front(WAVE3)
 # her left side, from the part back to the chignon
 LEFT1 = [(0.055, -0.080, 5.0, 0.006), (0.100, -0.140, 6.2, 0.034), (0.128, -0.112, 10.0, 0.036), (0.152, -0.050, 12.5, 0.036), (0.152, 0.040, 14.5, 0.034),
          (0.120, 0.120, 16.0, 0.030), (0.060, 0.160, 16.5, 0.016)]
 LEFT2 = [(0.050, -0.020, 4.0, 0.006), (0.085, -0.065, 3.6, 0.030), (0.122, -0.030, 6.8, 0.034), (0.148, 0.050, 10.0, 0.034), (0.130, 0.130, 13.0, 0.030),
          (0.070, 0.170, 14.5, 0.016)]
+LEFT1, LEFT2 = _lower_front(LEFT1), _lower_front(LEFT2)
 
 SCULPT = dict(
     cap=dict(thick=[(0, 0.012), (3, 0.02), (6, 0.032), (8, 0.035), (12, 0.028), (16, 0.022), (20, 0.018), (24, 0.015), (28, 0.012)], hairline=hairline, edge_k=0.012),
@@ -182,7 +188,7 @@ SHOES = dict(leg_x=0.095, y=0.0, len=0.25, w=0.088, heel=0.066, heel_h=0.036, he
              splay=0.26, out=0.010, foot_top=0.105, ball=0.12, mat='shoe')
 JAW = dict(top=22.0, lift=0.024, y0=-0.01, y1=0.09)          # jawline rising from the chin toward the ear lobe
 SHINE = dict(r=0.0035, dx=-0.30, dz=0.45, mirror=True, mat='shine')      # a tiny glint, upper-inner on each eye
-EAR = dict(kind='stud', r=0.014, x=0.146, dy=-0.004, z=21.6, mat='pearl')
+EAR = dict(kind='stud', r=0.014, x=0.140, dy=-0.004, z=21.6, mat='pearl')
 RIG = dict(hip=63.0, knee=80.0, ankle=95.0, waist=47.4, shoulder_top=31.5, neck_y=0.015, hand_end=66.0, leg_x=0.095,
            heel=0.066, ball=0.12, arm=A, walk_kw=dict(skirt=True))
 
@@ -201,6 +207,10 @@ def build(g):
             if q['radii'][1] > 0.01: gr.append(dict(keys=DK.loop_keys(g, **q), depth=0.007, k=0.003, n=40))
     hs['grooves'] = SCULPT['grooves'] + gr
     DK.sculpt_hair(g, hs)
+    # the soft shadow on the neck under the chin (the sheet's face ends in a clear jawline; without it the face ran on into the neck)
+    zc = g.zc
+    g.post_bake = [('Skin', lambda co: (1.0 - 0.30 * GK.sm((zc + 0.004 - co.z) / 0.012) * (1.0 - GK.sm((zc - 0.09 - co.z) / 0.05))
+                                        * GK.sm((0.26 * g.H * 0 + 0.30 - abs(co.x)) / 0.05)))]
     # glossy bands following the sweep's rolls and the chignon's loops (painted after the bake, see dress_kit.hair_bands)
     bc = BUN_CORE['c']
     g.hair_band_specs = [dict(light=0.30, dark=0.30, lines=True, line_w=0.05, line_amt=0.7, stripes=[

@@ -176,6 +176,10 @@ await page.click('#hand-detail .btn'); await page.waitForTimeout(300);
 log('12. espresso', await toast(), JSON.stringify(await st()), await page.textContent('#action-points'));
 if (await game(() => window.__game.cardViewOpen())) await h.tap('#btn-hand-close');
 await S('12-espresso-ap');
+await h.setHand(0, [C('es2', 'espresso')]); await game(() => { window.__game.activePlayer().actionPoints = 4; window.__game.refresh(); });
+await game(() => window.__game.useEspresso('es2')); await page.waitForTimeout(300);
+log('12b. espresso at 4', JSON.stringify(await st()), await page.textContent('#action-points'));
+await S('12-espresso-6ap');
 await page.evaluate(() => document.querySelector('#ap-pips').outerHTML).then(x => log('   pips', x.slice(0, 300)));
 
 // 13. Infirmary low and full health
@@ -183,7 +187,7 @@ await h.put('infirmary1', 4); await game(() => { window.__game.activePlayer().he
 await S('13-infirmary-low');
 await h.tap('#btn-room'); await page.waitForTimeout(300);
 log('13. infirmary', await toast(), JSON.stringify(await st()));
-await h.tap('#btn-room'); await page.waitForTimeout(300);
+log('13a. btn-room disabled at full?', await page.$eval('#btn-room', b => b.disabled + ' ' + b.textContent)); if (!(await page.$eval('#btn-room', b => b.disabled))) await h.tap('#btn-room'); await page.waitForTimeout(300);
 log('13b. infirmary again', await toast(), JSON.stringify(await st()), await page.textContent('#btn-room'));
 await S('13-infirmary-full');
 

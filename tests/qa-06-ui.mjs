@@ -112,9 +112,12 @@ if (lockedId) {
   await h.put(nb, 4); await h.setHand(0, [C('mk', 'masterKey'), C('lp', 'lockPick')]); await h.snapCam(); await page.waitForTimeout(600);
   await S('08-locked-next-door');
   // tap on the locked doorway ring
-  const dc = await game(({ nb, id }) => { const g = window.__game; const d = g.floor.rooms.get(nb).doorways.find(d => d.a === id || d.b === id); return g.groundToScreen(d.center[0], d.center[1]); }, { nb, id: lockedId });
-  await page.touchscreen.tap(dc.x, dc.y).catch(() => page.mouse.click(dc.x, dc.y)); await page.waitForTimeout(250);
-  log('8b. tap locked door toast:', await toast());
+  const dc = await game(({ nb, id }) => { const g = window.__game; const d = g.floor.rooms.get(nb).doorways.find(d => d.a === id || d.b === id); const c = g.roomCenter(nb); const k = 0.7 / Math.hypot(c[0] - d.center[0], c[1] - d.center[1]); return { door: g.groundToScreen(d.center[0], d.center[1]), inside: g.groundToScreen(d.center[0] + (c[0] - d.center[0]) * k, d.center[1] + (c[1] - d.center[1]) * k) }; }, { nb, id: lockedId });
+  const topAt = p => page.evaluate(({ x, y }) => { const el = document.elementFromPoint(x, y); return !el ? 'offscreen' : el.tagName === 'CANVAS' ? 'canvas' : (el.closest('[id]')?.id || el.className); }, p);
+  log('8a. locked door centre', JSON.stringify(dc.door), await topAt(dc.door), 'inside point', JSON.stringify(dc.inside), await topAt(dc.inside));
+  await page.touchscreen.tap(dc.inside.x, dc.inside.y); await page.waitForTimeout(250);
+  log('8b. tap locked door toast:', await toast(), 'cardview?', await game(() => window.__game.cardViewOpen()));
+  if (await game(() => window.__game.cardViewOpen())) await h.tap('#btn-hand-close');
   await S('08-locked-tap');
   await page.click('#hand-fan .fan-card[data-type="lockPick"]'); await page.waitForTimeout(300);
   await S('08-cardview-lockpick');

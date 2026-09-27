@@ -321,7 +321,8 @@ async function tapSel(sel, what = sel) {
   } catch (e) {
     const exists = await page.$(sel);
     if (!exists) { await violation('medium', `missing-${slug(what)}`, `Expected control ${what} (${sel}) is not on the page`); return false; }
-    await ux(`tap-failed-${slug(what)}`, `Tapping ${what} did not work as a tap: ${String(e.message).split('\n')[0].slice(0, 160)}`);
+    const why = String(e.message).split('\n').filter(l => /intercepts|not stable|not visible|outside|detached|disabled/.test(l)).slice(-2).join(' / ').trim();
+    await ux(`tap-failed-${slug(what)}`, `Tapping ${what} did not work as a tap: ${String(e.message).split('\n')[0].slice(0, 120)} ${why.slice(0, 200)}`);
     fallback(`DOM click ${what}`, 'tap was not accepted');
     await page.$eval(sel, el => el.click()).catch(() => {});
     return false;

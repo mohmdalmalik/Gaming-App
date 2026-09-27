@@ -22,6 +22,24 @@ export const CARD_ART = {
   possession: 'assets/cards/possession.jpg',
 };
 
+// Finished card faces (the owner's designs: frame, illustration and name in one image, 2:3). A card with a
+// face is shown as that image; the name stays in the DOM for screen readers and the revolver's shot
+// count is overlaid. tools/card-pipeline/import_owner_cards.py makes these from tools/card-pipeline/owner/.
+export const CARD_FACE = {
+  lantern: 'assets/cards/face/lantern.jpg',
+  bandage: 'assets/cards/face/bandage.jpg',
+  flashlight: 'assets/cards/face/flashlight.jpg',
+  knife: 'assets/cards/face/knife.jpg',
+  revolver: 'assets/cards/face/revolver.jpg',
+  barricade: 'assets/cards/face/barricade.jpg',
+  lockPick: 'assets/cards/face/lockPick.jpg',     // assembled in the same style (make_lockpick_face.py)
+  masterKey: 'assets/cards/face/masterKey.jpg',
+  handMirror: 'assets/cards/face/handMirror.jpg',
+  espresso: 'assets/cards/face/espresso.jpg',
+  possession: 'assets/cards/face/possession.jpg',
+};
+export const CARD_BACK = 'assets/cards/back.jpg';
+
 // The art panel for a card type: a real illustration if one is registered, else a big glyph.
 function cardArt(doc, type) {
   const meta = CARDS[type] || {};
@@ -45,12 +63,20 @@ function cardArt(doc, type) {
 export function cardTile(doc, card, opts = {}) {
   const meta = CARDS[card.type] || { name: card.type, glyph: '?', tint: '#fff', desc: '' };
   const el = doc.createElement('div');
-  el.className = 'card-tile' + (meta.evil ? ' evil' : '') + (opts.selectable ? ' selectable' : '') + (opts.selected ? ' selected' : '');
+  const face = CARD_FACE[card.type];
+  el.className = 'card-tile' + (face ? ' face' : '') + (meta.evil ? ' evil' : '') + (opts.selectable ? ' selectable' : '') + (opts.selected ? ' selected' : '');
   el.style.setProperty('--card-tint', meta.tint);
   el.dataset.cardId = card.id;
   const shots = card.type === 'revolver' && card.shots != null ? ` · ${card.shots} shot${card.shots === 1 ? '' : 's'}` : '';
 
-  el.appendChild(cardArt(doc, card.type));
+  if (face) {
+    const f = doc.createElement('div'); f.className = 'face-img';
+    const img = doc.createElement('img'); img.alt = `${meta.name}${shots}`; img.src = face; f.appendChild(img);
+    if (shots) { const b = doc.createElement('span'); b.className = 'face-badge'; b.textContent = `${card.shots} shot${card.shots === 1 ? '' : 's'}`; f.appendChild(b); }
+    el.appendChild(f);
+  } else {
+    el.appendChild(cardArt(doc, card.type));
+  }
   const nm = doc.createElement('span'); nm.className = 'cname'; nm.textContent = `${meta.name}${shots}`; el.appendChild(nm);
   if (!opts.hideDesc) {
     const d = doc.createElement('span'); d.className = 'cdesc'; d.textContent = opts.desc ?? meta.desc; el.appendChild(d);
@@ -75,7 +101,7 @@ export function countTile(doc, type, count) {
   const el = doc.createElement('div');
   el.className = 'card-tile count' + (meta.evil ? ' evil' : '');
   el.style.setProperty('--card-tint', meta.tint);
-  el.appendChild(cardArt(doc, type));
+  el.appendChild(cardArt(doc, type));   // (overview tile: keeps the small art panel)
   el.innerHTML += `<span class="cname">${meta.name}</span><span class="badge">×${count}</span><span class="cdesc">${meta.desc}</span>`;
   return el;
 }

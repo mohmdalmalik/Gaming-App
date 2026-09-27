@@ -323,7 +323,7 @@ def moustache(g, mat='brow'):
     top = L.smooth_profile(MO['top'], [abs(t) for t in ts]); bot = L.smooth_profile(MO['bot'], [abs(t) for t in ts])
     zs = [R * (u + l) * 0.5 for u, l in zip(top, bot)]; rs = [max(0.10, (u - l) * 0.5) for u, l in zip(top, bot)]
     pts = [tuple(g.on_face(t * hw, zm + z, 0.006)) for t, z in zip(ts, zs)]
-    mo = L.tube('Moustache', pts, [R * r for r in rs], n=14); g.flatten_to_face(mo, 0.42); g.add(mo, mat, 'head')
+    mo = L.tube('Moustache', pts, [R * r for r in rs], n=MO.get('n', 14)); g.flatten_to_face(mo, 0.42); g.add(mo, mat, 'head')
 
 # =============================================================================================
 # HAIR — one smooth closed-looking cap, built as a radial shell from a point inside the head:
@@ -346,7 +346,7 @@ def moustache(g, mat='brow'):
 # =============================================================================================
 def hair_shell(g, wr, wl, front, back, expo, hairline, edge, slope=0.9, t_min=0.010, grooves=(), disp=None,
                centre=(0.0, 0.02, 14.0), nlon=88, nrows=40, top=0.2, lip=0.8, name='Hair', mat='hair', thin_below=None,
-               lock_fields=(), lock_base=0.0):
+               lock_fields=(), lock_base=0.0, lock_crease=0.0):
     zp = g.zp; Y0 = g.Y0
     TWR, TWL, TF, TB, TE = (Table([(zp(p), v) for p, v in t]) for t in (wr, wl, front, back, expo))
     z_top = zp(top)
@@ -470,7 +470,21 @@ def hair_shell(g, wr, wl, front, back, expo, hairline, edge, slope=0.9, t_min=0.
         u = (math.atan2(-(p.y - c0.y), p.x - c0.x) - math.pi / 2) / (2 * math.pi) % 1.0
         return p.z > zp(hairline(u)) + margin
     g.hair_covers = covered
-    g.hair_groove = lambda p: groove_amt(p)          # metres of groove depth at p (the bake darkens the grooves)
+    def lock_edge_amt(p):
+        # lock_crease > 0: a soft crease line along each lock's edge (where it steps onto its neighbour), reported as
+        # groove depth so the bake's groove_dark prints it: the step then reads in flat (matte) game light too
+        best = 0.0
+        for pts, half, hgt, soft, tp in LF:
+            bd, bi = 1e9, 0
+            for i in range(len(pts) - 1):
+                a, b = pts[i], pts[i + 1]; ab = b - a; L2 = ab.length_squared
+                t = 0.0 if L2 < 1e-12 else max(0.0, min(1.0, (p - a).dot(ab) / L2))
+                dd = (a + ab * t - p).length
+                if dd < bd: bd, bi = dd, i + t
+            s_ = bi / (len(pts) - 1); along = sm(s_ / tp) * sm((1.0 - s_) / tp)
+            best = max(best, along * math.exp(-((bd - half) / max(1e-4, soft * 0.6)) ** 2))
+        return lock_crease * best
+    g.hair_groove = (lambda p: groove_amt(p) + lock_edge_amt(p)) if (lock_crease and LF) else (lambda p: groove_amt(p))   # metres of groove depth at p (the bake darkens the grooves)
     def surface(u, zpct, detail=False):
         """Point on the hair surface (without grooves unless detail) at longitude u and height pct, and its outward normal."""
         u %= 1.0; f = lambda uu, vv: outer(uu, vv, detail)[0]; v = v_at(u, zpct, f); e = 2e-3
@@ -622,7 +636,7 @@ def lapels(g, J):
         ztop = lambda f: zf + (zt - zf) * sm((f - op) / W_.get('v_width', 1.0))
         return wrap_collar(g, 'JacketCollar', La.get('mat', 'jacket'), R, C['neck_y'] + W_.get('dy', 0.0), op, ztop, g.jacket_top - 0.03,
                            W_['tip'], W_.get('th_side', 1.6), thick=W_.get('thick', 0.008), gap=W_.get('gap', 0.010),
-                           wfn=lambda co: {'spine': 1.0}, tuck=W_.get('tuck', 0.0))
+                           wfn=lambda co: {'spine': 1.0}, tuck=W_.get('tuck', 0.0), nth=W_.get('nth', 30), nt=W_.get('nt', 7))
     # jacket collar round the back of the neck, stepping down at the front to meet the collar leaves
     C = g.C; NY = C['neck_y']; R = C['neck_r'] + La.get('collar_gap', 0.028)
     zt_b, zt_f = zp(La['collar_top']), zp(La.get('collar_front', 34.0)); op = La.get('collar_open', 0.75)
@@ -773,7 +787,7 @@ def collar(g, S):
         def wfn(co):
             a = sm((co.z - (zj - 0.03)) / 0.05); return {'neck': 0.3 + 0.5 * a, 'spine': 0.7 - 0.5 * a}
         return wrap_collar(g, 'ShirtCollar', 'shirt', R, C['neck_y'], op, ztop, zj - W_.get('below', 0.03), W_['tip'], W_.get('th_side', 1.5),
-                           thick=W_.get('thick', 0.005), gap=W_.get('gap', 0.004), wfn=wfn, tuck=W_.get('tuck', 0.0))
+                           thick=W_.get('thick', 0.005), gap=W_.get('gap', 0.004), wfn=wfn, tuck=W_.get('tuck', 0.0), nth=W_.get('nth', 30), nt=W_.get('nt', 7))
     C = g.C; NY = C['neck_y']; R = C['neck_r'] + 0.012; zt = g.zp(S['collar_top']); zv = g.zp(S.get('collar_v', 33.6))
     band = ring_wall('CollarBand', NY, R, 0.007, lambda th: g.jacket_top - 0.02,
                      lambda th: zv + (zt - zv) * sm((math.pi - abs(math.pi - th)) / S.get('v_width', 0.9)), open_=S.get('v_open', 0.16), n=40)
@@ -1071,7 +1085,7 @@ def bake(g, n_rays=32, max_dist=0.26, strength=0.50):
         for vi in poly.vertices: vmat.setdefault(vi, slot.get(poly.material_index))
     col = me.color_attributes.get('Col') or me.color_attributes.new(name='Col', type='FLOAT_COLOR', domain='POINT')
     me.color_attributes.active_color = col; me.color_attributes.render_color_index = me.color_attributes.find('Col')
-    tint = C.get('tint', {}); sheen = C.get('sheen', {})
+    tint = C.get('tint', {}); sheen = C.get('sheen', {}); up_dark = C.get('up_dark', {})
     ze = g.z('z_ear'); earx = g.W(ze) + 0.022
     occ_stats = []
     for v in me.vertices:
@@ -1094,6 +1108,9 @@ def bake(g, n_rays=32, max_dist=0.26, strength=0.50):
             r *= 1.0 - 0.10 * ear; g_ *= 1.0 - 0.12 * ear; b *= 1.0 - 0.12 * ear
         if mname == 'Hair' and getattr(g, 'hair_groove', None) and C.get('groove_dark'):
             gd = min(1.0, g.hair_groove(v.co) / C['groove_dark'][0]); m_ = 1.0 - C['groove_dark'][1] * gd; r *= m_; g_ *= m_; b *= m_
+        if mname in up_dark:                  # (amount, power): darker where the surface faces UP (the crown faces the hall's
+            amt, pw = up_dark[mname]          # overhead lamps: 2-5x the light of the sides; without this it reads pale/grey)
+            m_ = 1.0 - amt * max(0.0, n.z) ** pw; r *= m_; g_ *= m_; b *= m_
         if mname in sheen:                    # (floor, [(direction, power, amount), ...]) or (floor, direction, power)
             sh = sheen[mname]; lobes = sh[1] if isinstance(sh[1], list) else [(sh[1], sh[2], 1.0)]
             hl = min(1.0, sum(amt * max(0.0, n.dot(Vector(hd).normalized())) ** pw for hd, pw, amt in lobes))

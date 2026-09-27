@@ -262,15 +262,11 @@ html, body {
 .hand-strip-label { font-family: var(--serif); font-size: 15px; color: var(--ivory); letter-spacing: 0.02em; }
 .hand-backs { display: flex; align-items: flex-end; }
 .card-back {
-  width: 30px; height: 44px; border-radius: 5px; margin-left: -14px;
-  background: linear-gradient(155deg, #26314a, #141a2b);
-  border: 1px solid var(--line); box-shadow: 0 2px 6px rgba(0,0,0,0.45);
+  width: 30px; height: 45px; border-radius: 3px; margin-left: -14px;
+  background: #1a1a1c url('assets/cards/back.jpg') center / cover no-repeat;   /* the owner's card back */
+  box-shadow: 0 2px 6px rgba(0,0,0,0.5);
 }
 .card-back:first-child { margin-left: 0; }
-.card-back::after {
-  content: ''; display: block; width: 16px; height: 24px; margin: 9px auto; border-radius: 3px;
-  border: 1px solid var(--line-soft);
-}
 .hand-count {
   min-width: 26px; height: 26px; padding: 0 8px; border-radius: 999px;
   display: inline-flex; align-items: center; justify-content: center; font-weight: 800; font-size: 14px;
@@ -442,6 +438,19 @@ html, body {
 .card-tile .art svg.icon { width: 72%; height: 72%; color: #3a2c14; color: color-mix(in srgb, var(--card-tint) 55%, #2a2016); filter: drop-shadow(0 1px 0 rgba(255,255,255,0.35)); }
 .card-tile.evil .art svg.icon { color: #6a2fa8; }
 .card-tile .cname { font-family: var(--serif); font-weight: 700; font-size: 15px; color: #2a2016; text-align: center; }
+/* Finished card faces (owner designs, src/ui/cards.js CARD_FACE): the image IS the card — frame, art and
+   name — so the tile drops its ivory frame; the name stays for screen readers; text below reads ivory. */
+.card-tile.face { background: none; border: none; box-shadow: none; padding: 0; gap: 6px; }
+.card-tile.face .face-img { position: relative; aspect-ratio: 2 / 3; border-radius: 7% / 4.7%; overflow: hidden;
+  box-shadow: 0 6px 16px rgba(0,0,0,0.5); }
+.card-tile.face .face-img img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.card-tile.face .face-badge { position: absolute; top: 7%; right: 8%; padding: 2px 8px; border-radius: 999px; font-size: 12px; font-weight: 800;
+  color: #2a2016; background: var(--brass-bright); box-shadow: 0 1px 4px rgba(0,0,0,0.5); }
+.card-tile.face .cname { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.card-tile.face .cdesc { color: var(--ivory-dim); }
+.card-tile.face.selected { border: none; box-shadow: none; }
+.card-tile.face.selected .face-img { box-shadow: 0 0 0 3px var(--brass-bright), 0 0 22px rgba(201,162,78,0.6); }
+.card-tile.face.evil .face-img { box-shadow: 0 6px 16px rgba(0,0,0,0.5), 0 0 0 1px rgba(154,107,208,0.6); }
 .card-tile .cdesc { font-size: 12px; color: #5c4a2e; line-height: 1.3; text-align: center; }
 .card-tile.count .badge { align-self: center; padding: 1px 9px; border-radius: 999px; font-size: 12px; font-weight: 700; background: rgba(140,114,51,0.2); color: #6a5326; }
 .card-tile.selectable { cursor: pointer; }

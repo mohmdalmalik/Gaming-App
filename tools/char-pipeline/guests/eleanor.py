@@ -31,7 +31,7 @@ CFG = dict(
     z_hair_top=0.0, z_skull_top=3.0, z_hairline=7.3, z_brow=12.7, z_eye=16.5, z_nose=19.65, z_mouth=22.2, z_chin=26.6,     # face rework: eyes up, shorter chin (measured vs the sheet's head front)
     z_ear=19.6,
     head_y=0.02, z_shoulder_top=31.5,
-    ear_style='round', ear_h=0.074, ear_w=0.052, ear_out=0.002, ear_y=0.004, ear_tilt=0.30, ear_thick=0.026, ear_rim=0.007, ear_bowl=0.010, ear_sink=0.020,
+    ear_style='round', ear_h=0.102, ear_w=0.074, ear_out=0.014, ear_y=0.004, ear_tilt=0.30, ear_thick=0.026, ear_rim=0.007, ear_bowl=0.010, ear_sink=0.020,
     eye_x=0.058, eye_w=0.046, eye_h=0.057, eye_lift=0.003,
     brow=dict(x0=0.028, x1=0.096, z=13.2, thick=0.025, arch=0.012, drop_in=-0.016, drop_out=0.010,     # face rework: thicker, closer above the eyes, inner end level, outer end tapering down (sheet)
               profile=[(0.0, 0.75), (0.04, 0.98), (0.25, 1.0), (0.60, 0.85), (0.90, 0.50), (1.0, 0.22)], flat=0.5),     # rounded inner end, tapering outer end
@@ -54,8 +54,8 @@ COLOURS = dict(
 )
 
 # ---- skull tables by f (0 chin .. 1 skull top): a soft oval face, full cheeks, small round chin
-W  = [(0, 0.0), (0.015, 0.046), (0.04, 0.065), (0.08, 0.087), (0.13, 0.104), (0.19, 0.116), (0.25, 0.123), (0.31, 0.127), (0.36, 0.127),
-      (0.42, 0.126), (0.52, 0.123), (0.62, 0.118), (0.70, 0.112), (0.80, 0.100), (0.88, 0.080), (0.94, 0.055), (0.98, 0.030), (1, 0.0)]     # face rework: cheeks ~6 % narrower (sheet: eye spacing 0.46 of the cheek width)
+W  = [(0, 0.0), (0.015, 0.040), (0.04, 0.062), (0.08, 0.089), (0.12, 0.108), (0.17, 0.124), (0.22, 0.133), (0.27, 0.133), (0.32, 0.130),
+      (0.38, 0.127), (0.44, 0.124), (0.52, 0.120), (0.62, 0.115), (0.70, 0.110), (0.80, 0.100), (0.88, 0.080), (0.94, 0.055), (0.98, 0.030), (1, 0.0)]     # apple cheeks: widest at mouth level, a round short chin
 DF = [(0, 0.0), (0.017, 0.130), (0.04, 0.165), (0.08, 0.183), (0.12, 0.190), (0.20, 0.198), (0.30, 0.203), (0.45, 0.205),
       (0.60, 0.202), (0.75, 0.196), (0.85, 0.182), (0.93, 0.150), (0.98, 0.070), (1, 0.0)]
 DB = [(0, 0.0), (0.05, 0.030), (0.15, 0.062), (0.30, 0.112), (0.45, 0.155), (0.60, 0.165), (0.75, 0.160), (0.85, 0.140),
@@ -78,7 +78,7 @@ def hairline(u):
         keys = [(0.0, 6.45), (0.04, 7.3), (0.08, 9.0), (0.11, 11.5), (0.14, 14.0), (0.165, 16.0), (0.19, 15.8), (0.21, 15.5), (0.30, 15.5),
                 (0.33, 18.0), (0.38, 24.0), (0.45, 27.0), (0.5, 27.3)]
     else:
-        keys = [(0.0, 6.45), (0.03, 6.25), (0.07, 6.8), (0.10, 8.0), (0.13, 11.0), (0.15, 14.0), (0.17, 16.0), (0.20, 15.8), (0.30, 15.8),
+        keys = [(0.0, 6.45), (0.03, 5.9), (0.07, 5.8), (0.10, 6.6), (0.13, 9.5), (0.15, 14.0), (0.17, 16.0), (0.20, 15.8), (0.30, 15.8),
                 (0.33, 18.0), (0.38, 24.0), (0.45, 27.0), (0.5, 27.3)]
     for (a0, z0), (a1, z1) in zip(keys, keys[1:]):
         if a <= a1: return z0 + (z1 - z0) * ss((a - a0) / (a1 - a0))
@@ -100,9 +100,9 @@ def _lower_front(k, amt=0.45):
     return [(x, dy, p + amt * sm((-dy - 0.07) / 0.06), r) for x, dy, p, r in k]
 WAVE1, WAVE2, WAVE3 = _lower_front(WAVE1), _lower_front(WAVE2), _lower_front(WAVE3)
 # her left side, from the part back to the chignon
-LEFT1 = [(0.055, -0.080, 5.0, 0.006), (0.100, -0.140, 6.2, 0.034), (0.128, -0.112, 10.0, 0.036), (0.152, -0.050, 12.5, 0.036), (0.152, 0.040, 14.5, 0.034),
+LEFT1 = [(0.060, -0.075, 4.2, 0.006), (0.112, -0.122, 5.0, 0.032), (0.146, -0.088, 8.6, 0.034), (0.162, -0.030, 11.8, 0.035), (0.152, 0.040, 14.5, 0.034),
          (0.120, 0.120, 16.0, 0.030), (0.060, 0.160, 16.5, 0.016)]
-LEFT2 = [(0.050, -0.020, 4.0, 0.006), (0.085, -0.065, 3.6, 0.030), (0.122, -0.030, 6.8, 0.034), (0.148, 0.050, 10.0, 0.034), (0.130, 0.130, 13.0, 0.030),
+LEFT2 = [(0.050, -0.020, 3.4, 0.006), (0.092, -0.050, 3.0, 0.028), (0.136, -0.012, 6.0, 0.032), (0.148, 0.050, 10.0, 0.034), (0.130, 0.130, 13.0, 0.030),
          (0.070, 0.170, 14.5, 0.016)]
 LEFT1, LEFT2 = _lower_front(LEFT1), _lower_front(LEFT2)
 
@@ -111,10 +111,10 @@ SCULPT = dict(
     masses=[dict(c=(-0.010, -0.014, 6.0), r=(0.140, 0.180, 0.092), k=0.03),           # the crown
             dict(c=(0.0, 0.070, 11.0), r=(0.180, 0.130, 0.100), k=0.03),            # the round back dome above the chignon
             dict(c=(-0.130, 0.02, 11.5), r=(0.090, 0.140, 0.060), k=0.03),          # fill under the wave, her right
-            dict(c=(0.110, 0.02, 11.5), r=(0.070, 0.130, 0.060), k=0.03),           # fill, her left
+            dict(c=(0.115, 0.04, 11.0), r=(0.065, 0.120, 0.055), k=0.03),           # fill, her left
             dict(c=(-0.030, -0.100, 3.2), r=(0.120, 0.090, 0.050), k=0.04),          # the sweep's crest: a fuller, higher top-front
             dict(c=(0.005, 0.030, 2.6), r=(0.130, 0.160, 0.052), k=0.035),          # a smooth crown dome over the rolls' seams (no 'turban' wraps from above)
-            dict(c=(0.125, -0.010, 11.0), r=(0.080, 0.130, 0.075), k=0.04),          # her left side: fuller, rounder
+            dict(c=(0.135, 0.020, 10.5), r=(0.075, 0.120, 0.070), k=0.04),          # her left side: fuller, rounder
             dict(c=(-0.010, 0.120, 17.5), r=(0.150, 0.100, 0.075), k=0.03),          # nape: side hair sweeping into the chignon
             dict(c=(-0.125, 0.120, 19.0), r=(0.065, 0.070, 0.075), k=0.03, cut=False),  # behind her right ear, into the chignon
             dict(c=(0.110, 0.120, 18.5), r=(0.055, 0.065, 0.065), k=0.03, cut=False)],  # behind her left ear
@@ -153,7 +153,8 @@ BUN = dict(centre=(-0.050, 0.150, 20.4), axis=(0.0, 1.0, -0.10), up=(0, 0, 1), t
            core=(0.120, 0.100, 0.095, -0.005), n_samples=80, n_ring=10, strands=(1.5, 0.10))
 
 # ---- body
-NECK = dict(rings=[(24.0, 0.108, 0.104, 1.0, 0.018), (27.5, 0.112, 0.110, 1.0, 0.016), (29.0, 0.118, 0.116, 1.0, 0.014),
+NECK = dict(rings=[(24.0, 0.122, 0.112, 1.0, 0.018), (27.5, 0.126, 0.116, 1.0, 0.016), (29.0, 0.132, 0.122, 1.0, 0.014),     # a fuller neck (sheet: 0.46 of the cheek width)
+                  
                    (30.0, 0.150, 0.130, 1.0, 0.012), (30.6, 0.200, 0.145, 0.95, 0.012), (31.2, 0.262, 0.157, 0.92, 0.010),
                    (32.0, 0.282, 0.172, 0.90, 0.008), (33.0, 0.298, 0.186, 0.85, 0.004), (34.5, 0.290, 0.205, 0.80, -0.004)],
             split=29.5, blend=0.02, n=28)
@@ -186,9 +187,9 @@ LEGS = dict(leg_x=0.095, leg_y=0.0, n=14,
             stations=[(61.0, 0.120, 0.125), (70.0, 0.108, 0.112), (80.0, 0.090, 0.094), (86.0, 0.098, 0.102), (91.0, 0.088, 0.094), (94.0, 0.078, 0.084), (96.0, 0.072, 0.078)])
 SHOES = dict(leg_x=0.095, y=0.0, len=0.25, w=0.088, heel=0.066, heel_h=0.036, heel_len=0.044, collar=0.088, vamp=0.060,
              splay=0.26, out=0.010, foot_top=0.105, ball=0.12, mat='shoe')
-JAW = dict(top=22.0, lift=0.024, y0=-0.01, y1=0.09)          # jawline rising from the chin toward the ear lobe
+JAW = dict(top=22.0, lift=0.016, y0=0.0, y1=0.09)          # jawline rising from the chin toward the ear lobe
 SHINE = dict(r=0.0035, dx=-0.30, dz=0.45, mirror=True, mat='shine')      # a tiny glint, upper-inner on each eye
-EAR = dict(kind='stud', r=0.014, x=0.140, dy=-0.004, z=21.6, mat='pearl')
+EAR = dict(kind='stud', r=0.014, x=0.143, dy=-0.004, z=22.0, mat='pearl')
 RIG = dict(hip=63.0, knee=80.0, ankle=95.0, waist=47.4, shoulder_top=31.5, neck_y=0.015, hand_end=66.0, leg_x=0.095,
            heel=0.066, ball=0.12, arm=A, walk_kw=dict(skirt=True))
 
@@ -209,7 +210,7 @@ def build(g):
     DK.sculpt_hair(g, hs)
     # the soft shadow on the neck under the chin (the sheet's face ends in a clear jawline; without it the face ran on into the neck)
     zc = g.zc
-    g.post_bake = [('Skin', lambda co: (1.0 - 0.30 * GK.sm((zc + 0.004 - co.z) / 0.012) * (1.0 - GK.sm((zc - 0.09 - co.z) / 0.05))
+    g.post_bake = [('Skin', lambda co: (1.0 - 0.30 * GK.sm((zc + 0.004 + 2.8 * co.x * co.x - co.z) / 0.012) * (1.0 - GK.sm((zc - 0.09 - co.z) / 0.05))
                                         * GK.sm((0.26 * g.H * 0 + 0.30 - abs(co.x)) / 0.05)))]
     # glossy bands following the sweep's rolls and the chignon's loops (painted after the bake, see dress_kit.hair_bands)
     bc = BUN_CORE['c']

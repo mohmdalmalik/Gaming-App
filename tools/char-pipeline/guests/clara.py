@@ -36,7 +36,7 @@ CFG = dict(
     head_y=0.03, z_shoulder_top=32.3,
     ear_style='round', ear_h=0.088, ear_w=0.062, ear_out=0.006, ear_y=0.030, ear_tilt=0.35, ear_thick=0.024, ear_rim=0.007, ear_bowl=0.010, ear_sink=0.020,
     eye_x=0.058, eye_w=0.037, eye_h=0.066, eye_lift=0.003,
-    brow=dict(x0=0.028, x1=0.098, z=13.35, thick=0.028, arch=0.014, drop_in=-0.022, drop_out=0.012,
+    brow=dict(x0=0.028, x1=0.098, z=13.55, thick=0.028, arch=0.014, drop_in=-0.022, drop_out=0.012,
               profile=[(0.0, 0.55), (0.06, 0.95), (0.25, 1.0), (0.60, 0.88), (0.90, 0.55), (1.0, 0.25)], flat=0.5),
     nose_w=0.054, nose_h=0.044, nose_d=0.032, nose_out=0.010, nose_top=1.3,
     lips=dict(z=22.3, w=0.080, rise=0.014, upper=0.011, lower=0.015, bow=0.002, flat=0.45),

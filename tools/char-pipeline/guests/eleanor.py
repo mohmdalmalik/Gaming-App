@@ -28,18 +28,18 @@ def zp(p): return H * (1 - p / 100)
 sm = GK.sm
 
 CFG = dict(
-    z_hair_top=0.0, z_skull_top=3.0, z_hairline=7.3, z_brow=12.7, z_eye=16.5, z_nose=18.1, z_mouth=21.6, z_chin=26.6,     # face rework: eyes up, shorter chin (measured vs the sheet's head front)
+    z_hair_top=0.0, z_skull_top=3.0, z_hairline=7.3, z_brow=12.7, z_eye=16.5, z_nose=18.9, z_mouth=22.0, z_chin=26.6,     # face rework: eyes up, shorter chin (measured vs the sheet's head front)
     z_ear=19.6,
     head_y=0.02, z_shoulder_top=31.5,
     ear_style='round', ear_h=0.102, ear_w=0.074, ear_out=0.014, ear_y=0.004, ear_tilt=0.30, ear_thick=0.026, ear_rim=0.007, ear_bowl=0.010, ear_sink=0.020,
     eye_x=0.058, eye_w=0.046, eye_h=0.057, eye_lift=0.003,
-    brow=dict(x0=0.027, x1=0.098, z=13.3, thick=0.026, arch=0.016, drop_in=0.004, drop_out=0.010,     # face rework: thicker, closer above the eyes, inner end level, outer end tapering down (sheet)
-              profile=[(0.0, 0.85), (0.04, 1.0), (0.35, 1.0), (0.65, 0.88), (0.90, 0.55), (1.0, 0.25)], flat=0.5),     # blunt inner start, peak ~55-60 % out, tapering outer end
+    brow=dict(x0=0.027, x1=0.098, z=13.3, thick=0.025, arch=0.014, drop_in=-0.017, drop_out=0.011,     # face rework: thicker, closer above the eyes, inner end level, outer end tapering down (sheet)
+              profile=[(0.0, 0.62), (0.06, 0.92), (0.45, 1.0), (0.70, 0.88), (0.92, 0.55), (1.0, 0.25)], flat=0.5),     # blunt inner start, peak ~55-60 % out, tapering outer end
     nose_w=0.056, nose_h=0.042, nose_d=0.030, nose_out=0.012, nose_top=1.3,
-    lips=dict(z=21.6, w=0.094, rise=0.015, upper=0.010, lower=0.015, bow=0.002, flat=0.45),
-    tint=dict(spots=[(0.078, 20.6, 0.024, 0.020, 1.0), (0.0, 18.1, 0.018, 0.016, 0.3)], g=0.36, b=0.28),       # soft rosy blush discs
+    lips=dict(z=22.0, w=0.094, rise=0.015, upper=0.010, lower=0.015, bow=0.002, flat=0.45),
+    tint=dict(spots=[(0.078, 20.6, 0.024, 0.020, 1.0), (0.0, 18.9, 0.018, 0.016, 0.3)], g=0.36, b=0.28),       # soft rosy blush discs
     soft_normals=dict(centre=(0.0, 0.03, 25.0), radii=(0.20, 0.24, 0.55), amount=1.0, z_top=12.5, z_bot=30.0, fade=0.03, front=0.04,
-                      keep=[(0.0, -0.215, 18.1, 0.034)]),
+                      keep=[(0.0, -0.215, 18.9, 0.034)]),
     up_dark={'Hair': (0.97, 0.45, (1.0, 1.0, 0.97))},      # the lobby's ceiling lamps: keep the crown chocolate brown (guest_kit bake; measured in the practice camera)
     groove_dark=(0.010, 0.0),       # no dark crease lines (they read as scratches from the game camera): hair_bands instead
     ao_skip=('Brow', 'Eye', 'Lips', 'Pearl', 'Shine'), ao_scale={'Skin': 0.20, 'Dress': 0.85},
@@ -63,7 +63,7 @@ DB = [(0, 0.0), (0.05, 0.030), (0.15, 0.062), (0.30, 0.112), (0.45, 0.155), (0.6
       (0.93, 0.110), (0.98, 0.060), (1, 0.0)]
 E  = [(0, 2.0), (0.08, 2.2), (0.18, 2.35), (0.30, 2.45), (0.50, 2.45), (0.70, 2.4), (0.90, 2.2), (1, 2.1)]
 BULGES = [dict(x=0.088, z=21.4, sx=0.050, sz=0.042, a=0.026),      # full rosy cheeks, widest at cheek / mouth level
-          dict(x=0.0, z=16.9, sx=0.015, sz=0.018, a=0.008),        # soft nose bridge
+          dict(x=0.0, z=17.5, sx=0.015, sz=0.018, a=0.008),        # soft nose bridge
           dict(x=0.0, z=25.6, sx=0.040, sz=0.015, a=0.004)]        # small round chin
 
 # ---- hair: a sculpted volume (dress_kit.sculpt_hair): a puffed mass over a thin cap, the side-part WAVE as rolls

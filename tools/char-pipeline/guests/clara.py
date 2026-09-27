@@ -38,14 +38,16 @@ HEAD_DROP = 0.030
 HEAD_DZP = HEAD_DROP / H * 100.0
 
 CFG = dict(
-    z_hair_top=0.0, z_skull_top=3.5, z_hairline=9.5, z_brow=13.5, z_eye=17.0, z_nose=19.8, z_mouth=22.4, z_chin=27.4, z_ear=20.6,
+    z_hair_top=0.0, z_skull_top=3.5, z_hairline=9.5, z_brow=13.5, z_eye=17.0, z_nose=19.2, z_mouth=22.1, z_chin=27.0, z_ear=20.6,
     head_y=0.03, z_shoulder_top=32.3,
     ear_style='round', ear_h=0.088, ear_w=0.062, ear_out=0.006, ear_y=0.030, ear_tilt=0.35, ear_thick=0.024, ear_rim=0.007, ear_bowl=0.010, ear_sink=0.020,
-    eye_x=0.058, eye_w=0.037, eye_h=0.066, eye_lift=0.003,
-    brow=dict(x0=0.028, x1=0.098, z=13.55, thick=0.028, arch=0.014, drop_in=-0.022, drop_out=0.012,
-              profile=[(0.0, 0.55), (0.06, 0.95), (0.25, 1.0), (0.60, 0.88), (0.90, 0.55), (1.0, 0.25)], flat=0.5),
-    nose_w=0.054, nose_h=0.044, nose_d=0.032, nose_out=0.010, nose_top=1.3,
-    lips=dict(z=22.3, w=0.080, rise=0.014, upper=0.011, lower=0.015, bow=0.002, flat=0.45),
+    eye_x=0.058, eye_w=0.037, eye_h=0.061, eye_lift=0.003,
+    # brows: the sheet's thick soft arch: a blunt inner end a touch below the peak, the peak about half way out, the
+    # outer end tapering a little lower than the inner (no inner-up 'worried' slant)
+    brow=dict(x0=0.040, x1=0.098, z=13.65, thick=0.030, arch=0.016, drop_in=-0.008, drop_out=0.010,
+              profile=[(0.0, 0.80), (0.05, 0.98), (0.20, 1.0), (0.60, 0.96), (0.85, 0.84), (0.97, 0.68), (1.0, 0.58)], flat=0.5),
+    nose_w=0.054, nose_h=0.044, nose_d=0.032, nose_out=0.014, nose_top=1.3,
+    lips=dict(z=22.05, w=0.083, rise=0.014, upper=0.011, lower=0.015, bow=0.002, flat=0.45),
     tint=dict(spots=[(0.084, 20.8 + HEAD_DZP, 0.036, 0.030, 1.0), (0.0, 19.8 + HEAD_DZP, 0.020, 0.020, 0.4)], g=0.20, b=0.16),
     soft_normals=dict(centre=(0.0, 0.03, 22.0 + HEAD_DZP), radii=(0.17, 0.22, 0.30), amount=0.9, z_top=12.5 + HEAD_DZP, z_bot=29.5 + HEAD_DZP, fade=0.03, front=0.04,
                       keep=[(0.0, -0.22, 19.8 + HEAD_DZP, 0.036)]),       # dress_kit: even glowing face shading (no dark jaw)
@@ -61,17 +63,27 @@ COLOURS = dict(
     dress='#4a2230', sash='#381a24', gold='#e8b25c', shoe=GK.PALETTE['shoe_black'],
 )
 
-# ---- skull tables by f (0 chin .. 1 skull top): a soft oval face, full cheeks, small round chin (Eleanor's, a touch longer)
-W  = [(0, 0.0), (0.02, 0.040), (0.05, 0.063), (0.09, 0.087), (0.14, 0.110), (0.20, 0.129), (0.26, 0.142), (0.32, 0.147),     # apple face: widest at
-      (0.42, 0.140), (0.52, 0.136), (0.62, 0.129), (0.70, 0.121), (0.80, 0.106), (0.88, 0.081), (0.94, 0.056), (0.98, 0.031), (1, 0.0)]   # mouth level, soft round chin
-DF = [(0, 0.0), (0.03, 0.120), (0.08, 0.160), (0.14, 0.180), (0.22, 0.195), (0.35, 0.203), (0.50, 0.203),
-      (0.62, 0.197), (0.75, 0.186), (0.85, 0.168), (0.93, 0.138), (0.98, 0.066), (1, 0.0)]
-DB = [(0, 0.0), (0.05, 0.030), (0.15, 0.062), (0.30, 0.112), (0.45, 0.155), (0.60, 0.165), (0.75, 0.160), (0.85, 0.140),
-      (0.93, 0.110), (0.98, 0.060), (1, 0.0)]
-E  = [(0, 2.1), (0.10, 2.2), (0.20, 2.2), (0.30, 2.4), (0.50, 2.45), (0.70, 2.4), (0.90, 2.2), (1, 2.1)]
-BULGES = [dict(x=0.100, z=22.4, sx=0.058, sz=0.048, a=0.050),      # full rosy cheeks
-          dict(x=0.0, z=18.2, sx=0.015, sz=0.022, a=0.010),        # soft nose bridge
-          dict(x=0.0, z=25.9, sx=0.050, sz=0.020, a=0.006)]        # small round chin
+# ---- skull tables. The upper head keeps the round-2 tables (keyed by f, 0 chin .. 1 skull top, with the chin then at
+# 27.4 %); the lower face (below the cheekbones) is written in pct of H (head frame) and converted to f for the new
+# chin height CFG['z_chin'] (round 3: a shorter, rounder lower face, the sheet's soft U chin flowing into full cheeks).
+_R2_CHIN, _TOP = 27.4, 3.5
+def _tab(lower, upper_f, split):
+    """lower: [(pct, v)] from the chin up; upper_f: round-2 [(f, v)] kept where their pct is above `split`."""
+    zc = CFG['z_chin']; keys = list(lower) + [(_R2_CHIN - (_R2_CHIN - _TOP) * f, v) for f, v in upper_f if _R2_CHIN - (_R2_CHIN - _TOP) * f < split]
+    return [(max(0.0, min(1.0, (zc - pc) / (zc - _TOP))), v) for pc, v in keys]
+W  = _tab([(27.0, 0.0), (26.75, 0.036), (26.35, 0.054), (25.9, 0.066), (25.4, 0.077), (24.7, 0.092), (24.0, 0.105), (23.3, 0.115),
+           (22.5, 0.125), (21.5, 0.135), (20.4, 0.143), (19.4, 0.147)],
+          [(0.42, 0.140), (0.52, 0.136), (0.62, 0.129), (0.70, 0.121), (0.80, 0.106), (0.88, 0.081), (0.94, 0.056), (0.98, 0.031), (1, 0.0)], 18.0)
+DF = _tab([(27.0, 0.0), (26.8, 0.070), (26.4, 0.112), (25.8, 0.145), (25.0, 0.168), (24.0, 0.184), (22.8, 0.195), (21.5, 0.201), (19.8, 0.203)],
+          [(0.50, 0.203), (0.62, 0.197), (0.75, 0.186), (0.85, 0.168), (0.93, 0.138), (0.98, 0.066), (1, 0.0)], 18.0)
+DB = _tab([(27.0, 0.0), (26.5, 0.030), (25.2, 0.062), (23.0, 0.112), (20.5, 0.150)],
+          [(0.35, 0.155), (0.45, 0.155), (0.60, 0.165), (0.75, 0.160), (0.85, 0.140), (0.93, 0.110), (0.98, 0.060), (1, 0.0)], 19.0)
+E  = _tab([(27.0, 2.3), (25.5, 2.55), (23.5, 2.65), (21.5, 2.6), (19.8, 2.5), (17.0, 2.6), (14.5, 2.75), (12.5, 2.6)],     # a flatter brow band:
+          [(0.70, 2.4), (0.90, 2.2), (1, 2.1)], 11.0)                                                               # the brows read level from above
+BULGES = [dict(x=0.105, z=23.0, sx=0.058, sz=0.052, a=0.024),      # full rosy cheeks, carried down into the round jaw (less forward: nose and lips lead in profile)
+          dict(x=0.0, z=18.0, sx=0.015, sz=0.020, a=0.010),        # soft nose bridge
+          dict(x=0.085, z=13.6, sx=0.030, sz=0.020, a=0.008),      # soft brow ridge: the outer brows sit forward (friendly from above)
+          dict(x=0.0, z=25.3, sx=0.050, sz=0.020, a=0.006)]        # small round chin
 
 # ---- hair (female_extras.long_hair): envelope measured on the FRONT (wr her right / wl her left) and SIDE panels
 ENV = dict(

@@ -30,6 +30,12 @@ import victor_lib as L
 H = 1.66
 def zp(p): return H * (1 - p / 100)
 sm = GK.sm
+# The head (skull, face, hair, ears, earrings) is built in its own frame, lowered by HEAD_DROP metres from the heights
+# written below (so the chin sits closer to the neckline, like the sheet); build() installs the offset on g.zp while
+# the head is built. Bake-time heights (tint, soft normals) and absolute ones (hair bottom / shoulder keep-out) add
+# HEAD_DZP (the same drop in pct of H) explicitly.
+HEAD_DROP = 0.018
+HEAD_DZP = HEAD_DROP / H * 100.0
 
 CFG = dict(
     z_hair_top=0.0, z_skull_top=3.5, z_hairline=9.5, z_brow=13.5, z_eye=17.0, z_nose=19.8, z_mouth=22.4, z_chin=26.85, z_ear=20.6,
@@ -40,9 +46,9 @@ CFG = dict(
               profile=[(0.0, 0.55), (0.06, 0.95), (0.25, 1.0), (0.60, 0.88), (0.90, 0.55), (1.0, 0.25)], flat=0.5),
     nose_w=0.054, nose_h=0.044, nose_d=0.032, nose_out=0.010, nose_top=1.3,
     lips=dict(z=22.3, w=0.080, rise=0.014, upper=0.011, lower=0.015, bow=0.002, flat=0.45),
-    tint=dict(spots=[(0.084, 20.8, 0.036, 0.030, 1.0), (0.0, 19.8, 0.020, 0.020, 0.4)], g=0.20, b=0.16),
-    soft_normals=dict(centre=(0.0, 0.03, 22.5), radii=(0.20, 0.24, 0.50), amount=1.0, z_top=12.5, z_bot=29.5, fade=0.03, front=0.04,
-                      keep=[(0.0, -0.22, 19.8, 0.036)]),       # dress_kit: even glowing face shading (no dark jaw)
+    tint=dict(spots=[(0.084, 20.8 + HEAD_DZP, 0.036, 0.030, 1.0), (0.0, 19.8 + HEAD_DZP, 0.020, 0.020, 0.4)], g=0.20, b=0.16),
+    soft_normals=dict(centre=(0.0, 0.03, 22.5 + HEAD_DZP), radii=(0.20, 0.24, 0.50), amount=1.0, z_top=12.5 + HEAD_DZP, z_bot=29.5 + HEAD_DZP, fade=0.03, front=0.04,
+                      keep=[(0.0, -0.22, 19.8 + HEAD_DZP, 0.036)]),       # dress_kit: even glowing face shading (no dark jaw)
     groove_dark=(0.010, 0.55),
     up_dark={'Hair': (0.75, 0.7, (0.92, 1.0, 1.05))},   # darker, warmer crown under the ceiling lamps (keeps her auburn)
     ao_skip=('Brow', 'Eye', 'Lips', 'Gold'), ao_scale={'Skin': 0.18, 'Dress': 0.85},
@@ -56,14 +62,14 @@ COLOURS = dict(
 )
 
 # ---- skull tables by f (0 chin .. 1 skull top): a soft oval face, full cheeks, small round chin (Eleanor's, a touch longer)
-W  = [(0, 0.0), (0.02, 0.066), (0.05, 0.090), (0.10, 0.112), (0.16, 0.126), (0.23, 0.136), (0.28, 0.141), (0.34, 0.143),
-      (0.42, 0.139), (0.52, 0.134), (0.62, 0.127), (0.70, 0.119), (0.80, 0.104), (0.88, 0.083), (0.94, 0.057), (0.98, 0.031), (1, 0.0)]
+W  = [(0, 0.0), (0.02, 0.038), (0.05, 0.060), (0.09, 0.086), (0.14, 0.116), (0.20, 0.140), (0.26, 0.150), (0.32, 0.149),     # apple face: widest at
+      (0.42, 0.139), (0.52, 0.127), (0.62, 0.117), (0.70, 0.110), (0.80, 0.100), (0.88, 0.081), (0.94, 0.056), (0.98, 0.031), (1, 0.0)]   # mouth level, soft round chin
 DF = [(0, 0.0), (0.03, 0.120), (0.08, 0.160), (0.14, 0.180), (0.22, 0.195), (0.35, 0.203), (0.50, 0.203),
       (0.62, 0.197), (0.75, 0.186), (0.85, 0.168), (0.93, 0.138), (0.98, 0.066), (1, 0.0)]
 DB = [(0, 0.0), (0.05, 0.030), (0.15, 0.062), (0.30, 0.112), (0.45, 0.155), (0.60, 0.165), (0.75, 0.160), (0.85, 0.140),
       (0.93, 0.110), (0.98, 0.060), (1, 0.0)]
 E  = [(0, 2.1), (0.10, 2.2), (0.20, 2.2), (0.30, 2.4), (0.50, 2.45), (0.70, 2.4), (0.90, 2.2), (1, 2.1)]
-BULGES = [dict(x=0.088, z=21.6, sx=0.052, sz=0.042, a=0.032),      # full rosy cheeks
+BULGES = [dict(x=0.096, z=22.0, sx=0.056, sz=0.046, a=0.040),      # full rosy cheeks
           dict(x=0.0, z=18.2, sx=0.015, sz=0.022, a=0.010),        # soft nose bridge
           dict(x=0.0, z=25.9, sx=0.050, sz=0.020, a=0.006)]        # small round chin
 
@@ -85,7 +91,7 @@ ENV = dict(
 def forehead(x):
     """Lowest point of the hair over the forehead / temples (pct) across x (her right negative): the wave hangs low on
     her right; the part side (her left) is higher; the temples drop to the flat strands in front of the ears."""
-    keys = [(-0.20, 19.5), (-0.145, 15.0), (-0.09, 13.0), (-0.03, 10.4), (0.02, 8.6), (0.06, 8.0), (0.10, 8.2), (0.13, 9.5), (0.16, 17.5), (0.20, 19.5)]
+    keys = [(-0.20, 19.5), (-0.145, 13.6), (-0.09, 11.8), (-0.03, 10.0), (0.02, 8.6), (0.06, 8.0), (0.10, 8.2), (0.13, 9.5), (0.16, 17.5), (0.20, 19.5)]
     for (x0, z0), (x1, z1) in zip(keys, keys[1:]):
         if x <= x1: return z0 + (z1 - z0) * sm((x - x0) / (x1 - x0)) if x >= x0 else z0
     return keys[-1][1]
@@ -134,15 +140,15 @@ HAIR = dict(
     cheek=dict(y=[(12.0, -0.045), (15.0, -0.005), (18.0, 0.015), (20.0, 0.038), (23.0, 0.045), (25.5, 0.050), (27.5, 0.060), (29.5, 0.055), (32.0, 0.030)], thin=-0.02, z=(11.5, 33.0)),   # the side hair stays behind the (shorter) jaw
     ears=dict(r=(0.034, 0.040, 0.050), dx=0.012, dy=0.026, z=21.0),
     neck=dict(r=0.064, y=-0.012, z_top=27.2, k=0.02),
-    body=[dict(c=(0.0, -0.03, 39.0), r=(0.245, 0.135, 0.110))],
-    bottom=34.8, rolls=ROLLS, waves=WAVES, grooves=GROOVES, ko_k=0.040, voxel=0.005, tris=8200, smooth=4, post_smooth=2, taubin=6,
+    body=[dict(c=(0.0, -0.03, 39.0 - HEAD_DZP), r=(0.245, 0.135, 0.110))],        # absolute (the head frame is lowered)
+    bottom=34.8 - HEAD_DZP, rolls=ROLLS, waves=WAVES, grooves=GROOVES, ko_k=0.040, voxel=0.005, tris=8200, smooth=4, post_smooth=2, taubin=6,
 )
 
 # ---- crisp locks as their own smooth meshes on the envelope (female_extras.lock_tube / spiral_curl):
 # keys (u, pct, width across the surface, thickness along the normal, lift of the centre above the envelope)
-WAVE_TUBE = [(0.855, 5.5, 0.020, 0.016, 0.004), (0.875, 3.2, 0.052, 0.036, 0.012), (0.93, 2.0, 0.066, 0.044, 0.016), (0.00, 3.0, 0.072, 0.048, 0.017),
-             (0.06, 5.0, 0.072, 0.048, 0.017), (0.12, 8.2, 0.068, 0.046, 0.016), (0.17, 11.4, 0.060, 0.042, 0.014), (0.205, 14.2, 0.048, 0.036, 0.011),
-             (0.225, 17.2, 0.032, 0.026, 0.008), (0.235, 19.6, 0.014, 0.012, 0.003)]
+WAVE_TUBE = [(0.855, 5.5, 0.020, 0.016, 0.004), (0.875, 3.2, 0.052, 0.036, 0.012), (0.93, 2.0, 0.066, 0.044, 0.019), (0.00, 3.0, 0.072, 0.048, 0.021),
+             (0.06, 4.8, 0.072, 0.048, 0.021), (0.12, 7.6, 0.066, 0.046, 0.018), (0.17, 10.2, 0.058, 0.042, 0.015), (0.21, 12.8, 0.046, 0.034, 0.011),
+             (0.235, 15.4, 0.030, 0.024, 0.007), (0.25, 17.4, 0.014, 0.012, 0.003)]
 # stacked C-curl rolls down each side (horizontal crests curving back and down), her right (u < 0.5) and left
 SIDE_TUBES = [
     [(0.215, 20.5, 0.016, 0.012, 0.0), (0.25, 21.0, 0.044, 0.030, 0.004), (0.30, 22.2, 0.050, 0.034, 0.005), (0.35, 24.2, 0.046, 0.032, 0.004), (0.39, 26.5, 0.020, 0.014, 0.0)],
@@ -154,7 +160,7 @@ CURLS = [dict(u=0.33, pct=27.0, r0=0.042, turns=1.1, start=40.0, sign=1, n=36, n
          dict(u=0.42, pct=29.5, r0=0.036, turns=1.0, start=20.0, sign=1, n=32, n_ring=10), dict(u=0.58, pct=29.5, r0=0.036, turns=1.0, start=160.0, sign=-1, n=32, n_ring=10)]
 
 # ---- body
-NECK = dict(rings=[(26.0, 0.110, 0.106, 1.0, 0.024), (29.0, 0.114, 0.110, 1.0, 0.020), (31.0, 0.118, 0.114, 1.0, 0.016),
+NECK = dict(rings=[(26.0, 0.114, 0.110, 1.0, 0.024), (29.0, 0.120, 0.116, 1.0, 0.020), (31.0, 0.124, 0.120, 1.0, 0.016),
                    (32.0, 0.128, 0.120, 1.0, 0.013), (32.8, 0.172, 0.136, 0.96, 0.010), (33.5, 0.240, 0.156, 0.92, 0.007),
                    (34.3, 0.290, 0.172, 0.90, 0.003), (35.5, 0.300, 0.192, 0.85, -0.004)],
             split=31.0, blend=0.02, n=28)
@@ -162,7 +168,7 @@ BOD = dict(profiles=[(50.0, 0.246, 0.206, 0.92, -0.018), (47.8, 0.240, 0.200, 0.
                      (44.0, 0.262, 0.228, 0.88, -0.022), (42.0, 0.282, 0.254, 0.86, -0.024), (40.0, 0.298, 0.272, 0.85, -0.024),
                      (38.0, 0.306, 0.272, 0.83, -0.020), (36.0, 0.318, 0.252, 0.80, -0.012), (34.5, 0.330, 0.224, 0.80, -0.004),
                      (33.3, 0.318, 0.198, 0.85, 0.004), (32.4, 0.280, 0.176, 0.90, 0.010), (31.6, 0.220, 0.160, 0.95, 0.014)],
-           neck=dict(kind='crew', side=32.3, front=34.0, back=32.6), waist=47.8, ncol=48, nrow=20, lip=0.006)
+           neck=dict(kind='crew', side=32.0, front=33.3, back=32.4), waist=47.8, ncol=48, nrow=20, lip=0.006)
 A = dict(
     shoulder=(0.180, 36.0), shoulder_y=0.0, elbow=(0.226, -0.012, 52.0), wrist=(0.262, -0.042, 59.0),
     sleeve_end=59.2, cuff_end=59.2, sleeve=None, n=16,
@@ -192,6 +198,7 @@ RIG = dict(hip=62.0, knee=79.5, ankle=95.0, waist=47.8, shoulder_top=32.3, neck_
            heel=0.075, ball=0.125, arm=A, walk_kw=dict(skirt=True))
 
 def build(g):
+    g.zp = lambda pct: H * (1 - pct / 100) - HEAD_DROP          # the head's frame (see HEAD_DROP)
     g.set_head(W, DF, DB, E, BULGES)
     FX.long_hair(g, HAIR)
     FX.lock_tube(g, 'HairWave', WAVE_TUBE, n_samples=56, n_ring=16)
@@ -199,6 +206,7 @@ def build(g):
     GK.head(g, nlon=48, nlat=34, cull_in=g.hair_covers)
     GK.ears(g); DK.decimate_parts(g, 'Ear', 0.55); GK.eyes(g); GK.brows(g); GK.nose(g)
     DK.lips(g, g.C['lips']); FX.ball_earrings(g, EAR)
+    del g.zp                                                    # back to the body frame
     DK.neck_yoke(g, NECK)
     DK.bodice(g, BOD)
     GK.arms(g, A); GK.hands(g, A)

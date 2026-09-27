@@ -108,8 +108,14 @@ def hairline(u):
     """Lower edge of the hair by longitude u (0 front, 0.25 her right, 0.5 back, 0.75 her left): the fringe (5.5),
     the temples (down to 16 in front of the ear), above the ear (15.5), then the bob's curtain behind it (27.5)."""
     u %= 1.0; a = abs(((u + 0.5) % 1.0) - 0.5); right = u < 0.5; ss = sm
-    z = 6.0 + (2.4 if right else 0.3) * ss(a / 0.08)
-    z += (15.5 - z) * ss((a - 0.085) / 0.060)                 # arched: down past the temples to the ear's top (clear of the brows' tails)
+    # the side sweep: from the part (her left) the hairline runs DIAGONALLY down across the forehead to her right temple
+    # (the wave comes down there); on her left it lifts away, leaving the forehead's top corner open (sheet front)
+    if right:
+        z = 6.0 + 7.0 * min(1.0, a / 0.11) ** 0.9
+        z += (15.5 - z) * ss((a - 0.11) / 0.06)
+    else:
+        z = 6.0 - 0.8 * ss(a / 0.04)
+        z += (15.5 - z) * ss((a - 0.09) / 0.09)               # the open corner, then down to the ear's top
     z += (15.0 - z) * ss((a - 0.205) / 0.02)                  # over the ear
     z += (27.0 - z) * ss((a - 0.27) / 0.05)                   # the curtain behind the ear (the curl ends hang lower)
     return z
@@ -132,8 +138,8 @@ def s_band(th0, p0, p1, sweep, amp, half, n=11):
         x, dy, pp = env(th, p0 + (p1 - p0) * t, 1.0); keys.append((x, dy, pp, half * (0.40 + 0.60 * sm(t / 0.40))))
     return keys
 BACK_ANGLES = ((84, 36), (112, 27), (140, 16), (168, 5), (-164, -5), (-136, -16), (-108, -27), (-80, -36))
-BACK_BANDS = [dict(keys=band_keys(math.radians(a), 3.0, 27.0, math.radians(sw), math.radians(15), 0.075), height=h, soft=0.010, taper=(0.12, 0.10))
-              for (a, sw), h in zip(BACK_ANGLES, (0.026, 0.014, 0.026, 0.014, 0.026, 0.014, 0.026, 0.016))]
+BACK_BANDS = [dict(keys=band_keys(math.radians(a), 3.0, 27.0, math.radians(sw), math.radians(15), 0.075), height=h, soft=0.008, taper=(0.12, 0.10))
+              for (a, sw), h in zip(BACK_ANGLES, (0.036, 0.020, 0.036, 0.020, 0.036, 0.020, 0.036, 0.022))]
 # the front: the big side-swept wave from the part (her left) over the forehead to her right side, a second wave above it,
 # and her left side's lock falling from the part
 def sweep_band(p_part, half, dx=0.0):
@@ -141,10 +147,17 @@ def sweep_band(p_part, half, dx=0.0):
     return [(0.055 + dx, -0.15 + 0.03 * p_part, p_part, half * 0.5), (-0.02, -0.205, p_part + 1.8, half), (-0.10, -0.19, p_part + 3.8, half),
             (-0.17, -0.14, p_part + 6.8, half), (-0.225, -0.07, p_part + 10.8, half), (-0.255, 0.005, p_part + 15.5, half),
             (-0.255, 0.07, p_part + 20.0, half)]
-FRONT_BANDS = [dict(keys=sweep_band(3.0, 0.050), height=0.026, soft=0.010, taper=(0.10, 0.12), cut=True),
-               dict(keys=sweep_band(0.3, 0.046), height=0.024, soft=0.010, taper=(0.10, 0.20), cut=True),
+FRONT_BANDS = [dict(keys=sweep_band(3.0, 0.050), height=0.036, soft=0.008, taper=(0.10, 0.12), cut=True),
+               dict(keys=sweep_band(0.3, 0.046), height=0.034, soft=0.008, taper=(0.10, 0.20), cut=True),
                dict(keys=[(0.07, -0.13, 2.0, 0.030), (0.13, -0.17, 4.8, 0.050), (0.19, -0.13, 8.5, 0.055), (0.24, -0.07, 13.0, 0.058),
-                          (0.26, 0.00, 17.5, 0.058), (0.255, 0.07, 22.5, 0.055)], height=0.030, soft=0.010, taper=(0.10, 0.15), cut=True)]
+                          (0.26, 0.00, 17.5, 0.058), (0.255, 0.07, 22.5, 0.055)], height=0.040, soft=0.008, taper=(0.10, 0.15), cut=True)]
+
+# the big rounded curl lobes framing the face on both sides (sheet front: three per side, the lowest at chin height),
+# set behind the earrings so the gold stays in front
+SIDE_LOBES = [dict(c=(sx * x, dy, p), r=r, k=0.03, cut=False) for sx in (1, -1) for x, dy, p, r in
+              ((0.262, 0.040, 19.2, (0.052, 0.070, 0.050)), (0.258, 0.060, 22.8, (0.058, 0.072, 0.052)), (0.222, 0.050, 26.4, (0.056, 0.068, 0.048)))]
+# the wave LIFTS up from the part (her left of centre) before sweeping over: a raised roll on the front of the crown
+LIFT = dict(c=(0.050, -0.050, 1.8), r=(0.100, 0.090, 0.040), k=0.04)
 
 SCULPT = dict(
     cap=dict(thick=[(0, 0.024), (3, 0.034), (6, 0.040), (10, 0.032), (14, 0.024), (18, 0.020), (24, 0.016), (28, 0.012)], hairline=hairline, edge_k=0.030),
@@ -156,8 +169,9 @@ SCULPT = dict(
             dict(c=(0.195, 0.045, 20.5), r=(0.094, 0.150, 0.080), k=0.04),            # her left side bulge
             dict(c=(0.0, 0.180, 22.0), r=(0.175, 0.110, 0.078), k=0.04),              # the full round back, low
             dict(c=(-0.010, -0.070, 3.2), r=(0.120, 0.100, 0.042), k=0.05)] +         # the front of the crown rolling forward
-           [curl_end(math.radians(a)) for a in (84, 106, 128, 150, 172, -166, -144, -122, -100, -78)],
-    bands=BACK_BANDS + FRONT_BANDS, lock_base=0.020,
+           [curl_end(math.radians(a)) for a in (84, 106, 128, 150, 172, -166, -144, -122, -100, -78)] +
+           SIDE_LOBES + [LIFT],
+    bands=BACK_BANDS + FRONT_BANDS, lock_base=0.028,
     box=((-0.36, 0.046 - 0.25, zp(30.0)), (0.34, 0.046 + 0.36, zp(-1.0))), voxel=0.0045, tris=12000, smooth=6, post_smooth=3,
 )
 

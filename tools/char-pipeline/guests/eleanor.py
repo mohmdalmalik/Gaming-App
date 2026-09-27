@@ -189,7 +189,7 @@ SHOES = dict(leg_x=0.095, y=0.0, len=0.25, w=0.088, heel=0.066, heel_h=0.036, he
              splay=0.26, out=0.010, foot_top=0.105, ball=0.12, mat='shoe')
 JAW = dict(top=22.0, lift=0.016, y0=0.0, y1=0.09)          # jawline rising from the chin toward the ear lobe
 SHINE = dict(r=0.0035, dx=-0.30, dz=0.45, mirror=True, mat='shine')      # a tiny glint, upper-inner on each eye
-EAR = dict(kind='stud', r=0.014, x=0.143, dy=-0.004, z=22.0, mat='pearl')
+EAR = dict(kind='stud', r=0.016, x=0.150, dy=-0.008, z=22.0, mat='pearl')
 RIG = dict(hip=63.0, knee=80.0, ankle=95.0, waist=47.4, shoulder_top=31.5, neck_y=0.015, hand_end=66.0, leg_x=0.095,
            heel=0.066, ball=0.12, arm=A, walk_kw=dict(skirt=True))
 

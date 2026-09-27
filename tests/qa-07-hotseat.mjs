@@ -13,6 +13,16 @@ const note = (seed, msg) => { findings.push({ seed, msg }); console.log(`   [${s
 let shotN = 0;
 const snap = async (seed, what) => { if (SHOTS && shotN < 60) { shotN++; await h.shot(`hs-${seed}-${String(shotN).padStart(2, '0')}-${what}`); } };
 const seenKinds = new Set();
+let curSeed = 0;
+const origClick = page.click.bind(page);
+page.click = async (sel, opts = {}) => {
+  try { return await origClick(sel, { timeout: 6000, force: true, ...opts }); }
+  catch (e) {
+    const state = await page.evaluate(() => ({ handoff: window.__game.handoffKind(), meeting: window.__game.meetingOpen(), full: window.__game.fullHandOpen(), notice: window.__game.noticeOpen(), cardview: window.__game.cardViewOpen(), phase: window.__game.inActionPhase() }));
+    note(curSeed, `click ${sel} failed (${e.message.split('\n')[0].slice(0, 60)}) screens=${JSON.stringify(state)}`);
+    await h.shot(`hs-${curSeed}-clickfail-${Date.now() % 100000}`);
+  }
+};
 
 // Public screen leak check: during an action phase, nothing on screen may name a hidden role.
 async function leakCheck(seed) {
@@ -131,7 +141,7 @@ const decide = () => game(() => {
 
 const summary = [];
 for (let m = 0; m < COUNT; m++) {
-  const seed = SEED0 + m;
+  const seed = SEED0 + m; curSeed = seed;
   shotN = 0; seenKinds.clear();
   const t0 = Date.now();
   await h.load(`mode=hotseat&players=${PLAYERS}&seed=${seed}${TIMER ? '' : '&timer=off'}`, { pr: SHOTS ? 0.75 : 0.3 });

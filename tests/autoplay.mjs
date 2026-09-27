@@ -1037,6 +1037,7 @@ async function useCard(s, card, buttonRe, onDone) {
   if (!clicked) return false;
   await frames(3);
   onDone?.();
+  if (card.type === 'espresso' && !onDone) { cur.turnEspresso++; cur.stats.espresso++; }
   let a = await page.evaluate(SNAP);
   const me2 = a.players[a.active];
   const cost = card.type === 'espresso' ? -2 : 1;

@@ -39,10 +39,11 @@ CFG = dict(
     tint=dict(spots=[(0.080, 20.9, 0.024, 0.020, 1.0), (0.0, 19.3, 0.018, 0.016, 0.3)], g=0.36, b=0.28),       # soft rosy blush discs
     soft_normals=dict(centre=(0.0, 0.03, 25.0), radii=(0.20, 0.24, 0.55), amount=1.0, z_top=12.5, z_bot=30.0, fade=0.03, front=0.04,
                       keep=[(0.0, -0.215, 19.3, 0.034)]),
+    up_dark={'Hair': (0.89, 0.7, (0.97, 1.0, 1.03))},      # the lobby's ceiling lamps: keep the crown chocolate brown (guest_kit bake)
     groove_dark=(0.010, 0.0),       # no dark crease lines (they read as scratches from the game camera): hair_bands instead
     ao_skip=('Brow', 'Eye', 'Lips', 'Pearl', 'Shine'), ao_scale={'Skin': 0.20, 'Dress': 0.85},
     sheen={'Shoe': (0.34, [((0.2, -0.45, 0.87), 14.0, 1.0), ((0.0, -1.0, 0.3), 16.0, 0.8), ((0.9, 0.0, 0.45), 16.0, 0.5), ((-0.9, 0.0, 0.45), 16.0, 0.5)]),
-           'Hair': (0.38, [((-0.1, -0.45, 0.89), 2.2, 1.0), ((0.5, -0.6, 0.6), 5.0, 0.45)]),
+           'Hair': (0.55, [((-0.1, -0.93, 0.35), 2.2, 1.0), ((0.5, -0.82, 0.25), 5.0, 0.45)]),     # highlight toward the front, not up
            'Gold': (0.55, [((0.0, -1.0, 0.25), 6.0, 1.0), ((-0.6, -0.6, 0.3), 8.0, 0.6), ((0.6, -0.6, 0.3), 8.0, 0.6)]),
            'Pearl': (0.70, (-0.3, -0.6, 0.75), 3.0)},
 )

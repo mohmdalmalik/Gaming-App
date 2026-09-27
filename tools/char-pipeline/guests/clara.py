@@ -44,9 +44,10 @@ CFG = dict(
     soft_normals=dict(centre=(0.0, 0.03, 23.5), radii=(0.20, 0.24, 0.50), amount=1.0, z_top=12.5, z_bot=31.0, fade=0.03, front=0.04,
                       keep=[(0.0, -0.22, 20.3, 0.036)]),       # dress_kit: even glowing face shading (no dark jaw)
     groove_dark=(0.010, 0.55),
+    up_dark={'Hair': (0.75, 0.7, (0.92, 1.0, 1.05))},   # darker, warmer crown under the ceiling lamps (keeps her auburn)
     ao_skip=('Brow', 'Eye', 'Lips', 'Gold'), ao_scale={'Skin': 0.18, 'Dress': 0.85},
     sheen={'Shoe': (0.34, [((0.2, -0.45, 0.87), 14.0, 1.0), ((0.0, -1.0, 0.3), 16.0, 0.8), ((0.9, 0.0, 0.45), 16.0, 0.5), ((-0.9, 0.0, 0.45), 16.0, 0.5)]),
-           'Hair': (0.45, [((-0.35, -0.55, 0.75), 2.6, 1.0), ((0.5, -0.6, 0.6), 4.0, 0.35)]),
+           'Hair': (0.45, [((-0.30, -0.85, 0.35), 2.6, 1.0), ((0.5, -0.75, 0.3), 4.0, 0.35)]),      # highlights toward the front
            'Gold': (0.72, [((0.0, -1.0, 0.25), 6.0, 1.0), ((-0.6, -0.6, 0.3), 8.0, 0.6), ((0.6, -0.6, 0.3), 8.0, 0.6)])},
 )
 COLOURS = dict(

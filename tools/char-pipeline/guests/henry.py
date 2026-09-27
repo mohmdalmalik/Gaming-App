@@ -42,7 +42,8 @@ CFG = dict(
     tint=dict(spots=[(0.100, 24.0, 0.050, 0.035, 1.0), (0.0, 22.9, 0.028, 0.024, 0.7)], g=0.20, b=0.20),
     groove_dark=(0.008, 0.60), smooth_angle=80.0,
     sheen={'Shoe': (0.34, [((0.2, -0.45, 0.87), 14.0, 1.0), ((0.0, -1.0, 0.3), 16.0, 0.8), ((0.9, 0.0, 0.45), 16.0, 0.5), ((-0.9, 0.0, 0.45), 16.0, 0.5)]),
-           'Hair': (0.86, (-0.2, -0.40, 0.89), 2.0)},
+           'Hair': (0.86, (-0.15, -0.85, 0.35), 2.0)},      # highlight toward the front, not up (the lamps are overhead)
+    up_dark={'Hair': (0.62, 0.6, (0.97, 1.0, 1.03))},   # darker crown under the hall's ceiling lamps (reads silver, not white)
     ao_skip=('Brow', 'Eye', 'Mouth', 'Glasses'), ao_scale={'Skin': 0.45, 'Jacket': 0.65},
 )
 COLOURS = dict(

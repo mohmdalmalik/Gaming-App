@@ -308,10 +308,11 @@ def taubin(ob, iters=6, lam=0.5, mu=-0.53, pin=None):
             for v, co in new.items(): v.co = co
     bm.to_mesh(ob.data); bm.free(); ob.data.update()
 
-def radial_grooves(g, grooves, centre=(0.0, 0.02, 14.5), R=0.2):
+def radial_grooves(g, grooves, centre=(0.0, 0.02, 14.5), R=0.2, keep_prev=False):
     """Replace g.hair_groove (the bake's groove darkening) with a version that measures the distance to each groove
     curve by DIRECTION from the hair centre (x R metres), so raised lock planes over a groove do not hide it (the
-    kit measures true 3-D distance to the undisplaced envelope). grooves: the same dicts as hair_shell's."""
+    kit measures true 3-D distance to the undisplaced envelope). grooves: the same dicts as hair_shell's. keep_prev: add
+    to the existing g.hair_groove (e.g. the kit's lock_crease lines) instead of replacing it."""
     c0 = Vector((centre[0], g.Y0 + centre[1], g.zp(centre[2])))
     G = []
     for gr in grooves:
@@ -333,4 +334,5 @@ def radial_grooves(g, grooves, centre=(0.0, 0.02, 14.5), R=0.2):
             if best < 3 * width:
                 s = bi / (len(pts) - 1); off += depth * math.sin(math.pi * s) ** 0.6 * GK.gauss(best, width)
         return off
-    g.hair_groove = amt
+    prev = getattr(g, 'hair_groove', None)
+    g.hair_groove = (lambda p: amt(p) + prev(p)) if (keep_prev and prev) else amt

@@ -56,9 +56,11 @@ const floor = createHotel(hotel, cfg);
 //   ?seed=123                 force the deal, the hidden role and the hotel's room deck (testing)
 //   ?timer=off                play without the 45-second turn clock
 //   ?camera=classic           the previous, higher camera angle (for comparison)
+//   ?camera=diagonal          trial corner-on view, like the owner's room pictures
 //   ?stats=1                  a small frame-rate / draw-call readout, for measuring on the iPad
 const params = new URLSearchParams(window.location.search);
 if (params.get('camera') === 'classic') Object.assign(cfg.camera, cfg.cameraClassic);   // the old, higher view
+if (params.get('camera') === 'diagonal') Object.assign(cfg.camera, cfg.cameraDiagonal); // trial: corner-on, like the room pictures
 const MODE = params.get('mode') === 'hotseat' ? 'hotseat' : 'practice';
 const askedPlayers = parseInt(params.get('players'), 10);
 applyMode(MODE, Number.isFinite(askedPlayers) ? askedPlayers : 6);

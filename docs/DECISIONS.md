@@ -647,6 +647,34 @@ Target: `docs/art-reference.jpg` (style, palette and finish; not its layout or i
   the next match), in keeping with "load rooms on demand" in the path to mobile apps.
 - **Flicker on a baked room** dims its whole light map with the bulb (mood.js), since the light is baked.
 
+## Rooms rebuilt to the owner's references (tools/room-pipeline/ref/)
+- **One style from 17 reference images.** Mahogany walls in tall moulded panels with square pilasters and
+  brass plinths at every doorway and corner, a heavy cap, upright sconces beside each doorway, cream stone
+  floors (herringbone in the ballroom, planks in the library, a checker in the kitchen, sage tiles in the
+  infirmaries, slate in the back corridor) and burgundy rugs, runners and border bands with a thin gold
+  line. The six rooms without a reference (corner corridor, linen stores, suite 416, housekeeping, fire
+  exit) use the same kit so the hotel is consistent.
+- **Game rules win over the pictures.** Doorways are exactly the tiles' (a reference opening the tile does
+  not have becomes wall); the furniture footprints in `src/data/hotel.js` were re-laid to follow each
+  picture while keeping every doorway reachable and the middle clear (`tests/logic-check.mjs`, all 96
+  orientations), and the model stands on exactly those footprints. One piece per room is the search
+  spot (`searchSpot(...)`, `size[1]` = its real height, `searchPoint` names it).
+- **Colours are matched as they show, not as albedo.** The game draws baked rooms unlit through Khronos
+  neutral tone mapping, which strips up to 0.04 from each channel of a dark colour: a saturated brown
+  albedo came out orange with no blue at all. Colours are now written as the reference shows them and
+  converted by `shown()` for the light each surface gets, and the light maps' colour is tamed before
+  saving (bounce light between brown walls made them orange).
+- **Lowered walls look like the references' low front walls.** A lowered wall keeps its lower 0.64 m;
+  the doorway and corner posts keep 1.05 m. The part of a post above the cut is baked with the cut caps
+  (upper walls hidden), so it is lit correctly when it is seen.
+- **Rugs are shapes, not textures.** A rug, a cross or T runner, or a border band is the union of
+  rectangles with its gold line inset from the outline (`rug()` in `roomkit.py`), so one continuous line
+  follows any shape and stops where a runner leaves through a doorway; the floor is cut around it.
+- **Comparison is honest to the game.** `vsref.mjs` shows each room with the game's own camera (pitch,
+  field of view, default zoom, 90° steps), entrance at the bottom; the references are drawn from a turned,
+  higher three-quarter view, so framing differs by design. `walkcheck.mjs` walks a guest through every
+  doorway of every room in the real game.
+
 ## All six guests modelled to the owner's sheets (tools/char-pipeline/guest_kit.py, dress_kit.py)
 - **One builder, many guests.** Victor's hand-written builder was generalised into `guest_kit.py` (suited
   guests) and `dress_kit.py` (dress guests); each guest is a spec in `tools/char-pipeline/guests/`. Same

@@ -41,6 +41,8 @@ const corner = (where, kind, w = 0.9, h = 0.9, d = 0.9) => {
 };
 // The piece of furniture that holds the room's search spot: the search icon floats above it.
 const searchSpot = f => ({ ...f, search: true });
+// A piece anywhere: centre (x, z) relative to the tile centre, footprint w (x) × d (z), height h.
+const at = (kind, x, z, w, h, d) => ({ kind, pos: [x, z], size: [w, h, d] });
 // A piece against the middle of a wall with NO doorway (in the default orientation).
 const wall = (side, kind, len = 2.2, h = 0.9, depth = 0.7) => {
   const off = INNER - depth / 2 - 0.05;
@@ -98,55 +100,83 @@ export const hotel = {
   // Doorways: 4 crossings, 7 T-junctions, 4 straight, 4 corners, 4 dead ends + the exit (a dead end).
   tiles: [
     // --- four-way ------------------------------------------------------------------------------
+    // (Layouts follow the owner's reference images, tools/room-pipeline/ref/<room>.jpg.)
     { id: 'lounge', name: 'Lounge', doors: CROSS, searchPoint: 'the writing bureau', mood: WARM,
-      furniture: [corner('nw', 'sofa', 1.3, 0.9, 0.9), corner('ne', 'armchair'), searchSpot(corner('sw', 'table', 1.0, 0.75, 1.0)), corner('se', 'plant', 0.6, 1.3, 0.6)] },
-    { id: 'ballroom', name: 'Ballroom', doors: CROSS, searchPoint: 'the band stand', mood: WARM,
-      furniture: [searchSpot(corner('nw', 'bandstand', 1.3, 0.5, 1.3)), corner('ne', 'table'), corner('sw', 'table'), corner('se', 'table')] },
+      furniture: [at('sofa', -3.35, -2.2, 0.95, 0.9, 2.1), at('lampTable', -3.35, -3.55, 0.55, 1.12, 0.5),
+        at('armchair', -2.05, -3.3, 0.95, 0.9, 0.95), at('bookcase', 2.2, -3.6, 1.5, 2.1, 0.5), at('plant', 3.4, -3.35, 0.6, 1.3, 0.6),
+        searchSpot(at('writingDesk', 3.2, -2.05, 1.25, 1.08, 1.3)), at('plant', 3.4, 2.7, 0.6, 1.3, 0.6),
+        at('coffeeTable', -1.9, 1.55, 0.95, 0.5, 0.95)] },
+    { id: 'ballroom', name: 'Ballroom', doors: CROSS, searchPoint: 'the piano', mood: WARM,
+      furniture: [searchSpot(at('bandstand', -2.65, -2.65, 2.4, 1.57, 2.4)),
+        at('clothTable', 3.05, -3.0, 1.0, 1.26, 1.0), at('plant', 1.95, -3.45, 0.6, 1.3, 0.6),
+        at('clothTable', -3.0, 3.0, 1.0, 1.26, 1.0), at('plant', -3.45, 1.95, 0.6, 1.3, 0.6),
+        at('clothTable', 3.0, 3.0, 1.0, 1.26, 1.0), at('plant', 3.45, 1.95, 0.6, 1.3, 0.6)] },
     { id: 'grandCorridor', name: 'Grand Corridor', doors: CROSS, searchPoint: 'the umbrella stand', mood: CORRIDOR,
-      furniture: [corner('nw', 'plant', 0.6, 1.3, 0.6), corner('se', 'plant', 0.6, 1.3, 0.6), searchSpot(corner('ne', 'bench', 1.2, 0.5, 0.5))] },
+      furniture: [at('plant', -3.35, -3.35, 0.6, 1.3, 0.6), at('bench', 2.0, -3.55, 1.3, 0.47, 0.55),
+        searchSpot(at('umbrellaStand', 3.45, -3.45, 0.4, 0.93, 0.4)), at('plant', 3.35, 3.35, 0.6, 1.3, 0.6)] },
     // Room with a job: 1 AP, once per player per turn — everyone learns how many guests are possessed.
     { id: 'switchboard', name: 'Switchboard', doors: CROSS, job: 'switchboard', searchPoint: "the operator's desk", mood: WARM,
-      furniture: [searchSpot(corner('nw', 'switchboard', 1.3, 1.5, 0.9)), corner('ne', 'switchboard', 1.3, 1.5, 0.9), corner('sw', 'chair', 0.7, 0.9, 0.7), corner('se', 'filingCabinet', 0.7, 1.3, 0.7)],
+      furniture: [searchSpot(at('switchDesk', -3.2, -2.3, 1.3, 1.43, 2.1)), at('switchDesk', 2.3, -3.2, 2.1, 1.43, 1.3),
+        at('smallDesk', -2.6, 3.45, 1.3, 1.2, 0.7), at('plant', -1.5, 3.5, 0.55, 1.2, 0.55),
+        at('filingCabinet', 3.5, 2.3, 0.65, 1.4, 1.1), at('box', 2.75, 2.05, 0.45, 0.4, 0.45), at('plant', 3.45, 3.45, 0.55, 1.2, 0.55)],
       colors: { switchboard: { color: '#4a3424', emissive: '#3a2208' } } },
 
     // --- T-junctions (the north side is a wall) -------------------------------------------------
     { id: 'dining', name: 'Dining Room', doors: TEE, searchPoint: 'the sideboard', mood: WARM,
-      furniture: [searchSpot(wall('north', 'sideboard', 2.4, 0.9, 0.6)), corner('sw', 'table', 1.2, 0.75, 1.2), corner('se', 'table', 1.2, 0.75, 1.2), corner('nw', 'chair', 0.6, 0.9, 0.6)] },
+      furniture: [searchSpot(at('sideboard', 0, -3.5, 2.6, 1.0, 0.6)), at('plant', -2.1, -3.5, 0.6, 1.3, 0.6), at('plant', 2.1, -3.5, 0.6, 1.3, 0.6),
+        at('diningSet', -2.5, 2.5, 1.9, 1.2, 1.9), at('diningSet', 2.5, 2.5, 1.9, 1.2, 1.9)] },
     { id: 'library', name: 'Library', doors: TEE, searchPoint: 'the bookcases', mood: QUIET,
-      furniture: [searchSpot(wall('north', 'bookcase', 3.0, 2.0, 0.5)), corner('nw', 'bookcase', 1.3, 2.0, 0.5), corner('ne', 'bookcase', 1.3, 2.0, 0.5), corner('se', 'armchair')] },
+      furniture: [searchSpot(at('bookcase', 0, -3.55, 3.0, 2.3, 0.6)), at('bookcaseNW', -3.1, -3.1, 1.5, 2.2, 1.5), at('bookcaseNE', 3.1, -3.1, 1.5, 2.2, 1.5),
+        at('armchair', 2.35, -1.75, 1.0, 0.9, 1.0), at('lampTable', 1.85, -2.6, 0.5, 1.12, 0.5),
+        at('plant', 3.45, -1.55, 0.6, 1.3, 0.6), at('plant', -3.45, -1.8, 0.6, 1.3, 0.6)] },
     { id: 'kitchen', name: 'Kitchen', doors: TEE, searchPoint: 'the kitchen counter', mood: COOL,
-      furniture: [searchSpot(wall('north', 'counter', 3.2, 0.95, 0.7)), corner('nw', 'counter', 1.3, 0.95, 0.7), corner('sw', 'shelf', 1.0, 1.8, 0.5)] },
+      furniture: [at('range', -2.35, -3.45, 1.2, 0.95, 0.8), at('greenCabinet', -1.3, -3.45, 0.8, 0.95, 0.8),
+        searchSpot(at('counter', 1.0, -3.45, 2.8, 0.95, 0.8)), at('fridge', 3.2, -3.45, 1.2, 1.9, 0.8),
+        at('sideCabinet', -3.45, -2.9, 0.8, 0.95, 1.9), at('rack', 3.5, -2.35, 0.6, 1.5, 0.9), at('island', 0.1, -1.65, 1.9, 0.95, 0.8),
+        at('plateShelf', -3.5, 2.2, 0.6, 1.5, 1.5), at('prepTable', 3.45, 2.3, 0.8, 0.95, 1.5), at('trayTrolley', 2.55, 3.4, 0.7, 1.2, 0.6)] },
     { id: 'serviceCorridor', name: 'Service Corridor', doors: TEE, searchPoint: 'the laundry cart', dark: true, mood: FLICKER,
-      furniture: [searchSpot(wall('north', 'cart', 1.2, 1.0, 0.8)), corner('se', 'crate')] },
+      furniture: [at('shelf', -2.2, -3.55, 1.3, 1.75, 0.55), searchSpot(at('cart', 0.5, -3.3, 1.4, 1.0, 0.95)), at('towelCrate', 2.8, -3.45, 0.75, 0.85, 0.7)] },
     { id: 'storage', name: 'Storage Room', doors: TEE, searchPoint: 'the storage shelves', dark: true, mood: DARK,
-      furniture: [searchSpot(wall('north', 'shelf', 3.0, 1.8, 0.5)), corner('nw', 'crate'), corner('ne', 'crate'), corner('sw', 'crate', 0.8, 0.6, 0.8)] },
+      furniture: [searchSpot(at('shelf', 0.3, -3.55, 3.0, 1.9, 0.55)), at('crates', -2.65, -3.3, 1.4, 1.2, 1.05),
+        at('luggageCart', 2.3, -3.3, 0.7, 1.35, 0.9), at('crates2', 3.35, -2.8, 0.95, 1.4, 1.5),
+        at('crate', -3.35, 2.55, 0.8, 0.75, 0.8), at('plant', -3.45, 1.7, 0.55, 1.2, 0.55), at('plant', 3.4, 3.35, 0.55, 1.2, 0.55)] },
     { id: 'corridorE', name: 'East Corridor', doors: TEE, searchPoint: 'the room-service trolley', mood: CORRIDOR,
-      furniture: [wall('north', 'console', 1.4, 0.8, 0.4), searchSpot(corner('sw', 'trolley', 0.8, 1.0, 1.1))] },
+      furniture: [at('console', 0, -3.6, 1.6, 0.82, 0.45), at('plant', -1.65, -3.5, 0.55, 1.2, 0.55), at('plant', 1.65, -3.5, 0.55, 1.2, 0.55),
+        searchSpot(at('trolley', -2.95, 2.8, 1.2, 1.0, 0.75)), at('plant', -3.45, 1.75, 0.55, 1.2, 0.55)] },
     { id: 'corridorW', name: 'West Corridor', doors: TEE, searchPoint: 'the console table', mood: CORRIDOR,
-      furniture: [searchSpot(wall('north', 'console', 1.4, 0.8, 0.4)), corner('se', 'plant', 0.6, 1.3, 0.6)] },
+      furniture: [searchSpot(at('console', 0, -3.6, 1.6, 0.82, 0.45)), at('plant', 1.6, -3.5, 0.55, 1.2, 0.55), at('plant', -3.45, 2.6, 0.55, 1.2, 0.55)] },
 
     // --- straight (east and west are walls) -----------------------------------------------------
     { id: 'corridorN', name: 'North Corridor', doors: STRAIGHT, searchPoint: 'the hall console', mood: CORRIDOR,
-      furniture: [searchSpot(wall('east', 'console', 1.4, 0.8, 0.4)), corner('sw', 'plant', 0.6, 1.3, 0.6)] },
+      furniture: [searchSpot(at('console', 2.0, -3.6, 1.5, 0.82, 0.45)), at('plant', -1.8, -3.5, 0.6, 1.3, 0.6)] },
     { id: 'corridorS', name: 'South Corridor', doors: STRAIGHT, searchPoint: 'the luggage trolley', mood: CORRIDOR,
-      furniture: [searchSpot(wall('west', 'trolley', 1.2, 1.0, 0.8)), corner('ne', 'bench', 0.5, 0.5, 1.2)] },
+      furniture: [searchSpot(at('luggageTrolley', -3.25, -1.6, 0.9, 1.65, 1.3)), at('plant', -1.8, -3.5, 0.6, 1.3, 0.6),
+        at('bench', 2.0, -3.55, 1.4, 0.47, 0.55), at('plant', 3.45, -2.4, 0.55, 1.2, 0.55)] },
     { id: 'stairs', name: 'Service Stairs', doors: STRAIGHT, searchPoint: 'the stairwell bench', dark: true, mood: DARK,
-      furniture: [wall('east', 'stairs', 3.0, 0.9, 1.6), searchSpot(wall('west', 'bench', 1.4, 0.5, 0.5))] },
+      furniture: [searchSpot(at('slatBench', -3.45, -1.9, 0.62, 0.95, 1.8)), at('plant', -1.8, -3.5, 0.6, 1.3, 0.6),
+        at('stairs', 2.45, -3.0, 2.8, 1.6, 1.7), at('binTrolley', 3.5, -1.4, 0.7, 1.0, 1.4)] },
     // Room with a job: 1 AP to restore 2 health (maximum 3).
     { id: 'infirmary2', name: 'Infirmary', doors: STRAIGHT, job: 'infirmary', searchPoint: 'the medicine cabinet', mood: CLINIC,
-      furniture: [wall('west', 'infirmaryBed', 2.0, 0.6, 1.8), searchSpot(wall('east', 'medicineCabinet', 1.4, 1.9, 0.5)), corner('ne', 'stool', 0.7, 0.9, 0.7)],
+      furniture: [at('infirmaryBed', -3.1, -1.75, 1.05, 1.0, 2.1), at('nightstand', -2.15, -3.5, 0.6, 1.1, 0.6), at('plant', -1.2, -3.5, 0.55, 1.2, 0.55),
+        at('towelChest', -3.5, 2.5, 0.6, 0.8, 0.9), searchSpot(at('medicineCabinet', 2.0, -3.55, 1.4, 1.9, 0.55)),
+        at('stool', 3.1, -2.4, 0.55, 0.6, 0.55), at('trayCabinet', 3.5, 2.0, 0.6, 0.85, 0.9), at('plant', 3.45, 3.2, 0.55, 1.2, 0.55)],
       colors: { infirmaryBed: { color: '#e4e2dc' }, medicineCabinet: { color: '#d8e2e4', emissive: '#3a0c0c' } } },
 
     // --- corners (north and west are walls) ------------------------------------------------------
     { id: 'backCorridor', name: 'Back Stairs Passage', doors: CORNER, searchPoint: 'the stacked crates', dark: true, mood: FLICKER,
-      furniture: [corner('nw', 'crate'), searchSpot(wall('north', 'crate', 1.0, 0.8, 0.9))] },
+      furniture: [at('crates', -2.9, -3.2, 1.6, 1.55, 1.3), at('platformCart', -3.3, -1.6, 1.0, 1.05, 1.2),
+        searchSpot(at('crates2', 0.0, -3.3, 1.7, 1.25, 1.1)), at('crate', 1.75, -3.45, 0.75, 0.8, 0.75), at('canisters', 2.95, -3.5, 1.1, 0.8, 0.6)] },
     { id: 'cloakroom', name: 'Cloakroom', doors: CORNER, searchPoint: 'the coat rail', locked: true, mood: QUIET,
-      furniture: [searchSpot(wall('north', 'rail', 3.0, 1.7, 0.6)), wall('west', 'rail', 3.0, 1.7, 0.6), corner('se', 'bench', 1.2, 0.5, 0.5)] },
+      furniture: [searchSpot(at('rail', -1.2, -3.5, 2.3, 1.95, 0.7)), at('rail', -3.5, -0.5, 0.7, 1.95, 2.8), at('plant', -3.35, -3.35, 0.6, 1.3, 0.6),
+        at('console', 2.2, -3.6, 1.5, 0.82, 0.45), at('tuftedBench', 2.9, 2.2, 0.65, 0.47, 1.4)] },
     { id: 'cornerCorridor', name: 'Corner Corridor', doors: CORNER, searchPoint: 'the window seat', mood: CORRIDOR,
-      furniture: [searchSpot(corner('nw', 'windowSeat', 1.3, 0.5, 1.3)), corner('sw', 'plant', 0.6, 1.3, 0.6)] },
+      furniture: [searchSpot(at('windowSeat', -3.1, -3.1, 1.3, 0.82, 1.3)), at('plant', -3.45, 3.35, 0.55, 1.2, 0.55), at('console', 1.6, -3.6, 1.5, 0.82, 0.45)] },
     // Room with a job: 1 AP to restore 2 health (maximum 3).
     { id: 'infirmary1', name: 'Infirmary', doors: CORNER, job: 'infirmary', searchPoint: 'the medicine cabinet', mood: CLINIC,
-      furniture: [wall('north', 'infirmaryBed', 2.0, 0.6, 1.8), searchSpot(wall('west', 'medicineCabinet', 1.4, 1.9, 0.5)), corner('se', 'stool', 0.7, 0.9, 0.7)],
+      furniture: [at('infirmaryBed', -3.1, -1.6, 1.05, 1.0, 2.1), at('nightstand', -2.15, -3.5, 0.6, 1.1, 0.6), at('plant', -1.2, -3.5, 0.55, 1.2, 0.55),
+        searchSpot(at('medicineCabinet', 0.9, -3.55, 1.4, 1.9, 0.55)), at('stool', 1.9, -2.5, 0.55, 0.6, 0.55),
+        at('trayCabinet', 3.5, -2.2, 0.6, 0.85, 0.9), at('plant', 3.4, -3.4, 0.55, 1.2, 0.55),
+        at('towelChest', -3.5, 2.4, 0.6, 0.8, 0.9), at('plant', 3.4, 3.4, 0.55, 1.2, 0.55)],
       colors: { infirmaryBed: { color: '#e4e2dc' }, medicineCabinet: { color: '#d8e2e4', emissive: '#3a0c0c' } } },
 
     // --- dead ends (only the south side opens) ------------------------------------------------------
@@ -158,7 +188,8 @@ export const hotel = {
       furniture: [searchSpot(wall('north', 'linenPress', 2.4, 1.6, 0.6)), wall('east', 'linenShelf', 3.0, 1.8, 0.5), corner('sw', 'foldingTable', 0.9, 0.8, 1.0)],
       colors: { linenShelf: { color: '#e8e0cc' }, linenPress: { color: '#e8e0cc' } } },
     { id: 'suite416', name: 'Guest Suite 416', doors: DEAD, searchPoint: 'the bedside table', locked: true, mood: WARM,
-      furniture: [searchSpot(wall('north', 'bed', 2.0, 0.6, 1.8)), wall('east', 'wardrobe', 1.4, 2.1, 0.6), corner('sw', 'chair', 0.7, 0.9, 0.7)] },
+      furniture: [wall('north', 'bed', 2.0, 0.6, 1.8), searchSpot(at('nightstand', 1.45, -3.55, 0.6, 0.64, 0.5)), at('nightstand', -1.45, -3.55, 0.6, 1.1, 0.5),
+        wall('east', 'wardrobe', 1.4, 2.1, 0.6), corner('sw', 'armchair', 0.9, 0.9, 0.9)] },
     { id: 'housekeeping', name: 'Housekeeping Store', doors: DEAD, searchPoint: 'the linen shelves', dark: true, mood: DARK,
       furniture: [searchSpot(wall('north', 'shelf', 3.0, 1.8, 0.5)), wall('east', 'shelf', 3.0, 1.8, 0.5), corner('sw', 'cart', 0.8, 1.0, 1.1)] },
 

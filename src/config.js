@@ -20,6 +20,8 @@ export const config = {
 
   // The previous, higher camera, kept for comparison: add ?camera=classic to the address.
   cameraClassic: { pitchDeg: 56, distance: 13 },
+  // A trial corner-on view like the owner's room pictures: add ?camera=diagonal to the address.
+  cameraDiagonal: { yawOffsetDeg: 45, pitchDeg: 46, distance: 12.5 },
 
   cutaway: {
     threshold: 0.3,       // how directly a wall must face the camera before it is lowered (0..1)

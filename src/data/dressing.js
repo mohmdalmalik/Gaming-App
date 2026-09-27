@@ -29,12 +29,13 @@ export const roomDressings = {
 
 // Every other room: a tile baked by tools/room-pipeline/make_room.py, loaded when the room is revealed
 // (src/render/bakedRoom.js, dressBakedTile). All tiles share one albedo texture; each has its own two
-// light maps. `exposure` scales the baked light (the dark rooms are baked dim and stay dim).
+// light maps. `exposure` scales the baked light, set so each room reads like its reference in the game; the
+// dark rooms (service corridor, storage, stairs, back corridor, housekeeping) sit at about 60% of that.
 export const BAKED_TILES = {
-  lounge: 0.62, ballroom: 0.6, grandCorridor: 0.62, switchboard: 0.62, dining: 0.62, library: 0.64,
-  kitchen: 0.6, serviceCorridor: 0.8, storage: 0.8, corridorE: 0.62, corridorW: 0.62, corridorN: 0.62,
-  corridorS: 0.62, stairs: 0.8, backCorridor: 0.8, cloakroom: 0.62, cornerCorridor: 0.62, infirmary1: 0.6,
-  infirmary2: 0.6, linenStore1: 0.62, linenStore2: 0.62, suite416: 0.62, housekeeping: 0.8, exit: 0.62,
+  lounge: 0.77, ballroom: 0.64, grandCorridor: 0.66, switchboard: 0.62, dining: 0.52, library: 0.72,
+  kitchen: 0.5, serviceCorridor: 0.42, storage: 0.52, corridorE: 0.58, corridorW: 0.58, corridorN: 0.55,
+  corridorS: 0.55, stairs: 0.44, backCorridor: 0.82, cloakroom: 0.61, cornerCorridor: 0.55, infirmary1: 0.51,
+  infirmary2: 0.49, linenStore1: 0.52, linenStore2: 0.52, suite416: 0.7, housekeeping: 0.43, exit: 0.5,
 };
 for (const [id, exposure] of Object.entries(BAKED_TILES)) {
   roomDressings[id] = {

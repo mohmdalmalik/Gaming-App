@@ -10,6 +10,7 @@ function smoothstep(t) { t = Math.min(1, Math.max(0, t)); return t * t * (3 - 2 
 export function createCameraRig(camera, cfg) {
   const c = cfg.camera;
   const pitch = THREE.MathUtils.degToRad(c.pitchDeg);
+  const base = THREE.MathUtils.degToRad(c.yawOffsetDeg || 0);   // a fixed turn of the whole view (0 = square on)
   const target = new THREE.Vector3();   // where the player is
   const focus = new THREE.Vector3();    // eased focus point (before pan)
   const pan = new THREE.Vector3();      // world-space drag offset
@@ -23,7 +24,7 @@ export function createCameraRig(camera, cfg) {
 
   const rig = {
     camera,
-    get yaw() { return yaw; },
+    get yaw() { return yaw + base; },
     get yawIndex() { return yawIndex; },
     get distance() { return distance; },
     get pan() { return pan; },
@@ -77,7 +78,8 @@ export function createCameraRig(camera, cfg) {
       }
       focus.lerp(target, 1 - Math.exp(-c.followLerp * dt));
 
-      offset.set(Math.sin(yaw) * Math.cos(pitch), Math.sin(pitch), Math.cos(yaw) * Math.cos(pitch)).multiplyScalar(distance);
+      const y = yaw + base;
+      offset.set(Math.sin(y) * Math.cos(pitch), Math.sin(pitch), Math.cos(y) * Math.cos(pitch)).multiplyScalar(distance);
       camera.position.copy(focus).add(pan).add(offset);
       camera.lookAt(focus.x + pan.x, 0, focus.z + pan.z);
     },

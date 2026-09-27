@@ -170,11 +170,14 @@ Output: `assets/models/lobby/` (`lobby.glb`, `lobby-light.jpg`, `lobby-floor-lig
 
 ## Room pipeline (Blender → baked glTF → game)
 
-Every other room is built the same way as the starting room, from the game's own tile data
-(`tools/room-pipeline/`, see its README): `node tools/room-pipeline/dump_rooms.mjs > tools/room-pipeline/rooms.json`,
-`python3 tools/room-pipeline/textures_rooms.py`, `tools/room-pipeline/build_all.sh 1024 48` (about an hour on
-4 CPUs), then `node tools/room-pipeline/shoot.mjs --rooms library,kitchen` to look at rooms in the game and
-`node tools/room-pipeline/perf.mjs --rooms 12` for draw calls. Output: `assets/models/rooms/`.
+Every other room is built the same way as the starting room, from the game's own tile data, and matched to
+the owner's reference image for it (`tools/room-pipeline/ref/`; see `tools/room-pipeline/README.md`):
+`node tools/room-pipeline/dump_rooms.mjs > tools/room-pipeline/rooms.json`, `python3 tools/room-pipeline/textures_rooms.py`,
+`tools/room-pipeline/build_all.sh 1024 48` (about an hour on 4 CPUs). Then
+`node tools/room-pipeline/vsref.mjs` puts each room in the game next to its reference
+(`tools/room-pipeline/shots/<room>-vs-ref.png`, contact sheet `shots/rooms-vs-refs.png`),
+`node tools/room-pipeline/walkcheck.mjs` walks a guest through every doorway of every room, and
+`node tools/room-pipeline/perf.mjs --rooms 12` measures draw calls. Output: `assets/models/rooms/`.
 
 ## Changing the rules or the floor
 

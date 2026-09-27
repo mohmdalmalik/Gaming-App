@@ -667,3 +667,36 @@ Target: `docs/art-reference.jpg` (style, palette and finish; not its layout or i
   giving ~3.5 steps/s with a slight foot glide that is hard to see from the game camera. Dress guests take
   shorter steps (`walk_kw=dict(skirt=True)`) and their skirts are weighted to follow the legs.
 - **Scene cost** with all six on screen in the lobby: 144 draw calls, ~237k triangles, 11 shader programs.
+
+## Search from the room, and the hand held like cards (interface only — no rule changed)
+- **No Search button.** The furniture flagged `search: true` in `src/data/hotel.js` carries the search
+  spot. `placeRoom` (`src/game/hotel.js`) now keeps that flag on the placed, turned furniture and
+  `searchSpotOf(room)` returns it, so any new footprint works with no code change. The icon
+  (`src/ui/searchSpot.js`) is one DOM button projected from a point just above that furniture each
+  frame (only its transform is written, and only when it moved): crisp, 60 px, easy to tap. What it
+  shows comes from the rules — `searchLeft` (a new pure helper in `actions.js`: unused draw or cards on
+  the floor) decides whether there is an icon, `canSearch` whether it is live or dimmed (dark, no
+  actions, empty deck). A tap walks the guest to free floor in front of the furniture (free, inside the
+  room) and then runs the same `search()` as the old button; refusals give the old button's words.
+- **The found card is shown large** on the hand-over card (`handoff.privateFound`): opaque and marked
+  private in hot-seat, exactly where the private note used to be (the table still sees only
+  "X searched."); on a lighter backdrop in practice. Then it deals into the fan.
+- **The hand is a fan** (`src/ui/handFan.js`) in the middle of the bottom bar, so flex layout keeps it
+  off the guest panel and the buttons at every size. Cards rest about a quarter below the screen edge
+  (as in Hearthstone) and rise when touched/hovered: a full-height fan covered the lobby door ring
+  nearest the camera at 1180×820. Rebuilt only when the hand changes; positions are CSS transforms,
+  re-placed whenever the strip's own width changes (a ResizeObserver: an Infirmary / Escape / Trade
+  button widens the button row without any window resize) and taken at once, without a glide, so no
+  half-finished slide can leave a card over the buttons. When the search furniture is at or past the
+  screen edge (a corner piece nearest the camera), the icon is kept on screen at the nearest edge.
+- **The card view replaces the hand sheet** (`src/ui/hand.js`): one card large, with the same detail
+  and action code as before, ‹ › to browse, the same possessed / unmasked banner. A card that is used
+  up closes the view.
+- **Privacy.** The fan and the icon show only in the active guest's own action phase; the script hides
+  them whenever a hand-over, private, meeting, notice, map, prompt or end screen is up, and a CSS `:has()`
+  rule hides them the instant any of those overlays appears. In hot-seat the fan never shows Possession
+  cards: on a shared device a purple card on the always-on screen would reveal the role (the same
+  reason the possessed tint is off in hot-seat). They are seen, as before, only through *Private
+  details*. Practice (and later online play, one device each) can show them.
+- **Not added:** discarding from the card view. Discarding is only the end-of-turn hand-limit prompt
+  in the rules, so the existing discard prompt stays the only place for it.

@@ -162,6 +162,32 @@ check(cues.leaves === cues.n, 'each has a door leaf standing in it');
 check(cues.rings === cues.n && cues.ringsInside, 'and a ring on the lobby side: it can be opened');
 check(cues.glows === cues.n, 'a soft glow at each threshold');
 check(cues.noPosts, 'no glowing yellow door blocks');
+// The hand is a fan of cards along the bottom and searching is an icon over the room's search spot:
+// neither may sit on a door's ring, and the lobby (nothing to search) has neither icon nor button.
+for (const [w, h] of [[1180, 820], [1024, 768], [1366, 1024], [1440, 900]]) {
+  await page.setViewportSize({ width: w, height: h });
+  await frames(4);
+  const covered = [];
+  for (const steps of [0, 1, 2, 3]) {
+    if (steps) { await game(() => window.__game.rotate(1)); await turned(); }
+    const free = await game(() => {
+      const g = window.__game;
+      return [...g.doorways.views.values()].filter(v => v.doorway.room === 'hall').map(v => {
+        const p = g.groundToScreen(v.blink.position.x, v.blink.position.z);
+        const el = document.elementFromPoint(p.x, p.y);
+        return p.y > innerHeight || (el && el.tagName === 'CANVAS');
+      });
+    });
+    if (free.length !== cues.n || !free.every(Boolean)) covered.push(steps * 90);
+  }
+  await game(() => window.__game.rotate(1)); await turned();
+  check(!covered.length, `${w}×${h}: at every camera turn the hand fan leaves each door ring free to tap${covered.length ? ` (covered at ${covered.join(', ')}°)` : ''}`);
+}
+await page.setViewportSize({ width: 1180, height: 820 });
+await frames(4);
+check(await game(() => window.__game.fanIds().length) === 4, 'the hand shows as a fan of four cards');
+check(!(await page.$('#btn-search')) && await game(() => window.__game.searchSpot().mode === null) && await page.evaluate(() => document.getElementById('search-spot').hidden),
+  'no Search button, and no search icon in the lobby: there is nothing to search there');
 
 console.log('\n5. choosing a door: open it, then walk through');
 // where a door's ring is on screen right now

@@ -1,26 +1,15 @@
 // On-screen interface: the top guest strip (with current-turn / next indicators), the
-// bottom-left active-player panel (portrait, name, health segments, action pips), the fanned
-// hand opener with a live count, the turn-action buttons (with costs / reasons), a move-confirm
-// bar and toasts. Portraits are illustrated placeholders (see ui/portrait.js) so real art can
-// drop in later without changing this logic. Possession is never revealed on the public strip.
+// bottom-left active-player panel (portrait, name, health segments, action pips), the turn-action
+// buttons (with costs / reasons), a move-confirm bar and toasts. (The hand is src/ui/handFan.js;
+// searching is the icon over the room's search spot, src/ui/searchSpot.js.) Portraits are
+// illustrated placeholders (see ui/portrait.js) so real art can drop in later without changing
+// this logic. Possession is never revealed on the public strip.
 import { activePlayer, nextPlayer, playersInRoom, canEscape, canTradeVoluntarily } from './game/state.js';
-import { canSearch, canUseRoom } from './game/actions.js';
+import { canUseRoom } from './game/actions.js';
 import { rules } from './data/rules.js';
 import { countableCount } from './game/cards.js';
 import { makePortrait } from './ui/portrait.js';
 import { roundLabel, finalRoundShort, isFinal } from './ui/roundLabel.js';
-
-const MAX_BACKS = 8; // fanned face-down cards drawn before we rely on the count badge alone
-
-// Plain-language reason the Search button is unavailable right now.
-const SEARCH_REASON = {
-  notSearchable: 'Nothing to search here',
-  searched: 'Already searched',
-  dark: 'Dark — need a Flashlight',
-  ap: 'No actions left',
-  empty: 'Nothing left to find',
-  finished: '—',
-};
 
 // The room-job button (Infirmary, Switchboard): its label, what it does for its cost, and a plain
 // reason when it can't be used. A Linen Store has no button — its job is in the search itself.
@@ -57,8 +46,6 @@ export function createHud(doc, cfg) {
     apPips: doc.getElementById('ap-pips'),
     ap: doc.getElementById('action-points'),
     private: doc.getElementById('btn-private'),
-    search: doc.getElementById('btn-search'),
-    searchSub: doc.getElementById('search-sub'),
     // (`room` above is the room-name header; the room's job button is `roomJob`.)
     roomJob: doc.getElementById('btn-room'),
     roomJobMain: doc.querySelector('#btn-room .btn-main'),
@@ -70,9 +57,6 @@ export function createHud(doc, cfg) {
     rotateLeft: doc.getElementById('btn-rotate-left'),
     rotateRight: doc.getElementById('btn-rotate-right'),
     map: doc.getElementById('btn-map'),
-    handStrip: doc.getElementById('hand-strip'),
-    handBacks: doc.getElementById('hand-backs'),
-    handCount: doc.getElementById('hand-count'),
     tint: doc.getElementById('possess-tint'),
     toast: doc.getElementById('toast'),
     confirmBar: doc.getElementById('confirm-bar'),
@@ -131,17 +115,6 @@ export function createHud(doc, cfg) {
     el.ap.classList.toggle('bonus', n > base);
   }
 
-  function renderHand(count) {
-    const shown = Math.min(count, MAX_BACKS);
-    if (el.handBacks.childElementCount !== shown) {
-      el.handBacks.innerHTML = '';
-      for (let i = 0; i < shown; i++) {
-        const b = doc.createElement('div'); b.className = 'card-back'; el.handBacks.appendChild(b);
-      }
-    }
-    el.handCount.textContent = String(count);
-  }
-
   const hud = {
     show() { el.root.hidden = false; },
     hide() { el.root.hidden = true; },
@@ -187,14 +160,6 @@ export function createHud(doc, cfg) {
       if (state.finished) { el.endMain.textContent = 'Game over'; el.endSub.textContent = ''; el.endTurn.disabled = true; }
       else { el.endMain.textContent = 'End turn ›'; el.endSub.textContent = next && next !== p ? `Next: ${next.name}` : `Refill to ${rules.actionPointsPerTurn}`; el.endTurn.disabled = false; }
 
-      // Search: cost when available, plain-language reason when not.
-      // Name the search point (the console table, the laundry cart) rather than the whole room.
-      const gate = canSearch(state, floor, p);
-      el.search.disabled = !gate.ok;
-      el.searchSub.textContent = gate.ok
-        ? (room?.searchPoint ? `${room.searchPoint} · ${rules.searchCost} action` : `${rules.searchCost} action`)
-        : (SEARCH_REASON[gate.reason] || 'Unavailable');
-
       // A room with a job: its button shows only while standing in one (Infirmary, Switchboard).
       // The Fire Exit uses the same button for Escape. In hot-seat it looks the same for every guest
       // standing there (whether it would let them out stays private until they try); practice has
@@ -218,9 +183,6 @@ export function createHud(doc, cfg) {
       // Voluntary trade: only in a safe zone that allows it (the Fire Exit, never the lobby), with
       // someone else there to trade with.
       el.trade.hidden = !canTradeVoluntarily(state, floor, p);
-
-      // Public card count excludes Possession cards, so it never reveals a role.
-      renderHand(countableCount(p.hand));
 
       // Top strip: current-turn + next-player indicators.
       if (!mini || mini.length !== state.players.length) buildStrip(state);
@@ -266,11 +228,6 @@ export function createHud(doc, cfg) {
     hideConfirm() { el.confirmBar.hidden = true; },
     get confirmOpen() { return !el.confirmBar.hidden; },
     on(name, fn) { el[name].addEventListener('click', e => { e.preventDefault(); fn(); }); },
-    onHand(fn) {
-      const open = e => { e.preventDefault(); fn(); };
-      el.handStrip.addEventListener('click', open);
-      el.handStrip.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') open(e); });
-    },
     onConfirm(move, cancel) {
       el.confirmMove.addEventListener('click', e => { e.preventDefault(); move(); });
       el.confirmCancel.addEventListener('click', e => { e.preventDefault(); cancel(); });

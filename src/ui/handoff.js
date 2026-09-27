@@ -7,11 +7,13 @@
 //   CHOICE   — a private yes/no (accept a lobby trade?).
 //   NOTE     — a private consequence (what you received, that you were possessed, who tried).
 //   MIRROR   — another guest's whole hand, seen through a Hand Mirror.
+//   FOUND    — what a search turned up, the cards shown large (also used in practice, on a lighter
+//              backdrop: there is nobody to hide it from there).
 //
 // Nothing here ever appears on the public HUD, and the turn timer is paused while any of it is up.
 import { rules } from '../data/rules.js';
 import { CARDS, countableCards, countableCount } from '../game/cards.js';
-import { cardTile } from './cards.js';
+import { cardTile, bigCard } from './cards.js';
 import { roundLabel, finalRoundNote, isFinal } from './roundLabel.js';
 
 export function createHandoff(doc) {
@@ -24,6 +26,8 @@ export function createHandoff(doc) {
     role: doc.getElementById('handoff-role'),
     notes: doc.getElementById('handoff-notes'),
     hand: doc.getElementById('handoff-hand'),
+    found: doc.getElementById('handoff-found'),
+    overlayBase: doc.getElementById('handoff-overlay').className,
     pick: doc.getElementById('handoff-offer'),
     pickCards: doc.getElementById('offer-cards'),
     pickIntent: doc.getElementById('offer-intent'),
@@ -39,6 +43,8 @@ export function createHandoff(doc) {
     el.role.hidden = true; el.role.className = 'role-badge';
     el.notes.hidden = true; el.notes.innerHTML = '';
     el.hand.hidden = true; el.hand.innerHTML = '';
+    el.found.hidden = true; el.found.innerHTML = '';
+    el.overlay.className = el.overlayBase;
     el.pick.hidden = true; el.pickCards.innerHTML = '';
     el.pickIntent.hidden = true; el.pickIntent.innerHTML = '';
     el.pickSummary.textContent = '';
@@ -180,6 +186,22 @@ export function createHandoff(doc) {
       if (!shown.length) el.hand.innerHTML = '<div class="panel-note">No cards at all.</div>';
       for (const c of shown) el.hand.appendChild(cardTile(doc, c, { hideDesc: true }));
       show('Done', onContinue);
+    },
+
+    // What a search turned up, for the searcher only: each card large, with its name and what it
+    // does, then the search's own words. `soft` (practice) keeps the room visible behind it.
+    privateFound(player, { kicker, title, cards = [], lines = [], button, soft = false }, onContinue) {
+      reset('found');
+      if (soft) el.overlay.classList.add('soft');
+      el.kicker.textContent = kicker || 'Private — hold the device close';
+      el.title.textContent = title;
+      if (cards.length) {
+        el.found.hidden = false;
+        el.found.classList.toggle('pair', cards.length > 1);
+        for (const c of cards) el.found.appendChild(bigCard(doc, c));
+      }
+      renderNotes(player, lines);
+      show(button || (cards.length ? 'Add to my hand' : 'Continue'), onContinue);
     },
 
     close() { el.overlay.hidden = true; onNext = null; kind = null; },

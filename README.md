@@ -60,18 +60,27 @@ readout at the top of the screen, for measuring speed on the iPad.
 - **Open a door** (1 AP) — tap a closed door's ring, then **Open**. The room behind it appears (it is
   empty, so nothing happens there yet); you stay where you are.
 - **Move** (1 AP) — tap the ring of an open doorway, then **Move**. Tapping empty floor in your room
-  repositions for free. A locked room says so; a Master Key or Lock Pick (from the hand sheet) opens
+  repositions for free. A locked room says so; a Master Key or Lock Pick (tap it in your hand) opens
   it from next door.
-- **Search** (1 AP) — takes anything lying in the room (a dead guest's cards); otherwise draws
-  one card, once per room (two in a Linen Store). Dark rooms need a Flashlight in hand. What you find is private: the
-  table only sees that you searched. Lanterns are never dealt — searching is the only way to get one.
-- **Rooms with jobs** — in an Infirmary or the Switchboard a room button appears next to Search:
+- **Search** (1 AP) — there is no Search button: a room that can still be searched shows a pulsing
+  brass magnifier over its search spot (the drawer, the shelves, the trolley…). Tap it and the guest
+  walks up to that furniture and searches; the card(s) found are shown large, then go into the hand.
+  It takes anything lying in the room (a dead guest's cards); otherwise draws one card, once per room
+  (two in a Linen Store) — once searched, the icon is gone. Dark rooms need a Flashlight in hand (the
+  icon is dimmed with a flashlight mark and says so when tapped); with no actions left it is dimmed
+  too. What you find is private: the table only sees that you searched. Lanterns are never dealt —
+  searching is the only way to get one.
+- **Rooms with jobs** — in an Infirmary or the Switchboard a room button appears by End turn:
   Infirmary (1 AP, heal 2), Switchboard (1 AP, once a turn: the whole table learns how many guests
   are possessed, not who). The map marks them (✚ ☎ ≡).
-- **Hand** — Bandage (heal 1), Master Key / Lock Pick (open a locked room next door), Barricade
-  (seal a doorway of your room for one round), Hand Mirror (1 AP: see the whole hand of a guest in
-  your room, in private) and Espresso (free: +2 actions this turn) are played from here. Lantern, Flashlight and
-  weapons are used in context.
+- **Hand** — held as a fan of face-up cards at the bottom of the screen (resting partly below the
+  edge; a card rises when touched). Tap a card to see it large with what it does and its action
+  (‹ › step through the hand; tap outside or ✕ to close). Bandage (heal 1), Master Key / Lock Pick
+  (open a locked room next door), Barricade (seal a doorway of your room for one round), Hand Mirror
+  (1 AP: see the whole hand of a guest in your room, in private) and Espresso (free: +2 actions this
+  turn) are played from there. Lantern, Flashlight and weapons are used in context. In hot-seat the
+  fan shows only during your own turn, and never shows Possession cards (they are seen through
+  *Private details*, as before).
 - **Meetings** (hot-seat) — walk in on a guest you have not met in that room this round and you
   must Trade or Attack. In a trade each side picks a card in private and sees only what they
   received. Give a Lantern and a Possession card cannot take you. The lobby is safe.
@@ -117,10 +126,14 @@ src/
                       searched-room ticks; bakedRoom.js loads the baked starting room;
                       pathPreview.js draws the dotted path + cost tag for a chosen door
   camera.js input.js player.js discovery.js   camera rig, gestures, movement, tap→plan glue
-  hud.js  map.js  overlays.js   HUD + action bar, 2D map, start/end/error overlays
+  hud.js  map.js  overlays.js   HUD + action bar (room job / Escape, Trade, End turn), 2D map, overlays
   ui/
-    cards.js  hand.js                 card tiles; the hand sheet with Bandage / key / Barricade actions
-    handoff.js                        pass-the-device + every private screen (role, turn, card pick, result)
+    cards.js                          card tiles, cards shown large, the order a hand is shown in
+    handFan.js                        the hand held as a fan of face-up cards (bottom centre)
+    hand.js                           the card view: one card large, with Bandage / key / Barricade / … actions
+    searchSpot.js                     the search icon over the room's flagged search furniture
+    handoff.js                        pass-the-device + every private screen (role, turn, card pick,
+                                      result, the found-card reveal)
     meeting.js                        the PUBLIC side of a meeting: who, Trade or Attack, weapon, outcome
     fullHand.js  discard.js           hand-limit prompts
 docs/                 GAME_RULES (spec), GAME_CONCEPT, DECISIONS, PROGRESS

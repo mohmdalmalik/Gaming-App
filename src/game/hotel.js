@@ -86,6 +86,10 @@ export function resetHotel(floor, seed) {
 export const roomAtCell = (floor, i, j) => floor.rooms.get(floor.cells.get(key(i, j))) || null;
 export const exitPlaced = floor => floor.exitRoom != null;
 
+// The placed (turned, world-space) piece of furniture that holds a room's search spot, or null.
+// Its footprint is `min`/`max`/`center` [x, z] and its height `size[1]`.
+export const searchSpotOf = room => room?.furniture?.find(f => f.search) || null;
+
 // Which room contains the point? Rooms touch but never overlap.
 export function roomAt(floor, x, z) {
   const S = floor.tileSize;
@@ -138,6 +142,7 @@ function placeRoom(floor, def, cell, rot) {
       const look = def.colors?.[f.kind] || {};
       return {
         id: `${def.id}:${f.kind}:${k}`, kind: f.kind, color: f.color ?? look.color, emissive: f.emissive ?? look.emissive,
+        search: !!f.search,     // the piece that holds the room's search spot (src/data/hotel.js searchSpot)
         center: [cx + fx, cz + fz], size: [fw, fh, fd],
         min: [cx + fx - fw / 2, cz + fz - fd / 2], max: [cx + fx + fw / 2, cz + fz + fd / 2],
       };

@@ -103,6 +103,45 @@ async function throughRoles() {
     if (await game(() => window.__game.handoffOpen())) await next(); else return;
   }
 }
+// Searching is the magnifier over the room's search spot (#search-spot): tap it, the guest walks up to
+// the furniture and searches. Resolves once the walk and the search are done (the reveal is then up,
+// or the take-or-leave prompt for a card that does not fit).
+async function searchHere() {
+  await page.click('#search-spot');
+  await page.waitForFunction(() => !window.__game.searchPending() && !window.__game.activeMover().walking && window.__game.activeMover().path.length === 0, null, { timeout: 40000, polling: 50 });
+  await page.waitForTimeout(80);
+}
+// The found-card reveal: read it, then "Add to my hand".
+const revealText = () => page.evaluate(() => document.getElementById('handoff-notes').textContent);
+const revealIds = () => page.evaluate(() => [...document.querySelectorAll('#handoff-found .big-card')].map(c => c.dataset.cardId));
+async function takeReveal() { if (await kind() === 'found') await next(); }
+const spot = () => game(() => window.__game.searchSpot());
+const fanIds = () => game(() => window.__game.fanIds());
+const handIds = () => game(() => window.__game.activePlayer().hand.map(c => c.id));
+const sameSet = (a, b) => a.length === b.length && a.every(x => b.includes(x));
+// Wait for n drawn frames (headless draws only a few a second).
+const frames = n => page.evaluate(n => new Promise(r => { let k = 0; const f = () => (++k >= n ? r() : requestAnimationFrame(f)); requestAnimationFrame(f); }), n);
+// After a resize the cards glide to their new places (a short CSS transition): wait until they stop.
+const fanStill = () => page.waitForFunction(() => {
+  const now = [...document.querySelectorAll('#hand-fan .fan-card')].map(c => { const r = c.getBoundingClientRect(); return `${Math.round(r.left)},${Math.round(r.top)}`; }).join(';');
+  const same = now === window.__fanLast; window.__fanLast = now; return same && now !== '';
+}, null, { timeout: 15000, polling: 250 });
+// For every card in the fan: is the part of it that shows (left of the next card) really that card
+// under a finger, and is the card on screen? The point is worked out in the card's own turned frame.
+const fanReach = () => page.evaluate(() => {
+  const els = [...document.querySelectorAll('#hand-fan .fan-card')];
+  const px = el => parseFloat(el.style.getPropertyValue('--x')) || 0;
+  return els.map((c, i) => {
+    const W = c.offsetWidth, H = c.offsetHeight, parent = c.offsetParent.getBoundingClientRect();
+    const u = i < els.length - 1 ? Math.min(W / 2, (px(els[i + 1]) - px(c)) / 2) : W / 2, v = H * 0.5;
+    const m = new DOMMatrix().translate(W / 2, H).multiply(new DOMMatrix(getComputedStyle(c).transform)).translate(-W / 2, -H);
+    const p = m.transformPoint(new DOMPoint(u, v));
+    const x = parent.left + c.offsetLeft + p.x, y = parent.top + c.offsetTop + p.y;
+    const r = c.getBoundingClientRect();
+    // (at rest a card is held partly below the screen edge; at least 70% of it shows)
+    return { id: c.dataset.cardId, hit: c.contains(document.elementFromPoint(x, y)), inside: r.left >= 0 && r.right <= innerWidth && innerHeight - r.top >= 0.7 * H };
+  });
+});
 // A room that can be searched with no fuss: not dark, not locked, nothing lying in it.
 const plainRoom = () => game(() => {
   const g = window.__game;
@@ -141,6 +180,11 @@ check(await visible('#health-row') && await game(() => document.querySelectorAll
 check(!(await visible('.hud-top-center')), 'no guest strip for a single guest');
 check(!(await visible('#btn-trade')) && !(await visible('#possess-tint')) && !(await visible('#turn-timer')), 'no trade, no tint, no clock');
 check(await visible('#btn-restart-practice'), 'Restart practice is there');
+check(!(await page.$('#btn-search')) && !(await page.evaluate(() => [...document.querySelectorAll('.action-row button')].some(b => b.offsetParent && /^\s*Search/.test(b.textContent)))),
+  'there is no Search button: searching is done from the room');
+check(!(await page.$('#hand-strip')) && await visible('#hand-fan'), 'the hand is a fan of cards, not a "cards in hand" button');
+check(sameSet(await fanIds(), await handIds()) && (await fanIds()).length === 4, 'the fan holds the four dealt cards, face up');
+check(await spot().then(s => s.mode) === null && !(await visible('#search-spot')), 'the lobby has no search icon (nothing to search there)');
 check((await page.textContent('#round')).trim() === 'Round 1', 'the round has no "of 8": practice has no dawn deadline');
 const lobbyDoors = await game(() => window.__game.closedDoors().length);
 check(lobbyDoors === 3 || lobbyDoors === 4, `the lobby has ${lobbyDoors} closed doors (3 or 4)`);
@@ -167,25 +211,147 @@ check(await game(() => window.__game.activePlayer().actionPoints) === 1, 'moving
 await game(() => window.__game.endTurn());
 check(await game(() => window.__game.activePlayer().actionPoints) === 4, 'End turn refills to 4');
 
-console.log('\n4. searching');
+console.log('\n4. searching from the room');
 await game(() => window.__game.revealTile('lounge'));
 const plain = 'lounge';
 await put(plain, 4);
+await settle();
+await game(() => { const g = window.__game, m = g.activeMover(); g.rig.setFocus(m.x, m.z, true); });   // (the camera eases slowly in headless: jump it)
+await page.waitForTimeout(400);
+{
+  const s1 = await spot();
+  check(s1.mode === 'live' && await visible('#search-spot'), 'an unsearched room shows the search icon');
+  const flagged = await game(() => window.__game.floor.rooms.get('lounge').furniture.filter(f => f.search).map(f => ({ kind: f.kind, center: f.center })));
+  check(flagged.length === 1 && s1.spot && s1.spot.kind === flagged[0].kind && s1.spot.center.join() === flagged[0].center.join(),
+    `it belongs to the furniture flagged as the search spot (${s1.spot?.kind})`);
+  // It floats over that furniture: the icon marks a point just above the flagged footprint, projected
+  // with the live camera — kept inside the screen when the furniture itself is near or past the edge
+  // (a corner piece nearest the camera can be), so it is always there to tap.
+  await frames(3);
+  const a = await game(() => {
+    const g = window.__game, f = g.floor.rooms.get('lounge').furniture.find(f => f.search), cam = g.view.camera;
+    const V = cam.position.constructor, W = innerWidth, H = innerHeight;
+    const scr = (x, y, z) => { const v = new V(x, y, z).project(cam); return [(v.x + 1) / 2 * W, (1 - v.y) / 2 * H]; };
+    const top = f.size[1];
+    const xs = [[f.min[0], f.min[1]], [f.max[0], f.min[1]], [f.min[0], f.max[1]], [f.max[0], f.max[1]]].map(([x, z]) => scr(x, top, z)[0]);
+    const [px, py] = scr(f.center[0], top + 0.45, f.center[1]);
+    return { px, py, span: [Math.min(...xs), Math.max(...xs)], icon: g.searchSpot().point, W, H };
+  });
+  const ex = Math.min(a.W - 44, Math.max(44, a.px));
+  const onScreen = a.px >= 44 && a.px <= a.W - 44 && a.py >= 180 && a.py <= a.H - 280;
+  check(a.px >= a.span[0] && a.px <= a.span[1] && !!a.icon && Math.abs(a.icon.x - ex) <= 3 && (!onScreen || Math.abs(a.icon.y - a.py) <= 3),
+    `above that furniture (icon ${a.icon?.x},${a.icon?.y}; point over it ${Math.round(a.px)},${Math.round(a.py)}; furniture ${a.span.map(Math.round).join('–')}${onScreen ? '' : ', kept on screen'})`);
+  const box = await page.evaluate(() => { const r = document.querySelector('#search-spot .ss-badge').getBoundingClientRect(); return { w: r.width, h: r.height }; });
+  check(box.w >= 48 && box.h >= 48, `big enough to tap (${Math.round(box.w)}×${Math.round(box.h)} px)`);
+  await shot('ui-search-lounge');
+}
 const before = await game(() => window.__game.activePlayer().hand.length);
-await tap('#btn-search');
-await leaveIfFull();
+const top1 = await game(() => window.__game.state.drawPile[0].id);
+const start4 = await game(() => { const m = window.__game.activeMover(); return [m.x, m.z]; });
+await searchHere();
+{
+  const g4 = await game(() => { const g = window.__game, m = g.activeMover(), f = g.floor.rooms.get('lounge').furniture.find(f => f.search);
+    const dx = Math.max(f.min[0] - m.x, 0, m.x - f.max[0]), dz = Math.max(f.min[1] - m.z, 0, m.z - f.max[1]);
+    return { gap: Math.hypot(dx, dz), x: m.x, z: m.z, ap: g.activePlayer().actionPoints }; });
+  check(Math.hypot(g4.x - start4[0], g4.z - start4[1]) > 0.5 && g4.gap < 1.0, `tapping it walks the guest up to the furniture (${g4.gap.toFixed(2)} m from it)`);
+  check(g4.ap === 3, 'and searches, for 1 action (the walk inside the room is free)');
+}
+check(await kind() === 'found' && sameSet(await revealIds(), [top1]), 'the card found is shown large');
+{
+  const r = await page.evaluate(() => { const c = document.querySelector('#handoff-found .big-card'); return c && { img: c.querySelector('img')?.getAttribute('src'), name: c.querySelector('.bc-name')?.textContent, desc: c.querySelector('.bc-desc')?.textContent, w: c.getBoundingClientRect().width }; });
+  const meta = await game(id => { const c = window.__game.activePlayer().hand.find(c => c.id === id); return window.__game.rules.cards[c.type]; }, top1);
+  check(r && /assets\/cards\/face\//.test(r.img) && r.name === meta.name && r.desc === meta.desc && r.w >= 150,
+    `with its card face, its name and what it does ("${r?.name}", ${Math.round(r?.w)} px wide)`);
+  check(/You search .+ and find an? /.test(await revealText()), 'and the search is described');
+  check(!(await visible('#hand-fan')) && !(await visible('#search-spot')), 'the fan and the icon step aside while it is shown');
+}
+await shot('ui-search-reveal');
+await next();
 check(await game(() => window.__game.activePlayer().hand.length) === before + 1, 'searching draws one card');
-check((await page.textContent('#search-sub')).includes('Already searched'), 'a room gives up its draw once');
+check(sameSet(await fanIds(), await handIds()) && (await fanIds()).includes(top1), 'it goes into the hand: the fan now shows it too');
+check((await spot()).mode === null && !(await visible('#search-spot')), 'the icon is gone once the room is searched (a room gives up its draw once)');
 await game(() => window.__game.revealTile('storage'));
 const dark = 'storage';
 await put(dark, 4);
 await game(() => { const p = window.__game.activePlayer(); p.hand = p.hand.filter(c => c.type !== 'flashlight'); window.__game.refresh(); });
-check((await page.textContent('#search-sub')).includes('Flashlight'), 'a dark room says it needs a Flashlight');
+await settle();
+await page.waitForTimeout(400);
+check((await spot()).mode === 'dark' && await visible('#search-spot .ss-hint'), 'a dark room shows the icon dimmed, with a flashlight hint');
+check(/Flashlight/.test(await page.textContent('#search-spot .ss-caption')), `which says what is needed ("${(await page.textContent('#search-spot .ss-caption')).trim()}")`);
+await shot('ui-search-dark');
+{
+  const ap = await game(() => window.__game.activePlayer().actionPoints);
+  await page.click('#search-spot'); await page.waitForTimeout(150);
+  check((await page.textContent('#toast')).trim() === 'Too dark to search — you need a Flashlight.', 'tapping it says it is too dark without a Flashlight');
+  check(await game(() => window.__game.activePlayer().actionPoints) === ap && !(await game(() => window.__game.handoffOpen())), 'and nothing is spent');
+}
 await give(0, [{ id: 'fl1', type: 'flashlight' }]);
-await tap('#btn-search');
+await page.waitForTimeout(200);
+check((await spot()).mode === 'live', 'with a Flashlight in hand the icon lights up');
+await searchHere();
+await takeReveal();
 await leaveIfFull();
 check(await game(() => window.__game.state.searchedRooms.has(window.__game.activePlayer().currentRoom)), 'with a Flashlight the dark room can be searched');
 check(await game(() => window.__game.activePlayer().hand.some(c => c.id === 'fl1')), 'and the Flashlight is kept');
+// No action points left: dimmed, and a tap explains.
+await game(() => window.__game.revealTile('dining'));
+await put('dining', 0);
+await page.waitForTimeout(300);
+check((await spot()).mode === 'ap', 'with no action points left the icon is dimmed');
+await page.click('#search-spot'); await page.waitForTimeout(150);
+check(/No action points left/.test(await page.textContent('#toast')), 'and a tap explains why');
+await game(() => { window.__game.activePlayer().actionPoints = 4; window.__game.refresh(); });
+
+console.log('\n4b. the hand, held as a fan of cards');
+{
+  const want = ['lantern', 'bandage', 'knife'];
+  await game(w => { const p = window.__game.activePlayer(); p.hand = w.map((t, i) => ({ id: `h${i}`, type: t })); window.__game.refresh(); }, want);
+  await page.waitForTimeout(200);
+  const f = await page.evaluate(() => [...document.querySelectorAll('#hand-fan .fan-card')].map(c => ({ id: c.dataset.cardId, type: c.dataset.type, src: c.querySelector('img')?.getAttribute('src'), r: getComputedStyle(c).transform })));
+  check(f.length === 3 && sameSet(f.map(c => c.id), ['h0', 'h1', 'h2']), 'the fan shows exactly the cards in hand');
+  check(f.every(c => c.src === `assets/cards/face/${c.type}.jpg`), 'each as its card face');
+  check(new Set(f.map(c => c.r)).size === 3, 'fanned: each card sits at its own angle');
+  await shot('ui-hand-3');
+  await page.click('#hand-fan .fan-card[data-card-id="h1"]');
+  await page.waitForTimeout(150);
+  check(await visible('#hand-overlay') && await game(() => window.__game.cardViewId()) === 'h1', 'tapping a card opens it large');
+  check(await page.evaluate(() => !!document.querySelector('#hand-big .big-card[data-card-id="h1"] img[src="assets/cards/face/bandage.jpg"]')), 'with its full card face');
+  check((await page.textContent('#hand-detail .d-name')).trim() === 'Bandage' && /Restores 1 health/.test(await page.textContent('#hand-detail')), 'its name and what it does');
+  check(/Use · 1 action/.test(await page.textContent('#hand-detail')) && /full health/i.test(await page.textContent('#hand-detail')), 'and its action (Use — not now: already at full health)');
+  await shot('ui-hand-detail');
+  await tap('#btn-hand-next');
+  check(await game(() => window.__game.cardViewId()) === 'h2', '› steps to the next card');
+  await page.mouse.click(8, 400); await page.waitForTimeout(120);
+  check(!(await visible('#hand-overlay')), 'tapping outside puts it away');
+  await page.click('#hand-fan .fan-card[data-card-id="h0"]'); await page.waitForTimeout(120);
+  await tap('#btn-hand-close');
+  check(!(await visible('#hand-overlay')), 'and so does Close');
+  // A big hand: eight cards still fit between the panel and the buttons, every one of them tappable.
+  await game(() => { const p = window.__game.activePlayer(); p.hand = ['lantern', 'lantern', 'bandage', 'knife', 'masterKey', 'handMirror', 'espresso', 'barricade'].map((t, i) => ({ id: `b${i}`, type: t })); window.__game.refresh(); });
+  await page.waitForTimeout(250);
+  await page.waitForFunction(() => !document.querySelector('#hand-fan .fan-card.dealt'), null, { timeout: 10000 });   // (the new cards finish dealing in)
+  await fanStill();
+  const big = await fanReach();
+  check(big.length === 8 && big.every(c => c.hit && c.inside), `eight cards all fit on screen and each can be tapped (${big.filter(c => c.hit).length}/8)`);
+  // Held like a hand: the cards rest partly below the screen edge; a finger on one lifts it into full view.
+  await page.waitForFunction(() => !document.querySelector('#hand-fan .fan-card.dealt'), null, { timeout: 10000 });   // (the new cards finish dealing in)
+  const lifted = await page.evaluate(() => new Promise(res => {
+    const c = document.querySelector('#hand-fan .fan-card[data-card-id="b3"]');
+    const before = c.getBoundingClientRect().bottom;
+    c.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+    // (headless draws a few frames a second: wait for the rise, up to 4 s)
+    const t0 = performance.now();
+    const look = () => {
+      const r = c.getBoundingClientRect();
+      if (r.bottom <= innerHeight + 1 || performance.now() - t0 > 4000) { c.dispatchEvent(new PointerEvent('pointerup', { bubbles: true })); res({ before, after: r.bottom, h: innerHeight }); }
+      else requestAnimationFrame(look);
+    };
+    requestAnimationFrame(look);
+  }));
+  check(lifted.before > lifted.h && lifted.after <= lifted.h + 1, `a card rests partly below the edge and rises fully when touched (bottom ${Math.round(lifted.before)} → ${Math.round(lifted.after)} px of ${lifted.h})`);
+  await shot('ui-hand-8');
+  await game(() => { const p = window.__game.activePlayer(); p.hand = p.hand.slice(0, 4); window.__game.refresh(); });
+}
 
 console.log('\n5. locked rooms');
 check(await game(() => window.__game.revealTile('cloakroom')) && await game(() => window.__game.lockedRooms().includes('cloakroom')), 'a locked room is locked as soon as it is revealed');
@@ -194,14 +360,15 @@ const nb = await game(l => [...window.__game.floor.rooms.get(l).neighbours][0], 
 await put(nb, 4);
 check(await game(() => window.__game.moveToRoom(window.__game.lockedRooms()[0]).ok) === false, 'you cannot walk into a locked room');
 await give(0, [{ id: 'mk', type: 'masterKey' }]);
-await game(() => window.__game.openHand());
-check(await visible('#hand-overlay'), 'the hand sheet opens');
-await page.click('#hand-cards .card-tile[data-card-id="mk"]');
+await page.waitForTimeout(150);
+await page.click('#hand-fan .fan-card[data-card-id="mk"]');
 await page.waitForTimeout(80);
+check(await visible('#hand-overlay'), 'tapping the Master Key in the fan opens it large');
 check((await page.textContent('#hand-detail')).includes('Open '), 'a Master Key offers to open the locked room next door');
 await page.click('#hand-detail .btn.primary');
 await page.waitForTimeout(150);
 check(await game(l => !window.__game.state.lockedRooms.has(l), locked), 'the room is unlocked');
+check(!(await visible('#hand-overlay')) && !(await fanIds()).includes('mk'), 'the used-up key leaves the hand and the card view closes');
 check(await game(() => window.__game.activePlayer().actionPoints) === 3, 'for 1 action point');
 await game(l => window.__game.moveToRoom(l), locked);
 await settle();
@@ -283,16 +450,19 @@ console.log('\n6b. a Linen Store');
   await game(() => { const p = window.__game.activePlayer(); p.hand = p.hand.slice(0, 2); window.__game.refresh(); });
   const top = await game(() => window.__game.state.drawPile.slice(0, 2).map(c => c.id));
   const before = await game(() => window.__game.activePlayer().hand.length);
-  await tap('#btn-search');
+  await searchHere();
+  check(await kind() === 'found' && sameSet(await revealIds(), top), 'both cards are shown large');
+  const toast = (await revealText()).trim();
+  await shot('ui-search-linen');
+  await next();
   const ls = await game(ids => ({
     n: window.__game.activePlayer().hand.length, has: ids.every(id => window.__game.activePlayer().hand.some(c => c.id === id)),
     ap: window.__game.activePlayer().actionPoints, full: window.__game.fullHandOpen(),
   }), top);
   check(ls.n === before + 2 && ls.has, `the first search there draws two cards (${before} -> ${ls.n}), the top two of the deck`);
   check(ls.ap === 3 && !ls.full, 'for one action, with no prompt while there is room for both');
-  const toast = (await page.textContent('#toast')).trim();
   check(/find an? .+ and an? /.test(toast), `the message names both cards ("${toast.slice(0, 80)}")`);
-  check((await page.textContent('#search-sub')).includes('Already searched'), 'and the room gives up its draw once, like any other');
+  check((await spot()).mode === null, 'and the room gives up its draw once, like any other: no icon now');
 
   // A full hand: each of the two cards gets the take-or-leave prompt, one after the other.
   check(await game(() => window.__game.revealTile('linenStore2')), 'the second Linen Store is revealed');
@@ -305,7 +475,10 @@ console.log('\n6b. a Linen Store');
     g.state.drawPile.unshift({ id: 'ls1', type: 'bandage' }, { id: 'ls2', type: 'flashlight' });
     g.refresh();
   });
-  await tap('#btn-search');
+  await searchHere();
+  check(await kind() === 'found' && sameSet(await revealIds(), ['ls1', 'ls2']), 'the reveal shows both, even with no room for them');
+  check(/choose what to do/.test(await revealText()) && (await page.textContent('#btn-handoff-next')).trim() === 'Continue', 'and says the hands are full');
+  await next();
   const firstUp = await page.evaluate(() => [...document.querySelectorAll('#fullhand-found .card-tile')].map(t => t.dataset.cardId));
   check(await game(() => window.__game.fullHandOpen()) && firstUp.length === 1 && firstUp[0] === 'ls1', `with a full hand the first card gets the take-or-leave prompt (${firstUp.join(',')})`);
   check(/Bandage/.test(await page.textContent('#fullhand-sub')), 'which names it');
@@ -340,11 +513,14 @@ for (const t of ['lounge', 'ballroom', 'grandCorridor', 'dining', 'library', 'ki
 const rooms = await game(() => window.__game.floor.roomList.filter(r => r.searchable).map(r => r.id));
 check(rooms.length >= 15, `the hotel has grown to ${rooms.length} searchable rooms`);
 let searched = 0, fullHandChecked = false;
+const notes7 = [];
 for (const r of rooms) {
   if (await game(() => window.__game.lanterns()) >= 3) break;
   await game(r => { window.__game.state.lockedRooms.delete(r); }, r);
   await put(r, 4);
-  await tap('#btn-search');
+  await settle();
+  await searchHere();
+  if (await kind() === 'found') { notes7.push(await revealText()); await next(); }
   // A full hand: keep a Lantern (dropping something that is not one); leave anything else. (A
   // Linen Store's two cards can ask twice, one after the other.)
   while (await game(() => window.__game.fullHandOpen())) {
@@ -370,8 +546,20 @@ for (const r of rooms) {
 }
 const held = await game(() => window.__game.lanterns());
 check(held >= 3, `searching ${searched} rooms turned up ${held} Lanterns`);
-check(/Lantern/.test(await page.textContent('#toast')), 'the search message keeps count of the Lanterns you hold');
-check(await game(() => Number(document.getElementById('hand-count').textContent) === window.__game.activePlayer().hand.length), 'Lanterns count in the hand like any card');
+{
+  // One more search with room in hand: what it says keeps count of the Lanterns held.
+  const spare = await game(() => { const g = window.__game; return g.floor.roomList.find(r => r.searchable && !g.state.searchedRooms.has(r.id) && !r.job)?.id; });
+  if (spare) {
+    await game(() => { const g = window.__game, p = g.activePlayer(); p.hand = p.hand.filter(c => c.type === 'lantern' || c.type === 'flashlight'); g.state.lockedRooms.clear(); g.state.drawPile.unshift({ id: 'tally', type: 'bandage' }); g.refresh(); });
+    await put(spare, 4);
+    await settle();
+    await searchHere();
+    if (await kind() === 'found') { notes7.push(await revealText()); await next(); }
+  }
+  const n = await game(() => window.__game.lanterns());
+  check(notes7.some(t => new RegExp(`You now hold ${n} Lanterns?\\.`).test(t)), `the search message keeps count of the Lanterns you hold ("…${(notes7.at(-1) || '').slice(-28)}")`);
+}
+check(sameSet(await fanIds(), await handIds()), 'Lanterns are in the hand like any card: the fan shows them');
 await game(() => window.__game.toggleMap());
 await page.waitForTimeout(150);
 check(await game(() => window.__game.isMapOpen()), 'the map opens');
@@ -394,16 +582,84 @@ await tap('#btn-restart');
 check(await game(() => !window.__game.isFinished() && window.__game.activePlayer().currentRoom === 'hall'), 'Restart practice puts the guest back in the lobby');
 
 console.log('\n8. layouts');
-for (const [name, w, h] of [['ipad-landscape', 1180, 820], ['ipad-small', 1024, 768], ['desktop', 1440, 900]]) {
+// The fan and the search icon at iPad landscape sizes and on a desktop: never over the guest's panel,
+// the buttons, the top strip or the map button, and the floor stays free to tap.
+await game(() => { window.__game.revealTile('library'); window.__game.state.lockedRooms.clear(); });
+await put('library', 4);
+await game(() => { const p = window.__game.activePlayer(); p.hand = ['lantern', 'lantern', 'bandage', 'knife', 'masterKey', 'handMirror', 'espresso', 'barricade'].map((t, i) => ({ id: `L${i}`, type: t })); window.__game.refresh(); });
+await settle();
+for (const [name, w, h] of [['ipad-landscape', 1180, 820], ['ipad-small', 1024, 768], ['ipad-pro', 1366, 1024], ['desktop', 1440, 900]]) {
   await page.setViewportSize({ width: w, height: h });
-  await page.waitForTimeout(120);
+  await page.mouse.move(4, 4);    // (no card under a hovering mouse)
+  await page.waitForTimeout(700);
+  await page.waitForFunction(() => !document.querySelector('#hand-fan .fan-card.dealt'), null, { timeout: 10000 });   // (cards finish dealing in)
+  await fanStill();
   const r = await page.evaluate(() => {
+    const box = el => el && el.offsetParent ? el.getBoundingClientRect() : null;
+    const hit = (a, b) => !!a && !!b && a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
     const b = document.querySelector('.hud-bottom').getBoundingClientRect();
     const e = document.getElementById('btn-end-turn').getBoundingClientRect();
-    return { inside: b.right <= window.innerWidth + 1 && b.bottom <= window.innerHeight + 1, endH: e.height };
+    const cards = [...document.querySelectorAll('#hand-fan .fan-card')].map(c => c.getBoundingClientRect());
+    const keep = ['#player-panel', '.hud-bottom-right .control-row', '.action-row', '#btn-map', '.hud-top-left', '.hud-top-right', '.hud-top-center'].map(s => box(document.querySelector(s)));
+    const icon = box(document.querySelector('#search-spot .ss-badge'));
+    const fanTop = Math.min(...cards.map(c => c.top));
+    return { inside: b.right <= innerWidth + 1 && b.bottom <= innerHeight + 1, endH: e.height,
+      cardsClear: cards.length === 8 && cards.every(c => !keep.some(k => hit(c, k)) && c.left >= 0 && c.right <= innerWidth),
+      why: cards.length !== 8 ? `${cards.length} cards` : cards.map((c, i) => keep.map((k, j) => hit(c, k) ? `card ${i} [${Math.round(c.left)},${Math.round(c.top)},${Math.round(c.right)},${Math.round(c.bottom)}] hits ${['panel', 'controls', 'actions', 'map', 'top-left', 'top-right', 'top-centre'][j]} [${Math.round(k.left)},${Math.round(k.top)},${Math.round(k.right)},${Math.round(k.bottom)}]` : '').filter(Boolean).join('; ')).filter(Boolean).join('; '),
+      iconClear: !!icon && !keep.some(k => hit(icon, k)) && !cards.some(c => hit(icon, c)),
+      floor: fanTop / innerHeight, fanW: cards[0]?.width };
   });
   check(r.inside, `${name}: the bottom bar fits on screen`);
   check(r.endH >= 44, `${name}: End turn is a comfortable touch size`);
+  check(r.cardsClear, `${name}: eight cards in the fan, clear of the panel, buttons, map and top bar${r.cardsClear ? '' : ` (${r.why})`}`);
+  check(r.floor >= 0.72, `${name}: the fan leaves the floor free to tap (it starts ${Math.round(r.floor * 100)}% of the way down)`);
+  check(r.iconClear, `${name}: the search icon is clear of the fan and the rest of the interface`);
+  await shot(`ui-hand-8-${w}x${h}`);
+  // (a hand of three, then a card open, then the reveal, at this size)
+  if (shots) {
+    await game(() => { const p = window.__game.activePlayer(); p.hand = p.hand.slice(0, 3); window.__game.refresh(); });
+    await page.waitForTimeout(300);
+    await shot(`ui-hand-3-${w}x${h}`);
+    await page.click('#hand-fan .fan-card[data-card-id="L2"]'); await page.waitForTimeout(250);
+    await shot(`ui-hand-detail-${w}x${h}`);
+    await tap('#btn-hand-close');
+    await shot(`ui-search-library-${w}x${h}`);
+    await game(() => { const p = window.__game.activePlayer(); p.hand = ['lantern', 'lantern', 'bandage', 'knife', 'masterKey', 'handMirror', 'espresso', 'barricade'].map((t, i) => ({ id: `L${i}`, type: t })); window.__game.refresh(); });
+    await page.waitForTimeout(200);
+  }
+}
+{
+  // A room button (here the Infirmary's) widens the action row: the fan makes room for it.
+  await page.setViewportSize({ width: 1024, height: 768 });
+  await game(() => { window.__game.revealTile('infirmary2'); window.__game.state.lockedRooms.clear(); });
+  await put('infirmary2', 4);
+  await settle(); await page.mouse.move(4, 4); await page.waitForTimeout(500);
+  await fanStill();
+  const r = await page.evaluate(() => {
+    const hit = (a, b) => a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
+    const btn = document.getElementById('btn-room'), act = document.querySelector('.action-row').getBoundingClientRect(), ctl = document.querySelector('.control-row').getBoundingClientRect();
+    const cards = [...document.querySelectorAll('#hand-fan .fan-card')].map(c => c.getBoundingClientRect());
+    return { shown: !btn.hidden && !!btn.offsetParent, n: cards.length, clear: cards.every(c => !hit(c, act) && !hit(c, ctl)) };
+  });
+  check(r.shown && r.n === 8 && r.clear, 'ipad-small, in an Infirmary: eight cards stay clear of the wider button row (with its Infirmary button)');
+  await put('library', 4); await settle();
+}
+if (shots) {
+  // The found-card reveal and a dark room at each iPad size.
+  await game(() => window.__game.revealTile('storage'));
+  for (const [w, h] of [[1180, 820], [1024, 768], [1366, 1024]]) {
+    await page.setViewportSize({ width: w, height: h });
+    await game(() => { const g = window.__game; g.state.searchedRooms.delete('library'); const p = g.activePlayer(); p.hand = p.hand.slice(0, 3); p.actionPoints = 4; g.state.drawPile.unshift({ id: `rv${Math.random()}`, type: 'lantern' }); g.refresh(); });
+    await settle(); await page.waitForTimeout(500);
+    await searchHere(); await page.waitForTimeout(500);
+    await shot(`ui-search-reveal-${w}x${h}`);
+    await takeReveal();
+    await put('storage', 4);
+    await game(() => { const g = window.__game; g.state.searchedRooms.delete('storage'); const p = g.activePlayer(); p.hand = p.hand.filter(c => c.type !== 'flashlight'); g.refresh(); });
+    await settle(); await page.waitForTimeout(700);
+    await shot(`ui-search-dark-${w}x${h}`);
+    await put('library', 4);
+  }
 }
 await page.setViewportSize({ width: 1180, height: 820 });
 

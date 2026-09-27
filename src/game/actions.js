@@ -85,6 +85,14 @@ export function canSearch(state, floor, player) {
   return { ok: true };
 }
 
+// Whether a room still has something a search could give anyone: it is searchable and either its
+// one card draw is unused or cards are lying on its floor. (Who may search it right now, and why
+// not, is canSearch's job.) Pure; changes nothing.
+export function searchLeft(state, room) {
+  if (!room?.searchable) return false;
+  return !state.searchedRooms.has(room.id) || (state.roomDrops.get(room.id) || []).length > 0;
+}
+
 // Search the current room (1 AP). If dropped cards are lying there you take them all (always
 // possible). Otherwise you draw one card, once per room — a Linen Store's draw gives
 // `linenStoreDraws` (2) cards. Results are PRIVATE to the searcher: the public log records only

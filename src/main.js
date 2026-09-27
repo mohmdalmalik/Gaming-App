@@ -7,7 +7,7 @@ import { config as cfg } from './config.js';
 import { rules, applyMode } from './data/rules.js';
 import { hotel } from './data/hotel.js';
 import { roster } from './data/characters.js';
-import { createHotel, stackDeck, growTo } from './game/hotel.js';
+import { createHotel, stackDeck, growTo, searchSpotOf } from './game/hotel.js';
 import { buildGrid } from './game/grid.js';
 import {
   createState, resetState, endTurn, activePlayer, nextPlayer, checkWin, canEscape,
@@ -15,7 +15,7 @@ import {
   isBarricaded, canTradeVoluntarily,
 } from './game/state.js';
 import {
-  search, escape, useBandage, useUnlock, useBarricade, resolveFullHand, resolveTrade, resolveAttack,
+  search, canSearch, escape, useBandage, useUnlock, useBarricade, resolveFullHand, resolveTrade, resolveAttack,
   discardCard, overHandLimit, tradeableCards, openDoor,
   canUseRoom, useInfirmary, useSwitchboard, useHandMirror, useEspresso,
 } from './game/actions.js';
@@ -36,6 +36,8 @@ import { createHud } from './hud.js';
 import { createMap } from './map.js';
 import { createOverlays } from './overlays.js';
 import { createHand } from './ui/hand.js';
+import { createHandFan } from './ui/handFan.js';
+import { createSearchSpot } from './ui/searchSpot.js';
 import { createDiscard } from './ui/discard.js';
 import { createFullHand } from './ui/fullHand.js';
 import { createHandoff } from './ui/handoff.js';
@@ -111,12 +113,15 @@ const discard = createDiscard(document, cfg, {
   onDiscard: cardId => { const r = discardCard(state, activePlayer(state), cardId); if (!r.ok) hud.toast('That card cannot be discarded.'); refresh(); },
 });
 const fullHand = createFullHand(document);
+// The hand, held as a fan of face-up cards; tapping one opens it large in the card view.
+const fan = createHandFan(document, { onOpen: cardId => { if (running && !uiBusy()) hand.open(state, floor, cardId); } });
 const handoff = createHandoff(document);
 const meeting = createMeeting(document, cfg);
 
 let running = false;
 let pendingArrival = null;   // enterRoom result waiting for the walk to finish
 let selectedMove = null;     // a door move awaiting confirmation
+let pendingSearch = null;    // { room, face: [x, z] }: walking to the search spot, then searching
 
 const uiBusy = () => map.isOpen || hand.isOpen || discard.isOpen || fullHand.isOpen
   || overlays.endOpen || overlays.noticeOpen || handoff.isOpen || meeting.isOpen;
@@ -131,6 +136,25 @@ const discovery = createDiscovery({
     },
   },
 });
+
+// The search icon over the room's search spot (the furniture flagged `search: true`).
+const searchSpot = createSearchSpot(document, { camera: view.camera, container, floor, state, onTap: onSearchSpot });
+
+// The fan and the search icon are part of the active guest's own action phase only: never on a
+// hand-over, role, private-pick, meeting, notice or end screen (CSS also hides them the moment any of
+// those is up). Cheap enough to run every frame; each only touches the page when something changed.
+function actionPhaseClear() {
+  return running && !state.finished && (PRACTICE || inActionPhase)
+    && !handoff.isOpen && !meeting.isOpen && !overlays.endOpen && !overlays.noticeOpen
+    && !map.isOpen && !discard.isOpen && !fullHand.isOpen;
+}
+function syncHandFan() {
+  // A Possession card never goes on the always-on fan in hot-seat (see src/ui/handFan.js).
+  fan.update(activePlayer(state), actionPhaseClear(), { withPossession: !HOTSEAT });
+}
+function syncSearchSpot() {
+  searchSpot.update(activePlayer(state), actionPhaseClear() && !hand.isOpen && !pendingArrival);
+}
 
 // --- Render sync -------------------------------------------------------------------------
 function syncViews(animate) {
@@ -156,7 +180,7 @@ function refreshUsable() {
   for (const dv of doorways.views.values()) dv.setUsable(usable.has(dv.doorway.id), p.currentRoom);
 }
 
-function refresh() { hud.update(state, floor); refreshUsable(); hand.refresh(); searchMarks.update(state); discovery.refresh(); }
+function refresh() { hud.update(state, floor); refreshUsable(); hand.refresh(); searchMarks.update(state); discovery.refresh(); syncHandFan(); syncSearchSpot(); }
 
 function activeMover() { return movers[state.activeIndex]; }
 
@@ -191,7 +215,7 @@ function beginTurn() {
   if (state.finished) { showEnd(); return; }
   inActionPhase = false;
   stopTimer();
-  hand.close(); map.close(); hud.hideConfirm(); selectedMove = null;
+  hand.close(); map.close(); hud.hideConfirm(); selectedMove = null; pendingSearch = null;
   const p = activePlayer(state);
   movers[p.index]?.halt();
   rig.setFocus(activeMover().x, activeMover().z, true);
@@ -238,7 +262,7 @@ function onTimeUp() {
 }
 
 function passTurn() {
-  hud.hideConfirm(); selectedMove = null;
+  hud.hideConfirm(); selectedMove = null; pendingSearch = null;
   hand.close();
   stopTimer();
   const result = endTurn(state, floor);
@@ -288,7 +312,7 @@ function startMeeting(P, candidates) {
   // The meeting panel is public: close anything private first (a hand sheet opened mid-walk would
   // otherwise stay readable underneath it).
   hand.close(); map.close();
-  hud.hideConfirm(); selectedMove = null;
+  hud.hideConfirm(); selectedMove = null; pendingSearch = null;
   const met = Q => {
     lockEncounter(state, P.currentRoom, P.index, Q.index);
     const canAttack = weaponsIn(P.hand).length > 0 && P.actionPoints >= rules.actionCost.attack;
@@ -393,8 +417,9 @@ function onSearch() {
   // A card that does not fit goes straight to the take-or-leave prompt, on the searcher's own turn.
   if (r.kind === 'card' && r.full) { askFullHand(player, r.card, where); return; }
   // A Linen Store's draw gives two cards; any that did not fit then go through the take-or-leave
-  // prompt one after another, once the searcher has read what they found.
+  // prompt one after another, once the searcher has seen what they found.
   const overflow = r.kind === 'cards' ? r.overflow : [];
+  const found = r.kind === 'found' || r.kind === 'cards' ? r.cards : r.kind === 'card' ? [r.card] : [];
   const line = r.kind === 'found'
     ? `Lying in ${where}: ${r.cards.map(c => CARDS[c.type].name).join(', ')}. You take it all.`
     : r.kind === 'nothing' ? `You search ${where}. Nothing.`
@@ -404,16 +429,67 @@ function onSearch() {
   const tally = lanterns ? ` You now hold ${lanterns} Lantern${lanterns === 1 ? '' : 's'}.` : '';
   const noRoom = overflow.length
     ? ` Your hands are full — choose what to do with ${andList(overflow.map(c => `the ${CARDS[c.type].name}`))} next.` : '';
-  const then = () => askEachFullHand(player, overflow, where);
-  // Search results are PRIVATE. In hot-seat the table sees only that a search happened; the
-  // result goes on a private card for the searcher. Practice has nobody to hide it from.
-  if (HOTSEAT) {
-    hud.toast(`${player.name} searched.`);
-    handoff.privateNote(player, [line + tally + noRoom], then);
-  } else {
-    hud.toast(line + tally + noRoom);
-    then();
+  const then = () => { refresh(); askEachFullHand(player, overflow, where); };
+  // Search results are PRIVATE. In hot-seat the table sees only that a search happened; the found
+  // cards are shown large on a private screen for the searcher. Practice has nobody to hide them from,
+  // so the same reveal sits on a lighter backdrop with the room still in view.
+  if (HOTSEAT) hud.toast(`${player.name} searched.`);
+  handoff.privateFound(player, {
+    kicker: HOTSEAT ? `Private — ${player.name} only · ${where}` : `You search ${where}`,
+    title: !found.length ? 'Nothing here' : r.kind === 'found' ? `You pick up ${andList(found.map(c => aCard(c.type)))}` : `You found ${andList(found.map(c => aCard(c.type)))}`,
+    cards: found,
+    lines: [line + tally + noRoom],
+    button: found.length && overflow.length === found.length ? 'Continue' : undefined,
+    soft: PRACTICE,
+  }, then);
+}
+
+// The search icon was tapped: walk to stand in front of the search spot (free, inside the room), then
+// search — the same search as always, for 1 action. A refusal is explained where the tap was.
+function onSearchSpot() {
+  if (!running || state.finished || uiBusy() || pendingArrival) return;
+  if (HOTSEAT && !inActionPhase) return;
+  const player = activePlayer(state);
+  const gate = canSearch(state, floor, player);
+  if (!gate.ok) { hud.toast(SEARCH_FAIL[gate.reason] || 'Cannot search now.'); return; }
+  hud.hideConfirm(); selectedMove = null;
+  const spot = searchSpotOf(floor.rooms.get(player.currentRoom));
+  const stand = spot && standInFront(spot, player);
+  if (stand) {
+    const plan = discovery.plan(stand[0], stand[1]);
+    const m = activeMover();
+    if (plan.ok && plan.cost === 0 && Math.hypot(m.x - stand[0], m.z - stand[1]) > 0.25) {
+      pendingSearch = { room: player.currentRoom, face: spot.center };
+      discovery.go(plan);
+      return;
+    }
   }
+  if (activeMover().walking) activeMover().halt();
+  pendingSearch = null;
+  if (spot) faceTowards(spot.center);
+  onSearch();
+}
+
+// Where to stand to search a piece of furniture: just off the side of its footprint that faces into
+// the room, on free floor of the same room (the side nearest the room's centre that can be stood on).
+function standInFront(f, player) {
+  const room = floor.rooms.get(player.currentRoom);
+  const gap = cfg.player.clearance + 0.3;
+  const [cx, cz] = f.center;
+  const spots = [[cx, f.min[1] - gap], [cx, f.max[1] + gap], [f.min[0] - gap, cz], [f.max[0] + gap, cz]];
+  const others = movers.filter((m, i) => i !== player.index && state.players[i].alive);
+  const ok = ([x, z]) => {
+    const c = grid.cellAt(x, z);
+    return c >= 0 && grid.walkable[c] && grid.roomIdOf(c) === room.id && !others.some(m => Math.hypot(m.x - x, m.z - z) < 0.6);
+  };
+  const d = ([x, z]) => Math.hypot(x - room.center[0], z - room.center[1]);
+  return spots.filter(ok).sort((a, b) => d(a) - d(b))[0] || null;
+}
+
+// Turn the active guest to look at a point (after walking up to the search spot).
+function faceTowards([x, z]) {
+  const m = activeMover();
+  if (Math.hypot(x - m.x, z - m.z) > 0.05) m.heading = Math.atan2(x - m.x, z - m.z);
 }
 
 // Every drawn card that did not fit, through the take-or-leave prompt one at a time.
@@ -576,7 +652,8 @@ function restart() {
   doorways.reset();
   rebuildGrid();
   movers.forEach((m, i) => m.reset(startSpot(i)[0], startSpot(i)[1]));
-  pendingArrival = null; selectedMove = null;
+  pendingArrival = null; selectedMove = null; pendingSearch = null;
+  fan.reset();
   discovery.refresh();
   syncViews(false);
   rig.setFocus(activeMover().x, activeMover().z, true);
@@ -697,6 +774,7 @@ function onOpenDoor(doorId) {
 createInput(view.renderer.domElement, {
   onTap(x, y) {
     if (!running || state.finished || uiBusy() || activeMover().walking) return;
+    pendingSearch = null;
     const p = screenToGround(x, y);
     if (!p) return;
     const player = activePlayer(state);
@@ -753,10 +831,8 @@ createInput(view.renderer.domElement, {
 hud.on('rotateLeft', () => rig.rotateLeft());
 hud.on('rotateRight', () => rig.rotateRight());
 hud.on('endTurn', doEndTurn);
-hud.on('search', onSearch);
 hud.on('roomJob', onRoom);
 hud.on('trade', onTrade);
-hud.onHand(() => { if (running && !uiBusy()) hand.open(state, floor); });
 hud.on('private', () => { if (running && !uiBusy()) hand.open(state, floor); });
 hud.on('map', () => { if (!meeting.isOpen && !discard.isOpen && !overlays.endOpen && !handoff.isOpen) map.toggle(state, movers); });
 hud.onConfirm(
@@ -823,6 +899,12 @@ view.renderer.setAnimationLoop(now => {
     activeMover().update(dt);
     discovery.update();
     if (pendingArrival && !activeMover().walking && activeMover().path.length === 0) onArrive();
+    // Walked up to the search spot: face it and search.
+    if (pendingSearch && !activeMover().walking && activeMover().path.length === 0) {
+      const ps = pendingSearch;
+      pendingSearch = null;
+      if (activePlayer(state).currentRoom === ps.room) { faceTowards(ps.face); onSearch(); }
+    }
   }
   rig.setFocus(activeMover().x, activeMover().z);
   rig.update(dt);
@@ -833,6 +915,8 @@ view.renderer.setAnimationLoop(now => {
   updateCutaway(roomViews, rig, state, cfg, dt);
   characters.forEach((cv, i) => cv.update(movers[i], dt));
   view.render();
+  syncHandFan();
+  syncSearchSpot();     // after the render, so it reads this frame's camera
   if (++frames === 2) overlays.setReady();
 });
 document.addEventListener('visibilitychange', () => { last = performance.now(); });
@@ -848,6 +932,13 @@ window.__game = {
   walkTo: (x, z) => discovery.walkTo(x, z),
   moveToRoom,
   search: () => onSearch(),
+  // The search icon and the hand fan (tests).
+  tapSearchSpot: () => onSearchSpot(),
+  searchSpot: () => ({ mode: searchSpot.mode, point: searchSpot.point, spot: searchSpot.spot && { center: searchSpot.spot.center, height: searchSpot.spot.size[1], kind: searchSpot.spot.kind } }),
+  searchPending: () => !!pendingSearch,
+  fanIds: () => (fan.visible ? fan.ids : []),
+  cardViewOpen: () => hand.isOpen,
+  cardViewId: () => hand.cardId,
   useBandage: id => onUseBandage(id),
   // Part 2: rooms with jobs and the new cards (same paths as the buttons).
   roomJob: () => canUseRoom(state, floor, activePlayer(state)),

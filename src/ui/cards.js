@@ -95,6 +95,38 @@ export function cardTile(doc, card, opts = {}) {
   return el;
 }
 
+// The order a hand is shown in (the fan, the card view): Possession cards first, then the rest
+// grouped by type in catalogue order (Lanterns lead). Returns a new array.
+export function sortHand(hand) {
+  const order = Object.keys(CARDS);
+  const rank = c => (c.type === 'possession' ? -1 : order.indexOf(c.type));
+  return [...hand].sort((a, b) => rank(a) - rank(b));
+}
+
+// One card shown large: its face, then its name and what it does in plain text (the found-card
+// reveal and the card view). `opts.text` false leaves the words out.
+export function bigCard(doc, card, opts = {}) {
+  const meta = CARDS[card.type] || { name: card.type, desc: '' };
+  const el = doc.createElement('div');
+  el.className = 'big-card' + (meta.evil ? ' evil' : '');
+  el.dataset.cardId = card.id;
+  const shots = card.type === 'revolver' && card.shots != null ? `${card.shots} shot${card.shots === 1 ? '' : 's'}` : '';
+  const face = doc.createElement('div');
+  face.className = 'bc-face';
+  if (CARD_FACE[card.type]) {
+    const img = doc.createElement('img'); img.src = CARD_FACE[card.type]; img.alt = meta.name; face.appendChild(img);
+  } else {
+    face.appendChild(cardArt(doc, card.type));
+  }
+  if (shots) { const b = doc.createElement('span'); b.className = 'face-badge'; b.textContent = shots; face.appendChild(b); }
+  el.appendChild(face);
+  if (opts.text !== false) {
+    const nm = doc.createElement('div'); nm.className = 'bc-name'; nm.textContent = meta.name; el.appendChild(nm);
+    const d = doc.createElement('div'); d.className = 'bc-desc'; d.textContent = meta.desc; el.appendChild(d);
+  }
+  return el;
+}
+
 // A stacked tile summarising N copies of one card type (kept for possible overviews).
 export function countTile(doc, type, count) {
   const meta = CARDS[type];

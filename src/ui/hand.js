@@ -1,19 +1,24 @@
-// The hand sheet: the active guest's cards as large illustrated tiles, with a detail pane that
-// explains the selected card and offers its action when it has one. Private to whoever holds
-// the device: it shows their Lanterns, their Possession cards and who they have unmasked.
+// The card view: one card of the active guest's hand shown large — its face, its name, what it does
+// and, when it has one, its action (Use, Open, Seal, Drink, whose hand to look at). Opened by tapping a
+// card in the hand fan (src/ui/handFan.js) or the "Private details" link; ‹ › step through the hand.
+// Private to whoever holds the device: it shows their Lanterns, their Possession cards and who they
+// have unmasked. Tap outside the panel, or Close, to put it away.
 import { activePlayer, adjacentLockedRooms, isBarricaded, playersInRoom } from '../game/state.js';
 import { rules } from '../data/rules.js';
 import { CARDS, countableCount } from '../game/cards.js';
-import { cardTile } from './cards.js';
+import { bigCard, sortHand } from './cards.js';
 
 export function createHand(doc, cfg, { onUseBandage, onUnlock, onBarricade, onEspresso, onHandMirror }) {
   const overlay = doc.getElementById('hand-overlay');
   const title = doc.getElementById('hand-title');
   const banner = doc.getElementById('hand-banner');
-  const cards = doc.getElementById('hand-cards');
+  const big = doc.getElementById('hand-big');
   const detail = doc.getElementById('hand-detail');
   const note = doc.getElementById('hand-note');
   const closeBtn = doc.getElementById('btn-hand-close');
+  const prevBtn = doc.getElementById('btn-hand-prev');
+  const nextBtn = doc.getElementById('btn-hand-next');
+  const position = doc.getElementById('hand-pos');
   let open = false;
   let ctx = null;
   let selectedId = null;
@@ -33,21 +38,20 @@ export function createHand(doc, cfg, { onUseBandage, onUnlock, onBarricade, onEs
     } else banner.hidden = true;
 
     // Possession cards first, then the rest grouped by type (Lanterns lead the catalogue).
-    const order = Object.keys(CARDS);
-    const rank = c => (c.type === 'possession' ? -1 : order.indexOf(c.type));
-    const hand = [...p.hand].sort((a, b) => rank(a) - rank(b));
+    const hand = sortHand(p.hand);
     if (!hand.some(c => c.id === selectedId)) selectedId = hand[0]?.id ?? null;
+    const at = hand.findIndex(c => c.id === selectedId);
+    const card = hand[at] || null;
 
-    cards.innerHTML = '';
-    for (const card of hand) {
-      cards.appendChild(cardTile(doc, card, {
-        hideDesc: true, selectable: true, selected: card.id === selectedId,
-        onSelect: c => { selectedId = c.id; render(); },
-      }));
-    }
-    if (!hand.length) cards.innerHTML = '<div class="panel-note">No cards.</div>';
+    big.innerHTML = '';
+    if (card) big.appendChild(bigCard(doc, card, { text: false }));
+    else big.innerHTML = '<div class="panel-note">No cards.</div>';
+    position.textContent = hand.length ? `${at + 1} of ${hand.length}` : '';
+    prevBtn.disabled = nextBtn.disabled = hand.length < 2;
+    prevBtn.onclick = e => { e.preventDefault(); selectedId = hand[(at - 1 + hand.length) % hand.length]?.id; render(); };
+    nextBtn.onclick = e => { e.preventDefault(); selectedId = hand[(at + 1) % hand.length]?.id; render(); };
 
-    renderDetail(state, floor, p, hand.find(c => c.id === selectedId) || null);
+    renderDetail(state, floor, p, card);
 
     // An Espresso can lift a turn above the usual action points: say by how much.
     const base = rules.actionPointsPerTurn;
@@ -145,8 +149,20 @@ export function createHand(doc, cfg, { onUseBandage, onUnlock, onBarricade, onEs
 
   const api = {
     get isOpen() { return open; },
-    open(state, floor) { ctx = { state, floor }; open = true; overlay.hidden = false; render(); },
-    refresh() { if (open) render(); },
+    get cardId() { return open ? selectedId : null; },
+    // Open on card `cardId` (or the first card of the hand).
+    open(state, floor, cardId = null) {
+      ctx = { state, floor }; open = true; overlay.hidden = false;
+      selectedId = cardId;
+      render();
+    },
+    // After anything that changes the hand. A card that has just been used up takes the view with it.
+    refresh() {
+      if (!open) return;
+      const p = activePlayer(ctx.state);
+      if (selectedId && !p.hand.some(c => c.id === selectedId)) { api.close(); return; }
+      render();
+    },
     close() { open = false; overlay.hidden = true; },
   };
   closeBtn.addEventListener('click', e => { e.preventDefault(); api.close(); });

@@ -249,29 +249,90 @@ html, body {
 }
 .private-link:active { color: var(--brass-bright); }
 
-/* ---- Bottom-centre: hand opener (fanned card backs + label) ---- */
-.hand-strip {
-  margin: 0 auto; flex: 0 0 auto; min-height: 60px;
-  display: flex; align-items: center; gap: 12px; cursor: pointer; touch-action: manipulation;
-  padding: 8px 18px; border-radius: 14px;
-  background: var(--panel); border: 1px solid var(--line);
-  box-shadow: inset 0 0 0 1px rgba(0,0,0,0.5), 0 8px 20px rgba(0,0,0,0.4);
-  -webkit-backdrop-filter: blur(7px); backdrop-filter: blur(7px);
+/* ---- Bottom-centre: the hand, held as a fan of face-up cards (src/ui/handFan.js) ----
+   The fan takes the width left between the player panel and the buttons, so it can never cover
+   either. The strip itself lets taps through to the floor; only the cards catch them. Each card's
+   place on the arc is three custom properties set by the script: --x, --y and --r. */
+.hand-fan {
+  position: relative; z-index: 0;   /* its own stacking context: cards never rise above an overlay */
+  flex: 1 1 0; min-width: 0; align-self: flex-end;
+  height: var(--fan-h, 150px); pointer-events: none;
 }
-.hand-strip:active { transform: scale(0.98); }
-.hand-strip-label { font-family: var(--serif); font-size: 15px; color: var(--ivory); letter-spacing: 0.02em; }
-.hand-backs { display: flex; align-items: flex-end; }
-.card-back {
-  width: 30px; height: 45px; border-radius: 3px; margin-left: -14px;
-  background: #1a1a1c url('assets/cards/back.jpg') center / cover no-repeat;   /* the owner's card back */
-  box-shadow: 0 2px 6px rgba(0,0,0,0.5);
+.fan-card {
+  position: absolute; left: 0; bottom: calc(var(--fan-drop, 0px) - var(--fan-sink, 0px)); width: var(--fan-w, 96px); aspect-ratio: 2 / 3;
+  padding: 0; border: none; border-radius: 7% / 4.7%; overflow: hidden; cursor: pointer;
+  background: #1a1a1c; touch-action: manipulation; pointer-events: auto;
+  transform-origin: 50% 100%;
+  transform: translate(var(--x, 0px), var(--y, 0px)) rotate(var(--r, 0deg));
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(201, 162, 78, 0.35);
+  transition: transform 0.16s ease-out, box-shadow 0.16s ease-out;
 }
-.card-back:first-child { margin-left: 0; }
-.hand-count {
-  min-width: 26px; height: 26px; padding: 0 8px; border-radius: 999px;
-  display: inline-flex; align-items: center; justify-content: center; font-weight: 800; font-size: 14px;
-  color: var(--accent-text); background: var(--brass); border: 1px solid var(--brass-bright);
+.hand-fan.settling .fan-card { transition: none; }
+.fan-card img { display: block; width: 100%; height: 100%; object-fit: cover; pointer-events: none; -webkit-user-drag: none; }
+.fan-card .fan-name { display: flex; align-items: center; justify-content: center; height: 100%; padding: 6px; font-family: var(--serif); font-weight: 700; color: var(--ivory); }
+.fan-card .fan-badge {
+  position: absolute; top: 7%; right: 8%; padding: 1px 6px; border-radius: 999px; font-size: 10.5px; font-weight: 800;
+  color: #2a2016; background: var(--brass-bright); box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
 }
+.fan-card.evil { box-shadow: 0 6px 16px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(154, 107, 208, 0.7); }
+/* Lift: the pointer over a card (mouse) or a finger on it (touch) raises it clear of the screen edge. */
+.fan-card.lift { z-index: 60 !important; transform: translate(var(--x, 0px), calc(var(--y, 0px) - var(--fan-lift, 26px))) rotate(0deg) scale(1.1); box-shadow: 0 12px 26px rgba(0, 0, 0, 0.6), 0 0 0 2px var(--brass-bright), 0 0 22px rgba(201, 162, 78, 0.45); }
+@media (hover: hover) {
+  .fan-card:hover { z-index: 60 !important; transform: translate(var(--x, 0px), calc(var(--y, 0px) - var(--fan-lift, 26px))) rotate(0deg) scale(1.1); box-shadow: 0 12px 26px rgba(0, 0, 0, 0.6), 0 0 0 2px var(--brass-bright), 0 0 22px rgba(201, 162, 78, 0.45); }
+}
+.fan-card:focus-visible { outline: 2px solid var(--brass-bright); outline-offset: 2px; }
+/* A card that has just come into the hand (a search, a trade) is dealt in from above. */
+.fan-card.dealt { animation: fan-deal 0.55s cubic-bezier(0.2, 0.8, 0.25, 1) both; }
+@keyframes fan-deal {
+  from { opacity: 0; transform: translate(var(--x, 0px), calc(var(--y, 0px) - 190px)) rotate(0deg) scale(1.5); }
+  to { opacity: 1; transform: translate(var(--x, 0px), var(--y, 0px)) rotate(var(--r, 0deg)); }
+}
+
+/* ---- The search icon: a brass magnifier floating over the room's search spot (src/ui/searchSpot.js).
+   Its position is one transform written by the script; the pulse lives on the inner badge. ---- */
+.search-spot {
+  position: absolute; left: 0; top: 0; z-index: 4;
+  display: flex; flex-direction: column; align-items: center; gap: 5px;
+  margin: -30px 0 0 -40px; width: 80px; padding: 0; border: none; background: none;
+  cursor: pointer; touch-action: manipulation; pointer-events: auto; will-change: transform;
+}
+.search-spot .ss-badge {
+  position: relative; width: 60px; height: 60px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center; color: #3a2a10;
+  background: radial-gradient(circle at 38% 30%, #fbf5e6 0%, var(--ivory) 45%, #d9cba9 100%);
+  border: 3px solid var(--brass);
+  box-shadow: 0 0 0 2px rgba(20, 16, 8, 0.55), 0 6px 16px rgba(0, 0, 0, 0.55), inset 0 0 0 1px rgba(255, 255, 255, 0.6);
+}
+.search-spot .ss-glass { width: 36px; height: 36px; }
+.search-spot.live .ss-badge { animation: ss-pulse 1.8s ease-in-out infinite; }
+@keyframes ss-pulse {
+  0%, 100% { transform: scale(1); box-shadow: 0 0 0 2px rgba(20, 16, 8, 0.55), 0 6px 16px rgba(0, 0, 0, 0.55), 0 0 0 0 rgba(232, 202, 128, 0.55); }
+  50% { transform: scale(1.08); box-shadow: 0 0 0 2px rgba(20, 16, 8, 0.55), 0 6px 16px rgba(0, 0, 0, 0.55), 0 0 0 10px rgba(232, 202, 128, 0); }
+}
+.search-spot .ss-caption {
+  padding: 2px 9px; border-radius: 999px; white-space: nowrap;
+  font: 700 11.5px/1.35 var(--sans); letter-spacing: 0.03em; color: var(--ivory);
+  background: rgba(14, 16, 22, 0.88); border: 1px solid var(--line);
+}
+.search-spot .ss-hint {
+  display: none; position: absolute; right: -8px; bottom: -6px; width: 26px; height: 26px; border-radius: 50%;
+  align-items: center; justify-content: center; color: var(--brass-bright);
+  background: #1b1c24; border: 1.5px solid var(--brass);
+}
+.search-spot .ss-hint svg { width: 17px; height: 17px; }
+.search-spot.dark .ss-hint { display: flex; }
+/* Dimmed: cannot be searched right now (too dark, no actions, nothing left) — a tap says why. */
+.search-spot.dark .ss-badge, .search-spot.ap .ss-badge, .search-spot.empty .ss-badge {
+  filter: grayscale(0.75) brightness(0.62); border-color: var(--brass-dim);
+}
+.search-spot.dark .ss-caption, .search-spot.ap .ss-caption, .search-spot.empty .ss-caption { color: var(--ivory-dim); border-color: var(--line-soft); }
+.search-spot:active .ss-badge { transform: scale(0.94); }
+
+/* The fan and the search icon belong to the active guest's own action phase: the moment a hand-over,
+   private, public or end screen is up they are gone (the script hides them too). */
+#app:has(#handoff-overlay:not([hidden]), #encounter-overlay:not([hidden]), #end-overlay:not([hidden]),
+  #notice-overlay:not([hidden]), #map-overlay:not([hidden]), #discard-overlay:not([hidden]),
+  #fullhand-overlay:not([hidden]), #start-overlay:not([hidden])) :is(#hand-fan, #search-spot) { display: none !important; }
 
 /* ---- Bottom-right: camera controls (separate) + action buttons ---- */
 .hud-bottom-right { display: flex; flex-direction: column; align-items: flex-end; gap: 12px; }
@@ -325,7 +386,7 @@ html, body {
 
 /* Move-confirm bar */
 .confirm-bar {
-  position: absolute; left: 50%; bottom: calc(var(--safe-bottom) + 150px); transform: translateX(-50%);
+  position: absolute; left: 50%; bottom: calc(var(--safe-bottom) + 244px); transform: translateX(-50%);
   display: flex; gap: 12px; align-items: center; flex-wrap: wrap; justify-content: center;
   padding: 12px 14px 12px 20px; max-width: 92vw; border-radius: 14px;
   background: var(--panel); border: 1px solid var(--line);
@@ -337,7 +398,7 @@ html, body {
 
 /* Toast */
 .toast {
-  position: absolute; left: 50%; bottom: calc(var(--safe-bottom) + 108px); transform: translateX(-50%);
+  position: absolute; left: 50%; bottom: calc(var(--safe-bottom) + 196px); transform: translateX(-50%);
   padding: 11px 18px; border-radius: 12px; font-size: 15px; white-space: nowrap; max-width: 90vw;
   text-overflow: ellipsis; overflow: hidden; color: var(--ivory);
   background: var(--panel); border: 1px solid var(--line);
@@ -351,8 +412,6 @@ html, body {
 .overlay { position: absolute; inset: 0; background: var(--scrim); z-index: 10; }
 .overlay.center { display: flex; align-items: center; justify-content: center; padding: 24px; }
 .overlay[hidden] { display: none; }
-/* the hand sheet uses a lighter scrim so the room stays visible above it */
-.overlay.sheet { background: linear-gradient(to bottom, rgba(8,9,14,0) 30%, rgba(8,9,14,0.4) 100%); }
 
 .card {
   text-align: center; border-radius: 20px; padding: 30px 38px; max-width: 92vw;
@@ -363,20 +422,13 @@ html, body {
 .card p { margin: 0 0 22px; }
 .muted { color: var(--muted); }
 
-/* Bottom-docked panel (hand). Full-height panel kept as fallback via .panel. */
+/* Full-height panel (kept for general use); its header styles are shared by the card view. */
 .panel {
   position: absolute; inset: calc(var(--safe-top) + 16px) calc(var(--safe-right) + 16px) calc(var(--safe-bottom) + 16px) calc(var(--safe-left) + 16px);
   border-radius: 18px; display: flex; flex-direction: column; overflow: hidden;
   background: var(--panel-solid); border: 1px solid var(--line);
   box-shadow: inset 0 0 0 1px rgba(0,0,0,0.5);
 }
-.panel.sheet {
-  top: auto; max-height: min(56vh, 460px);
-  border-radius: 20px 20px 0 0; border-bottom: none;
-  box-shadow: inset 0 0 0 1px rgba(0,0,0,0.5), 0 -14px 40px rgba(0,0,0,0.5);
-  animation: sheet-up 0.2s ease-out;
-}
-@keyframes sheet-up { from { transform: translateY(30px); opacity: 0.6; } to { transform: translateY(0); opacity: 1; } }
 .panel-header {
   display: flex; align-items: center; gap: 10px; padding: 12px 12px 12px 20px;
   border-bottom: 1px solid var(--line-soft);
@@ -393,12 +445,50 @@ html, body {
 .banner[hidden] { display: none; }
 .banner.info { background: rgba(143,216,255,0.14); border-color: rgba(143,216,255,0.45); color: #bfe6ff; }
 
-/* ---- The hand: a row of large cards + a detail pane ---- */
-.hand-body { display: flex; gap: 18px; padding: 14px 18px 12px; overflow: hidden; min-height: 0; flex: 1; }
-/* A short hand centres; a long hand scrolls horizontally by touch (margin:auto on the row). */
-.hand-cards-wrap { flex: 1; min-width: 0; overflow-x: auto; overflow-y: hidden; -webkit-overflow-scrolling: touch; display: flex; }
+/* A row of card tiles (the prompts, the hand-over screens). */
 .cards { display: flex; gap: 12px; align-content: flex-start; }
-#hand-cards { flex-wrap: nowrap; gap: 14px; margin: auto; padding: 6px 4px 12px; align-items: stretch; }
+
+/* ---- The card view: one card of the hand shown large, beside what it does (src/ui/hand.js) ---- */
+.cv-panel {
+  display: flex; flex-direction: column; width: min(760px, 94vw); max-height: 94vh; overflow: hidden;
+  border-radius: 18px; background: var(--panel-solid); border: 1px solid var(--line);
+  box-shadow: inset 0 0 0 1px rgba(0,0,0,0.5), inset 0 0 0 2px var(--line-soft), 0 18px 50px rgba(0,0,0,0.6);
+  animation: cv-in 0.18s ease-out;
+}
+@keyframes cv-in { from { transform: translateY(18px) scale(0.97); opacity: 0.4; } to { transform: none; opacity: 1; } }
+.cv-body { display: flex; gap: 22px; padding: 16px 20px 6px; min-height: 0; overflow: hidden; flex: 1; }
+.cv-left { flex: none; display: flex; flex-direction: column; align-items: center; gap: 10px; }
+.cv-card .big-card { width: clamp(180px, min(28vw, 38vh), 280px); }
+.cv-nav { display: flex; align-items: center; gap: 14px; }
+.cv-nav .btn.round { width: 48px; height: 48px; font-size: 26px; }
+.cv-pos { min-width: 5ch; text-align: center; font-family: var(--serif); font-size: 14px; color: var(--ivory-dim); }
+.card-view .hand-detail { flex: 1; width: auto; min-width: 0; padding-top: 4px; }
+
+/* A card shown large (the card view, the found-card reveal): the face, then its name and words. */
+.big-card { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.big-card .bc-face {
+  position: relative; width: 100%; aspect-ratio: 2 / 3; border-radius: 7% / 4.7%; overflow: hidden;
+  box-shadow: 0 10px 28px rgba(0,0,0,0.6), 0 0 0 1px rgba(201,162,78,0.45);
+}
+.big-card.evil .bc-face { box-shadow: 0 10px 28px rgba(0,0,0,0.6), 0 0 0 1px rgba(154,107,208,0.7); }
+.big-card .bc-face img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.big-card .bc-face .art { height: 100%; border-radius: 0; }
+.big-card .face-badge { position: absolute; top: 7%; right: 8%; padding: 2px 9px; border-radius: 999px; font-size: 13px; font-weight: 800;
+  color: #2a2016; background: var(--brass-bright); box-shadow: 0 1px 4px rgba(0,0,0,0.5); }
+.big-card .bc-name { font-family: var(--serif); font-size: 20px; font-weight: 700; color: var(--brass-bright); }
+.big-card.evil .bc-name { color: var(--evil); }
+.big-card .bc-desc { font-size: 14px; line-height: 1.45; color: var(--ivory); max-width: 30ch; text-align: center; }
+
+/* The found-card reveal on the hand-over card: one or two cards, large. */
+.handoff-found { display: flex; gap: 26px; justify-content: center; margin: 6px auto 10px; }
+.handoff-found .big-card { width: clamp(170px, min(24vw, 40vh), 250px); animation: found-in 0.45s cubic-bezier(0.2, 0.8, 0.25, 1) both; }
+.handoff-found .big-card:nth-child(2) { animation-delay: 0.12s; }
+.handoff-found.pair .big-card { width: clamp(150px, min(21vw, 34vh), 220px); }
+@keyframes found-in { from { opacity: 0; transform: translateY(26px) rotate(-3deg) scale(0.9); } to { opacity: 1; transform: none; } }
+.card.handoff-card.found h1 { color: var(--brass-bright); }
+/* Practice: nobody to hide from, so the room stays in view behind the reveal. */
+.overlay.handoff.soft { background: rgba(8, 9, 14, 0.74); }
+
 .hand-detail {
   width: 264px; flex: none; border-left: 1px solid var(--line-soft); padding-left: 18px;
   display: flex; flex-direction: column; gap: 10px; overflow-y: auto;
@@ -536,8 +626,6 @@ html, body {
   .player-panel { gap: 10px; padding: 10px 12px 10px 10px; }
   .player-meta { min-width: 96px; }
   .portrait-slot { width: 60px; height: 74px; }
-  .hand-strip { gap: 8px; padding: 7px 12px; }
-  .hand-strip-label { display: none; }        /* keep the fanned backs + count */
   .action-row { gap: 8px; }
   .control-row { gap: 8px; }
   .btn.action { min-width: 92px; padding: 9px 12px; }
@@ -549,9 +637,9 @@ html, body {
 /* Portrait orientation / narrow: the bottom bar becomes two rows — hand opener + camera controls
    above, player panel + turn actions below — so nothing is squeezed or overlapped. */
 @media (max-width: 900px) {
-  .hud-bottom { display: grid; grid-template-columns: auto 1fr auto; grid-template-areas: "hand . ctl" "panel panel actions"; align-items: end; column-gap: 10px; row-gap: 10px; }
+  .hud-bottom { display: grid; grid-template-columns: auto 1fr auto; grid-template-areas: "hand hand ctl" "panel panel actions"; align-items: end; column-gap: 10px; row-gap: 10px; }
   .hud-bottom-left { grid-area: panel; max-width: none; }
-  .hand-strip { grid-area: hand; margin: 0; justify-self: start; }
+  .hand-fan { grid-area: hand; width: 100%; }
   .hud-bottom-right { display: contents; }     /* its two rows become grid items */
   .control-row { grid-area: ctl; justify-self: end; }
   .action-row { grid-area: actions; justify-self: end; }

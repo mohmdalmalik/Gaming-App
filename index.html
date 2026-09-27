@@ -58,12 +58,9 @@
           </div>
         </div>
 
-        <!-- Centre: the active player's hand (fanned backs + count). Tap to open. -->
-        <div id="hand-strip" class="hand-strip" role="button" tabindex="0" aria-label="View hand">
-          <div id="hand-backs" class="hand-backs"></div>
-          <span class="hand-strip-label">View hand</span>
-          <span id="hand-count" class="hand-count" aria-label="Cards in hand">0</span>
-        </div>
+        <!-- Centre: the active guest's hand, held as a fan of face-up cards (src/ui/handFan.js).
+             Tap a card to see it large. -->
+        <div id="hand-fan" class="hand-fan" hidden aria-label="Your hand"></div>
 
         <!-- Right: camera controls (kept separate) above the turn actions. -->
         <div class="hud-bottom-right">
@@ -73,7 +70,6 @@
             <button id="btn-map" class="ctl map" type="button" aria-label="Open map"><span class="ico">&#x25A4;</span> Map</button>
           </div>
           <div class="action-row">
-            <button id="btn-search" class="btn action" type="button"><span class="btn-main">Search</span><span id="search-sub" class="btn-sub">1 action</span></button>
             <!-- A room with a job (Infirmary, Switchboard): shown only while standing in one. -->
             <button id="btn-room" class="btn action room-job" type="button" hidden><span class="btn-main">Infirmary</span><span id="room-sub" class="btn-sub">1 action</span></button>
             <button id="btn-trade" class="btn action" type="button" hidden><span class="btn-main">Trade</span><span class="btn-sub">Safe zone</span></button>
@@ -120,9 +116,9 @@
       </div>
     </div>
 
-    <!-- Hand: a collapsible bottom sheet that keeps the room in view above it -->
-    <div id="hand-overlay" class="overlay sheet" hidden>
-      <div class="panel sheet">
+    <!-- The card view: one card of the hand shown large, with what it does and its action -->
+    <div id="hand-overlay" class="overlay center card-view" hidden>
+      <div class="cv-panel" role="dialog" aria-labelledby="hand-title">
         <div class="panel-header">
           <span id="hand-title" class="panel-title">Hand</span>
           <span class="lock">&#x1F512; Private</span>
@@ -130,8 +126,15 @@
           <button id="btn-hand-close" class="btn round" type="button" aria-label="Close">&#x2715;</button>
         </div>
         <div id="hand-banner" class="banner" hidden></div>
-        <div class="hand-body">
-          <div class="hand-cards-wrap"><div id="hand-cards" class="cards"></div></div>
+        <div class="cv-body">
+          <div class="cv-left">
+            <div id="hand-big" class="cv-card"></div>
+            <div class="cv-nav">
+              <button id="btn-hand-prev" class="btn round" type="button" aria-label="Previous card">&#x2039;</button>
+              <span id="hand-pos" class="cv-pos"></span>
+              <button id="btn-hand-next" class="btn round" type="button" aria-label="Next card">&#x203A;</button>
+            </div>
+          </div>
           <div id="hand-detail" class="hand-detail"></div>
         </div>
         <div id="hand-note" class="panel-note"></div>
@@ -174,6 +177,7 @@
         <h1 id="handoff-title">&nbsp;</h1>
         <p id="handoff-sub" class="muted"></p>
         <div id="handoff-role" class="role-badge" hidden></div>
+        <div id="handoff-found" class="handoff-found" hidden></div>
         <div id="handoff-notes" class="handoff-notes" hidden></div>
         <div id="handoff-hand" class="cards handoff-hand" hidden></div>
         <div id="handoff-offer" class="offer-block" hidden>

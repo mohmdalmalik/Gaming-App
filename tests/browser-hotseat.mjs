@@ -106,6 +106,17 @@ async function throughRoles() {
     if (await game(() => window.__game.handoffOpen())) await next(); else return;
   }
 }
+// Searching is the magnifier over the room's search spot (#search-spot): tap it, the guest walks up to
+// the furniture and searches. Resolves once the walk and the search are done.
+async function searchHere() {
+  await page.click('#search-spot');
+  await page.waitForFunction(() => !window.__game.searchPending() && !window.__game.activeMover().walking && window.__game.activeMover().path.length === 0, null, { timeout: 40000, polling: 50 });
+  await page.waitForTimeout(80);
+}
+const fanIds = () => game(() => window.__game.fanIds());
+const sameSet = (a, b) => a.length === b.length && a.every(x => b.includes(x));
+// The hand fan and the search icon must be off the screen (hand-overs, private screens, the end).
+const fanGone = async () => !(await visible('#hand-fan')) && !(await visible('#search-spot'));
 // A room that can be searched with no fuss: not dark, not locked, nothing lying in it.
 const plainRoom = () => game(() => {
   const g = window.__game;
@@ -156,15 +167,18 @@ check(st.timer, 'the 45-second timer is on');
 console.log('\n2. secret roles, one guest at a time');
 await tap('#btn-begin');
 check(await kind() === 'pass', 'a neutral hand-over screen comes first');
+check(await fanGone(), 'no hand fan and no search icon on the hand-over screen');
 check(!(await visible('#handoff-role')) && !(await visible('#handoff-hand')), 'with no role and no hand on it');
 await next();
 check(await kind() === 'role' && /CLEAN GUEST|POSSESSED/.test(await page.textContent('#handoff-role')), 'then that guest alone reads their role');
+check(await fanGone(), 'nor on the role screen');
 await shot('hs-01-role');
 await throughRoles();
 check(await game(() => window.__game.state.players.every(p => p.roleSeen)), 'all six acknowledged');
 check(await kind() === 'turn', "the first guest's private turn screen follows");
 check(await visible('#handoff-hand') && await visible('#handoff-role'), 'it shows their role and their hand');
 check((await page.textContent('#handoff-kicker')).includes('health 3 of 3'), 'and their health');
+check(await fanGone(), 'the hand fan waits until their turn starts');
 await shot('hs-02-private-turn');
 await next();
 
@@ -177,8 +191,23 @@ check(!/POSSESS/i.test(hudText), 'the word "possessed" is nowhere on the public 
 check(!(await visible('#possess-tint')) && await page.evaluate(() => !document.getElementById('player-panel').classList.contains('possessed')),
   'no possessed tint or portrait on the shared screen — the tell lives on the private screens');
 check(/cards/.test(await page.evaluate(() => document.getElementById('players-strip').innerText)), 'the strip shows rooms, cards and health');
+check(await visible('#hand-fan') && sameSet(await fanIds(), await game(() => window.__game.activePlayer().hand.map(c => c.id))), 'the turn shows their hand as a fan of cards');
+check(!(await page.$('#btn-search')), 'there is no Search button');
+check(!(await visible('#search-spot')), 'and no search icon in the lobby');
 // Possessed guest's private screen carries the tell.
 const evilIdx = st.poss[0];
+{
+  // Their own action phase: the fan shows their ordinary cards; a Possession card never goes on the
+  // always-on screen, and the strip still counts only the ordinary ones.
+  await game(i => { window.__game.state.activeIndex = i; window.__game.refresh(); }, evilIdx);
+  await page.waitForTimeout(150);
+  const ev = await game(i => { const p = window.__game.state.players[i]; return { ord: p.hand.filter(c => c.type !== 'possession').map(c => c.id), n: p.hand.length }; }, evilIdx);
+  const fan = await fanIds();
+  check(sameSet(fan, ev.ord) && ev.n === ev.ord.length + 3, `the possessed guest's fan shows their ${ev.ord.length} ordinary cards and none of the 3 Possession cards`);
+  check(!/POSSESS/i.test(await page.evaluate(() => document.getElementById('hud').innerText)) && !(await page.$('#hand-fan .fan-card.evil')), 'nothing on the shared screen says possessed');
+  const strip = await page.evaluate(i => document.querySelectorAll('#players-strip .mini-where')[i].textContent, evilIdx);
+  check(strip.includes(`${ev.ord.length} cards`), `the strip shows the public count only ("${strip}")`);
+}
 await game(i => { window.__game.state.activeIndex = i; window.__game.refresh(); }, evilIdx);
 await game(() => window.__game.endTurn());
 await page.waitForTimeout(150);
@@ -208,11 +237,13 @@ await walkInto(P, E);
 check(await game(() => window.__game.meetingOpen()), 'walking in on a guest opens the meeting');
 check(await clickBtn('#encounter-actions .btn', 'Trade'), 'the arriving guest chooses Trade');
 check(await kind() === 'pick' && (await page.textContent('#handoff-kicker')).includes('Victor'), 'they choose their card in private');
+check(await fanGone(), 'the fan is off the screen while cards are picked in private');
 check(await page.evaluate(() => document.querySelectorAll('#offer-cards .card-tile').length) === 2, 'from their own hand only');
 await page.click('#offer-cards .card-tile[data-card-id="p1"]'); await page.waitForTimeout(80);
 check(await kind() === 'pass' && (await page.textContent('#handoff-title')).includes('Pass the device'), 'the device is passed to the other guest');
 await next();
 check(await kind() === 'pick', 'who chooses in private too');
+check(await fanGone(), 'and while the other guest picks theirs');
 check(await page.evaluate(() => !!document.querySelector('#offer-cards .card-tile[data-card-id="x1"]')), 'a possessed guest may give a Possession card');
 await page.click('#offer-cards .card-tile[data-card-id="x1"]'); await page.waitForTimeout(80);
 check(await kind() === 'pass', 'the device goes back');
@@ -221,6 +252,7 @@ check(await kind() === 'note' && /POSSESSED/.test(await page.textContent('#hando
 await shot('hs-04-possessed-note');
 await next();
 check(await game(() => window.__game.meetingOpen()) && !/Possession|POSSESS/.test(await page.textContent('#encounter-body')), 'the public result says only that a trade was made');
+check(await fanGone(), 'no fan over the public meeting panel');
 await tap('#encounter-actions .btn.primary');
 const after = await game(({ P, E }) => ({
   poss: window.__game.state.players[P].possessed, keeps: window.__game.state.players[P].hand.some(c => c.id === 'x1'),
@@ -282,9 +314,10 @@ check(!dead.alive && dead.drops.includes('v1') && dead.drops.includes('v2'), 'th
 check(/Dead/.test(dead.strip), 'the strip marks them dead');
 check(dead.ap === 2, 'the move and the attack cost one each');
 await game(() => { window.__game.activePlayer().actionPoints = 4; window.__game.refresh(); });
-await tap('#btn-search');
-await page.waitForTimeout(150);
-if (await kind() === 'note') await next();
+await page.waitForTimeout(200);
+check(await visible('#search-spot'), 'a room with cards lying in it shows the search icon');
+await searchHere();
+if (await kind() === 'found') await next();
 check(await game(() => window.__game.state.players[0].hand.some(c => c.id === 'v2')), 'searching the room picks the dropped Lanterns up');
 await game(() => window.__game.endTurn());
 await page.waitForTimeout(150);
@@ -296,12 +329,21 @@ console.log('\n6b. search results are private');
   const room = await plainRoom();
   await put(room, 4);
   const logBefore = await game(() => window.__game.publicLog().length);
-  await tap('#btn-search');
-  await page.waitForTimeout(120);
-  check(await kind() === 'note', 'the result goes on a private card for the searcher');
+  await settle();
+  check((await game(() => window.__game.searchSpot().mode)) === 'live', 'an unsearched room shows the search icon');
+  const top = await game(() => window.__game.state.drawPile[0].id);
+  await searchHere();
+  check(await kind() === 'found', 'the result goes on a private card for the searcher');
+  check(/Private/.test(await page.textContent('#handoff-kicker')) && await game(() => getComputedStyle(document.getElementById('handoff-overlay')).backgroundColor) === 'rgba(8, 9, 14, 0.97)',
+    'marked private, on the opaque hand-over backdrop');
+  check(await page.evaluate(id => !!document.querySelector(`#handoff-found .big-card[data-card-id="${id}"] img`), top), 'the card found is shown large');
+  check(await fanGone(), 'the fan and the icon are off the screen meanwhile');
   const note = await page.textContent('#handoff-notes');
   check(/You search .* find an? /.test(note), `it says what they found ("${note.trim().slice(0, 60)}")`);
+  await shot('ui-search-reveal-hotseat');
   await next();
+  check((await fanIds()).includes(top), 'then it is in their hand fan');
+  check(!(await visible('#search-spot')), 'and the icon is gone: the room is searched');
   const toast = await page.textContent('#toast');
   check(/searched\.$/.test(toast.trim()) && !/find|Lantern|Bandage|Knife|Flashlight|Revolver|Barricade|Lock Pick|Master Key|Hand Mirror|Espresso/.test(toast),
     `the shared screen only says that someone searched ("${toast.trim()}")`);
@@ -334,6 +376,7 @@ await tap('#btn-room');
 await page.waitForTimeout(300);
 check(await game(() => window.__game.isFinished() && window.__game.state.won === 'humans'), 'a clean guest with three Lanterns presses Escape (1 action): the guests win');
 check(/got out/i.test(await page.textContent('#end-title')), 'the end screen says so');
+check(await fanGone(), 'no hand fan on the end screen');
 await shot('hs-06-escaped');
 // A possessed guest cannot.
 await load('mode=hotseat&players=6&seed=4242');
@@ -435,6 +478,7 @@ await game(() => window.__game.forceTimeUp());
 await page.waitForFunction(() => window.__game.state.activeIndex === 1, null, { timeout: 20000 }).catch(() => {});
 check(await game(() => window.__game.state.activeIndex) === 1 && await kind() === 'pass', 'when the clock runs out the turn ends and the device is passed');
 check(await game(() => window.__game.timeLeft()) === 0, 'the clock does not run on the hand-over screen');
+check(await fanGone(), 'and the last guest\'s cards are off the screen before the device changes hands');
 
 // Part 2 stagings run with ?timer=off: headless software rendering is slow, and a turn that ran out
 // of time half-way would hand the device on in the middle of a check.
@@ -451,10 +495,11 @@ const roomBtn = () => page.evaluate(() => {
   return { shown: !!b && !b.hidden && b.offsetParent !== null, disabled: b.disabled,
     main: b.querySelector('.btn-main').textContent.trim(), sub: document.getElementById('room-sub').textContent.trim() };
 });
-// Open the hand sheet the way a player does (tap the fanned cards) and select one card.
+// Open a card the way a player does: tap it in the hand fan (it opens large, with its actions).
 async function handCard(id) {
-  if (!(await game(() => !document.getElementById('hand-overlay').hidden))) await tap('#hand-strip');
-  await page.click(`#hand-cards .card-tile[data-card-id="${id}"]`); await page.waitForTimeout(80);
+  if (await game(() => !document.getElementById('hand-overlay').hidden)) await tap('#btn-hand-close');
+  await page.waitForTimeout(100);
+  await page.click(`#hand-fan .fan-card[data-card-id="${id}"]`); await page.waitForTimeout(80);
 }
 const detailButtons = () => page.evaluate(() => [...document.querySelectorAll('#hand-detail .btn')].map(b => ({ text: b.textContent.trim(), disabled: b.disabled })));
 
@@ -560,13 +605,14 @@ console.log('\n10d. the Hand Mirror');
   check(same(await game(() => window.__game.handMirrorTargets()), [await game(e => window.__game.state.players[e].id, E)]), 'the only guest in the room is the possessed one');
   const logBefore = await game(() => window.__game.publicLog().length);
   await handCard('hm1');
-  check(await visible('#hand-overlay'), 'tapping the hand opens the hand sheet');
+  check(await visible('#hand-overlay') && await game(() => window.__game.cardViewId()) === 'hm1', 'tapping the Hand Mirror in the fan opens it large');
   let btns = await detailButtons();
   check(btns.length === 1 && btns[0].text === who[E] && !btns[0].disabled, `the Hand Mirror offers one guest: "${btns[0]?.text}"`);
   check(/Whose hand\? · 1 action/.test(await page.textContent('#hand-detail')), 'and says what it costs');
   await clickBtn('#hand-detail .d-targets .btn', who[E]);
   check(await kind() === 'mirror' && await game(() => window.__game.mirrorOpen()), 'a private hand-over screen opens');
-  check(!(await visible('#hand-overlay')), 'and the hand sheet has closed');
+  check(!(await visible('#hand-overlay')), 'and the card view has closed');
+  check(await fanGone(), 'the fan is off the screen while the mirror shows their hand');
   check((await page.textContent('#handoff-title')).trim() === `${who[E]}'s hand`, `titled "${(await page.textContent('#handoff-title')).trim()}"`);
   check((await page.textContent('#handoff-kicker')).includes(`${who[P]} only`), 'for the mirror user only');
   const tiles = await page.evaluate(() => [...document.querySelectorAll('#handoff-hand .card-tile')].map(t => ({ id: t.dataset.cardId, evil: t.classList.contains('evil') })));
@@ -594,7 +640,7 @@ console.log('\n10d. the Hand Mirror');
   check(!/POSSESS/i.test(await page.evaluate(() => document.getElementById('hud').innerText)), 'the shared screen does not say who is possessed');
   await handCard('pb');
   check(await visible('#hand-banner') && (await page.textContent('#hand-banner')).includes(`You have unmasked: ${who[E]}`),
-    `the hand sheet banner now lists the unmasked guest ("${(await page.textContent('#hand-banner')).trim()}")`);
+    `the card view's banner now lists the unmasked guest ("${(await page.textContent('#hand-banner')).trim()}")`);
   await tap('#btn-hand-close');
 
   // Nobody else in the room: no one to look at.
@@ -622,14 +668,16 @@ console.log('\n10e. Espresso');
   check(await game(() => window.__game.activePlayer().actionPoints) === 6, 'drinking it gives 4 -> 6 actions, and costs none');
   check(p.n === 6 && p.full === 6 && p.bonus === 2, `six pips, two of them bonus pips (${p.n} pips, ${p.bonus} bonus)`);
   check(p.label === '6', `the count reads "${p.label}" (the copper pips show the extra two)`);
-  check(/Actions 6 \(\+2\)/.test(await page.textContent('#hand-note')), `the hand sheet says so too ("${(await page.textContent('#hand-note')).trim()}")`);
   check(await game(() => !window.__game.activePlayer().hand.some(c => c.id === 'es1') && window.__game.state.discardPile.some(c => c.id === 'es1')), 'the Espresso is used up');
+  check(!(await visible('#hand-overlay')) && !(await fanIds()).includes('es1'), 'it leaves the fan, and its card view closes');
+  await handCard('es2');
+  check(/Actions 6 \(\+2\)/.test(await page.textContent('#hand-note')), `the card view says so too ("${(await page.textContent('#hand-note')).trim()}")`);
   await shot('hs-13-espresso');
   await tap('#btn-hand-close');
   // A search spends one of them as normal.
   await put(await plainRoom(), null);
-  await tap('#btn-search');
-  await page.waitForTimeout(120);
+  await settle();
+  await searchHere();
   while (await game(() => window.__game.handoffOpen())) await next();
   if (await game(() => window.__game.fullHandOpen())) await tap('#btn-fullhand-leave');
   check(await game(() => window.__game.activePlayer().actionPoints) === 5 && (await pips()).label === '5', `a search spends one of the six (${(await pips()).label})`);
@@ -649,7 +697,7 @@ await load('');
 check(await game(() => window.__game.mode === 'practice' && window.__game.state.players.length === 1), 'the plain address is still one guest alone');
 
 console.log('\n12. layouts');
-for (const [name, w, h] of [['ipad-landscape', 1180, 820], ['ipad-small', 1024, 768], ['desktop', 1440, 900]]) {
+for (const [name, w, h] of [['ipad-landscape', 1180, 820], ['ipad-small', 1024, 768], ['ipad-pro', 1366, 1024], ['desktop', 1440, 900]]) {
   await page.setViewportSize({ width: w, height: h });
   await load('mode=hotseat&players=6&seed=7');
   await tap('#btn-begin');
@@ -673,6 +721,15 @@ for (const [name, w, h] of [['ipad-landscape', 1180, 820], ['ipad-small', 1024, 
     return t.right <= window.innerWidth + 1 && e.height >= 44 && e.bottom <= window.innerHeight + 1;
   });
   check(bars, `${name}: the clock and the End turn button sit inside the screen`);
+  const fanOk = await page.evaluate(() => {
+    const box = el => el && el.offsetParent ? el.getBoundingClientRect() : null;
+    const hit = (a, b) => !!a && !!b && a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
+    const cards = [...document.querySelectorAll('#hand-fan .fan-card')].map(c => c.getBoundingClientRect());
+    const keep = ['#player-panel', '.control-row', '.action-row', '#btn-map', '.hud-top-center', '.hud-top-right'].map(s => box(document.querySelector(s)));
+    // (at rest the cards are held partly below the screen edge; at least 70% of each shows)
+    return cards.length > 0 && cards.every(c => !keep.some(k => hit(c, k)) && innerHeight - c.top >= 0.68 * c.height);
+  });
+  check(fanOk, `${name}: the hand fan sits clear of the panel, the buttons, the map and the guest strip`);
   await game(() => { window.__game.state.round = 8; window.__game.refresh(); });
   const finalFits = await page.evaluate(() => {
     const r = document.getElementById('round').getBoundingClientRect();

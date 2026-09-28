@@ -101,6 +101,12 @@ export function createInput(element, handlers, opts = {}) {
   element.addEventListener('pointercancel', e => release(e, false));
   element.addEventListener('lostpointercapture', e => release(e, false));
   element.addEventListener('wheel', onWheel, { passive: false });
+  // A finger tap also makes the browser send a "click" just after it lifts, aimed at whatever is
+  // under the finger by then. A tap on a door ring shows the Move/Open bar, and when that bar
+  // appears under the finger the late click pressed it: the door opened or the guest walked off
+  // without the player confirming. Cancelling the touch's end stops that click (taps still arrive
+  // through the pointer events above).
+  element.addEventListener('touchend', prevent, { passive: false });
   element.addEventListener('contextmenu', prevent);
   element.addEventListener('dblclick', prevent);
   element.addEventListener('gesturestart', onGestureStart, { passive: false });

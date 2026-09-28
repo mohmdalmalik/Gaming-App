@@ -65,6 +65,7 @@ export function createHud(doc, cfg) {
     confirmCancel: doc.getElementById('btn-confirm-cancel'),
   };
   let toastTimer = 0;
+  let pressedConfirm = false;   // a press began on the Move/Cancel bar since it appeared (onConfirm)
   let mini = null;            // the top-strip guest cells
   let portraitKey = '';       // so the panel portrait only rebuilds when it must
 
@@ -236,14 +237,20 @@ export function createHud(doc, cfg) {
     showConfirm(text, moveLabel) {
       el.confirmText.textContent = text;
       if (moveLabel) el.confirmMove.textContent = moveLabel;
+      if (el.confirmBar.hidden) pressedConfirm = false;
       el.confirmBar.hidden = false;
     },
     hideConfirm() { el.confirmBar.hidden = true; },
     get confirmOpen() { return !el.confirmBar.hidden; },
     on(name, fn) { el[name].addEventListener('click', e => { e.preventDefault(); fn(); }); },
     onConfirm(move, cancel) {
-      el.confirmMove.addEventListener('click', e => { e.preventDefault(); move(); });
-      el.confirmCancel.addEventListener('click', e => { e.preventDefault(); cancel(); });
+      // Belt and braces for src/input.js: a pointer click on Move/Cancel counts only if the press
+      // started on the bar after it appeared (a late click left over from the tap that opened it
+      // does not). Clicks with no pointer behind them (keyboard, e.detail 0) always count.
+      el.confirmBar.addEventListener('pointerdown', () => { pressedConfirm = true; });
+      const real = e => e.detail === 0 || pressedConfirm;
+      el.confirmMove.addEventListener('click', e => { e.preventDefault(); if (real(e)) move(); });
+      el.confirmCancel.addEventListener('click', e => { e.preventDefault(); if (real(e)) cancel(); });
     },
   };
   return hud;

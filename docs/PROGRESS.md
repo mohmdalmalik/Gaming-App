@@ -11,6 +11,11 @@ owner-approved rule was implemented; no other rule or number changed.
   of the HUD and the move bar; a padlock marks locked doors; guests get a faint fill light in dark
   rooms. Details: DECISIONS "Corner-on camera and see-through". Comparison:
   `tests/shots/fix-camera/rooms-diagonal.png`.
+- Verification: 50 more autoplay matches on the fixed build (212 matches in total across both rounds):
+  0 rule violations, 0 console errors. Remaining door-ring tap misses (13 of 50 matches) traced to the
+  browser's late "ghost click" after a touch; fixed (src/input.js, src/hud.js), door taps made mid-walk
+  are kept, and the camera eases toward the room centre when the guest stops so rings stay clear of
+  the cards. 15-match re-run: 0 door-tap notes.
 - Owner declined (kept the current rule): topping a newly possessed guest up to 3 Possession cards
   (simulated first: 6 players, clean wins 7% -> 4%).
 

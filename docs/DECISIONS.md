@@ -796,3 +796,25 @@ Target: `docs/art-reference.jpg` (style, palette and finish; not its layout or i
   other shader changes; readable in dark rooms). The active marker sits 0.16 m above the model's
   measured head. A searched room shows a small brass tag with an engraved tick on its search furniture
   instead of a large white tick in the air.
+
+## Reliable door taps (touch fix round; no rule changed)
+
+- **No "ghost" confirm.** A finger tap is followed by a browser click aimed at whatever is under the
+  finger by then. A door ring under the spot where the Move/Open bar appears got that late click on
+  the bar's button, so the door opened (or the guest walked) with no confirmation, or Cancel closed the
+  bar at once. `src/input.js` cancels the canvas's `touchend` (no late click; taps still come from the
+  pointer events), and `src/hud.js` only accepts a pointer click on Move/Cancel whose press began on the
+  bar after it appeared (keyboard / scripted clicks, `detail` 0, still count). This was the cause of the
+  autoplay notes `ring-inner-edge-miss`, `door-tap-no-move` (guest already walking) and
+  `door-tap-no-confirm` ("The door opens…" with no bar).
+- **Door taps while walking are kept, not dropped.** A tap made while the guest is still walking (or
+  arriving) is remembered as a ground point and answered once they stand still, if it is on a door, in
+  the same turn, and nothing (a meeting, a card) opened meanwhile; the answer is only the Move/Open
+  question, never a move. Floor taps mid-walk are still ignored.
+- **Camera at rest frames the room.** While the guest walks the camera follows them as before; once
+  they stand still it aims no more than 1.2 m (at the default zoom; more when zoomed in) from the centre
+  of their room, so a guest searching in a far corner no longer pushes the near door rings under the
+  hand (`followPoint` in `src/main.js`).
+- The harness's `ring-inner-edge-miss` message now reads the game's real tap zone
+  (`__game.doorTapAcross()`, 1.22 m) instead of the stale 0.85 m. `tap-failed-move-confirm`
+  ("element is not stable") is Playwright's stability wait during a slow headless frame; not changed.

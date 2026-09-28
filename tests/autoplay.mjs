@@ -944,7 +944,8 @@ async function moveThrough(s, door, to, why) {
     await frames(1);
     const r = await page.evaluate(() => ({ confirm: !document.getElementById('confirm-bar').hidden, walking: window.__game.activeMover().walking || window.__game.activeMover().path.length > 0 }));
     cur.stats.ringProbe = r.confirm ? 'move offered' : r.walking ? 'walked instead' : 'nothing';
-    if (pt.ok && !r.confirm) await ux('ring-inner-edge-miss', `Tapping the inner edge of a doorway's ring (still on the painted ring) ${r.walking ? 'walks the guest to that spot' : 'does nothing'} instead of offering "Move" (ring centre ${0.77} m from the doorway, tap zone ends at 0.85 m, ring radius 0.33 m)`, s);
+    const zone = await page.evaluate(() => window.__game.doorTapAcross?.() ?? null);
+    if (pt.ok && !r.confirm) await ux('ring-inner-edge-miss', `Tapping the inner edge of a doorway's ring (still on the painted ring) ${r.walking ? 'walks the guest to that spot' : 'does nothing'} instead of offering "Move" (ring centre 0.77 m from the doorway, tap 1.05 m in, the game's tap zone ends at ${zone == null ? '?' : zone.toFixed(2)} m, ring radius 0.33 m)`, s);
     if (r.confirm) await tapSel('#btn-confirm-cancel', 'Cancel');
     await afterWait(`(() => { const m = window.__game.activeMover(); return !m.walking && m.path.length === 0; })()`, 6000);
     await frames(2);

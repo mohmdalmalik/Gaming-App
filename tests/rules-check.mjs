@@ -14,7 +14,7 @@ import {
 } from '../src/game/state.js';
 import {
   search, canSearch, useBandage, useUnlock, useBarricade, resolveFullHand, discardCard, overHandLimit,
-  resolveTrade, resolveAttack, tradeableCards, drawCard, dropEverything, openDoor, escape,
+  resolveTrade, resolveAttack, tradeableCards, canTrade, skipTrade, drawCard, dropEverything, openDoor, escape,
   canUseRoom, useInfirmary, useSwitchboard, useHandMirror, useEspresso,
 } from '../src/game/actions.js';
 import { buildGrid, nearestWalkable } from '../src/game/grid.js';
@@ -466,6 +466,56 @@ console.log('\ntrade and possession');
   V.hand.push({ id: 'vl', type: 'lantern' });
   const t2 = resolveTrade(s, floor, V, A, 'vl', 'b1');
   check(t2.ok && t2.swap && A.hand.some(c => c.id === 'vl') && !A.possessed, 'a possessed guest can hand over a Lantern to look innocent');
+}
+{
+  // "If either guest has no ordinary card (Possession cards don't count), the trade is skipped and both
+  // are told why."
+  const s = hs(29);
+  const V = possessed(s), [K, L] = cleanOnes(s);
+  V.currentRoom = K.currentRoom = L.currentRoom = 'corridorE';
+  K.hand = []; L.hand = [{ id: 'l1', type: 'bandage' }];
+  const pubBefore = s.log.length;
+  check(!canTrade(K, L).ok && canTrade(K, L).empty.join() === K.id, 'a guest with an empty hand has nothing to give: no trade');
+  check(!canTrade(L, K).ok && canTrade(L, K).empty.join() === K.id, 'whichever of the two walked in');
+  check(resolveTrade(s, floor, K, L, null, 'l1').reason === 'nothingToGive', 'resolveTrade refuses it too');
+  const sk = skipTrade(s, floor, L, K);
+  check(sk.ok && sk.skipped && L.hand.length === 1 && K.hand.length === 0, 'the trade is skipped: nothing changes hands');
+  check(/no ordinary card to give/.test(sk.notes[K.id]) && K.notes.includes(sk.notes[K.id]), 'the empty-handed guest is told why, in private');
+  check(sk.notes[L.id].includes(K.name) && L.notes.includes(sk.notes[L.id]), 'and so is the other guest');
+  const pub = s.log.slice(pubBefore).map(l => l.text).join(' ');
+  check(/no trade/.test(pub) && !/bandage|possess|lantern/i.test(pub) && !pub.includes(`${K.name} had`), 'the public log says only that there was no trade — no card, no role, not whose hand was empty');
+  // Both empty.
+  L.hand = [];
+  check(canTrade(K, L).empty.length === 2, 'both empty: both have nothing to give');
+  const both = skipTrade(s, floor, K, L);
+  check(both.ok && /no ordinary card to give/.test(both.notes[K.id]) && /no ordinary card to give/.test(both.notes[L.id]), 'each is told only about their own hand');
+  // Possession cards don't count: a possessed guest holding only Possession cards is skipped too, and
+  // everything anyone could see reads exactly as for an empty-handed clean guest.
+  V.hand = V.hand.filter(c => c.type === 'possession');
+  K.hand = []; L.hand = [{ id: 'l2', type: 'knife' }];
+  check(countableCount(V.hand) === 0 && V.hand.length > 0 && !canTrade(V, L).ok && canTrade(V, L).empty.join() === V.id,
+    'a possessed guest holding only Possession cards has no ordinary card: no trade');
+  const lv = s.log.length;
+  const sv = skipTrade(s, floor, V, L);
+  const pubV = s.log.slice(lv).map(l => l.text).join(' ');
+  const lk = s.log.length;
+  const sk2 = skipTrade(s, floor, K, L);
+  const pubK = s.log.slice(lk).map(l => l.text).join(' ');
+  check(sv.ok && V.hand.every(c => c.type === 'possession') && L.hand.length === 1, 'the trade is skipped: nothing changes hands');
+  check(pubV.replace(V.name, 'X') === pubK.replace(K.name, 'X') && !/possess/i.test(pubV),
+    'the public line is word for word the one for an empty-handed clean guest');
+  check(sv.notes[V.id].replace(L.name, '') === sk2.notes[K.id].replace(L.name, '') && !/possess/i.test(sv.notes[V.id]),
+    "the possessed guest's own note is the same as a clean empty-handed guest's");
+  check(sv.notes[L.id].replace(V.name, 'X') === sk2.notes[L.id].replace(K.name, 'X') && !/possess/i.test(sv.notes[L.id]),
+    'and the other guest reads the same words whichever of the two it was');
+  check(resolveTrade(s, floor, V, L, V.hand[0].id, 'l2').reason === 'nothingToGive', 'resolveTrade will not let a Possession card through that way either');
+  // With an ordinary card as well, a possessed guest trades as usual (and may still give a Possession card).
+  V.hand.push({ id: 'vk', type: 'bandage' });
+  check(canTrade(V, L).ok && tradeableCards(V).some(c => c.type === 'possession'), 'with one ordinary card they trade, and may give a Possession card');
+  check(skipTrade(s, floor, V, L).reason === 'canTrade', 'a trade that can be made is never skipped');
+  // A skipped trade needs no card from anyone: the empty guest's own note never mentions the other's hand.
+  const kv = skipTrade(s, floor, K, V);
+  check(kv.ok && !/possess/i.test(kv.notes[K.id]) && !kv.notes[K.id].includes('has'), "the empty guest's note says nothing about what the other holds");
 }
 {
   // The comparison variant exists only for the simulator; the game never switches it on.

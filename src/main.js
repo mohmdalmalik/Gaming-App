@@ -16,7 +16,7 @@ import {
 } from './game/state.js';
 import {
   search, canSearch, escape, useBandage, useUnlock, useBarricade, resolveFullHand, resolveTrade, resolveAttack,
-  discardCard, overHandLimit, tradeableCards, openDoor,
+  discardCard, overHandLimit, tradeableCards, canTrade, skipTrade, openDoor,
   canUseRoom, useInfirmary, useSwitchboard, useHandMirror, useEspresso,
 } from './game/actions.js';
 import { CARDS, weaponsIn } from './game/cards.js';
@@ -44,6 +44,7 @@ import { createHandoff } from './ui/handoff.js';
 import { createMeeting } from './ui/meeting.js';
 import { roundLabel, finalRoundNote, isFinal } from './ui/roundLabel.js';
 import { createPerfStats } from './ui/perfStats.js';
+import { usePracticeWording } from './ui/cards.js';
 
 // --- World (pure data + rules) ---------------------------------------------------------
 // The hotel is random every match: it starts as the lobby and grows as doors are opened
@@ -55,12 +56,13 @@ const floor = createHotel(hotel, cfg);
 //   ?mode=hotseat&players=6   a six-person hot-seat match on one device
 //   ?seed=123                 force the deal, the hidden role and the hotel's room deck (testing)
 //   ?timer=off                play without the 45-second turn clock
-//   ?camera=classic           the previous, higher camera angle (for comparison)
-//   ?camera=diagonal          trial corner-on view, like the owner's room pictures
+//   ?camera=square            the previous square-on view (the standard view is corner-on)
+//   ?camera=classic           the older, higher square-on view (for comparison)
 //   ?stats=1                  a small frame-rate / draw-call readout, for measuring on the iPad
 const params = new URLSearchParams(window.location.search);
+if (params.get('camera') === 'square') Object.assign(cfg.camera, cfg.cameraSquare);     // the previous square-on view
 if (params.get('camera') === 'classic') Object.assign(cfg.camera, cfg.cameraClassic);   // the old, higher view
-if (params.get('camera') === 'diagonal') Object.assign(cfg.camera, cfg.cameraDiagonal); // trial: corner-on, like the room pictures
+if (params.get('camera') === 'diagonal') Object.assign(cfg.camera, cfg.cameraDiagonal); // (the standard view; old links)
 const MODE = params.get('mode') === 'hotseat' ? 'hotseat' : 'practice';
 const askedPlayers = parseInt(params.get('players'), 10);
 applyMode(MODE, Number.isFinite(askedPlayers) ? askedPlayers : 6);
@@ -126,7 +128,7 @@ let selectedMove = null;     // a door move awaiting confirmation
 let pendingSearch = null;    // { room, face: [x, z] }: walking to the search spot, then searching
 
 const uiBusy = () => map.isOpen || hand.isOpen || discard.isOpen || fullHand.isOpen
-  || overlays.endOpen || overlays.noticeOpen || handoff.isOpen || meeting.isOpen;
+  || overlays.endOpen || overlays.noticeOpen || overlays.askOpen || handoff.isOpen || meeting.isOpen;
 
 const discovery = createDiscovery({
   floor, grid, state, movers, cfg,
@@ -147,7 +149,7 @@ const searchSpot = createSearchSpot(document, { camera: view.camera, container, 
 // those is up). Cheap enough to run every frame; each only touches the page when something changed.
 function actionPhaseClear() {
   return running && !state.finished && (PRACTICE || inActionPhase)
-    && !handoff.isOpen && !meeting.isOpen && !overlays.endOpen && !overlays.noticeOpen
+    && !handoff.isOpen && !meeting.isOpen && !overlays.endOpen && !overlays.noticeOpen && !overlays.askOpen
     && !map.isOpen && !discard.isOpen && !fullHand.isOpen;
 }
 function syncHandFan() {
@@ -246,8 +248,11 @@ function startTimer() {
   hud.showTimer(timerLeft, rules.turnTimerSeconds);
 }
 function stopTimer() { timerLeft = 0; hud.hideTimer(); }
-const timerPaused = () => handoff.handingOver || overlays.endOpen || overlays.noticeOpen
-  || meeting.isOpen || fullHand.isOpen || discard.isOpen;
+// The "turn your iPad sideways" card (pure CSS, styles.css) covers the game in portrait: the clock
+// waits while it is up.
+const sideways = window.matchMedia?.('(orientation: portrait), (max-width: 900px)');
+const timerPaused = () => handoff.handingOver || overlays.endOpen || overlays.noticeOpen || overlays.askOpen
+  || meeting.isOpen || fullHand.isOpen || discard.isOpen || !!sideways?.matches;
 
 function tickTimer(dt) {
   if (!rules.turnTimerEnabled || !inActionPhase || state.finished || timerLeft <= 0) return;
@@ -268,6 +273,7 @@ function passTurn() {
   hand.close();
   stopTimer();
   const result = endTurn(state, floor);
+  if (PRACTICE) endTurnGuardUntil = performance.now() + END_TURN_GUARD_MS;   // (hot-seat: the pass screen catches it)
   movers[result.from.index]?.halt();
   syncViews(false);
   if (result.finished) { refresh(); showEnd(); return; }
@@ -285,9 +291,15 @@ function endTurnNow() {
   passTurn();
 }
 
+// A second tap on End turn right after the first (a double tap) must not end the next turn too: in
+// practice there is no hand-over screen in between to catch it. The new turn ignores End turn for a
+// moment.
+const END_TURN_GUARD_MS = 700;
+let endTurnGuardUntil = 0;
 function doEndTurn() {
   if (!running || state.finished || uiBusy() || activeMover().walking) return;
   if (HOTSEAT && !inActionPhase) return;
+  if (performance.now() < endTurnGuardUntil) return;
   endTurnNow();
 }
 
@@ -318,11 +330,13 @@ function startMeeting(P, candidates) {
   const met = Q => {
     lockEncounter(state, P.currentRoom, P.index, Q.index);
     const canAttack = weaponsIn(P.hand).length > 0 && P.actionPoints >= rules.actionCost.attack;
-    meeting.chooseAction(P, Q, {
+    // Trade or Attack; the weapon picker's Back returns here (nothing has happened yet).
+    const chooseAction = () => meeting.chooseAction(P, Q, {
       canAttack,
       onTrade: () => runTrade(P, Q, { first: P, second: Q }),
-      onAttack: () => runAttack(P, Q),
+      onAttack: () => runAttack(P, Q, chooseAction),
     });
+    chooseAction();
   };
   if (candidates.length === 1) met(candidates[0]);
   else meeting.choose(P, candidates, met);
@@ -336,13 +350,16 @@ function afterMeeting() {
 // A trade between A and B. `first` holds the device now and picks first; then it is passed to
 // `second`, who picks; the cards swap; `first` gets the device back and privately reads what they
 // received. `second` reads theirs on their own next private screen.
+// If either has no card they may give, the trade is skipped (GAME_RULES, Trade): see skippedTrade.
 function runTrade(A, B, { first, second }, onDone = afterMeeting) {
+  if (!canTrade(A, B).ok) { skippedTrade(A, B, first, onDone); return; }
   const pick = (who, other, then) => handoff.privatePick(who, {
     kicker: `Private — ${who.name} only`,
     title: `Give one card to ${other.name}`,
     sub: 'They will not see which until the cards have already changed hands.',
     cards: tradeableCards(who),
-    onPick: then,
+    // (never empty here — checked above; the pick screen still offers a way on if it ever is)
+    onPick: card => (card ? then(card) : skippedTrade(A, B, who, onDone)),
   });
   pick(first, second, firstCard => {
     handoff.passTo(second, 'A trade — they choose in private', () => {
@@ -371,11 +388,27 @@ function runTrade(A, B, { first, second }, onDone = afterMeeting) {
   });
 }
 
-function runAttack(P, Q) {
+// The trade is skipped: nothing changes hands. `holder` has the device now and reads their own
+// reason in private at once; the other guest's reason waits on their next private screen (the engine
+// puts it in their notes), unless they are the guest whose turn it is, who gets the device back and
+// reads it straight away. Then the table sees a neutral public line that names no hand and no card.
+function skippedTrade(A, B, holder, onDone) {
+  const r = skipTrade(state, floor, A, B);
+  const active = activePlayer(state);
+  const finish = () => meeting.notice(r.ok
+    ? `${A.name} and ${B.name} cannot trade: one of them has no ordinary card to give. The meeting ends.`
+    : 'The trade could not be made. The meeting ends.', onDone, 'No trade');
+  const read = (who, then) => handoff.privateNote(who, who.notes.splice(0, who.notes.length), then);
+  read(holder, () => (holder === active ? finish()
+    : handoff.passTo(active, `No trade — back to ${active.name}'s turn`, () => read(active, finish))));
+}
+
+function runAttack(P, Q, onBack = null) {
   meeting.attackPick(P, Q, weaponId => {
     const events = resolveAttack(state, floor, P, Q, weaponId);
+    if (events.killed) layBodyClear(Q.index);   // (the figure falls when the result is dismissed)
     meeting.attackResult(P, Q, events, afterMeeting);
-  });
+  }, onBack);
 }
 
 // Voluntary trade in a safe zone that allows it (the Fire Exit; never the lobby): the other guest
@@ -430,7 +463,7 @@ function onSearch() {
   const lanterns = player.hand.filter(c => c.type === 'lantern').length;
   const tally = lanterns ? ` You now hold ${lanterns} Lantern${lanterns === 1 ? '' : 's'}.` : '';
   const noRoom = overflow.length
-    ? ` Your hands are full — choose what to do with ${andList(overflow.map(c => `the ${CARDS[c.type].name}`))} next.` : '';
+    ? ` Your hand is full — choose what to do with ${andList(overflow.map(c => `the ${CARDS[c.type].name}`))} next.` : '';
   const then = () => { refresh(); askEachFullHand(player, overflow, where); };
   // Search results are PRIVATE. In hot-seat the table sees only that a search happened; the found
   // cards are shown large on a private screen for the searcher. Practice has nobody to hide them from,
@@ -482,7 +515,7 @@ function standInFront(f, player) {
   const others = movers.filter((m, i) => i !== player.index && state.players[i].alive);
   const ok = ([x, z]) => {
     const c = grid.cellAt(x, z);
-    return c >= 0 && grid.walkable[c] && grid.roomIdOf(c) === room.id && !others.some(m => Math.hypot(m.x - x, m.z - z) < 0.6);
+    return c >= 0 && grid.walkable[c] && grid.roomIdOf(c) === room.id && !others.some(m => Math.hypot(m.x - x, m.z - z) < 0.6) && !onABody(x, z);
   };
   const d = ([x, z]) => Math.hypot(x - room.center[0], z - room.center[1]);
   return spots.filter(ok).sort((a, b) => d(a) - d(b))[0] || null;
@@ -508,13 +541,14 @@ function askFullHand(player, card, where = 'the room', then = null) {
     onTake: dropId => {
       const res = resolveFullHand(state, player, card, 'take', dropId);
       if (!res.ok) hud.toast('That card cannot be dropped.');
-      else if (PRACTICE) hud.toast(`Kept the ${CARDS[card.type].name}, left the ${CARDS[res.dropped.type].name} behind.`);
+      else if (PRACTICE) hud.toast(`Kept the ${CARDS[card.type].name} — the ${CARDS[res.dropped.type].name} goes to the discard pile.`);
       refresh(); then?.();
     },
     onUse: () => { resolveFullHand(state, player, card, 'leave'); refresh(); then?.(); },
     onLeave: () => {
       resolveFullHand(state, player, card, 'leave');
-      if (PRACTICE) hud.toast(`Left the ${CARDS[card.type].name} in ${where}.`);
+      // (a card left behind is not put back where it was found: it goes to the discard pile)
+      if (PRACTICE) hud.toast(`Left the ${CARDS[card.type].name} — it goes to the discard pile.`);
       refresh(); then?.();
     },
   });
@@ -620,7 +654,10 @@ function onRoom() {
     if (!r.ok) { hud.toast(ROOM_FAIL[r.reason] || 'Cannot use this room now.'); return; }
     refresh();
     // PUBLIC, for the whole table: it stays up until someone taps Continue (the clock waits).
-    overlays.showNotice('The Switchboard', `${player.name} rang the Switchboard. ${switchboardLine(r.count)}`, refresh);
+    // Practice: nobody else is in the hotel, so there is nobody to count — say what it does in a match.
+    overlays.showNotice('The Switchboard', PRACTICE
+      ? 'You rang the Switchboard. In a match it tells everyone how many guests are possessed. You are alone in the hotel, so there is nobody to count.'
+      : `${player.name} rang the Switchboard. ${switchboardLine(r.count)}`, refresh);
   }
 }
 
@@ -630,7 +667,7 @@ function showEnd() {
   if (state.practice) {
     const p = activePlayer(state);
     overlays.showEnd('You reached the fire exit',
-      `Practice complete — ${rules.lanternsToEscape} Lanterns carried out, ${floor.roomList.length} rooms of the hotel revealed, on round ${state.round}.`,
+      `Practice complete: ${rules.lanternsToEscape} Lanterns carried out.\n${floor.roomList.length} rooms of the hotel revealed, on round ${state.round}.`,
       { keepExploring: false });
     void p;
     return;
@@ -638,13 +675,16 @@ function showEnd() {
   const evil = state.players.filter(p => p.possessed).map(p => p.name);
   const dead = state.players.filter(p => !p.alive).map(p => p.name);
   const out = [...state.escaped].map(id => state.players.find(p => p.id === id)?.name).filter(Boolean);
+  // One fact per line (styles.css keeps the breaks): what happened, then who was possessed, who died
+  // and the round.
   const parts = [`Possessed: ${evil.length ? evil.join(', ') : 'nobody'}`];
   if (dead.length) parts.push(`Dead: ${dead.join(', ')}`);
   parts.push(roundLabel(state));
+  const facts = parts.join('\n');
   const opts = { restartLabel: 'New match' };
-  if (state.won === 'humans') overlays.showEnd('The guests got out', `${out.join(', ')} escaped carrying ${rules.lanternsToEscape} Lanterns. ${parts.join(' · ')}`, opts);
-  else if (state.dawn) overlays.showEnd('Dawn breaks', `Round ${rules.roundLimit} has ended and nobody got out. The hotel keeps them. ${parts.join(' · ')}`, opts);
-  else overlays.showEnd('The hotel keeps them', `No clean guest is left. ${parts.join(' · ')}`, opts);
+  if (state.won === 'humans') overlays.showEnd('The guests got out', `${out.join(', ')} escaped carrying ${rules.lanternsToEscape} Lanterns.\n${facts}`, opts);
+  else if (state.dawn) overlays.showEnd('Dawn breaks', `Round ${rules.roundLimit} has ended and nobody got out. The hotel keeps them.\n${facts}`, opts);
+  else overlays.showEnd('The hotel keeps them', `No clean guest is left.\n${facts}`, opts);
 }
 
 function restart() {
@@ -661,7 +701,7 @@ function restart() {
   rig.setFocus(activeMover().x, activeMover().z, true);
   rig.reset();
   mood.snap(activePlayer(state).currentRoom);
-  overlays.hideEnd(); overlays.hideNotice(); hand.close(); map.close();
+  overlays.hideEnd(); overlays.hideNotice(); overlays.hideAsk(); hand.close(); map.close();
   fullHand.close(); discard.close(); handoff.close(); meeting.close(); hud.hideConfirm();
   stopTimer();
   refresh();
@@ -689,13 +729,18 @@ function groundToScreen(x, z) {
   return { x: rect.left + ((v.x + 1) / 2) * rect.width, y: rect.top + ((1 - v.y) / 2) * rect.height };
 }
 
+// How far from a doorway's centre line a tap still counts as a tap on that door. The gold ring is
+// drawn t + 0.62 m into the room with an outer radius of 0.33 m (src/render/roomView.js placeRing /
+// ringGeo), so it reaches t + 0.95 m; the zone covers the whole ring plus a finger's slack. (It was
+// t + 0.7, so a tap on the room-facing half of the ring walked the guest there instead.)
+const DOOR_TAP_ACROSS = () => cfg.walls.thickness + 0.62 + 0.33 + 0.12;
+
 // The usable doorway (if any) near a ground point, and the room it leads to.
 function usableDoorwayNear(px, pz, player) {
-  const t = cfg.walls.thickness;
   let best = null, bestD = Infinity;
   for (const d of usableDoorways(state, floor, player)) {
     const along = d.axis === 'x';
-    const halfAlong = d.width / 2 + 0.6, halfAcross = t + 0.7;
+    const halfAlong = d.width / 2 + 0.6, halfAcross = DOOR_TAP_ACROSS();
     const da = along ? Math.abs(px - d.center[0]) : Math.abs(pz - d.center[1]);
     const dc = along ? Math.abs(pz - d.center[1]) : Math.abs(px - d.center[0]);
     if (da <= halfAlong && dc <= halfAcross) {
@@ -709,42 +754,74 @@ function usableDoorwayNear(px, pz, player) {
 
 // A closed door of the current room near a ground point (to open it, or to explain why not).
 function closedDoorNear(px, pz, player) {
-  const t = cfg.walls.thickness;
   for (const d of (floor.rooms.get(player.currentRoom)?.frontier || [])) {
     const along = d.axis === 'x';
     const da = along ? Math.abs(px - d.center[0]) : Math.abs(pz - d.center[1]);
     const dc = along ? Math.abs(pz - d.center[1]) : Math.abs(px - d.center[0]);
-    if (da <= d.width / 2 + 0.6 && dc <= t + 0.7) return d;
+    if (da <= d.width / 2 + 0.6 && dc <= DOOR_TAP_ACROSS()) return d;
   }
   return null;
 }
 
 // Any doorway of the current room near a ground point, usable or not (for explaining a refusal).
 function doorwayNear(px, pz, player) {
-  const t = cfg.walls.thickness;
   for (const d of (floor.rooms.get(player.currentRoom)?.doorways || [])) {
     const along = d.axis === 'x';
     const da = along ? Math.abs(px - d.center[0]) : Math.abs(pz - d.center[1]);
     const dc = along ? Math.abs(pz - d.center[1]) : Math.abs(px - d.center[0]);
-    if (da <= d.width / 2 + 0.6 && dc <= t + 0.7) return d;
+    if (da <= d.width / 2 + 0.6 && dc <= DOOR_TAP_ACROSS()) return d;
   }
   return null;
 }
 
 // A free standing spot in a discovered room: the centre, or a nearby ring position not on
-// another player.
+// another player or on a body lying on the floor.
 function standingSlot(roomId, forIndex) {
   const room = floor.rooms.get(roomId);
   const [cx, cz] = room.center;
   const others = movers.filter((m, i) => i !== forIndex && state.players[i].alive);
-  const occupied = (x, z) => others.some(m => Math.hypot(m.x - x, m.z - z) < 0.7);
+  const occupied = (x, z) => others.some(m => Math.hypot(m.x - x, m.z - z) < 0.7) || onABody(x, z);
   const walkable = (x, z) => { const c = grid.cellAt(x, z); return c >= 0 && grid.walkable[c]; };
-  const ring = [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [-1, 1], [1, -1], [-1, -1]];
+  const ring = [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [-1, 1], [1, -1], [-1, -1],
+    [2, 0], [-2, 0], [0, 2], [0, -2], [2, 1], [-2, 1], [2, -1], [-2, -1], [1, 2], [-1, 2], [1, -2], [-1, -2]];
   for (const [ox, oz] of ring) {
     const x = cx + ox * 0.95, z = cz + oz * 0.95;
     if (walkable(x, z) && !occupied(x, z)) return { x, z };
   }
   return { x: cx, z: cz };
+}
+
+// Bodies on the floor. A guest who dies falls on their back: feet where they stood, head about a
+// body length behind them (src/render/characterView.js setDead turns the figure about its feet, and
+// it keeps the heading it had). Standing spots keep clear of the whole length.
+const BODY_LEN = 1.75;
+function segmentDistance(px, pz, ax, az, bx, bz) {
+  const vx = bx - ax, vz = bz - az;
+  const t = Math.max(0, Math.min(1, ((px - ax) * vx + (pz - az) * vz) / (vx * vx + vz * vz || 1)));
+  return Math.hypot(px - (ax + t * vx), pz - (az + t * vz));
+}
+const bodyEnds = (m, heading = m.heading) => [m.x, m.z, m.x - Math.sin(heading) * BODY_LEN, m.z - Math.cos(heading) * BODY_LEN];
+function onABody(x, z, clear = 0.6) {
+  return state.players.some((q, i) => !q.alive && !state.escaped?.has(q.id) && segmentDistance(x, z, ...bodyEnds(movers[i])) < clear);
+}
+// A guest has just died: turn them (before they fall) so the body lands on free floor of their room,
+// clear of the living guests there — the direction they faced if that works, else the nearest one
+// that does.
+function layBodyClear(index) {
+  const m = movers[index];
+  const roomId = state.players[index].currentRoom;
+  const living = movers.filter((o, j) => j !== index && state.players[j].alive && state.players[j].currentRoom === roomId);
+  const onFloor = (x, z) => { const c = grid.cellAt(x, z); return c >= 0 && grid.walkable[c] && grid.roomIdOf(c) === roomId; };
+  let best = null, bestGap = -1;
+  for (let k = 0; k < 16; k++) {
+    const h = m.heading + Math.ceil(k / 2) * (k % 2 ? 1 : -1) * (Math.PI / 8);
+    const [ax, az, bx, bz] = bodyEnds(m, h);
+    if (![0.5, 0.95].every(f => onFloor(ax + (bx - ax) * f, az + (bz - az) * f))) continue;
+    const gap = Math.min(9, ...living.map(o => segmentDistance(o.x, o.z, ax, az, bx, bz)));
+    if (gap >= 0.75) { best = h; break; }
+    if (gap > bestGap) { bestGap = gap; best = h; }
+  }
+  if (best != null) m.heading = best;
 }
 
 // Where to walk when moving through `door` into `dest`: the standing slot there (its centre, or a
@@ -849,7 +926,14 @@ hud.onConfirm(
 );
 overlays.onBegin(begin);
 overlays.onRestart(restart);
-hud.on('restartPractice', () => { if (!uiBusy() || overlays.endOpen) restart(); });
+// Restart practice throws the whole hotel away, so it asks first (from the end screen it does not:
+// the match is over).
+hud.on('restartPractice', () => {
+  if (overlays.endOpen) { restart(); return; }
+  if (uiBusy()) return;
+  overlays.ask('Restart practice?', 'This hotel and everything you have found will be lost, and you start again in the lobby of a new hotel.',
+    { yes: 'Restart', no: 'Keep playing' }, restart);
+});
 
 // --- Start screen: choose the game ---------------------------------------------------------
 // The only decision that has to be made before the world is built, so it is in the address and
@@ -858,9 +942,11 @@ function buildStartScreen() {
   const sub = document.getElementById('start-sub');
   const host = document.getElementById('mode-buttons');
   if (sub) {
+    // Two short lines rather than one that wraps with a word alone at the end (styles.css keeps the
+    // line break and balances each line).
     sub.textContent = HOTSEAT
-      ? `Hot-seat · ${rules.playerCount} guests, one device · one is secretly possessed · find ${rules.lanternsToEscape} Lanterns and get one clean guest out before dawn (${rules.roundLimit} rounds)`
-      : `Practice mode · explore the hotel alone, find ${rules.lanternsToEscape} Lanterns, escape through the fire exit`;
+      ? `Hot-seat · ${rules.playerCount} guests, one device · one is secretly possessed\nFind ${rules.lanternsToEscape} Lanterns and get one clean guest out before dawn (${rules.roundLimit} rounds)`
+      : `Practice · explore the hotel alone\nFind ${rules.lanternsToEscape} Lanterns and escape through the fire exit`;
   }
   document.title = HOTSEAT ? `Hotel Escape — Hot-seat (${rules.playerCount})` : 'Hotel Escape — Practice';
   if (!host) return;
@@ -880,6 +966,14 @@ function buildStartScreen() {
   }
 }
 buildStartScreen();
+// Practice is one guest alone: no trades, no possessed guest, nobody to hide a hand from. Words written
+// for the shared hot-seat screen are swapped for plain ones (hot-seat is unchanged).
+if (PRACTICE) {
+  usePracticeWording(true);
+  const privateBtn = document.getElementById('btn-private');
+  if (privateBtn) privateBtn.textContent = '▸ My cards';
+  document.querySelector('#hand-overlay .lock')?.setAttribute('hidden', '');
+}
 // --- Initial state -----------------------------------------------------------------------
 syncViews(false);
 rig.setFocus(activeMover().x, activeMover().z, true);
@@ -911,7 +1005,7 @@ view.renderer.setAnimationLoop(now => {
   rig.setFocus(activeMover().x, activeMover().z);
   rig.update(dt);
   for (const rv of roomViews.values()) rv.update(dt);
-  doorways.update(time, dt, roomViews);
+  doorways.update(time, dt, roomViews, activeMover());
   pathPreview.update(selectedMove && hud.confirmOpen && !activeMover().walking ? selectedMove : null, time);
   mood.update(activePlayer(state).currentRoom, dt, time, activeMover());
   updateCutaway(roomViews, rig, state, cfg, dt);
@@ -995,6 +1089,10 @@ window.__game = {
     return floor.rooms.has(id) && (!nextTo || floor.rooms.get(id).neighbours.has(nextTo));
   },
   hotelRooms: () => floor.roomList.map(r => r.id),
+  // Tests: where a guest walking into `room` would stand, and whether a point is on a body.
+  standingSlot: (room, i) => standingSlot(room, i),
+  onABody: (x, z) => onABody(x, z),
+  bodyEnds: i => bodyEnds(movers[i]),
   programCount: () => view.renderer.info.programs.length,
   setPixelRatio: cap => view.setPixelRatio(cap),
 };

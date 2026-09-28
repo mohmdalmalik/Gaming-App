@@ -51,8 +51,8 @@ html, body {
 #view { position: absolute; inset: 0; }
 #view canvas { display: block; width: 100%; height: 100%; touch-action: none; }
 /* ?stats=1 performance readout (for measuring on the device). */
-.perf-stats {
-  position: fixed; left: 50%; top: calc(6px + var(--safe-top)); transform: translateX(-50%); z-index: 50;
+.perf-stats {   /* top left, below the room name and the guest strip */
+  position: fixed; left: calc(14px + var(--safe-left)); top: calc(166px + var(--safe-top)); z-index: 50;
   pointer-events: none; padding: 3px 9px; border-radius: 6px; background: rgba(0, 0, 0, 0.72);
   color: #9fe6a8; font: 12px/1.3 ui-monospace, Menlo, monospace;
 }
@@ -141,9 +141,10 @@ html, body {
 .objectives.complete .obj-label { color: #9fe3b8; }
 .objectives.complete .obj-pip.on { background: #6fc492; border-color: #9fe3b8; box-shadow: 0 0 7px rgba(120,200,150,0.6); }
 
-/* Restart practice: deliberately quieter than the turn actions so it is never hit by accident. */
+/* Restart practice: deliberately quieter than the turn actions, and it asks before wiping the game.
+   44 px tall: the smallest comfortable touch target. */
 .ctl.restart {
-  height: 38px; min-width: 0; padding: 0 13px; font-family: var(--serif); font-size: 13px;
+  height: 44px; min-width: 0; padding: 0 13px; font-family: var(--serif); font-size: 13px;
   font-weight: 600; letter-spacing: 0.02em; color: var(--muted); border-radius: 10px;
 }
 .ctl.restart:active { color: var(--ivory-dim); }
@@ -270,10 +271,15 @@ html, body {
 .hand-fan.settling .fan-card { transition: none; }
 .fan-card img { display: block; width: 100%; height: 100%; object-fit: cover; pointer-events: none; -webkit-user-drag: none; }
 .fan-card .fan-name { display: flex; align-items: center; justify-content: center; height: 100%; padding: 6px; font-family: var(--serif); font-weight: 700; color: var(--ivory); }
+/* The Revolver's shots, top LEFT: the next card in the fan covers each card's right-hand side. When
+   the fan is crowded (.tight) only the number shows. */
 .fan-card .fan-badge {
-  position: absolute; top: 7%; right: 8%; padding: 1px 6px; border-radius: 999px; font-size: 10.5px; font-weight: 800;
-  color: #2a2016; background: var(--brass-bright); box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
+  position: absolute; top: 5%; left: 5%; padding: 1px 6px; border-radius: 999px; font-size: 10.5px; font-weight: 800;
+  white-space: nowrap; color: #2a2016; background: var(--brass-bright); box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
 }
+.fan-card .fan-badge b { font-weight: 800; }
+.hand-fan.tight .fan-badge .unit { display: none; }
+.hand-fan.tight .fan-badge { min-width: 19px; text-align: center; padding: 1px 5px; }
 .fan-card.evil { box-shadow: 0 6px 16px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(154, 107, 208, 0.7); }
 /* Lift: the pointer over a card (mouse) or a finger on it (touch) raises it clear of the screen edge. */
 .fan-card.lift { z-index: 60 !important; transform: translate(var(--x, 0px), calc(var(--y, 0px) - var(--fan-lift, 26px))) rotate(0deg) scale(1.1); box-shadow: 0 12px 26px rgba(0, 0, 0, 0.6), 0 0 0 2px var(--brass-bright), 0 0 22px rgba(201, 162, 78, 0.45); }
@@ -281,10 +287,11 @@ html, body {
   .fan-card:hover { z-index: 60 !important; transform: translate(var(--x, 0px), calc(var(--y, 0px) - var(--fan-lift, 26px))) rotate(0deg) scale(1.1); box-shadow: 0 12px 26px rgba(0, 0, 0, 0.6), 0 0 0 2px var(--brass-bright), 0 0 22px rgba(201, 162, 78, 0.45); }
 }
 .fan-card:focus-visible { outline: 2px solid var(--brass-bright); outline-offset: 2px; }
-/* A card that has just come into the hand (a search, a trade) is dealt in from above. */
-.fan-card.dealt { animation: fan-deal 0.55s cubic-bezier(0.2, 0.8, 0.25, 1) both; }
+/* A card that has just come into the hand (a search, a trade) is dealt in from just above. It starts
+   close to its place, so a finger already on that place is on the card. */
+.fan-card.dealt { animation: fan-deal 0.4s cubic-bezier(0.2, 0.8, 0.25, 1) both; }
 @keyframes fan-deal {
-  from { opacity: 0; transform: translate(var(--x, 0px), calc(var(--y, 0px) - 190px)) rotate(0deg) scale(1.5); }
+  from { opacity: 0; transform: translate(var(--x, 0px), calc(var(--y, 0px) - 44px)) rotate(0deg) scale(1.18); }
   to { opacity: 1; transform: translate(var(--x, 0px), var(--y, 0px)) rotate(var(--r, 0deg)); }
 }
 
@@ -332,7 +339,7 @@ html, body {
    private, public or end screen is up they are gone (the script hides them too). */
 #app:has(#handoff-overlay:not([hidden]), #encounter-overlay:not([hidden]), #end-overlay:not([hidden]),
   #notice-overlay:not([hidden]), #map-overlay:not([hidden]), #discard-overlay:not([hidden]),
-  #fullhand-overlay:not([hidden]), #start-overlay:not([hidden])) :is(#hand-fan, #search-spot) { display: none !important; }
+  #fullhand-overlay:not([hidden]), #start-overlay:not([hidden]), #ask-overlay:not([hidden])) :is(#hand-fan, #search-spot) { display: none !important; }
 
 /* ---- Bottom-right: camera controls (separate) + action buttons ---- */
 .hud-bottom-right { display: flex; flex-direction: column; align-items: flex-end; gap: 12px; }
@@ -419,7 +426,9 @@ html, body {
   box-shadow: inset 0 0 0 1px rgba(0,0,0,0.5), inset 0 0 0 2px var(--line-soft), 0 18px 50px rgba(0,0,0,0.6);
 }
 .card h1 { margin: 0 0 6px; font-family: var(--serif); font-size: clamp(28px, 5vw, 44px); font-weight: 700; letter-spacing: 0.01em; color: var(--ivory); }
-.card p { margin: 0 0 22px; }
+.card p { margin: 0 0 22px; text-wrap: balance; }
+/* Start and end screens: the script writes one line per fact; keep those breaks. */
+#start-sub, #end-summary { white-space: pre-line; line-height: 1.5; }
 .muted { color: var(--muted); }
 
 /* Full-height panel (kept for general use); its header styles are shared by the card view. */
@@ -680,8 +689,13 @@ html, body {
 .turn-timer.low .tt-fill { background: linear-gradient(90deg, #8c3a34, var(--crimson)); }
 .turn-timer.low .tt-seconds { color: #f0b4ae; }
 
-/* Public per-guest line in the top strip: where they are and how many cards. Never a role. */
-.mini-where { font-size: 10px; line-height: 1.2; color: var(--muted); text-align: center; max-width: 74px; }
+/* Public per-guest lines in the top strip: where they are (a short room name), then cards and health.
+   Never a role. Two single lines, readable at arm's length; a long name ends in an ellipsis. */
+.mini-where { display: flex; flex-direction: column; align-items: center; font-size: 11.5px; line-height: 1.25; color: var(--ivory-dim); text-align: center; width: calc(100% + 8px); max-width: 82px; }
+.mini-where .mini-room, .mini-where .mini-stats { display: block; max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mini-where .mini-stats { color: var(--muted); letter-spacing: -0.01em; }
+.mini-where .mini-hearts { margin-left: 4px; font-size: 10px; letter-spacing: -0.5px; color: #e88178; }
+.mini-where .mini-stats:empty { display: none; }
 .mini-player.escaped { opacity: 0.55; }
 .mini-player.escaped .mini-name { color: #9fe3b8; }
 
@@ -749,8 +763,10 @@ html, body {
   font-family: var(--serif); font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase;
   color: var(--brass); margin-bottom: 10px;
 }
-.offer-block .cards { justify-content: center; }
-.offer-block .card-tile { width: 112px; }
+/* The row wraps: a big hand (6 cards + 3 Possession cards) ran off both sides, and a centred row that
+   spills off the left can never be scrolled back. Tiles shrink a little on short screens. */
+.offer-block .cards { justify-content: center; flex-wrap: wrap; }
+.offer-block .card-tile { width: clamp(84px, 13vh, 100px); }   /* six to a row in the 700 px block */
 .offer-block .card-tile .art { min-height: 62px; }
 .card-tile.nothing { background: linear-gradient(180deg, #2a2e3a, #1e222c); border-color: var(--line-soft); color: var(--ivory-dim); }
 .card-tile.nothing .cname { color: var(--ivory-dim); }
@@ -783,3 +799,23 @@ html, body {
 
 /* The last round before dawn: the header round label says so and turns a warning colour. */
 .round-label.final { color: #f0b4ae; border-color: rgba(207, 74, 64, 0.65); background: rgba(80, 24, 22, 0.55); }
+
+/* --- Turn sideways: portrait or a window under ~900 px wide ----------------------------------
+   The game is laid out for landscape only; rather than squeeze it, a calm card asks for the iPad to
+   be turned. Pure CSS (no script), above every other screen; main.js pauses the turn clock meanwhile. */
+.rotate-overlay { display: none; }
+@media (orientation: portrait), (max-width: 900px) {
+  .rotate-overlay {
+    display: flex; position: fixed; inset: 0; z-index: 200; align-items: center; justify-content: center;
+    padding: calc(var(--safe-top) + 24px) calc(var(--safe-right) + 24px) calc(var(--safe-bottom) + 24px) calc(var(--safe-left) + 24px);
+    background: radial-gradient(120% 90% at 50% 35%, #1a1e2c, var(--bg) 70%);
+  }
+}
+.rotate-card { max-width: min(460px, 100%); padding: 30px 32px 26px; }
+.rotate-card h1 { font-size: clamp(24px, 6vw, 32px); text-wrap: balance; }
+.rotate-card p { margin: 10px 0 0; line-height: 1.45; text-wrap: balance; }
+.rotate-icon { width: 132px; height: 99px; margin: 0 auto 14px; display: block; }
+.rotate-icon rect { fill: none; stroke-width: 3; }
+.rotate-icon .ri-portrait { stroke: var(--brass-dim); stroke-dasharray: 5 5; }
+.rotate-icon .ri-landscape { stroke: var(--brass-bright); fill: rgba(201,162,78,0.12); }
+.rotate-icon path { fill: none; stroke: var(--brass); stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }

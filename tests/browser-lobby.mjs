@@ -60,12 +60,6 @@ async function tapDoor({ x, y }) {
 // wait until a camera turn has finished (the eased turn runs on game time: slow headless)
 const turned = async () => { await page.waitForFunction(() => window.__game.rig.debug.yawT >= 1, null, { timeout: 30000 }); await frames(25); };
 const frames = n => page.evaluate(n => new Promise(r => { let k = 0; const f = () => (++k >= n ? r() : requestAnimationFrame(f)); requestAnimationFrame(f); }), n);
-// the camera's angle above the horizon, in degrees
-const pitch = () => game(() => {
-  const g = window.__game, c = g.view.camera.position, m = g.activeMover(), p = g.rig.pan;
-  const dx = c.x - m.x - p.x, dz = c.z - m.z - p.z;
-  return Math.atan2(c.y, Math.hypot(dx, dz)) * 180 / Math.PI;
-});
 
 console.log('1. the baked lobby loads');
 await load(`seed=${process.env.LOBBY_SEED || 7}`);   // a fixed hotel (seed 7: a lobby with one side closed off)
@@ -224,12 +218,23 @@ await page.waitForFunction(() => !window.__game.activeMover().walking && window.
 check(await game(() => window.__game.activePlayer().currentRoom) === opened.rooms[1], 'the guest walked through into the new room');
 
 console.log('\n6. camera');
+// the view's own direction: its angle below the horizon, and how far it is turned off the room's axes
+const look = () => game(() => {
+  const d = new (window.__game.view.camera.position.constructor)();
+  window.__game.view.camera.getWorldDirection(d);
+  const turn = Math.abs(Math.atan2(d.x, d.z) * 180 / Math.PI) % 90;
+  return { pitch: Math.asin(-d.y) * 180 / Math.PI, turn: Math.min(turn, 90 - turn) };
+});
 await load('');
-const p1 = await pitch();
-check(Math.abs(p1 - 42) < 1.5, `the default camera is lower (${p1.toFixed(1)}° above the floor)`);
+const l1 = await look();
+check(Math.abs(l1.turn - 45) < 2 && Math.abs(l1.pitch - 44) < 1.5,
+  `the standard view is corner-on, like the room pictures (turned ${l1.turn.toFixed(1)}° off square, ${l1.pitch.toFixed(1)}° down)`);
+await load('camera=square');
+const l2 = await look();
+check(l2.turn < 1 && Math.abs(l2.pitch - 42) < 1.5, `?camera=square gives the previous square-on view (${l2.turn.toFixed(1)}°, ${l2.pitch.toFixed(1)}° down)`);
 await load('camera=classic');
-const p2 = await pitch();
-check(Math.abs(p2 - 56) < 1.5, `?camera=classic keeps the old angle (${p2.toFixed(1)}°)`);
+const l3 = await look();
+check(l3.turn < 1 && Math.abs(l3.pitch - 56) < 1.5, `?camera=classic keeps the old higher angle (${l3.pitch.toFixed(1)}°)`);
 
 console.log('\n7. performance readout and budget');
 await load('stats=1');

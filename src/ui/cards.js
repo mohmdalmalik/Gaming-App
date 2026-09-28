@@ -40,6 +40,19 @@ export const CARD_FACE = {
 };
 export const CARD_BACK = 'assets/cards/back.jpg';
 
+// Practice is one guest alone — no trades, no possessed guest — so card words that talk about those
+// are swapped for these there (main.js switches it on in practice only). The rules' own words are in
+// src/data/rules.js and are unchanged.
+const PRACTICE_DESC = {
+  lantern: 'Three of them let you escape through the fire exit.',
+};
+let practiceWording = false;
+export function usePracticeWording(on) { practiceWording = !!on; }
+// What a card does, in words for this mode.
+export function cardDesc(type) {
+  return (practiceWording && PRACTICE_DESC[type]) || CARDS[type]?.desc || '';
+}
+
 // The art panel for a card type: a real illustration if one is registered, else a big glyph.
 function cardArt(doc, type) {
   const meta = CARDS[type] || {};
@@ -79,7 +92,7 @@ export function cardTile(doc, card, opts = {}) {
   }
   const nm = doc.createElement('span'); nm.className = 'cname'; nm.textContent = `${meta.name}${shots}`; el.appendChild(nm);
   if (!opts.hideDesc) {
-    const d = doc.createElement('span'); d.className = 'cdesc'; d.textContent = opts.desc ?? meta.desc; el.appendChild(d);
+    const d = doc.createElement('span'); d.className = 'cdesc'; d.textContent = opts.desc ?? (CARDS[card.type] ? cardDesc(card.type) : meta.desc); el.appendChild(d);
   }
 
   if (opts.selectable && opts.onSelect) el.addEventListener('click', e => { e.preventDefault(); opts.onSelect(card, el); });
@@ -122,7 +135,7 @@ export function bigCard(doc, card, opts = {}) {
   el.appendChild(face);
   if (opts.text !== false) {
     const nm = doc.createElement('div'); nm.className = 'bc-name'; nm.textContent = meta.name; el.appendChild(nm);
-    const d = doc.createElement('div'); d.className = 'bc-desc'; d.textContent = meta.desc; el.appendChild(d);
+    const d = doc.createElement('div'); d.className = 'bc-desc'; d.textContent = CARDS[card.type] ? cardDesc(card.type) : meta.desc; el.appendChild(d);
   }
   return el;
 }

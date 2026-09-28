@@ -81,10 +81,14 @@ export function createHud(doc, cfg) {
       const name = doc.createElement('div'); name.className = 'mini-name'; name.textContent = p.name;
       // PUBLIC information only: where they are and how many cards they hold. A hidden role is
       // never shown here, and neither is anyone's Offer.
+      // Two short lines: the room (its short name, full name on hover), then cards and health.
       const where = doc.createElement('div'); where.className = 'mini-where';
+      const room = doc.createElement('span'); room.className = 'mini-room';
+      const stats = doc.createElement('span'); stats.className = 'mini-stats';
+      where.append(room, stats);
       cell.append(flag, port, name, where);
       el.strip.appendChild(cell);
-      return { cell, flag, where };
+      return { cell, flag, where, room, stats };
     });
   }
 
@@ -161,18 +165,22 @@ export function createHud(doc, cfg) {
       else { el.endMain.textContent = 'End turn ›'; el.endSub.textContent = next && next !== p ? `Next: ${next.name}` : `Refill to ${rules.actionPointsPerTurn}`; el.endTurn.disabled = false; }
 
       // A room with a job: its button shows only while standing in one (Infirmary, Switchboard).
-      // The Fire Exit uses the same button for Escape. In hot-seat it looks the same for every guest
-      // standing there (whether it would let them out stays private until they try); practice has
-      // nothing to hide, so it says when Lanterns are missing.
+      // The Fire Exit uses the same button for Escape. It is enabled only for a guest it would let
+      // out, so nobody gives themselves away by trying: a possessed guest carrying the Lanterns sees
+      // exactly what a clean guest short of Lanterns sees ("Clean + 3 Lanterns"), so the button never
+      // says which of the two it is. (Enabled means "this guest can escape now" — and escaping ends the
+      // match at once.) With no actions left it reads the same for everyone. Practice has nothing to
+      // hide, so it says plainly when Lanterns are missing.
       const job = ROOM_JOB[room?.job];
       el.roomJob.hidden = !job && !room?.isExit;
       if (room?.isExit) {
         const short = p.actionPoints < rules.actionCost.escape;
-        const missing = state.practice && !canEscape(state, floor, p);
+        const barred = !canEscape(state, floor, p);
         el.roomJobMain.textContent = 'Escape';
-        el.roomJob.disabled = state.finished || short || missing;
+        el.roomJob.disabled = state.finished || short || barred;
         el.roomJobSub.textContent = state.finished ? '—' : short ? 'No actions left'
-          : missing ? `Need ${rules.lanternsToEscape} Lanterns` : plural(rules.actionCost.escape);
+          : barred ? (state.practice ? `Need ${rules.lanternsToEscape} Lanterns` : `Clean + ${rules.lanternsToEscape} Lanterns`)
+            : plural(rules.actionCost.escape);
       } else if (job) {
         const use = canUseRoom(state, floor, p);
         el.roomJobMain.textContent = job.name;
@@ -196,10 +204,15 @@ export function createHud(doc, cfg) {
         mini[i].cell.classList.toggle('escaped', out);
         mini[i].flag.textContent = out ? 'Out' : active ? 'Your turn' : (i === nextIdx ? 'Next' : '');
         if (mini[i].where) {
-          const hearts = rules.healthEnabled ? ' · ' + '♥'.repeat(q.health) + '♡'.repeat(Math.max(0, rules.maxHealth - q.health)) : '';
-          mini[i].where.textContent = out ? 'Escaped'
-            : !q.alive ? 'Dead'
-              : `${floor.rooms.get(q.currentRoom)?.name ?? '—'} · ${countableCount(q.hand)} cards${hearts}`;
+          const hearts = rules.healthEnabled ? '♥'.repeat(q.health) + '♡'.repeat(Math.max(0, rules.maxHealth - q.health)) : '';
+          const place = floor.rooms.get(q.currentRoom);
+          mini[i].room.textContent = out ? 'Escaped' : !q.alive ? 'Dead' : (place?.short || place?.name || '—');
+          mini[i].room.title = out || !q.alive ? '' : (place?.name ?? '');
+          if (out || !q.alive) mini[i].stats.textContent = '';
+          else {
+            const h = doc.createElement('span'); h.className = 'mini-hearts'; h.textContent = hearts;
+            mini[i].stats.replaceChildren(doc.createTextNode(`${countableCount(q.hand)} cards`), h);
+          }
         }
       });
     },

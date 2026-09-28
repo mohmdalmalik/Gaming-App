@@ -224,23 +224,24 @@ await page.waitForTimeout(400);
   const flagged = await game(() => window.__game.floor.rooms.get('lounge').furniture.filter(f => f.search).map(f => ({ kind: f.kind, center: f.center })));
   check(flagged.length === 1 && s1.spot && s1.spot.kind === flagged[0].kind && s1.spot.center.join() === flagged[0].center.join(),
     `it belongs to the furniture flagged as the search spot (${s1.spot?.kind})`);
-  // It floats over that furniture: the icon marks a point just above the flagged footprint, projected
-  // with the live camera — kept inside the screen when the furniture itself is near or past the edge
-  // (a corner piece nearest the camera can be), so it is always there to tap.
-  await frames(3);
+  // It rests on that furniture: the badge's foot on the piece as the live camera sees it. If that spot
+  // is taken by the interface (or off the screen) it moves to the nearest clear place, and a small arrow
+  // on the badge points back at the furniture.
+  await frames(6);
   const a = await game(() => {
     const g = window.__game, f = g.floor.rooms.get('lounge').furniture.find(f => f.search), cam = g.view.camera;
     const V = cam.position.constructor, W = innerWidth, H = innerHeight;
     const scr = (x, y, z) => { const v = new V(x, y, z).project(cam); return [(v.x + 1) / 2 * W, (1 - v.y) / 2 * H]; };
-    const top = f.size[1];
-    const xs = [[f.min[0], f.min[1]], [f.max[0], f.min[1]], [f.min[0], f.max[1]], [f.max[0], f.max[1]]].map(([x, z]) => scr(x, top, z)[0]);
-    const [px, py] = scr(f.center[0], top + 0.45, f.center[1]);
-    return { px, py, span: [Math.min(...xs), Math.max(...xs)], icon: g.searchSpot().point, W, H };
+    const pts = [];
+    for (const x of [f.min[0], f.max[0]]) for (const z of [f.min[1], f.max[1]]) for (const y of [0, f.size[1]]) pts.push(scr(x, y, z));
+    const b = document.querySelector('#search-spot .ss-badge').getBoundingClientRect();
+    const arrow = getComputedStyle(document.querySelector('#search-spot .ss-arrow')).display !== 'none';
+    return { x0: Math.min(...pts.map(p => p[0])), x1: Math.max(...pts.map(p => p[0])), y0: Math.min(...pts.map(p => p[1])), y1: Math.max(...pts.map(p => p[1])),
+      icon: g.searchSpot().point, foot: b.bottom, arrow };
   });
-  const ex = Math.min(a.W - 44, Math.max(44, a.px));
-  const onScreen = a.px >= 44 && a.px <= a.W - 44 && a.py >= 180 && a.py <= a.H - 280;
-  check(a.px >= a.span[0] && a.px <= a.span[1] && !!a.icon && Math.abs(a.icon.x - ex) <= 3 && (!onScreen || Math.abs(a.icon.y - a.py) <= 3),
-    `above that furniture (icon ${a.icon?.x},${a.icon?.y}; point over it ${Math.round(a.px)},${Math.round(a.py)}; furniture ${a.span.map(Math.round).join('–')}${onScreen ? '' : ', kept on screen'})`);
+  const onIt = !!a.icon && a.icon.x >= a.x0 && a.icon.x <= a.x1 && a.foot >= a.y0 - 12 && a.foot <= a.y1 + 4;
+  check(!!a.icon && (a.arrow || onIt),
+    `on that furniture (icon ${a.icon?.x},${a.icon?.y}, foot at ${Math.round(a.foot)}; furniture ${Math.round(a.x0)}–${Math.round(a.x1)} × ${Math.round(a.y0)}–${Math.round(a.y1)}${a.arrow ? '; moved clear of the interface, arrow pointing at it' : ''})`);
   const box = await page.evaluate(() => { const r = document.querySelector('#search-spot .ss-badge').getBoundingClientRect(); return { w: r.width, h: r.height }; });
   check(box.w >= 48 && box.h >= 48, `big enough to tap (${Math.round(box.w)}×${Math.round(box.h)} px)`);
   await shot('ui-search-lounge');
@@ -398,7 +399,7 @@ console.log('\n5b. standing at a door that opens onto a locked room (never stuck
     await page.waitForTimeout(1500);   // let the camera follow the guest to the room
     // 1) tap the floor right in front of the door: the guest walks up to it
     const inward = await game(s => { const c = window.__game.roomCenter(s.room); const dx = c[0] - s.center[0], dz = c[1] - s.center[1]; const l = Math.hypot(dx, dz); return [dx / l, dz / l]; }, setup);
-    const front = [setup.center[0] + inward[0] * 1.0, setup.center[1] + inward[1] * 1.0];   // just outside the "tap the door" zone
+    const front = [setup.center[0] + inward[0] * 1.45, setup.center[1] + inward[1] * 1.45];   // just outside the "tap the door" zone (it covers the whole ring: 1.22 m)
     const tapGround = async ([x, z]) => { const sp = await game(([x, z]) => window.__game.groundToScreen(x, z), [x, z]); await page.touchscreen.tap(sp.x, sp.y); await page.waitForTimeout(120); };
     await tapGround(front);
     await settle();
@@ -484,7 +485,15 @@ console.log('\n6b. a Linen Store');
   check(/Bandage/.test(await page.textContent('#fullhand-sub')), 'which names it');
   await shot('pr-02c-linen-full');
   await tap('#btn-fullhand-take');
-  await page.click('#fullhand-hand .card-tile[data-card-id="k1"]'); await page.waitForTimeout(100);
+  // Choosing the card to make room is two steps: tap it (nothing is thrown away yet), then confirm.
+  await page.click('#fullhand-hand .card-tile[data-card-id="k2"]'); await page.waitForTimeout(80);
+  await page.click('#fullhand-hand .card-tile[data-card-id="k1"]'); await page.waitForTimeout(80);
+  const picked = await page.evaluate(() => ({ sel: [...document.querySelectorAll('#fullhand-hand .card-tile.selected')].map(t => t.dataset.cardId),
+    btn: document.getElementById('btn-fullhand-drop').textContent.trim(), dis: document.getElementById('btn-fullhand-drop').disabled }));
+  check(await game(() => window.__game.fullHandOpen() && window.__game.activePlayer().hand.some(c => c.id === 'k1') && window.__game.activePlayer().hand.some(c => c.id === 'k2')),
+    'tapping a card to make room only picks it: nothing is thrown away yet');
+  check(picked.sel.join() === 'k1' && !picked.dis && picked.btn === 'Discard the Knife', `tapping another moves the choice, and the button names it ("${picked.btn}")`);
+  await tap('#btn-fullhand-drop');
   const secondUp = await page.evaluate(() => [...document.querySelectorAll('#fullhand-found .card-tile')].map(t => t.dataset.cardId));
   check(await game(() => window.__game.fullHandOpen()) && secondUp.length === 1 && secondUp[0] === 'ls2', `then the second card gets its own prompt straight after (${secondUp.join(',')})`);
   check(/Flashlight/.test(await page.textContent('#fullhand-sub')), 'which names it');
@@ -504,7 +513,14 @@ console.log('\n7. finding three Lanterns and the fire exit');
 // A fresh start builds a new random hotel. Open the whole hotel up, then search room after room for
 // real until three Lanterns have turned up.
 const before7 = await game(() => window.__game.hotelRooms().length);
+check(await page.evaluate(() => document.getElementById('btn-restart-practice').getBoundingClientRect().height >= 44), 'the Restart practice button is at least 44 px tall');
 await tap('#btn-restart-practice');
+check(await visible('#ask-overlay') && /Restart practice\?/.test(await page.textContent('#ask-title')), 'Restart practice asks first');
+check(await game(() => window.__game.hotelRooms().length) === before7, 'and nothing is lost while it asks');
+await tap('#btn-ask-no');
+check(!(await visible('#ask-overlay')) && await game(() => window.__game.hotelRooms().length) === before7, '"Keep playing" keeps the hotel as it was');
+await tap('#btn-restart-practice');
+await tap('#btn-ask-yes');
 check(await game(() => window.__game.hotelRooms().length) === 1 && before7 > 1, 'Restart practice builds a new hotel: just the lobby again');
 await give(0, [{ id: 'fl7', type: 'flashlight' }]);
 for (const t of ['lounge', 'ballroom', 'grandCorridor', 'dining', 'library', 'kitchen', 'corridorE', 'corridorW', 'corridorN', 'corridorS', 'infirmary1', 'infirmary2', 'linenStore1', 'linenStore2', 'switchboard', 'cornerCorridor', 'storage', 'stairs', 'serviceCorridor', 'backCorridor', 'housekeeping']) {
@@ -540,6 +556,7 @@ for (const r of rooms) {
         await shot('pr-02b-fullhand');
       }
       await page.click(`#fullhand-hand .card-tile[data-card-id="${drop}"]`); await page.waitForTimeout(80);
+      await tap('#btn-fullhand-drop');
     } else await tap('#btn-fullhand-leave');
   }
   searched++;
@@ -580,6 +597,133 @@ check(await visible('#end-overlay') && /fire exit/i.test(await page.textContent(
 await shot('pr-03-end');
 await tap('#btn-restart');
 check(await game(() => !window.__game.isFinished() && window.__game.activePlayer().currentRoom === 'hall'), 'Restart practice puts the guest back in the lobby');
+
+console.log('\n7b. playtest fixes');
+{
+  // The whole painted door ring is the door: a tap anywhere on it offers Open (it used to walk the
+  // guest there when the tap was on the ring's room-facing half).
+  await page.waitForTimeout(1200);   // (the camera settles on the lobby)
+  const pts = await game(() => {
+    const g = window.__game, t = g.cfg.walls.thickness, c = g.roomCenter('hall');
+    const out = [];
+    for (const d of g.closedDoors()) {
+      const dx = c[0] - d.center[0], dz = c[1] - d.center[1], l = Math.hypot(dx, dz);
+      for (const k of [t + 0.62, t + 0.8, t + 0.93]) {
+        const x = d.center[0] + dx / l * k, z = d.center[1] + dz / l * k;
+        const sp = g.groundToScreen(x, z);
+        const el = document.elementFromPoint(sp.x, sp.y);
+        if (el && el.tagName === 'CANVAS') out.push({ door: d.id, k: +k.toFixed(2), x: sp.x, y: sp.y });
+      }
+    }
+    return out;
+  });
+  const missed = [];
+  for (const q of pts) {
+    await page.touchscreen.tap(q.x, q.y); await page.waitForTimeout(120);
+    const r = await page.evaluate(() => ({ bar: !document.getElementById('confirm-bar').hidden, text: document.getElementById('confirm-text').textContent, walking: window.__game.activeMover().walking || window.__game.activeMover().path.length > 0 }));
+    if (!r.bar || !/Open this door/.test(r.text) || r.walking) missed.push(`${q.door}@${q.k}`);
+    if (r.bar) await tap('#btn-confirm-cancel');
+    await settle();
+  }
+  const outer = pts.filter(q => q.k > 1.0).length;
+  check(pts.length >= 6 && outer >= 2 && !missed.length, `a tap anywhere on a door's ring — up to its room-side edge — offers Open (${pts.length - missed.length}/${pts.length} taps${missed.length ? `; missed ${missed.join(', ')}` : ''})`);
+
+  // A double tap on End turn ends ONE turn (practice has no hand-over screen to catch the second).
+  await game(() => { const p = window.__game.activePlayer(); p.hand = p.hand.slice(0, 4); window.__game.refresh(); });
+  const t0 = await game(() => window.__game.state.turn);
+  await page.click('#btn-end-turn', { clickCount: 2 }); await page.waitForTimeout(150);
+  const t1 = await game(() => ({ turn: window.__game.state.turn, ap: window.__game.activePlayer().actionPoints }));
+  check(t1.turn === t0 + 1 && t1.ap === 4, `a double tap on End turn ends one turn, not two (turn ${t0} → ${t1.turn})`);
+  await page.waitForTimeout(800);
+  await tap('#btn-end-turn');
+  check(await game(() => window.__game.state.turn) === t0 + 2, 'a deliberate tap a moment later ends the next one');
+  await page.waitForTimeout(800);
+
+  // The end-of-turn discard: tap a card to pick it, then confirm. Nothing goes on one tap.
+  await game(() => { const p = window.__game.activePlayer(); p.hand = ['lantern', 'lantern', 'bandage', 'knife', 'masterKey', 'handMirror', 'espresso', 'barricade'].map((t, i) => ({ id: `d${i}`, type: t })); window.__game.refresh(); });
+  const t2 = await game(() => window.__game.state.turn);
+  await tap('#btn-end-turn');
+  const dsc = () => page.evaluate(() => ({ open: !document.getElementById('discard-overlay').hidden, title: document.querySelector('#discard-overlay .modal-title').textContent,
+    sub: document.getElementById('discard-sub').textContent, btn: document.getElementById('btn-discard-done').textContent.trim(), dis: document.getElementById('btn-discard-done').disabled,
+    sel: [...document.querySelectorAll('#discard-cards .card-tile.selected')].map(t => t.dataset.cardId), n: window.__game.activePlayer().hand.length }));
+  let d = await dsc();
+  check(d.open && d.title === 'Your hand is full' && /Tap a card to discard/.test(d.sub), `over the limit, End turn asks for a discard: "${d.title}" — "${d.sub}"`);
+  check(await page.evaluate(() => document.querySelector('#fullhand-overlay .modal-title').textContent) === d.title, 'the take-or-leave prompt has the same title');
+  check(d.dis && d.btn === 'Tap a card to discard', 'until a card is picked, the button says what to do and cannot be pressed');
+  await page.click('#discard-cards .card-tile[data-card-id="d2"]'); await page.waitForTimeout(80);
+  d = await dsc();
+  check(d.n === 8 && d.sel.join() === 'd2' && !d.dis && d.btn === 'Discard the Bandage', `one tap only picks a card: nothing is thrown away yet ("${d.btn}")`);
+  await page.click('#discard-cards .card-tile[data-card-id="d2"]'); await page.waitForTimeout(80);
+  d = await dsc();
+  check(!d.sel.length && d.dis && d.n === 8, 'tapping it again puts it back');
+  await page.click('#discard-cards .card-tile[data-card-id="d3"]'); await page.waitForTimeout(80);
+  await tap('#btn-discard-done');
+  d = await dsc();
+  check(d.n === 7 && d.open && !(await game(() => window.__game.activePlayer().hand.some(c => c.id === 'd3'))), 'the button discards the picked card (the Knife)');
+  await page.click('#discard-cards .card-tile[data-card-id="d7"]'); await page.waitForTimeout(80);
+  await tap('#btn-discard-done');
+  d = await dsc();
+  check(d.n === 6 && !d.dis && d.btn === 'Keep these 6' && await game(t => window.__game.state.turn === t, t2), 'down to six: "Keep these 6", and the turn has not ended yet');
+  await tap('#btn-discard-done');
+  check(!(await visible('#discard-overlay')) && await game(t => window.__game.state.turn === t + 1, t2), 'then the turn ends');
+  await page.waitForTimeout(800);
+
+  // A tap on a fan card works while the fan is being re-laid out under the finger (a card arriving,
+  // the hand changing): the card the finger went down on opens.
+  await game(() => { const p = window.__game.activePlayer(); p.hand = ['lantern', 'bandage', 'knife', 'espresso'].map((t, i) => ({ id: `f${i}`, type: t })); window.__game.refresh(); });
+  await page.waitForTimeout(300);
+  await page.waitForFunction(() => !document.querySelector('#hand-fan .fan-card.dealt'), null, { timeout: 10000 });
+  const cdp = await context.newCDPSession(page);
+  const centre = id => page.evaluate(i => { const r = document.querySelector(`#hand-fan .fan-card[data-card-id="${i}"]`).getBoundingClientRect(); return { x: r.left + Math.min(r.width * 0.3, 20), y: Math.min(innerHeight - 30, r.top + r.height * 0.3) }; }, id);
+  let at = await centre('f1');
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: at.x, y: at.y }] });
+  // the hand changes mid-press: two cards arrive, every card moves along the fan
+  await game(() => { const p = window.__game.activePlayer(); p.hand.push({ id: 'f8', type: 'lantern' }, { id: 'f9', type: 'barricade' }); window.__game.refresh(); });
+  await page.waitForTimeout(60);
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  await page.waitForTimeout(200);
+  check(await game(() => window.__game.cardViewId()) === 'f1', `a card pressed while the fan re-lays itself out still opens (${await game(() => window.__game.cardViewId())})`);
+  if (await visible('#hand-overlay')) await tap('#btn-hand-close');
+  await page.waitForTimeout(400);
+  // ...and a card just dealt in can be tapped at once, at its place, while it is still arriving.
+  await game(() => { const p = window.__game.activePlayer(); p.hand.push({ id: 'fz', type: 'masterKey' }); window.__game.refresh(); });
+  at = await page.evaluate(() => {
+    const el = document.querySelector('#hand-fan .fan-card[data-card-id="fz"]');
+    const a = el.getAnimations()[0]; let r;
+    if (a) { a.pause(); a.currentTime = 400; r = el.getBoundingClientRect(); a.currentTime = 0; a.play(); } else r = el.getBoundingClientRect();
+    return { x: r.left + Math.min(r.width * 0.3, 20), y: Math.min(innerHeight - 30, r.top + r.height * 0.35), dealing: !!a };
+  });
+  await page.touchscreen.tap(at.x, at.y); await page.waitForTimeout(200);
+  check(await game(() => window.__game.cardViewId()) === 'fz', `a card tapped while it is still dealing in opens (${await game(() => window.__game.cardViewId())}${at.dealing ? '' : ', already settled'})`);
+  // Practice words: nobody to hide from, nobody to trade with.
+  if (await visible('#hand-overlay')) await tap('#btn-hand-close');
+  await page.click('#hand-fan .fan-card[data-card-id="f0"]'); await page.waitForTimeout(150);
+  const words = await page.evaluate(() => ({ lock: getComputedStyle(document.querySelector('#hand-overlay .lock')).display, detail: document.getElementById('hand-detail').textContent,
+    priv: document.getElementById('btn-private').textContent }));
+  check(words.lock === 'none' && /My cards/.test(words.priv) && !/Private/.test(words.priv), `practice shows no "Private" labels ("${words.priv.trim()}")`);
+  check(!/trade|possess/i.test(words.detail) && /escape/i.test(words.detail), 'and the Lantern is described without trades or possession');
+  await tap('#btn-hand-close');
+  await game(() => window.__game.revealTile('switchboard'));
+  await put('switchboard', 4);
+  await game(() => window.__game.useRoom()); await page.waitForTimeout(150);
+  const sw = await page.textContent('#notice-body');
+  check(await game(() => window.__game.noticeOpen()) && /alone/.test(sw) && !/No guest is possessed right now/.test(sw), `the Switchboard speaks to a guest alone ("${sw.slice(0, 60)}…")`);
+  await tap('#btn-notice-ok');
+
+  // Portrait (or a window under ~900 px wide): a calm "turn your iPad sideways" card over everything.
+  const rot = () => page.evaluate(() => { const el = document.getElementById('rotate-overlay'); const cs = getComputedStyle(el);
+    const hit = document.elementFromPoint(innerWidth / 2, innerHeight / 2); return { shown: cs.display !== 'none', covers: !!hit && el.contains(hit), text: el.textContent }; });
+  for (const [w, h] of [[820, 1180], [768, 1024], [860, 700]]) {
+    await page.setViewportSize({ width: w, height: h }); await page.waitForTimeout(250);
+    const r = await rot();
+    check(r.shown && r.covers && /turn your iPad sideways/i.test(r.text), `${w}×${h}: "Please turn your iPad sideways" covers the game`);
+    if (w === 820) await shot('ui-portrait-overlay');
+  }
+  for (const [w, h] of [[1024, 768], [1180, 820], [1440, 900]]) {
+    await page.setViewportSize({ width: w, height: h }); await page.waitForTimeout(250);
+    check(!(await rot()).shown, `${w}×${h}: landscape — no overlay`);
+  }
+}
 
 console.log('\n8. layouts');
 // The fan and the search icon at iPad landscape sizes and on a desktop: never over the guest's panel,

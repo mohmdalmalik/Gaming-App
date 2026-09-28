@@ -123,15 +123,21 @@ export function createHandoff(doc) {
       show('Start my turn', handlers.onStart);
     },
 
-    // A private card choice. `cards` are the options; the guest taps one.
+    // A private card choice. `cards` are the options; the guest taps one. There is ALWAYS a way on:
+    // with no card to choose, the button says Continue and calls `onCancel` (or `onPick(null)`), so
+    // this screen can never be a dead end.
     privatePick(player, { kicker, title, sub, cards, onPick, cancelLabel, onCancel }) {
       reset('pick');
       el.kicker.textContent = kicker || `Private — ${player.name} only`;
       el.title.textContent = title;
       el.sub.textContent = sub || '';
       el.pick.hidden = false;
-      el.pick.querySelector('.offer-label').textContent = 'Tap the card you give';
-      if (!cards.length) el.pickCards.innerHTML = '<div class="panel-note">No card you are allowed to give.</div>';
+      el.pick.querySelector('.offer-label').textContent = cards.length ? 'Tap the card you give' : '';
+      if (!cards.length) {
+        el.pickCards.innerHTML = '<div class="panel-note">You have no ordinary card to give.</div>';
+        show(onCancel ? (cancelLabel || 'Continue') : 'Continue', onCancel || (() => onPick(null)));
+        return;
+      }
       for (const c of cards) {
         el.pickCards.appendChild(cardTile(doc, c, { hideDesc: true, selectable: true, onSelect: card => { api.close(); onPick(card.id); } }));
       }

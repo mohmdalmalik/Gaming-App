@@ -90,7 +90,7 @@
     <!-- Found a card with a full hand: take it (dropping one), use it now, or leave it. -->
     <div id="fullhand-overlay" class="overlay center" hidden>
       <div class="modal">
-        <div class="modal-title">Your hands are full</div>
+        <div class="modal-title">Your hand is full</div>
         <div id="fullhand-sub" class="modal-sub"></div>
         <div id="fullhand-found" class="cards"></div>
         <div id="fullhand-step" class="modal-sub"></div>
@@ -99,6 +99,7 @@
           <button id="btn-fullhand-take" class="btn primary" type="button">Take it &#8212; drop a card</button>
           <button id="btn-fullhand-use" class="btn" type="button" hidden>Use it now &#183; 1 action</button>
           <button id="btn-fullhand-leave" class="btn" type="button">Leave it</button>
+          <button id="btn-fullhand-drop" class="btn primary" type="button" hidden disabled>Tap a card to discard</button>
           <button id="btn-fullhand-cancel" class="btn" type="button" hidden>Back</button>
         </div>
       </div>
@@ -107,11 +108,11 @@
     <!-- Discard-down-to-the-hand-limit modal (shown at end of turn when over the limit) -->
     <div id="discard-overlay" class="overlay center" hidden>
       <div class="modal">
-        <div class="modal-title">Hand is full</div>
+        <div class="modal-title">Your hand is full</div>
         <div id="discard-sub" class="modal-sub"></div>
         <div id="discard-cards" class="cards"></div>
         <div class="modal-actions">
-          <button id="btn-discard-done" class="btn primary" type="button" disabled>Keep these 6</button>
+          <button id="btn-discard-done" class="btn primary" type="button" disabled>Tap a card to discard</button>
         </div>
       </div>
     </div>
@@ -215,6 +216,19 @@
       </div>
     </div>
 
+    <!-- A yes/no question on the shared screen ("Restart practice?"): src/overlays.js ask(). -->
+    <div id="ask-overlay" class="overlay center" hidden>
+      <div class="card notice" role="alertdialog" aria-labelledby="ask-title">
+        <div class="notice-rule"></div>
+        <h1 id="ask-title">&nbsp;</h1>
+        <p id="ask-body" class="muted"></p>
+        <div class="end-actions">
+          <button id="btn-ask-no" class="btn big" type="button">Cancel</button>
+          <button id="btn-ask-yes" class="btn primary big" type="button">OK</button>
+        </div>
+      </div>
+    </div>
+
     <div id="end-overlay" class="overlay center" hidden>
       <div class="card">
         <h1 id="end-title">Game over</h1>
@@ -223,6 +237,21 @@
           <button id="btn-keep-exploring" class="btn big" type="button" hidden>Keep exploring</button>
           <button id="btn-restart" class="btn primary big" type="button">Restart practice</button>
         </div>
+      </div>
+    </div>
+
+    <!-- Portrait / narrow window: the game is laid out for landscape only. Shown by CSS alone
+         (styles.css, "Turn sideways"); it covers everything, and the turn clock waits meanwhile. -->
+    <div id="rotate-overlay" class="rotate-overlay" role="alert">
+      <div class="card rotate-card">
+        <svg class="rotate-icon" viewBox="0 0 120 90" aria-hidden="true">
+          <rect class="ri-portrait" x="8" y="6" width="44" height="66" rx="6"/>
+          <rect class="ri-landscape" x="40" y="40" width="72" height="44" rx="6"/>
+          <path class="ri-arrow" d="M62 12 q30 0 34 22" />
+          <path class="ri-arrow-head" d="M90 30 l6 6 l5 -8" />
+        </svg>
+        <h1>Please turn your iPad sideways</h1>
+        <p class="muted">Hotel Escape is played in landscape. On a computer, make the window wider.</p>
       </div>
     </div>
 

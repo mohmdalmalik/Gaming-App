@@ -728,3 +728,71 @@ Target: `docs/art-reference.jpg` (style, palette and finish; not its layout or i
   details*. Practice (and later online play, one device each) can show them.
 - **Not added:** discarding from the card view. Discarding is only the end-of-turn hand-limit prompt
   in the rules, so the existing discard prompt stays the only place for it.
+
+## Playtest fix round (interface; one owner-approved rule)
+
+- **Skipped trade = pure rules + neutral words.** `canTrade(P, Q)` and `skipTrade(state, floor, P, Q)`
+  live in `src/game/actions.js` so a server can reuse them; `resolveTrade` refuses a trade that should be
+  skipped. Owner-approved rule (Option B): the trade is skipped if either guest has no *ordinary* card —
+  Possession cards don't count. The first version counted a Possession card as something to give, and
+  then a guest showing 0 cards who still traded was visibly possessed; now whether a trade happens
+  depends only on the public card counts. A possessed guest holding only Possession cards is skipped
+  exactly like an empty-handed clean guest, and every note, the public line and the log read word for
+  word the same (tested in rules-check and browser-hotseat 5b). The public line never says whose hand was
+  empty. Each guest's private note says only what they can know. In hot-seat the guest holding the
+  device reads theirs at once; the other reads theirs on their next private screen.
+- **Door tap zone** = the ring's drawn extent (`t + 0.62` inset + `0.33` radius, `src/render/roomView.js`)
+  plus 0.12 m of finger slack: `DOOR_TAP_ACROSS` in `src/main.js`.
+- **Fan taps open on pointer release with pointer capture**, not on the browser's click (which is
+  hit-tested where the finger lifts, after a re-layout may have moved the card). The click that follows
+  is swallowed once so it cannot land on (and close) the card view just opened. Cards already drawn are
+  kept (keyed by id), so a pressed card is never replaced mid-tap.
+- **Escape button**: enabled only when `canEscape` would let the guest out. Disabled reads "Clean + 3
+  Lanterns" for everyone barred (hot-seat), so a possessed guest's button looks exactly like a clean guest
+  short of Lanterns; with no actions it reads "No actions left" for all. Enabled means the guest can win
+  this instant, so it reveals nothing that pressing it would not.
+- **Portrait** is refused with a pure-CSS overlay (`(orientation: portrait), (max-width: 900px)`) rather
+  than a second layout; the turn clock checks the same media query and pauses.
+- **Bodies**: a death turns the victim (before the fall) so the body lies on free floor of the room, away
+  from the living; standing spots treat a body as a 1.75 m segment to keep clear of. Display only.
+- **Short room names** for the top strip are data (`short:` in `src/data/hotel.js`), not code.
+
+
+## Corner-on camera and see-through (camera fix round; owner-approved view, no rule changed)
+
+- **The standard view is corner-on** (`config.camera`: yaw offset 45°, pitch 44°, distance 16, zoom
+  8–26), like the owner's room pictures: a whole 8 m room with a margin at the default zoom on 1024×768
+  and 1180×820. `lookAhead` (1.2 m, scaled with zoom) aims the camera a little past the guest toward the
+  viewer, so the guest's room sits above the middle of the screen and its near doorways clear the hand.
+  Rotate still steps 90° (the view stays corner-on). `?camera=square` is the previous square-on view,
+  `?camera=classic` the older higher one; `?camera=diagonal` still works (it is the default now).
+  Taps, pan and the path preview go through ground-plane ray casts, so they needed no change.
+- **Cutaway, corner-on** (`render/cutaway.js`): every room's two near walls (facing the camera) are
+  lowered and its two far walls stand, as in the pictures. Rooms more than 2 m nearer the camera than
+  the guest's room are cut down entirely, and walls backing onto the guest's room are lowered, so that
+  room is always open to view. The square-on views keep the old rule.
+- **See-through window** (`render/xray.js`) instead of re-exporting furniture: the rooms are baked with
+  their furniture merged into one "static" mesh, and splitting every tall piece out would mean a full
+  re-bake (~1 h) plus cut caps for each piece. Instead the room materials get a few shader lines: a
+  fragment is dropped (ordered dither at the edge, so no transparency sorting and no extra draw calls)
+  when it is inside a screen-space oval around the active guest and nearer the camera than the guest,
+  and above the floor. The same is done around the search furniture while its icon is up, so the next
+  room's cabinet cannot hide it. Covers tall furniture, next-door furniture, door leaves and the side
+  wall at a doorway. Known limit: the plain backs of tall pieces on a near wall still show elsewhere.
+- **Doors**: an open leaf is as tall as the taller of the two walls it stands between; it hinges on
+  whichever jamb lets it swing open without passing through furniture. Rings next to a walking guest
+  are hidden (no second ring under the guest crossing a doorway). A locked door gets a padlock sign
+  (a sprite, seen from anywhere) besides the padlocks on the leaf. On the map the padlock sits on the
+  doorway, not over the room's name.
+- **Search icon** (`ui/searchSpot.js`): the badge's foot rests on the search furniture (its edge facing
+  the room, on top or at 1.1 m on a tall piece — the Switchboard icon sits on its desk). It never
+  covers the interface: every few frames it collects the rectangles of the top bar, player panel, fan
+  cards, rotate/Map/End turn/room buttons, the Move–Open–Cancel bar, toasts, the path tag and the
+  room's door rings, and takes the nearest clear place, caption included. When it had to move (or the
+  furniture is off screen) it is docked at that nearest clear place with a small brass arrow on its rim
+  pointing at the furniture; if nowhere is clear it hides until somewhere is. The dimmed icon's hint is
+  now a side-on torch with a beam (the old one read as a megaphone).
+- **Small visuals**: guests get a faint warm rim and fill in their own shader (no scene light, so no
+  other shader changes; readable in dark rooms). The active marker sits 0.16 m above the model's
+  measured head. A searched room shows a small brass tag with an engraved tick on its search furniture
+  instead of a large white tick in the air.

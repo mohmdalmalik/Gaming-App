@@ -7,6 +7,7 @@
 // ones nearest the camera, so the light count — and every shader — stays fixed.
 import * as THREE from 'three';
 import { unitBox, unitPlane, lambert, tinted, makeShadow, easeOutCubic } from './materials.js';
+import { applyXray } from './xray.js';
 
 let seedCounter = 0;
 
@@ -178,6 +179,30 @@ function lockedDoorTexture() {
   return t;
 }
 
+// The padlock sign over a locked door: a brass padlock on a dark round plate, readable from afar.
+function padlockTexture() {
+  const S = 128;
+  const c = document.createElement('canvas');
+  c.width = c.height = S;
+  const g = c.getContext('2d');
+  g.fillStyle = 'rgba(20, 16, 12, 0.82)';
+  g.beginPath(); g.arc(64, 64, 60, 0, Math.PI * 2); g.fill();
+  g.strokeStyle = '#c9a24e'; g.lineWidth = 5;
+  g.beginPath(); g.arc(64, 64, 57, 0, Math.PI * 2); g.stroke();
+  g.strokeStyle = '#b9bcc4'; g.lineWidth = 10; g.lineCap = 'round';          // steel shackle
+  g.beginPath(); g.moveTo(44, 62); g.lineTo(44, 44); g.arc(64, 44, 20, Math.PI, 0); g.lineTo(84, 62); g.stroke();
+  const grad = g.createLinearGradient(0, 58, 0, 104);                         // brass body
+  grad.addColorStop(0, '#f0d27a'); grad.addColorStop(1, '#b08a36');
+  g.fillStyle = grad;
+  g.beginPath(); g.roundRect ? g.roundRect(32, 58, 64, 46, 8) : g.rect(32, 58, 64, 46); g.fill();
+  g.fillStyle = '#2a1a08';                                                    // keyhole
+  g.beginPath(); g.arc(64, 76, 6, 0, Math.PI * 2); g.fill();
+  g.fillRect(61, 78, 6, 14);
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
 const INTO = { north: [0, 1], south: [0, -1], east: [-1, 0], west: [1, 0] };   // into the room from its wall
 
 // Doors and doorways. A CLOSED door (one that leads to a room not yet revealed) is a walnut door
@@ -209,6 +234,9 @@ export function createDoorwayViews(floor, cfg, scene, { isLocked = () => false }
   const padBodyMat = new THREE.MeshBasicMaterial({ color: new THREE.Color('#d4aa4f') });
   const padShackleMat = new THREE.MeshBasicMaterial({ color: new THREE.Color('#9da0a8') });
   const lockGlowMat = new THREE.MeshBasicMaterial({ map: radial, color: new THREE.Color('#c0392b'), transparent: true, opacity: 0.35, depthWrite: false, toneMapped: false, blending: THREE.AdditiveBlending });
+  const padlockMat = new THREE.SpriteMaterial({ map: padlockTexture(), transparent: true, depthTest: false, depthWrite: false, toneMapped: false });
+  // (door leaves fade like the room models where they would hide the guest: xray.js)
+  for (const m of [leafMat, leafJammedMat, knobMat, lockedMat, padBodyMat, padShackleMat]) applyXray(m);
   const LEAF_H = 2.02;
 
   // A door leaf hinged at one jamb: a pivot group so it can swing open.
@@ -216,15 +244,10 @@ export function createDoorwayViews(floor, cfg, scene, { isLocked = () => false }
     const along = d.axis === 'x';
     const w = d.width - 0.04;
     const pivot = new THREE.Group();
-    const [ix, iz] = INTO[d.side];
-    // hinge at the "low" jamb, on the owning room's side of the wall line
-    pivot.position.set(d.center[0] - (along ? w / 2 : 0) + ix * t * 0.5, 0, d.center[1] - (along ? 0 : w / 2) + iz * t * 0.5);
     const leaf = new THREE.Mesh(unitBox, leafMat);
     leaf.scale.set(along ? w : 0.05, LEAF_H, along ? 0.05 : w);
-    leaf.position.set(along ? w / 2 : 0, 0, along ? 0 : w / 2);
     const knob = new THREE.Mesh(unitBox, knobMat);
     knob.scale.set(0.06, 0.06, 0.06);
-    knob.position.set(along ? w - 0.12 : ix * 0.05, 1.0, along ? iz * 0.05 : w - 0.12);
     pivot.add(leaf, knob);
     // The padlocks (shown only while the room behind is locked), one on each face at hand height.
     const pads = [1, -1].map(f => {
@@ -234,14 +257,53 @@ export function createDoorwayViews(floor, cfg, scene, { isLocked = () => false }
       shackle.position.y = 0.085;
       if (!along) { body.rotation.y = Math.PI / 2; shackle.rotation.y = Math.PI / 2; }
       g.add(body, shackle);
-      g.position.set(along ? w / 2 : f * 0.06, 1.05, along ? f * 0.06 : w / 2);
+      g.userData.f = f;
       g.visible = false;
       pivot.add(g);
       return g;
     });
-    pivot.userData = { leaf, knob, pads, swing: 0, target: 0, room: room.id, side: d.side, along };
+    pivot.userData = { leaf, knob, pads, swing: 0, target: 0, room: room.id, side: d.side, along, d, w, hinge: 1 };
+    setHinge(pivot, 1);
     scene.add(pivot);
     return pivot;
+  }
+
+  // Hinge the leaf at the "low" jamb (s = 1) or the "high" one (s = -1), on the owning room's side
+  // of the wall line.
+  function setHinge(pivot, s) {
+    const u = pivot.userData, { d, w, along } = u, [ix, iz] = INTO[u.side];
+    u.hinge = s;
+    pivot.position.set(d.center[0] - (along ? s * w / 2 : 0) + ix * t * 0.5, 0, d.center[1] - (along ? 0 : s * w / 2) + iz * t * 0.5);
+    u.leaf.position.set(along ? s * w / 2 : 0, 0, along ? 0 : s * w / 2);
+    u.knob.position.set(along ? s * (w - 0.12) : ix * 0.05, 1.0, along ? iz * 0.05 : s * (w - 0.12));
+    for (const g of u.pads) g.position.set(along ? s * w / 2 : g.userData.f * 0.06, 1.05, along ? g.userData.f * 0.06 : s * w / 2);
+  }
+  // The angle an open leaf ends at (swing away from the room it belongs to, into the next one).
+  const OPEN = 1.75;
+  const swingAngle = (u, k) => k * OPEN * u.hinge * (u.along ? INTO[u.side][1] : -INTO[u.side][0]);
+  // Before a door swings open: hinge it on whichever jamb lets it open without passing through
+  // furniture in the room it opens into (a corner table, a cabinet), if one does.
+  function chooseHinge(pivot, intoRoom) {
+    const furniture = floor.rooms.get(intoRoom)?.furniture || [];
+    if (!furniture.length) return;
+    const hits = s => {
+      setHinge(pivot, s);
+      const u = pivot.userData, a = swingAngle(u, 1), px = pivot.position.x, pz = pivot.position.z;
+      let n = 0;
+      for (let k = 1; k <= 8; k++) {                      // points along the open leaf, and its sweep
+        for (const frac of [0.35, 0.7, 1]) {
+          const r = (k / 8) * u.w, ang = a * frac;
+          const lx = u.along ? s * r : 0, lz = u.along ? 0 : s * r;
+          const x = px + lx * Math.cos(ang) + lz * Math.sin(ang), z = pz - lx * Math.sin(ang) + lz * Math.cos(ang);
+          for (const f of furniture) {
+            if (Math.abs(x - f.center[0]) < f.size[0] / 2 + 0.06 && Math.abs(z - f.center[1]) < f.size[2] / 2 + 0.06) n++;
+          }
+        }
+      }
+      return n;
+    };
+    const low = hits(1);
+    if (low && hits(-1) >= low) setHinge(pivot, 1);
   }
 
   // `inside`: the side of a closed door (the room it belongs to); its glow then stays on that side,
@@ -316,19 +378,27 @@ export function createDoorwayViews(floor, cfg, scene, { isLocked = () => false }
     const warn = new THREE.Mesh(unitPlane, lockGlowMat);
     warn.renderOrder = 2;
     scene.add(warn);
+    // and a padlock sign in front of the locked door, seen from anywhere (it faces the camera)
+    const mark = new THREE.Sprite(padlockMat);
+    mark.scale.set(0.62, 0.62, 1);
+    mark.renderOrder = 7;
+    mark.visible = false;
+    scene.add(mark);
     const view = {
-      kind: 'open', doorway: d, strip, leaf, glow, blink, warn, locked: null,
+      kind: 'open', doorway: d, strip, leaf, glow, blink, warn, mark, locked: null,
       sync() {
         const locked = lockedNow();
-        if (locked === this.locked || !leaf) { warn.visible = !!locked; return; }
+        if (locked === this.locked || !leaf) { warn.visible = !!locked; mark.visible = !!locked && !!leaf; return; }
         this.locked = locked;
         const u = leaf.userData;
         u.leaf.material = locked ? lockedMat : leafMat;
         u.knob.visible = !locked;
         for (const p of u.pads) p.visible = locked;
+        if (!locked && u.swing === 0) chooseHinge(leaf, u.room === d.a ? d.b : d.a);
         u.target = locked ? 0 : 1;
         u.locked = locked;
         warn.visible = locked;
+        mark.visible = locked;
         if (locked) {
           // the glow sits on the side of the room that is NOT locked
           const openSide = isLocked(d.a) ? d.b : d.a;
@@ -336,11 +406,12 @@ export function createDoorwayViews(floor, cfg, scene, { isLocked = () => false }
           const deep = 1.0;
           warn.scale.set(along ? d.width + 0.6 : deep, 1, along ? deep : d.width + 0.6);
           warn.position.set(d.center[0] + ix * (t + deep / 2), 0.036, d.center[1] + iz * (t + deep / 2));
+          mark.position.set(d.center[0] + ix * 0.45, 1.5, d.center[1] + iz * 0.45);
         }
       },
       setState() { this.sync(); },
       setUsable(v, fromRoom) { blink.visible = v; glow.visible = v; placeRing(blink, d, fromRoom); },
-      dispose() { scene.remove(strip, glow, blink, warn); if (leaf) scene.remove(leaf); },
+      dispose() { scene.remove(strip, glow, blink, warn, mark); if (leaf) scene.remove(leaf); },
     };
     view.sync();
     return view;
@@ -372,22 +443,31 @@ export function createDoorwayViews(floor, cfg, scene, { isLocked = () => false }
       views.clear();
     },
     // Pulse the rings, swing opening doors, and keep leaves no taller than a lowered wall.
-    update(time, dt, roomViews) {
+    // `walker` (the active guest's mover): while they walk, the rings right around them are hidden,
+    // so the doorway they are crossing does not show a second ring over their own.
+    update(time, dt, roomViews, walker = null) {
       const p = 0.5 + 0.5 * Math.sin(time * 2.6);
       ringMat.opacity = 0.6 + 0.4 * p;
       haloMat.opacity = 0.25 + 0.3 * p;
       glowMat.opacity = 0.4 + 0.12 * p;
       for (const v of views.values()) {
+        const b = v.blink;
+        const near = !!walker?.walking && Math.hypot(b.position.x - walker.x, b.position.z - walker.z) < 1.3;
+        if (b.children[0].visible === near) for (const ch of b.children) ch.visible = !near;
         const leaf = v.leaf;
         if (!leaf) continue;
         const u = leaf.userData;
         if (u.swing < u.target) u.swing = Math.min(u.target, u.swing + dt / 0.45);
-        const [ix, iz] = INTO[u.side];
         // swing away from the room the door belongs to, into the room that was revealed
-        const ang = easeOutCubic(u.swing) * 1.75 * (u.along ? iz : -ix);
-        leaf.rotation.y = ang;
+        leaf.rotation.y = swingAngle(u, easeOutCubic(u.swing));
         const rv = roomViews.get(u.room);
-        const h = rv ? rv.sideHeight(u.side) : H;
+        let h = rv ? rv.sideHeight(u.side) : H;
+        // An open door stands in the next room: it is as tall as the taller of the two walls there
+        // (so it lowers when both are cut down, and stands by a wall that stands).
+        if (v.kind === 'open' && u.swing > 0) {
+          const other = v.doorway.a === u.room ? v.doorway.b : v.doorway.a, ov = roomViews.get(other);
+          if (ov) h = Math.max(h, ov.sideHeight(v.doorway.sideFor(other)));
+        }
         // A locked door stays at least chest high, padlock showing, even where the wall is cut down.
         leaf.scale.y = Math.max(u.locked ? 1.3 / LEAF_H : 0.02, Math.min(1, h / LEAF_H));
         leaf.visible = !!rv?.group.visible;

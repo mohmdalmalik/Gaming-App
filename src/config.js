@@ -3,12 +3,19 @@
 // Units are metres, seconds, radians unless noted.
 
 export const config = {
+  // The standard view is corner-on (diagonal), like the owner's room pictures
+  // (tools/room-pipeline/ref/*.jpg): the whole room with a margin at the default zoom, its two
+  // near walls cut down. `?camera=square` gives the previous square-on view, `?camera=classic`
+  // the older, higher square-on one (both below).
   camera: {
     fov: 42,              // vertical field of view in degrees
-    pitchDeg: 42,         // angle above the horizon (90 = straight down): low and close, so the
-    distance: 11.5,       // fronts of furniture and faces show; default distance from the focus (zoom)
-    minDistance: 7,       // zoom-in limit
-    maxDistance: 22,      // zoom-out limit
+    yawOffsetDeg: 45,     // a fixed turn of the whole view off the room's axes (0 = square on)
+    pitchDeg: 44,         // angle above the horizon (90 = straight down)
+    distance: 16,         // default distance from the focus (zoom)
+    minDistance: 8,       // zoom-in limit
+    maxDistance: 26,      // zoom-out limit
+    lookAhead: 1.2,       // metres the view is aimed past the guest, toward the camera, so the guest's
+                          // room sits a little above the middle of the screen (clear of the hand)
     rotateDuration: 0.4,  // seconds for a 90° snap rotation
     followLerp: 4,        // how quickly the focus point catches up with the player (per second)
     panReturnDelay: 1.2,  // seconds after a pan gesture before the camera drifts back
@@ -18,10 +25,12 @@ export const config = {
     far: 120,
   },
 
-  // The previous, higher camera, kept for comparison: add ?camera=classic to the address.
-  cameraClassic: { pitchDeg: 56, distance: 13 },
-  // A trial corner-on view like the owner's room pictures: add ?camera=diagonal to the address.
-  cameraDiagonal: { yawOffsetDeg: 45, pitchDeg: 46, distance: 12.5 },
+  // Earlier views, kept for comparison. ?camera=square: the square-on view used before the corner-on
+  // one became standard. ?camera=classic: the older, higher square-on view. (?camera=diagonal is the
+  // standard view, kept so old links still work.)
+  cameraSquare: { yawOffsetDeg: 0, pitchDeg: 42, distance: 11.5, minDistance: 7, maxDistance: 22, lookAhead: 0 },
+  cameraClassic: { yawOffsetDeg: 0, pitchDeg: 56, distance: 13, minDistance: 7, maxDistance: 22, lookAhead: 0 },
+  cameraDiagonal: {},
 
   cutaway: {
     threshold: 0.3,       // how directly a wall must face the camera before it is lowered (0..1)
@@ -44,7 +53,7 @@ export const config = {
     ringRadius: 0.42,         // coloured floor ring under each character
     ringActiveOpacity: 0.95,
     ringInactiveOpacity: 0.35,
-    markerHeight: 0.3,        // how far the active marker floats above the head
+    markerHeight: 0.16,       // how far the active marker floats above the head
   },
 
   grid: {

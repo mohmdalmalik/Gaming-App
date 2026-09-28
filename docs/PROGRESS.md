@@ -1,5 +1,39 @@
 # PROGRESS
 
+## Playtest fix round (2026-09-28)
+
+Fixes from the two playtest reports (`tests/qa-visual-report.md`, `tests/autoplay-report.md`). One
+owner-approved rule was implemented; no other rule or number changed.
+
+- **Corner-on camera is now standard** (owner-approved): the view is turned 45° like the owner's room
+  pictures, both near walls cut away; `?camera=square` keeps the old view. Tall furniture and walls
+  between the camera and the guest turn see-through (`src/render/xray.js`); the search icon keeps clear
+  of the HUD and the move bar; a padlock marks locked doors; guests get a faint fill light in dark
+  rooms. Details: DECISIONS "Corner-on camera and see-through". Comparison:
+  `tests/shots/fix-camera/rooms-diagonal.png`.
+- Owner declined (kept the current rule): topping a newly possessed guest up to 3 Possession cards
+  (simulated first: 6 players, clean wins 7% -> 4%).
+
+- **Empty-hand trade soft-lock (blocker).** New rule in GAME_RULES (Trade): if either guest has no
+  ordinary card (Possession cards don't count), the trade is skipped. `canTrade` / `skipTrade` in `src/game/actions.js` (a
+  server can reuse them); each guest gets a private note saying why, the table sees a neutral "No
+  trade — one of them has no ordinary card to give". The card-pick screen can no longer be a dead end.
+  The simulator uses the same functions.
+- **Trade card row** wraps (all 8 cards, or 8 + 3 Possession cards, reachable at 1024×768–1440×900).
+- **Door rings**: the tap zone now covers the whole painted ring (it stopped at 0.85 m of 1.10 m).
+- **End turn**: a double tap in practice ends one turn. **Restart practice** asks first; 44 px tall.
+- **Portrait / narrow window**: a "Please turn your iPad sideways" card; the clock waits.
+- **Hand fan**: a card opens on the finger's release, on the card pressed, even if the fan re-lays
+  itself out mid-tap; cards on screen are kept, not rebuilt; the deal-in starts close to its place.
+- **Minor**: bodies fall clear of the living and standing spots avoid them; discard (and "make room")
+  is tap-to-pick then confirm, both prompts titled "Your hand is full"; the "left the card" toast says
+  it goes to the discard pile; practice drops hot-seat words (Lantern text, "Private" labels,
+  Switchboard); the top strip shows two readable lines with short room names; Escape is disabled for
+  anyone it would not let out, with the same words for all; weapon picker Back; Revolver badge moved
+  to the visible corner; start/end screens break into lines; `?stats=1` moved off the strip.
+- **Tests**: rules-check (+17), browser checks for each fix (practice section 7b, hot-seat 5b/5c and
+  additions in 6 and 7); `tests/autoplay.mjs` taps the new confirm buttons.
+
 ## Phase 0 correction pass (2026-09-17, later)
 
 A small correction pass on the Phase 0 build. No Phase 1 work, no new multiplayer features, no

@@ -184,7 +184,8 @@ function spare(p) {
     || loose.find(c => !keepLast.has(c.type)) || loose[0] || null;
 }
 
-// The card a bot gives in a trade (null: nothing to give — cards that get used up can empty a hand).
+// The card a bot gives in a trade (null: nothing to give — but meet() skips any trade where either
+// guest has no ordinary card first, as the rules say).
 function giveCard(st, me, partner) {
   const hand = A.tradeableCards(me);
   if (!hand.length) return null;
@@ -246,8 +247,10 @@ function meet(st, p, m) {
     if (r.ok) { m.attacks++; if (r.killed) { m.deaths++; heard(st, Q); } }
     return;
   }
+  // GAME_RULES (Trade): if either guest has no ordinary card (Possession cards don't count), the trade
+  // is skipped — a possessed guest holding only Possession cards included.
+  if (!A.canTrade(p, Q).ok) { A.skipTrade(st, floor, p, Q); m.emptyHanded++; return; }
   const [cardP, cardQ] = [giveCard(st, p, Q), giveCard(st, Q, p)];
-  if (!cardP || !cardQ) { m.emptyHanded++; return; }   // the rules do not say; here the meeting just ends
   const r = A.resolveTrade(st, floor, p, Q, cardP, cardQ);
   if (!r.ok) return;
   m.trades++;
@@ -609,7 +612,7 @@ const jobs = [
   ['Espressos in hand at the start / drawn by searching', `${avg(v, 'dealt:espresso')} / ${avg(v, 'drawn:espresso')}`],
   ['Espressos drunk', use('espresso', 'espressoHeld', 'one in a hand')],
   ['  … extra actions gained / left unused at the end of the turn', `${avg(v, 'espressoAP')} / ${avg(v, 'espressoUnused')}`],
-  ['Meetings where a guest had no card to give (no trade made)', `${v.sums.emptyHanded} in ${N} matches`],
+  ['Meetings where a guest had no ordinary card (trade skipped)', `${v.sums.emptyHanded} in ${N} matches`],
   ['Cards drawn by searching, per match', DECK_TYPES.map(t => `${NAMES[t]} ${avg(v, `drawn:${t}`)}`).join(', ')],
 ];
 console.log('\nRooms with jobs and new cards (per match)\n');

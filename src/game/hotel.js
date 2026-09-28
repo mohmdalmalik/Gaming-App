@@ -117,6 +117,7 @@ function placeRoom(floor, def, cell, rot) {
   const room = {
     id: def.id,
     name: def.name,
+    short: def.short || def.name,     // (display only: the top guest strip, where space is tight)
     role: def.role || (def.isExit ? 'exit' : 'item'),
     tile: def.id,
     rotation: rot,

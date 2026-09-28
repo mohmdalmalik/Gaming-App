@@ -707,7 +707,9 @@ async function onDiscard(s) {
   const cards = s.discard.cards.map(id => ({ id, type: s.types[id] }));
   const c = seatStyle(me.i) === 'random' ? cards[Math.floor(rng() * cards.length)] : worst(cards, ['lantern']) || worst(cards);
   act(`discard ${c.type}`);
+  // Two steps since the playtest fix round: tap the card to pick it, then confirm with the button.
   await tapSel(`#discard-cards .card-tile[data-card-id="${c.id}"]`, 'discard card');
+  await tapSel('#btn-discard-done', 'Discard (confirm)');
 }
 
 async function onFullHand(s) {
@@ -719,6 +721,7 @@ async function onFullHand(s) {
     const c = worst(cards, ['lantern']) || worst(cards);
     act(`full hand: drop ${c.type}`);
     await tapSel(`#fullhand-hand .card-tile[data-card-id="${c.id}"]`, 'full-hand drop');
+    await tapSel('#btn-fullhand-drop', 'full-hand drop (confirm)');   // (pick, then confirm)
     return;
   }
   cur.stats.fullhand++;
@@ -1240,7 +1243,8 @@ async function finishMatch(s) {
     const cleanAlive = s.players.filter(p => p.alive && !p.possessed);
     if (cleanAlive.length) await violation('critical', 'hotel-win-invalid', `Hotel won with clean guests alive: ${cleanAlive.map(p => p.name)}`, s);
   } else await violation('high', 'end-unknown', `End screen with won=${s.won}`, s);
-  const listed = (/Possessed: ([^·]+)/.exec(e.summary)?.[1] || '').trim();
+  // (the summary is one fact per line since the playtest fix round; older builds used " · ")
+  const listed = (/Possessed: (.+?)(?= · |\s+Dead: |\s+Round \d|\n|$)/.exec(e.summary)?.[1] || '').trim();
   const want = possessed.length ? possessed.join(', ') : 'nobody';
   if (listed !== want) await violation('high', 'end-possessed-list', `End screen lists possessed "${listed}", state says "${want}"`, s);
   if (s.fan.visible || s.spot.visible) await violation('medium', 'end-fan', 'Fan or search icon on the end screen', s);

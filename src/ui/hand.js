@@ -6,7 +6,7 @@
 import { activePlayer, adjacentLockedRooms, isBarricaded, playersInRoom } from '../game/state.js';
 import { rules } from '../data/rules.js';
 import { CARDS, countableCount } from '../game/cards.js';
-import { bigCard, sortHand } from './cards.js';
+import { bigCard, sortHand, cardDesc } from './cards.js';
 
 export function createHand(doc, cfg, { onUseBandage, onUnlock, onBarricade, onEspresso, onHandMirror }) {
   const overlay = doc.getElementById('hand-overlay');
@@ -78,7 +78,7 @@ export function createHand(doc, cfg, { onUseBandage, onUnlock, onBarricade, onEs
     name.textContent = `${meta.name}${shots}`;
     if (meta.evil) name.style.color = 'var(--evil)';
     detail.appendChild(name);
-    line(meta.desc, 'd-desc');
+    line(cardDesc(card.type), 'd-desc');
 
     const noAp = p.actionPoints < rules.actionCost.useCard;
     if (card.type === 'lantern') {

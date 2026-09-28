@@ -17,6 +17,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { easeOutCubic } from './materials.js';
+import { applyXray } from './xray.js';
 
 const BASE = 'assets/models/';
 const LM_SCALE = 4.0;   // the light texture stores light / LM_SCALE (tools/lobby-pipeline/make_lobby.py)
@@ -68,6 +69,7 @@ export async function dressBaked(view, spec, cfg) {
       m = new THREE.MeshBasicMaterial({ map: src.map || null, vertexColors: !src.map, lightMap: lm, lightMapIntensity: intensity });
     }
     m.name = src.name;
+    applyXray(m);                           // fades out where it would hide the guest (xray.js)
     mats.set(src.name, m);
     return m;
   };
@@ -157,6 +159,7 @@ export async function dressBakedTile(view, spec, cfg) {
     else if (src.name === 'tex') m = new THREE.MeshBasicMaterial({ map, lightMap: lm, lightMapIntensity: intensity });
     else m = new THREE.MeshBasicMaterial({ vertexColors: true, lightMap: lm, lightMapIntensity: intensity });
     m.name = src.name;
+    applyXray(m);                           // fades out where it would hide the guest (xray.js)
     mats.set(key, m);
     if (m.lightMap) (view.bakedMats ||= []).push({ mat: m, base: intensity });   // (mood.js flickers these)
     return m;

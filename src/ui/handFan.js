@@ -32,6 +32,33 @@ export function createHandFan(doc, { onOpen }) {
 
   const cardWidth = () => Math.round(Math.max(72, Math.min(108, window.innerHeight * 0.115)));
 
+  // A tap opens the card on the finger's RELEASE, on the card the finger went down on. Touch pointers
+  // are captured by the element they press (and the mouse is captured explicitly), so the release
+  // reaches that card even if the fan re-laid itself out, or the card was still dealing in, under the
+  // finger — the browser's own click is hit-tested where the finger lifts and could miss it. The click
+  // that follows is swallowed (it would land on the card view just opened and close it). A plain
+  // click with no pointer before it (a keyboard, a script) still opens the card.
+  let openedAt = -1e9;
+  function swallowClick() {
+    const off = () => doc.removeEventListener('click', eat, true);
+    const eat = e => { e.stopPropagation(); e.preventDefault(); off(); };   // that one click only
+    doc.addEventListener('click', eat, true);
+    setTimeout(off, 350);
+  }
+  const shotsText = card => (card.type === 'revolver' && card.shots != null ? `${card.shots} shot${card.shots === 1 ? '' : 's'}` : '');
+
+  // The Revolver's shots: a badge at the top LEFT (the next card covers each card's right-hand side).
+  // When the fan is crowded only the number shows (.hand-fan.tight).
+  function setShots(b, card) {
+    const meta = CARDS[card.type] || { name: card.type };
+    const shots = shotsText(card);
+    b.setAttribute('aria-label', `${meta.name}${shots ? ` · ${shots}` : ''} — show this card`);
+    let badge = b.querySelector('.fan-badge');
+    if (!shots) { badge?.remove(); return; }
+    if (!badge) { badge = doc.createElement('span'); badge.className = 'fan-badge'; b.appendChild(badge); }
+    badge.innerHTML = `<b>${card.shots}</b><span class="unit"> shot${card.shots === 1 ? '' : 's'}</span>`;
+  }
+
   function makeCard(card, dealt) {
     const meta = CARDS[card.type] || { name: card.type };
     const b = doc.createElement('button');
@@ -39,19 +66,32 @@ export function createHandFan(doc, { onOpen }) {
     b.className = 'fan-card' + (meta.evil ? ' evil' : '') + (dealt ? ' dealt' : '');
     b.dataset.cardId = card.id;
     b.dataset.type = card.type;
-    const shots = card.type === 'revolver' && card.shots != null ? `${card.shots} shot${card.shots === 1 ? '' : 's'}` : '';
-    b.setAttribute('aria-label', `${meta.name}${shots ? ` · ${shots}` : ''} — show this card`);
     const face = CARD_FACE[card.type];
     if (face) {
       const img = doc.createElement('img'); img.src = face; img.alt = ''; img.draggable = false; b.appendChild(img);
     } else {
       const n = doc.createElement('span'); n.className = 'fan-name'; n.textContent = meta.name; b.appendChild(n);
     }
-    if (shots) { const s = doc.createElement('span'); s.className = 'fan-badge'; s.textContent = shots; b.appendChild(s); }
-    b.addEventListener('click', e => { e.preventDefault(); onOpen(card.id); });
+    setShots(b, card);
+    let press = null;
     // Touch has no hover: lift the card while a finger is on it.
-    b.addEventListener('pointerdown', () => b.classList.add('lift'));
-    for (const t of ['pointerup', 'pointercancel', 'pointerleave']) b.addEventListener(t, () => b.classList.remove('lift'));
+    b.addEventListener('pointerdown', e => {
+      if (e.button > 0) return;
+      b.classList.add('lift');
+      press = { id: e.pointerId, x: e.clientX, y: e.clientY };
+      try { b.setPointerCapture(e.pointerId); } catch { /* not capturable: the click still works */ }
+    });
+    b.addEventListener('pointerup', e => {
+      b.classList.remove('lift');
+      const p = press; press = null;
+      if (!e.isTrusted || !p || p.id !== e.pointerId || Math.hypot(e.clientX - p.x, e.clientY - p.y) > 28) return;
+      openedAt = performance.now();
+      swallowClick();
+      onOpen(card.id);
+    });
+    b.addEventListener('click', e => { e.preventDefault(); if (performance.now() - openedAt > 350) onOpen(card.id); });
+    for (const t of ['pointercancel', 'lostpointercapture']) b.addEventListener(t, () => { press = null; b.classList.remove('lift'); });
+    b.addEventListener('pointerleave', () => { if (!press) b.classList.remove('lift'); });
     if (dealt) b.addEventListener('animationend', () => b.classList.remove('dealt'), { once: true });
     return b;
   }
@@ -69,6 +109,7 @@ export function createHandFan(doc, { onOpen }) {
     const turn = n > 1 ? Math.min(5, 20 / (n - 1)) : 0;        // degrees between neighbours
     const drop = w * 0.12;                                      // how far the outer cards sit lower
     root.style.setProperty('--fan-w', `${w}px`);
+    root.classList.toggle('tight', n > 1 && step < w * 0.55);    // little of each card shows: the badge drops its word
     // The cards rest partly below the bottom edge of the screen and rise fully when pressed or hovered.
     // `edge` is the gap between the strip and the bottom of the screen (margin + safe area).
     const edge = Math.max(0, window.innerHeight - root.getBoundingClientRect().bottom);
@@ -94,13 +135,22 @@ export function createHandFan(doc, { onOpen }) {
     root.classList.remove('settling');
   }
 
+  // The cards already on screen are KEPT (only new ones are made, only gone ones removed), so a card
+  // being pressed is never swapped for a copy mid-tap. Their stacking is z-index, not page order.
+  const els = new Map();          // `${id}|${type}` -> the card's element
+  const keyOf = c => `${c.id}|${c.type}`;
   function render(player, withPossession) {
     const hand = sortHand(player.hand).filter(c => withPossession || c.type !== 'possession');
     const fresh = shownFor === player.index;   // same guest as last time: new cards deal in
-    root.innerHTML = '';
+    const keep = new Set(hand.map(keyOf));
+    for (const [k, el] of els) if (!keep.has(k)) { el.remove(); els.delete(k); }
     cards = hand.map(card => {
-      const el = makeCard(card, fresh && !shownIds.has(card.id));
-      root.appendChild(el);
+      let el = els.get(keyOf(card));
+      if (!el) {
+        el = makeCard(card, fresh && !shownIds.has(card.id));
+        root.appendChild(el);
+        els.set(keyOf(card), el);
+      } else setShots(el, card);
       return { card, el };
     });
     shownIds = new Set(hand.map(c => c.id));
@@ -132,7 +182,7 @@ export function createHandFan(doc, { onOpen }) {
       else if (appeared) layout();     // the width may have changed while it was hidden
     },
     // A new match: forget what was drawn (no deal-in animation for a fresh deal).
-    reset() { sig = ''; shownIds = new Set(); shownFor = -1; },
+    reset() { sig = ''; shownIds = new Set(); shownFor = -1; els.clear(); root.innerHTML = ''; cards = []; },
     get visible() { return visible; },
     get ids() { return cards.map(c => c.card.id); },
     layout,

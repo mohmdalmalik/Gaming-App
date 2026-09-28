@@ -301,6 +301,36 @@ export function tradeableCards(player) {
   return player.hand.filter(c => player.possessed || c.type !== 'possession');
 }
 
+// Whether P and Q can trade at all. GAME_RULES (Trade), owner-approved: "If either guest has no
+// ordinary card (Possession cards don't count), the trade is skipped and both are told why." So a
+// possessed guest holding only Possession cards is skipped exactly like an empty-handed clean guest:
+// whether a trade happens depends only on the public card counts, and never gives a role away.
+// `empty` lists who has no ordinary card.
+export function canTrade(P, Q) {
+  const empty = [P, Q].filter(X => countableCount(X.hand) === 0).map(X => X.id);
+  return empty.length ? { ok: false, reason: 'nothingToGive', empty } : { ok: true, empty: [] };
+}
+
+// The skipped trade: nothing changes hands, the meeting ends. Each guest gets a PRIVATE note saying
+// why, worded the same whatever their role (a possessed guest with only Possession cards reads exactly
+// what an empty-handed clean guest reads). A guest with no ordinary card is told that about
+// themselves; a guest who has one is told the other has none (which the public count already shows).
+// The PUBLIC log names neither the empty hand nor any card.
+export function skipTrade(state, floor, P, Q) {
+  if (state.finished) return { ok: false, reason: 'finished' };
+  const gate = canTrade(P, Q);
+  if (gate.ok) return { ok: false, reason: 'canTrade' };
+  const notes = {};
+  for (const [X, Y] of [[P, Q], [Q, P]]) {
+    notes[X.id] = gate.empty.includes(X.id)
+      ? `You have no ordinary card to give, so there is no trade with ${Y.name}.`
+      : `${Y.name} has no ordinary card to give, so there is no trade.`;
+    X.notes.push(notes[X.id]);
+  }
+  logPublic(state, `${P.name} and ${Q.name} met, but there was no trade: one of them had no ordinary card to give.`);
+  return { ok: true, skipped: true, empty: gate.empty, notes };
+}
+
 // Both guests chose secretly; the cards swap at the same time. P entered the room and gives
 // cardIdP; Q gives cardIdQ. Results are PRIVATE — the returned `received` map says what each
 // side gets to see, and `notes` carries the two private consequences (a block, a conversion).
@@ -313,6 +343,7 @@ export function tradeableCards(player) {
 //     goes to the possessed guest instead.)
 export function resolveTrade(state, floor, P, Q, cardIdP, cardIdQ) {
   if (state.finished) return { ok: false, reason: 'finished' };
+  if (!canTrade(P, Q).ok) return { ok: false, reason: 'nothingToGive' };   // skipTrade() instead
   const cP = P.hand.find(c => c.id === cardIdP);
   const cQ = Q.hand.find(c => c.id === cardIdQ);
   if (!cP || !cQ) return { ok: false, reason: 'noCard' };

@@ -1,6 +1,6 @@
-// Camera rig: an elevated, angled view that follows the player, snaps its rotation in 90°
-// steps, zooms within limits and can be dragged away (it eases back on its own once the
-// fingers lift).
+// Camera rig: an elevated view that follows the player, corner-on by default (yawOffsetDeg: 45,
+// like the owner's room pictures). It snaps its rotation in 90° steps, zooms within limits and can
+// be dragged away (it eases back on its own once the fingers lift).
 import * as THREE from 'three';
 
 const QUARTER = Math.PI / 2;
@@ -15,6 +15,7 @@ export function createCameraRig(camera, cfg) {
   const focus = new THREE.Vector3();    // eased focus point (before pan)
   const pan = new THREE.Vector3();      // world-space drag offset
   const offset = new THREE.Vector3();
+  const aim = new THREE.Vector3();      // the ground point the camera looks at
   let yawIndex = 0;
   let yaw = 0, yawFrom = 0, yawTo = 0, yawT = 1;
   let distance = c.distance;
@@ -79,9 +80,14 @@ export function createCameraRig(camera, cfg) {
       focus.lerp(target, 1 - Math.exp(-c.followLerp * dt));
 
       const y = yaw + base;
+      // Aim a little past the guest toward the camera (lookAhead, scaled with the zoom), so the
+      // guest's room sits above the middle of the screen and its near doorways clear the hand.
+      const ahead = (c.lookAhead || 0) * distance / c.distance;
+      aim.set(focus.x + pan.x + Math.sin(y) * ahead, 0, focus.z + pan.z + Math.cos(y) * ahead);
       offset.set(Math.sin(y) * Math.cos(pitch), Math.sin(pitch), Math.cos(y) * Math.cos(pitch)).multiplyScalar(distance);
-      camera.position.copy(focus).add(pan).add(offset);
-      camera.lookAt(focus.x + pan.x, 0, focus.z + pan.z);
+      camera.position.copy(aim).add(offset);
+      camera.lookAt(aim);
+      camera.updateMatrixWorld();
     },
   };
   return rig;

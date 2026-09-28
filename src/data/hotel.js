@@ -76,6 +76,7 @@ export const hotel = {
   lobby: {
     id: 'hall',
     name: 'Fourth Floor Landing',
+    short: 'Landing',       // (the top guest strip has room for a short name only)
     role: 'lobby',
     safe: true,             // safe zone: no meetings, no attacks
     noTrade: true,          // ...and no trades either (the Fire Exit, also safe, still allows voluntary trades)
@@ -111,7 +112,7 @@ export const hotel = {
         at('clothTable', 3.05, -3.0, 1.0, 1.26, 1.0), at('plant', 1.95, -3.45, 0.6, 1.3, 0.6),
         at('clothTable', -3.0, 3.0, 1.0, 1.26, 1.0), at('plant', -3.45, 1.95, 0.6, 1.3, 0.6),
         at('clothTable', 3.0, 3.0, 1.0, 1.26, 1.0), at('plant', 3.45, 1.95, 0.6, 1.3, 0.6)] },
-    { id: 'grandCorridor', name: 'Grand Corridor', doors: CROSS, searchPoint: 'the umbrella stand', mood: CORRIDOR,
+    { id: 'grandCorridor', name: 'Grand Corridor', short: 'Grand Corr.', doors: CROSS, searchPoint: 'the umbrella stand', mood: CORRIDOR,
       furniture: [at('plant', -3.35, -3.35, 0.6, 1.3, 0.6), at('bench', 2.0, -3.55, 1.3, 0.47, 0.55),
         searchSpot(at('umbrellaStand', 3.45, -3.45, 0.4, 0.93, 0.4)), at('plant', 3.35, 3.35, 0.6, 1.3, 0.6)] },
     // Room with a job: 1 AP, once per player per turn — everyone learns how many guests are possessed.
@@ -134,22 +135,22 @@ export const hotel = {
         searchSpot(at('counter', 1.0, -3.45, 2.8, 0.95, 0.8)), at('fridge', 3.2, -3.45, 1.2, 1.9, 0.8),
         at('sideCabinet', -3.45, -2.9, 0.8, 0.95, 1.9), at('rack', 3.5, -2.35, 0.6, 1.5, 0.9), at('island', 0.1, -1.65, 1.9, 0.95, 0.8),
         at('plateShelf', -3.5, 2.2, 0.6, 1.5, 1.5), at('prepTable', 3.45, 2.3, 0.8, 0.95, 1.5), at('trayTrolley', 2.55, 3.4, 0.7, 1.2, 0.6)] },
-    { id: 'serviceCorridor', name: 'Service Corridor', doors: TEE, searchPoint: 'the laundry cart', dark: true, mood: FLICKER,
+    { id: 'serviceCorridor', name: 'Service Corridor', short: 'Service Corr.', doors: TEE, searchPoint: 'the laundry cart', dark: true, mood: FLICKER,
       furniture: [at('shelf', -2.2, -3.55, 1.3, 1.75, 0.55), searchSpot(at('cart', 0.5, -3.3, 1.4, 1.0, 0.95)), at('towelCrate', 2.8, -3.45, 0.75, 0.85, 0.7)] },
     { id: 'storage', name: 'Storage Room', doors: TEE, searchPoint: 'the storage shelves', dark: true, mood: DARK,
       furniture: [searchSpot(at('shelf', 0.3, -3.55, 3.0, 1.9, 0.55)), at('crates', -2.65, -3.3, 1.4, 1.2, 1.05),
         at('luggageCart', 2.3, -3.3, 0.7, 1.35, 0.9), at('crates2', 3.35, -2.8, 0.95, 1.4, 1.5),
         at('crate', -3.35, 2.55, 0.8, 0.75, 0.8), at('plant', -3.45, 1.7, 0.55, 1.2, 0.55), at('plant', 3.4, 3.35, 0.55, 1.2, 0.55)] },
-    { id: 'corridorE', name: 'East Corridor', doors: TEE, searchPoint: 'the room-service trolley', mood: CORRIDOR,
+    { id: 'corridorE', name: 'East Corridor', short: 'East Corr.', doors: TEE, searchPoint: 'the room-service trolley', mood: CORRIDOR,
       furniture: [at('console', 0, -3.6, 1.6, 0.82, 0.45), at('plant', -1.65, -3.5, 0.55, 1.2, 0.55), at('plant', 1.65, -3.5, 0.55, 1.2, 0.55),
         searchSpot(at('trolley', -2.95, 2.8, 1.2, 1.0, 0.75)), at('plant', -3.45, 1.75, 0.55, 1.2, 0.55)] },
-    { id: 'corridorW', name: 'West Corridor', doors: TEE, searchPoint: 'the console table', mood: CORRIDOR,
+    { id: 'corridorW', name: 'West Corridor', short: 'West Corr.', doors: TEE, searchPoint: 'the console table', mood: CORRIDOR,
       furniture: [searchSpot(at('console', 0, -3.6, 1.6, 0.82, 0.45)), at('plant', 1.6, -3.5, 0.55, 1.2, 0.55), at('plant', -3.45, 2.6, 0.55, 1.2, 0.55)] },
 
     // --- straight (east and west are walls) -----------------------------------------------------
-    { id: 'corridorN', name: 'North Corridor', doors: STRAIGHT, searchPoint: 'the hall console', mood: CORRIDOR,
+    { id: 'corridorN', name: 'North Corridor', short: 'North Corr.', doors: STRAIGHT, searchPoint: 'the hall console', mood: CORRIDOR,
       furniture: [searchSpot(at('console', 2.0, -3.6, 1.5, 0.82, 0.45)), at('plant', -1.8, -3.5, 0.6, 1.3, 0.6)] },
-    { id: 'corridorS', name: 'South Corridor', doors: STRAIGHT, searchPoint: 'the luggage trolley', mood: CORRIDOR,
+    { id: 'corridorS', name: 'South Corridor', short: 'South Corr.', doors: STRAIGHT, searchPoint: 'the luggage trolley', mood: CORRIDOR,
       furniture: [searchSpot(at('luggageTrolley', -3.25, -1.6, 0.9, 1.65, 1.3)), at('plant', -1.8, -3.5, 0.6, 1.3, 0.6),
         at('bench', 2.0, -3.55, 1.4, 0.47, 0.55), at('plant', 3.45, -2.4, 0.55, 1.2, 0.55)] },
     { id: 'stairs', name: 'Service Stairs', doors: STRAIGHT, searchPoint: 'the stairwell bench', dark: true, mood: DARK,
@@ -163,13 +164,13 @@ export const hotel = {
       colors: { infirmaryBed: { color: '#e4e2dc' }, medicineCabinet: { color: '#d8e2e4', emissive: '#3a0c0c' } } },
 
     // --- corners (north and west are walls) ------------------------------------------------------
-    { id: 'backCorridor', name: 'Back Stairs Passage', doors: CORNER, searchPoint: 'the stacked crates', dark: true, mood: FLICKER,
+    { id: 'backCorridor', name: 'Back Stairs Passage', short: 'Back Stairs', doors: CORNER, searchPoint: 'the stacked crates', dark: true, mood: FLICKER,
       furniture: [at('crates', -2.9, -3.2, 1.6, 1.55, 1.3), at('platformCart', -3.3, -1.6, 1.0, 1.05, 1.2),
         searchSpot(at('crates2', 0.0, -3.3, 1.7, 1.25, 1.1)), at('crate', 1.75, -3.45, 0.75, 0.8, 0.75), at('canisters', 2.95, -3.5, 1.1, 0.8, 0.6)] },
     { id: 'cloakroom', name: 'Cloakroom', doors: CORNER, searchPoint: 'the coat rail', locked: true, mood: QUIET,
       furniture: [searchSpot(at('rail', -1.2, -3.5, 2.3, 1.95, 0.7)), at('rail', -3.5, -0.5, 0.7, 1.95, 2.8), at('plant', -3.35, -3.35, 0.6, 1.3, 0.6),
         at('console', 2.2, -3.6, 1.5, 0.82, 0.45), at('tuftedBench', 2.9, 2.2, 0.65, 0.47, 1.4)] },
-    { id: 'cornerCorridor', name: 'Corner Corridor', doors: CORNER, searchPoint: 'the window seat', mood: CORRIDOR,
+    { id: 'cornerCorridor', name: 'Corner Corridor', short: 'Corner Corr.', doors: CORNER, searchPoint: 'the window seat', mood: CORRIDOR,
       furniture: [searchSpot(at('windowSeat', -3.1, -3.1, 1.3, 0.82, 1.3)), at('plant', -3.45, 3.35, 0.55, 1.2, 0.55), at('console', 1.6, -3.6, 1.5, 0.82, 0.45)] },
     // Room with a job: 1 AP to restore 2 health (maximum 3).
     { id: 'infirmary1', name: 'Infirmary', doors: CORNER, job: 'infirmary', searchPoint: 'the medicine cabinet', mood: CLINIC,
@@ -187,10 +188,10 @@ export const hotel = {
     { id: 'linenStore2', name: 'Linen Store', doors: DEAD, job: 'linenStore', searchPoint: 'the linen press', mood: QUIET,
       furniture: [searchSpot(wall('north', 'linenPress', 2.4, 1.6, 0.6)), wall('east', 'linenShelf', 3.0, 1.8, 0.5), corner('sw', 'foldingTable', 0.9, 0.8, 1.0)],
       colors: { linenShelf: { color: '#e8e0cc' }, linenPress: { color: '#e8e0cc' } } },
-    { id: 'suite416', name: 'Guest Suite 416', doors: DEAD, searchPoint: 'the bedside table', locked: true, mood: WARM,
+    { id: 'suite416', name: 'Guest Suite 416', short: 'Suite 416', doors: DEAD, searchPoint: 'the bedside table', locked: true, mood: WARM,
       furniture: [wall('north', 'bed', 2.0, 0.6, 1.8), searchSpot(at('nightstand', 1.45, -3.55, 0.6, 0.64, 0.5)), at('nightstand', -1.45, -3.55, 0.6, 1.1, 0.5),
         wall('east', 'wardrobe', 1.4, 2.1, 0.6), corner('sw', 'armchair', 0.9, 0.9, 0.9)] },
-    { id: 'housekeeping', name: 'Housekeeping Store', doors: DEAD, searchPoint: 'the linen shelves', dark: true, mood: DARK,
+    { id: 'housekeeping', name: 'Housekeeping Store', short: 'Housekeeping', doors: DEAD, searchPoint: 'the linen shelves', dark: true, mood: DARK,
       furniture: [searchSpot(wall('north', 'shelf', 3.0, 1.8, 0.5)), wall('east', 'shelf', 3.0, 1.8, 0.5), corner('sw', 'cart', 0.8, 1.0, 1.1)] },
 
     // --- the way out ----------------------------------------------------------------------------------

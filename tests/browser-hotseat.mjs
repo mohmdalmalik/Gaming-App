@@ -291,6 +291,90 @@ check(!blk.poss && blk.knows, 'the defender is not possessed and knows who tried
 check(blk.lanternGone, 'the blocking Lantern is used up — nobody holds it, it is on the discard pile');
 check(blk.destroyed && blk.left === 2, 'the Possession card is destroyed; two remain');
 
+console.log('\n5b. an empty hand: the trade is skipped, and both are told why');
+// 'possessed': the other guest is possessed and holds only Possession cards — skipped too, and it must
+// read word for word like the clean empty-handed case.
+const noTradeText = {};
+for (const emptySide of ['mover', 'other', 'possessed']) {
+  await load('mode=hotseat&players=6&seed=4242');
+  await tap('#btn-begin'); await throughRoles(); await intoTurn();
+  await game(({ P, E, emptySide }) => {
+    const s = window.__game.state;
+    s.players.forEach((p, i) => { p.possessed = i === (emptySide === 'possessed' ? E : 5); p.notes = []; p.knows = new Set(); });
+    s.players[P].hand = emptySide === 'mover' ? [] : [{ id: 'p1', type: 'bandage' }, { id: 'p2', type: 'lantern' }];
+    s.players[E].hand = emptySide === 'other' ? [] : emptySide === 'possessed' ? [1, 2, 3].map(i => ({ id: `x${i}`, type: 'possession' })) : [{ id: 'e1', type: 'flashlight' }];
+    s.activeIndex = P; window.__game.refresh();
+  }, { P, E, emptySide });
+  const before = await game(({ P, E }) => [P, E].map(i => window.__game.state.players[i].hand.map(c => c.id).join()), { P, E });
+  await walkInto(P, E);
+  check(await clickBtn('#encounter-actions .btn', 'Trade'), `${emptySide} has no cards: Trade can still be chosen (the button gives nothing away)`);
+  check(await kind() === 'note', `${emptySide} empty: no card-pick screen — the mover reads a private note instead`);
+  const note = await page.textContent('#handoff-notes');
+  check(emptySide === 'mover' ? /You have no ordinary card to give/.test(note) : /has no ordinary card to give/.test(note),
+    `${emptySide} empty: the mover is told why ("${note.trim().slice(0, 70)}")`);
+  check(await visible('#btn-handoff-next'), `${emptySide} empty: the private screen has a way on`);
+  await next();
+  check(await game(() => window.__game.meetingOpen()) && /No trade/.test(await page.textContent('#encounter-title')), `${emptySide} empty: the table sees "No trade"`);
+  const pub = await page.textContent('#encounter-body');
+  check(/one of them has no ordinary card/.test(pub) && !/Bandage|Lantern|Flashlight|Possess/i.test(pub), `${emptySide} empty: the public line names no card and no role`);
+  check(await visible('#encounter-actions .btn.primary'), `${emptySide} empty: the public screen has a way on`);
+  await tap('#encounter-actions .btn.primary');
+  const after = await game(({ P, E }) => ({
+    hands: [P, E].map(i => window.__game.state.players[i].hand.map(c => c.id).join()),
+    otherNotes: window.__game.state.players[E].notes.join(' '), running: window.__game.inActionPhase(),
+    meeting: window.__game.meetingOpen(), handoff: window.__game.handoffOpen(),
+    log: window.__game.publicLog().at(-1),
+  }), { P, E });
+  check(after.hands.join('|') === before.join('|'), `${emptySide} empty: nothing changed hands`);
+  check(emptySide === 'mover' ? /has no ordinary card to give/.test(after.otherNotes) : /You have no ordinary card to give/.test(after.otherNotes),
+    `${emptySide} empty: the other guest's reason waits for their own private screen`);
+  noTradeText[emptySide] = { note, pub, other: after.otherNotes, log: after.log };
+  check(!after.meeting && !after.handoff && after.running, `${emptySide} empty: the turn carries on — no soft-lock`);
+  check(/no trade/.test(after.log) && !/Bandage|Lantern|Flashlight/.test(after.log), `${emptySide} empty: the public log says only that there was no trade`);
+  await shot(`hs-04b-empty-trade-${emptySide}`);
+}
+
+{
+  const [c, v] = [noTradeText.other, noTradeText.possessed];
+  check(!!c && !!v && c.note === v.note && c.pub === v.pub && c.other === v.other && c.log === v.log,
+    'a possessed guest holding only Possession cards: every screen and the log read word for word as for an empty-handed clean guest');
+}
+
+console.log('\n5c. a big hand: every card in the trade row can be reached');
+for (const [w, h] of [[1024, 768], [1180, 820], [1440, 900]]) {
+  await page.setViewportSize({ width: w, height: h });
+  await load('mode=hotseat&players=6&seed=4242');
+  await tap('#btn-begin'); await throughRoles(); await intoTurn();
+  await game(({ P, E }) => {
+    const s = window.__game.state;
+    const eight = ['lantern', 'lantern', 'bandage', 'knife', 'masterKey', 'handMirror', 'espresso', 'barricade'];
+    s.players.forEach((p, i) => { p.possessed = i === E; p.notes = []; p.knows = new Set(); });
+    s.players[P].hand = eight.map((t, i) => ({ id: `p${i}`, type: t }));
+    // the possessed guest: 8 cards and three Possession cards — 11 to choose from
+    s.players[E].hand = [...eight.map((t, i) => ({ id: `e${i}`, type: t })), ...[1, 2, 3].map(i => ({ id: `x${i}`, type: 'possession' }))];
+    s.activeIndex = P; window.__game.refresh();
+  }, { P, E });
+  await walkInto(P, E);
+  await clickBtn('#encounter-actions .btn', 'Trade');
+  const reach = () => page.evaluate(() => {
+    const box = document.getElementById('handoff-card').getBoundingClientRect();
+    return [...document.querySelectorAll('#offer-cards .card-tile')].map(t => {
+      const r = t.getBoundingClientRect();
+      const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+      return { id: t.dataset.cardId, ok: r.left >= box.left - 1 && r.right <= box.right + 1 && r.top >= 0 && r.bottom <= innerHeight && !!hit && t.contains(hit) };
+    });
+  });
+  const mine = await reach();
+  check(mine.length === 8 && mine.every(c => c.ok), `${w}×${h}: all 8 cards of the trade row are on screen and tappable (${mine.filter(c => c.ok).length}/8)`);
+  await shot(`hs-04c-trade-8-${w}x${h}`);
+  await page.click('#offer-cards .card-tile[data-card-id="p0"]'); await page.waitForTimeout(80);
+  await next();
+  const theirs = await reach();
+  check(theirs.length === 11 && theirs.every(c => c.ok), `${w}×${h}: all 11 of a possessed guest's (8 + 3 Possession) too (${theirs.filter(c => c.ok).length}/11)`);
+  await page.click('#offer-cards .card-tile[data-card-id="e2"]'); await page.waitForTimeout(80);
+}
+await page.setViewportSize({ width: 1180, height: 820 });
+
 console.log('\n6. attack, death and dropped cards');
 await load('mode=hotseat&players=6&seed=4242');
 await tap('#btn-begin'); await throughRoles(); await intoTurn();
@@ -302,6 +386,11 @@ await game(() => {
 });
 await walkInto(0, 1);
 check(await clickBtn('#encounter-actions .btn', 'Attack'), 'with a weapon, Attack is offered');
+check(await clickBtn('#encounter-actions .btn', '‹ Back'), 'the weapon picker has a Back button');
+check(await game(() => window.__game.meetingOpen()) && await page.evaluate(() => [...document.querySelectorAll('#encounter-actions .btn')].some(b => /^Trade/.test(b.textContent.trim()))),
+  'Back returns to Trade or Attack, with nothing spent');
+check(await game(() => window.__game.state.players[0].actionPoints === 3 && window.__game.state.players[1].health === 2), '(no action spent, no damage done)');
+await clickBtn('#encounter-actions .btn', 'Attack');
 await page.click('#encounter-body .card-tile[data-card-id="rv"]'); await page.waitForTimeout(120);
 check(/dead/i.test(await page.textContent('#encounter-body')), 'a Revolver at 2 health kills — and says so publicly');
 await shot('hs-05-attack');
@@ -313,6 +402,18 @@ const dead = await game(() => ({
 check(!dead.alive && dead.drops.includes('v1') && dead.drops.includes('v2'), 'the dead guest’s cards — their Lanterns included — lie on the floor');
 check(/Dead/.test(dead.strip), 'the strip marks them dead');
 check(dead.ap === 2, 'the move and the attack cost one each');
+{
+  // The body lies clear of the living, and a guest walking in later does not stand on it.
+  const body = await game(() => {
+    const g = window.__game, [ax, az, bx, bz] = g.bodyEnds(1);
+    const seg = (px, pz) => { const vx = bx - ax, vz = bz - az; const t = Math.max(0, Math.min(1, ((px - ax) * vx + (pz - az) * vz) / (vx * vx + vz * vz))); return Math.hypot(px - ax - t * vx, pz - az - t * vz); };
+    const m0 = g.movers[0];
+    const slot = g.standingSlot('corridorE', 2);
+    return { attacker: seg(m0.x, m0.z), slot: seg(slot.x, slot.z) };
+  });
+  check(body.attacker >= 0.6, `the body falls clear of the attacker standing there (${body.attacker.toFixed(2)} m)`);
+  check(body.slot >= 0.6, `a guest walking in stands clear of the body (${body.slot.toFixed(2)} m)`);
+}
 await game(() => { window.__game.activePlayer().actionPoints = 4; window.__game.refresh(); });
 await page.waitForTimeout(200);
 check(await visible('#search-spot'), 'a room with cards lying in it shows the search icon');
@@ -394,6 +495,19 @@ await game(() => window.__game.moveToRoom(window.__game.floor.exitRoom));
 await settle();
 await page.waitForTimeout(200);
 check(await game(() => !window.__game.isFinished()), 'a possessed guest with three Lanterns cannot escape');
+{
+  // The Escape button is disabled for them, reading exactly as it does for a clean guest who cannot
+  // escape (short of Lanterns), so it never tells the table which it is.
+  const btn = () => page.evaluate(() => { const b = document.getElementById('btn-room'); return { shown: !b.hidden, disabled: b.disabled, text: b.textContent.trim() }; });
+  const evil = await btn();
+  await game(() => { const s = window.__game.state; s.players[0].possessed = false; s.players[5].possessed = true; s.players[0].hand = s.players[0].hand.slice(0, 2); window.__game.refresh(); });
+  const clean2 = await btn();
+  check(evil.shown && evil.disabled, `the Escape button is disabled for a possessed guest with three Lanterns ("${evil.text}")`);
+  check(clean2.disabled && clean2.text === evil.text, `and reads exactly the same for a clean guest with two ("${clean2.text}")`);
+  await game(() => { const s = window.__game.state; s.players[0].hand.push({ id: 'b3x', type: 'lantern' }); window.__game.refresh(); });
+  const clean3 = await btn();
+  check(!clean3.disabled && clean3.text !== evil.text, `a clean guest with three can press it ("${clean3.text}")`);
+}
 
 console.log('\n8. the hotel wins');
 await game(() => { window.__game.state.players.forEach(p => { p.possessed = true; }); window.__game.endTurn(); });

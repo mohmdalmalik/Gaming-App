@@ -8,6 +8,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { lambert, makeShadow } from './materials.js';
 import { bodyTypes, outfits } from '../data/characters.js';
+import { xrayGuest } from './xray.js';
 
 const gltfLoader = new GLTFLoader();
 
@@ -17,6 +18,23 @@ const boxUp = new THREE.BoxGeometry(1, 1, 1); boxUp.translate(0, 0.5, 0);
 const sphere = new THREE.SphereGeometry(1, 14, 10);
 const ringGeo = new THREE.RingGeometry(1, 1.16, 32); ringGeo.rotateX(-Math.PI / 2);
 const markerGeo = new THREE.OctahedronGeometry(0.09);
+
+// A faint light that only the guests get, so a navy suit still reads in a dark room: a warm rim
+// on the edges turned away from the camera plus a little fill. It is part of the guests' own
+// shader (no scene light, so nothing else changes and there is no extra draw call).
+const RIM = { color: new THREE.Color('#ffe2b8'), rim: 0.42, fill: 0.1 };
+function guestLight(m) {
+  m.onBeforeCompile = shader => {
+    shader.uniforms.uRimColor = { value: RIM.color };
+    shader.uniforms.uRim = { value: new THREE.Vector2(RIM.rim, RIM.fill) };
+    shader.fragmentShader = 'uniform vec3 uRimColor;\nuniform vec2 uRim;\n' + shader.fragmentShader.replace('#include <opaque_fragment>', `
+      float rimK = pow(1.0 - clamp(abs(dot(normal, normalize(vViewPosition))), 0.0, 1.0), 2.4);
+      outgoingLight += uRimColor * rimK * uRim.x * (0.35 + 0.65 * diffuseColor.rgb) + diffuseColor.rgb * uRim.y;
+      #include <opaque_fragment>`);
+  };
+  m.customProgramCacheKey = () => 'guestLight1';
+  return m;
+}
 
 function box(geo, color, w, h, d, emissive) {
   const m = new THREE.Mesh(geo, lambert(color, emissive));
@@ -48,9 +66,10 @@ export function createCharacterView(playerDef, cfg, scene) {
   ring.renderOrder = 1;
   group.add(ring);
 
-  // Marker floating above the active player's head.
-  const markerY = useModel ? (outfit.modelHeight || 1.8) + c.markerHeight + 0.18
-    : shoulderY + b.neck + b.headRadius * 2 + c.markerHeight;
+  // Marker floating just above the active player's head (for a model: re-measured from the model
+  // once it has loaded, since modelHeight is only its nominal height).
+  let headY = useModel ? (outfit.modelHeight || 1.8) : shoulderY + b.neck + b.headRadius * 2;
+  const markerY = headY + c.markerHeight;
   const marker = new THREE.Mesh(markerGeo, new THREE.MeshBasicMaterial({ color: new THREE.Color(playerDef.color), toneMapped: false }));
   marker.position.y = markerY;
   marker.visible = false;
@@ -89,11 +108,13 @@ export function createCharacterView(playerDef, cfg, scene) {
           if (src.transparent) { m.transparent = true; m.opacity = src.opacity; }
           if (src.side !== undefined) m.side = src.side;
           if (src.vertexColors) m.vertexColors = true;   // baked shading (glTF COLOR_0) multiplies the base colour
-          return m;
+          return guestLight(m);
         };
         o.material = Array.isArray(o.material) ? o.material.map(flatten) : flatten(o.material);
       });
       body.add(root);
+      const top = new THREE.Box3().setFromObject(root).max.y;
+      if (top > 0.8 && top < 2.4) { headY = top; marker.position.y = headY + c.markerHeight; }
       mixer = new THREE.AnimationMixer(root);
       const idle = gltf.animations.find(a => /idle/i.test(a.name)) || gltf.animations[0];
       const walk = gltf.animations.find(a => /walk/i.test(a.name)) || gltf.animations[1];
@@ -266,6 +287,7 @@ export function createCharacterView(playerDef, cfg, scene) {
     update(mover, dt) {
       group.position.set(mover.x, 0, mover.z);
       if (dead) return;
+      if (active) xrayGuest(mover.x, mover.z, headY);   // never hidden behind furniture or walls (xray.js)
       group.rotation.y = mover.heading;
 
       if (useModel) {

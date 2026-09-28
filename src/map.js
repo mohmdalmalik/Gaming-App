@@ -143,8 +143,10 @@ export function createMap(doc, floor, cfg) {
       const sealed = isBarricaded(state, d.id);
       doorLine(d, sealed ? '#cf6a5c' : lockedRoom ? '#c9a24e' : 'rgba(239,231,214,0.35)');
       if (sealed || lockedRoom) {
-        const [ox, oz] = lockedRoom ? outward[d.sideFor(lockedRoom === d.a ? d.b : d.a)] : [0, 0];
-        mark(sealed ? '▬' : '🔒', d.center[0] + ox * 0.9, d.center[1] + oz * 0.9, sealed ? '#f0b4ae' : BRASS_BRIGHT);
+        // on the doorway itself, on a small dark disc (not inside the room, where its name is)
+        ctx.fillStyle = 'rgba(20,16,12,0.92)'; ctx.strokeStyle = sealed ? '#cf6a5c' : '#c9a24e'; ctx.lineWidth = 1.5;
+        ctx.beginPath(); ctx.arc(X(d.center[0]), Z(d.center[1]), 11, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+        mark(sealed ? '▬' : '🔒', d.center[0], d.center[1], sealed ? '#f0b4ae' : BRASS_BRIGHT);
       }
     }
     // Closed doors: a solid brass door with a "?" beyond it (still to be opened); a jammed door is

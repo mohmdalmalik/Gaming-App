@@ -49,7 +49,8 @@ export function createMeeting(doc, cfg) {
     },
 
     // Which weapon. The weapon is public the moment it is used, so this can stay on the shared screen.
-    attackPick(P, Q, onWeapon) {
+    // `onBack` (Back) returns to Trade or Attack: nothing has happened until a weapon is tapped.
+    attackPick(P, Q, onWeapon, onBack = null) {
       show();
       title.textContent = 'Attack';
       body.innerHTML = `<div class="modal-sub">${P.name} attacks ${Q.name}. Choose a weapon:</div>`;
@@ -57,6 +58,7 @@ export function createMeeting(doc, cfg) {
       for (const w of weaponsIn(P.hand)) grid.appendChild(cardTile(doc, w, { selectable: true, onSelect: c => { hide(); onWeapon(c.id); } }));
       body.appendChild(grid);
       actions.innerHTML = '';
+      if (onBack) actions.appendChild(button('‹ Back', () => { hide(); onBack(); }));
     },
 
     // The public outcome of an attack. Health is public, so this is safe for the table.
@@ -84,9 +86,9 @@ export function createMeeting(doc, cfg) {
     },
 
     // A plain public message (a declined lobby trade, for instance).
-    notice(text, onDone) {
+    notice(text, onDone, heading = 'Meeting') {
       show();
-      title.textContent = 'Meeting';
+      title.textContent = heading;
       body.innerHTML = `<div class="result-line">${text}</div>`;
       actions.innerHTML = '';
       actions.appendChild(button('Continue', () => { hide(); onDone?.(); }, { primary: true }));

@@ -1,5 +1,5 @@
-// Full-screen overlays: "Tap to begin", a one-off notice (the exit opening), the end screen
-// and load errors.
+// Full-screen overlays: "Tap to begin", a one-off notice (the exit opening), a yes/no question,
+// the end screen and load errors.
 
 export function createOverlays(doc) {
   const start = doc.getElementById('start-overlay');
@@ -16,7 +16,14 @@ export function createOverlays(doc) {
   const errorMessage = doc.getElementById('error-message');
   const beginBtn = doc.getElementById('btn-begin');
 
+  const ask = doc.getElementById('ask-overlay');
+  const askTitle = doc.getElementById('ask-title');
+  const askBody = doc.getElementById('ask-body');
+  const askYes = doc.getElementById('btn-ask-yes');
+  const askNo = doc.getElementById('btn-ask-no');
+
   let noticeNext = null;
+  let askNext = null;
   const apiTail = {
     // The 3D view has rendered: the begin button becomes usable.
     setReady() { beginBtn.disabled = false; beginBtn.textContent = 'Tap to begin'; },
@@ -44,6 +51,15 @@ export function createOverlays(doc) {
     },
     hideNotice() { notice.hidden = true; noticeNext = null; },
     get noticeOpen() { return !notice.hidden; },
+    // A yes/no question ("Restart practice?"). `onYes` runs only on the yes button; the other button
+    // (or tapping outside the card) just closes it.
+    ask(title, body, { yes = 'OK', no = 'Cancel' } = {}, onYes = null) {
+      askTitle.textContent = title; askBody.textContent = body || '';
+      askYes.textContent = yes; askNo.textContent = no;
+      askNext = onYes; ask.hidden = false;
+    },
+    hideAsk() { ask.hidden = true; askNext = null; },
+    get askOpen() { return !ask.hidden; },
     showError(message) { errorMessage.textContent = message; error.hidden = false; start.hidden = true; },
   };
   noticeOk.addEventListener('click', e => {
@@ -51,5 +67,12 @@ export function createOverlays(doc) {
     notice.hidden = true;
     const fn = noticeNext; noticeNext = null; fn?.();
   });
+  askYes.addEventListener('click', e => {
+    e.preventDefault();
+    ask.hidden = true;
+    const fn = askNext; askNext = null; fn?.();
+  });
+  askNo.addEventListener('click', e => { e.preventDefault(); apiTail.hideAsk(); });
+  ask.addEventListener('click', e => { if (e.target === ask) apiTail.hideAsk(); });
   return apiTail;
 }

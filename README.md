@@ -48,9 +48,12 @@ Published with GitHub Pages from `main`: **https://mohmdalmalik.github.io/Gaming
 `?seed=123` to deal the same hands, pick the same Possessor and shuffle the same hotel (the same
 lobby doors and room deck).
 
-Two viewing switches work in any mode: `?camera=classic` shows the previous, higher camera angle
-(for comparison with the new lower one), and `?stats=1` shows a small frame-rate / draw-call
-readout at the top of the screen, for measuring speed on the iPad.
+The standard view is **corner-on**, like the owner's room pictures: the whole room at the default zoom,
+its two near walls cut down, rooms nearer the camera cut down too, and anything else that would hide the
+active guest (a wardrobe, a side wall at a doorway) faded out around them. Viewing switches that work in
+any mode: `?camera=square` shows the previous square-on view, `?camera=classic` the older, higher one
+(both for comparison), and `?stats=1` shows a small frame-rate / draw-call
+readout at the top left (below the room name), for measuring speed on the iPad.
 
 ## How to play (each turn, 4 action points)
 
@@ -83,16 +86,21 @@ readout at the top of the screen, for measuring speed on the iPad.
   *Private details*, as before).
 - **Meetings** (hot-seat) — walk in on a guest you have not met in that room this round and you
   must Trade or Attack. In a trade each side picks a card in private and sees only what they
-  received. Give a Lantern and a Possession card cannot take you. The lobby is safe.
+  received. If either guest has no ordinary card (Possession cards don't count), the trade is
+  skipped and each is told why (the table sees only "no trade"). Give a Lantern and a Possession card
+  cannot take you. The lobby is safe. The weapon picker has a Back button.
 - **Escape** — a clean guest carrying three Lanterns walks into the Fire Exit (1 AP) and taps
   **Escape** (1 AP). Arrive with nothing left and you can escape on your next turn; the exit is safe.
 - **Dawn** (hot-seat) — the header reads "Round 3 of 8"; round 8 is marked as the final round.
   If nobody has escaped when it ends, dawn breaks and the hotel wins. Practice has no deadline.
 - **End turn** — refills action points to 4; if you hold more than 6 ordinary cards you discard
-  first (Lanterns count; Possession cards never do).
+  first (Lanterns count; Possession cards never do): tap a card to pick it, then confirm with the
+  button. A double tap on End turn ends only one turn. *Restart practice* asks before it wipes the game.
+- **Landscape only** — in portrait (or a window under ~900 px wide) a card asks you to turn the iPad
+  sideways; the turn clock waits meanwhile.
 
-Controls (camera): pinch / wheel to zoom, two-finger or right-drag to pan, ↺ ↻ to rotate,
-the map button (bottom-right) for the 2D map.
+Controls (camera): pinch / wheel to zoom, two-finger or right-drag to pan, ↺ ↻ to rotate (90° a
+step; the view stays corner-on), the map button (bottom-right) for the 2D map.
 
 ## Run locally
 
@@ -123,7 +131,8 @@ src/
     actions.js          search, the deck and discard pile, cards played, trade, attack, death
     moves.js            plan a walk from a tap
   render/             Three.js visuals: greybox rooms, doorway cues, characters, cutaway, mood,
-                      searched-room ticks; bakedRoom.js loads the baked starting room;
+                      searched-room ticks; bakedRoom.js loads the baked rooms; xray.js fades
+                      whatever stands between the camera and the active guest / search spot;
                       pathPreview.js draws the dotted path + cost tag for a chosen door
   camera.js input.js player.js discovery.js   camera rig, gestures, movement, tap→plan glue
   hud.js  map.js  overlays.js   HUD + action bar (room job / Escape, Trade, End turn), 2D map, overlays
@@ -192,10 +201,11 @@ Which mode runs is decided by the address: `applyMode()` at the bottom of `src/d
 
 ```
 python3 -m http.server 8123 --bind 127.0.0.1 &
-node tests/rules-check.mjs        # the rules engine against docs/GAME_RULES.md (280 assertions)
+node tests/rules-check.mjs        # the rules engine against docs/GAME_RULES.md (313 assertions)
 node tests/logic-check.mjs        # floor, map topology, grid, pathfinding
 node tests/browser-practice.mjs   # practice mode in a real browser [--screens]
 node tests/browser-hotseat.mjs    # hot-seat in a real browser: roles, private trades, attacks, escape [--screens]
 node tests/browser-lobby.mjs      # the baked starting room, door cues, path preview, camera, draw calls
+node tests/autoplay.mjs --url http://127.0.0.1:8123/ --matches 10   # bots play whole hot-seat matches through the real UI (tests/autoplay-report.md)
 node tools/balance/hotseat-sim.mjs 400 6   # 400 six-player matches under the rules as they stand (--before: same bots on the rules before Part 2; --compare: Lantern variants; --cautious)
 ```

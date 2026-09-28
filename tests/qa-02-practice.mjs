@@ -128,7 +128,9 @@ for (let m = 0; m < COUNT; m++) {
       const r = await tapGround(d.center[0], d.center[1]);
       let viaUI = false;
       if (r.ok && await h.visible('#confirm-bar')) {
-        await h.tap('#btn-confirm-move'); viaUI = true;
+        const onTop = await page.evaluate(() => { const b = document.getElementById('btn-confirm-move').getBoundingClientRect(); const el = document.elementFromPoint(b.left + b.width / 2, b.top + b.height / 2); return el && el.closest('#search-spot') ? 'search-spot' : null; });
+        if (onTop) { note(seed, 'SEARCH ICON COVERS the Move/Open confirm button'); if (!global.__coverShot) { global.__coverShot = 1; await h.shot(`p-${seed}-icon-over-confirm`); } }
+        await page.$eval('#btn-confirm-move', b => b.click()); await page.waitForTimeout(80); viaUI = true;
       } else {
         covered++;
         if (covered <= 3) note(seed, `door ring for ${d.a} not tappable (covered by "${r.top}" at ${Math.round(r.pt.x)},${Math.round(r.pt.y)}); used hook`);

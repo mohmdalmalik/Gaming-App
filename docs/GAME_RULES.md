@@ -27,7 +27,7 @@ Guests are trapped on a hotel floor. Lanterns are the way out: a clean guest car
 ### Trade
 - Both guests secretly choose one card to give; the cards swap at the same time. In hot-seat the device is passed so the other guest chooses in private. Results are private: each guest sees only what they received.
 - A clean guest can never give a Possession card. A possessed guest may give a Possession card, or a normal card to look innocent.
-- If either guest has no card they may give, the trade is skipped and both are told why.
+- If either guest has no ordinary card (Possession cards don't count), the trade is skipped and both are told why.
 - In an ordinary trade a Lantern goes to the other guest like any other card, so teammates can pass Lanterns to one guest.
 - Receive a Possession card without giving a Lantern: you become possessed and keep that Possession card.
 - Receive a Possession card while giving a Lantern: the attempt fails and the Lantern is used up — the Lantern and the Possession card are both discarded — and you privately learn who tried.

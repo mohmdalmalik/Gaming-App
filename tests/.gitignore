@@ -2,3 +2,4 @@ node_modules
 shots/
 scratch/
 autoplay-results.jsonl
+personality-results.jsonl

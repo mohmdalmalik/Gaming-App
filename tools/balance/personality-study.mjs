@@ -30,7 +30,7 @@ const say = (...a) => { if (TRACE) console.log(...a); };
 // --- the common view (see personalities.mjs) ---------------------------------------------------------
 function fullOf(st, personas) {
   return {
-    round: st.round, turn: st.turn, exitRoom: floor.exitRoom, lobby: floor.start.room,
+    round: st.round, turn: st.turn, exitRoom: floor.exitRoom, lobby: floor.start.room, lanternsToEscape: rules.lanternsToEscape,
     locks: [...st.encounterLocks],
     players: st.players.map(p => ({
       i: p.index, id: p.id, name: p.name, persona: personas[p.index], room: p.currentRoom, ap: p.actionPoints,
@@ -61,7 +61,7 @@ function playMatch(seed, players, assign, ov = {}) {
     persona: personas[i], startPossessed: p.possessed, becamePossessed: false, possessedRound: null, alive: true, escaped: false,
     searches: 0, lanternsFound: 0, attacks: 0, kills: 0, killedBy: null, trades: 0, attempts: 0, blocks: 0, wasBlocked: 0, opens: 0, moves: 0, damageDealt: 0,
   }));
-  const m = { meetings: 0, trades: 0, attacks: 0, kills: [], attempts: 0, conversions: 0, blocks: 0, skipped: 0, exitRound: null, lanternsFound: 0 };
+  const m = { meetings: 0, trades: 0, attacks: 0, kills: [], attempts: 0, attemptsOnHolder: 0, conversions: 0, convRounds: [], blocks: 0, skipped: 0, exitRound: null, lanternsFound: 0 };
   const view = () => fullOf(st, personas);
 
   function meet(p) {
@@ -89,12 +89,16 @@ function playMatch(seed, players, assign, ov = {}) {
     const f = view();
     const cp = P.decideTradeCard(f, p.index, Q.index, A.tradeableCards(p).map(c => c.id), mem, rng);
     const cq = P.decideTradeCard(f, Q.index, p.index, A.tradeableCards(Q).map(c => c.id), mem, rng);
+    const holding = st.players.map(x => lanternsIn(x.hand));
     const r = A.resolveTrade(st, floor, p, Q, cp, cq);
     if (!r.ok) return;
     say(`    trade: ${p.name} gives ${r.given[p.id]}, ${Q.name} gives ${r.given[Q.id]}${r.possessed.length ? ' => CONVERTED' : ''}${r.blocks.length ? ' => BLOCKED' : ''}`);
     m.trades++; seats[p.index].trades++; seats[Q.index].trades++;
     for (const [X, Y] of [[p, Q], [Q, p]]) {
-      if (r.given[X.id] === 'possession' && r.given[Y.id] !== 'possession') { m.attempts++; seats[X.index].attempts++; }
+      if (r.given[X.id] === 'possession' && r.given[Y.id] !== 'possession') {
+        m.attempts++; seats[X.index].attempts++;
+        if (holding[Y.index] > 0) m.attemptsOnHolder++;
+      }
     }
     for (const b of r.blocks) {
       m.blocks++;
@@ -107,11 +111,17 @@ function playMatch(seed, players, assign, ov = {}) {
       }
     }
     for (const e of r.possessed) {
-      m.conversions++;
+      m.conversions++; m.convRounds.push(st.round);
       const X = st.players.find(x => x.id === e.newly);
       seats[X.index].becamePossessed = true; seats[X.index].possessedRound = st.round;
       // Proposal: a Possession card is spent when it converts someone (it leaves the game).
       if (ov.spendOnConvert) { const k = X.hand.findIndex(c => c.type === 'possession'); if (k >= 0) X.hand.splice(k, 1); }
+      // Proposal: only the original possessed guest spreads possession — the card goes back to the giver.
+      if (ov.returnToGiver) {
+        const G = st.players.find(x => x.id === e.by);
+        const k = X.hand.findIndex(c => c.type === 'possession');
+        if (k >= 0 && G) G.hand.push(X.hand.splice(k, 1)[0]);
+      }
     }
     S.checkWin(st, floor);
   }
@@ -178,7 +188,8 @@ function playMatch(seed, players, assign, ov = {}) {
         if (a.k === 'end') { ended = true; break; }
         const key = JSON.stringify(a);
         if (failed.has(key)) continue;
-        if (exec(p, a)) { did = true; say(`  r${st.round} ${p.name}${p.possessed ? '*' : ''} (${personas[p.index]}) ${a.k}${a.type ? ' ' + a.type : ''}${a.to ? ' -> ' + a.to : ''} ap${p.actionPoints} hp${p.health} [${p.hand.map(c => c.type).join(',')}]`); break; }
+        if (TRACE && a.k === 'move') say(`  r${st.round} ${p.name}${p.possessed ? '*' : ''} (${personas[p.index]}) move -> ${a.to}`);
+        if (exec(p, a)) { did = true; if (a.k !== 'move') say(`  r${st.round} ${p.name}${p.possessed ? '*' : ''} (${personas[p.index]}) ${a.k}${a.type ? ' ' + a.type : ''}${a.to ? ' -> ' + a.to : ''} ap${p.actionPoints} hp${p.health} [${p.hand.map(c => c.type).join(',')}]`); break; }
         failed.add(key);
       }
       if (ended || !did) break;
@@ -266,6 +277,9 @@ export function summarise(label, list, players, ms = 0) {
     deaths: mean(list.map(r => r.deaths)), meetings: mean(list.map(r => r.m.meetings)), trades: mean(list.map(r => r.m.trades)),
     attacks: mean(list.map(r => r.m.attacks)), attempts: mean(list.map(r => r.m.attempts)), conversions: mean(list.map(r => r.m.conversions)),
     blocks: mean(list.map(r => r.m.blocks)), lanternsFound: mean(list.map(r => r.m.lanternsFound)),
+    attemptsOnHolderPct: list.reduce((a, r) => a + r.m.attemptsOnHolder, 0) / Math.max(1, list.reduce((a, r) => a + r.m.attempts, 0)) * 100,
+    convByRound: (() => { const h = {}; let t = 0; for (const r of list) for (const x of r.m.convRounds) { h[x] = (h[x] || 0) + 1; t++; } return Object.fromEntries(Object.entries(h).map(([k, v]) => [k, +(v / t * 100).toFixed(1)])); })(),
+    endRoundHist: (() => { const h = {}; for (const r of list) h[r.rounds] = (h[r.rounds] || 0) + 1; return Object.fromEntries(Object.entries(h).map(([k, v]) => [k, +(v / list.length * 100).toFixed(1)])); })(),
     exitFound: cnt(r => r.m.exitRound != null), exitRound: mean(list.filter(r => r.m.exitRound != null).map(r => r.m.exitRound)),
     killsCleanOnClean: mean(list.map(r => r.m.kills.filter(k => !k.byPossessed && !k.victimPossessed).length)),
     killsOfPossessed: mean(list.map(r => r.m.kills.filter(k => k.victimPossessed).length)),
@@ -309,6 +323,7 @@ export function printSummary(s) {
   console.log('| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |');
   console.log(`| ${s.cleanPct.toFixed(1)}% ±${s.cleanCI.toFixed(1)} | ${(100 - s.cleanPct).toFixed(1)}% | ${pc('escape')} | ${pc('allGone')} | ${pc('allGoneKilled')} | ${pc('dawn')} | ${s.roundsMed} / ${f1(s.roundsMean)} | ${s.turnsMed} / ${f1(s.turnsMean)} (${s.turnsP10}–${s.turnsP90}) | ${f2(s.deaths)} | ${f2(s.attacks)} | ${f1(s.trades)} | ${f2(s.attempts)} / ${f2(s.conversions)} / ${f2(s.blocks)} | ${f1(s.lanternsFound)} |`);
   console.log(`\nLanterns at the end — clean hands ${f1(s.where.clean)}, possessed hands ${f1(s.where.possessed)}, deck ${f1(s.where.deck)}, discard (burned) ${f1(s.where.discard)}, floor ${f1(s.where.floor)}. Fire Exit found in ${f0(s.exitFound / s.n * 100)} (mean round ${f1(s.exitRound)}). Kills per match: clean-on-clean ${f2(s.killsCleanOnClean)}, of possessed ${f2(s.killsOfPossessed)}, by possessed ${f2(s.killsByPossessed)}.`);
+  console.log(`Possession attempts on a guest holding a Lantern: ${f0(s.attemptsOnHolderPct)}. Conversions by round (%): ${JSON.stringify(s.convByRound)}. Match ends by round (%): ${JSON.stringify(s.endRoundHist)}.`);
   console.log('\n| Personality | Seats | Survive | Escaped | Got possessed (clean start) | Kills/match | Killed | Clean-side win when starting clean | Hotel win when starting possessed | Searches | Lanterns found | Attacks | Trades |');
   console.log('| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |');
   for (const [k, v] of Object.entries(s.per)) {
@@ -326,6 +341,13 @@ export const PROPOSALS = [
   { key: 'dealt1', label: 'Each guest starts with 1 Lantern', rulesOver: { lanternsDealtEach: 1 } },
   { key: 'spend+keep', label: 'Spent on conversion + blocking Lantern kept', ov: { spendOnConvert: true, blockKeepsLantern: true } },
   { key: 'spend+dawn10', label: 'Spent on conversion + dawn after round 10', ov: { spendOnConvert: true }, rulesOver: { roundLimit: 10 } },
+  { key: 'return', label: 'Only the first possessed guest can possess (a converted guest hands the card back)', ov: { returnToGiver: true } },
+  { key: 'escape2', label: '2 Lanterns to escape (not 3)', rulesOver: { lanternsToEscape: 2 } },
+  { key: 'spend+dealt1', label: 'Spent on conversion + each guest starts with 1 Lantern', ov: { spendOnConvert: true }, rulesOver: { lanternsDealtEach: 1 } },
+  { key: 'supply2+dealt1', label: '2 Possession cards + each guest starts with 1 Lantern', rulesOver: { possessionSupply: 2, lanternsDealtEach: 1 } },
+  { key: 'spend+dealt1+supply2', label: 'Spent on conversion + 1 Lantern each + 2 Possession cards', ov: { spendOnConvert: true }, rulesOver: { lanternsDealtEach: 1, possessionSupply: 2 } },
+  { key: 'spend+dealt1+supply2+dawn10', label: 'Spent on conversion + 1 Lantern each + 2 Possession cards + dawn after round 10', ov: { spendOnConvert: true }, rulesOver: { lanternsDealtEach: 1, possessionSupply: 2, roundLimit: 10 } },
+  { key: 'spend+dealt1+dawn10', label: 'Spent on conversion + 1 Lantern each + dawn after round 10', ov: { spendOnConvert: true }, rulesOver: { lanternsDealtEach: 1, roundLimit: 10 } },
 ];
 
 export async function runPersonalityCli({ floor: fl, roster: ro, argv }) {
@@ -350,8 +372,14 @@ export async function runPersonalityCli({ floor: fl, roster: ro, argv }) {
     if (want('clean')) for (const x of PERS) run({ label: `${P.LABELS[x]} as one CLEAN guest among the other five`, n: 2000 * scale, players: 6, assign: assignClean(x), seedBase: 4 });
     if (want('counts')) for (const n of [4, 5]) run({ label: `Mixed table, ${n} players (personalities drawn without replacement)`, n: 6000 * scale, players: n, assign: assignMixed(n), seedBase: 5 + n });
     if (want('proposals')) {
-      run({ label: 'Proposal baseline: mixed table, rules as they stand', n: 6000 * scale, players: 6, assign: assignMixed(6), seedBase: 9 });
-      for (const pr of PROPOSALS) run({ label: `Proposal: ${pr.label}`, n: 6000 * scale, players: 6, assign: assignMixed(6), rulesOver: pr.rulesOver, ov: pr.ov, seedBase: 9 });
+      // --pplayers 4,5,6 to measure the proposals at other table sizes; --pkeys spend,dealt1 for a subset.
+      const keys = opt('pkeys', null)?.split(',');
+      for (const np of (opt('pplayers', '6')).split(',').map(Number)) {
+        run({ label: `Proposal baseline: mixed table, ${np} players, rules as they stand`, n: 6000 * scale, players: np, assign: assignMixed(np), seedBase: 9 });
+        for (const pr of PROPOSALS.filter(x => !keys || keys.includes(x.key))) {
+          run({ label: `Proposal (${np} players): ${pr.label}`, n: 6000 * scale, players: np, assign: assignMixed(np), rulesOver: pr.rulesOver, ov: pr.ov, seedBase: 9 });
+        }
+      }
     }
   }
   const json = opt('json', null);

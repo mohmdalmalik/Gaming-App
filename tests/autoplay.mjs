@@ -15,6 +15,11 @@
 // Setup once:  npm --prefix tests install
 // Run:         node tests/autoplay.mjs --url http://127.0.0.1:8125/ [--matches 100] [--first 0]
 //              [--seed-base 7000] [--seed 1234 --players 5 --profile smart]  (one match)
+// Personalities (tools/balance/personalities.mjs — the same decision rules the fast simulator uses):
+//              --personalities rusher,slow,safe,aggressive,killer,team --seed 1234   (one match, one per seat)
+//              --persona-study [--first 0 --matches 30]   the planned study: 18 six-player, 6 five-player and
+//              6 four-player matches, seats rotated and seeds chosen so each personality starts possessed
+//              (results: tests/personality-results.jsonl unless --results is given)
 // Output:      tests/autoplay-results.jsonl (one line per match), tests/shots/autoplay/*.jpg
 //
 // Speed: headless software WebGL draws only a few frames a second on this machine, and the game's
@@ -24,6 +29,7 @@
 import { chromium } from 'playwright-core';
 import fs from 'node:fs';
 import path from 'node:path';
+import * as PERS from '../tools/balance/personalities.mjs';
 
 const args = process.argv.slice(2);
 const opt = (name, def) => { const i = args.indexOf(`--${name}`); return i >= 0 ? args[i + 1] : def; };
@@ -32,7 +38,11 @@ const baseUrl = opt('url', 'http://127.0.0.1:8125/');
 const here = path.dirname(new URL(import.meta.url).pathname);
 const outDir = path.join(here, 'shots/autoplay');
 fs.mkdirSync(outDir, { recursive: true });
-const resultsFile = opt('results', path.join(here, 'autoplay-results.jsonl'));
+const PERSONA_STUDY = flag('persona-study');
+const PERSONA_LIST = opt('personalities', null)?.split(',').map(x => x.trim());
+const PERSONA_MODE = PERSONA_STUDY || !!PERSONA_LIST;
+if (PERSONA_LIST) for (const x of PERSONA_LIST) if (!PERS.PERSONALITIES.includes(x)) throw new Error(`unknown personality ${x}`);
+const resultsFile = opt('results', path.join(here, PERSONA_MODE ? 'personality-results.jsonl' : 'autoplay-results.jsonl'));
 const MATCHES = +opt('matches', 100);
 const FIRST = +opt('first', 0);
 const SEED_BASE = +opt('seed-base', 7000);
@@ -46,6 +56,44 @@ const CDN = 'https://cdn.jsdelivr.net/npm/three@0.186.0/';
 // ---------------------------------------------------------------------------------------------
 // Match schedule: player count, seed, bot profile and input device vary by match.
 const PROFILES = ['smart', 'mixed', 'smart', 'chaos', 'mixed', 'smart', 'mixed', 'smart'];
+// Which seat the game makes possessed for a seed (the same pure rules code the page runs).
+let _engine = null;
+async function possessedSeatFor(seed, players) {
+  if (!_engine) {
+    const [{ applyMode }, S, { hotel }, { config }, { roster }, { createHotel }] = await Promise.all([
+      import('../src/data/rules.js'), import('../src/game/state.js'), import('../src/data/hotel.js'),
+      import('../src/config.js'), import('../src/data/characters.js'), import('../src/game/hotel.js')]);
+    _engine = { applyMode, S, roster, floor: createHotel(hotel, config) };
+  }
+  _engine.applyMode('hotseat', players);
+  const st = _engine.S.createState(_engine.floor, _engine.roster.slice(0, players), seed, { mode: 'hotseat' });
+  return st.players.findIndex(p => p.possessed);
+}
+// The personality study: match k has 6 players (k < 18), 5 (k < 24) or 4; the personality that starts
+// possessed rotates through all six (each is possessed 3 times at six players and twice at 4-5);
+// smaller tables draw their other personalities without replacement, rotating with k; the seats are
+// rotated every match.
+async function personaSchedule(k) {
+  const P6 = PERS.PERSONALITIES;
+  const players = k < 18 ? 6 : k < 24 ? 5 : 4;
+  const target = P6[k % 6];
+  const rest = P6.filter(x => x !== target);
+  const rot = (a, r) => a.map((_, i) => a[(i + r) % a.length]);
+  const others = rot(rest, k % rest.length).slice(0, players - 1);
+  const seed = 9100 + k * 131;
+  const seat = await possessedSeatFor(seed, players);
+  const order = rot(others, Math.floor(k / 6) % others.length);
+  const personas = [];
+  for (let i = 0; i < players; i++) personas.push(i === seat ? target : order.shift());
+  return { k, seed, players, profile: 'persona', personas, touch: k % 2 === 1, restartCheck: false };
+}
+async function scheduleAsync(k) {
+  if (PERSONA_STUDY) return personaSchedule(k);
+  if (PERSONA_LIST) {
+    return { k, seed: +opt('seed', 9100 + k * 131), players: PERSONA_LIST.length, profile: 'persona', personas: [...PERSONA_LIST], touch: flag('touch'), restartCheck: false };
+  }
+  return schedule(k);
+}
 function schedule(k) {
   if (opt('seed', null)) {
     return { k, seed: +opt('seed'), players: +opt('players', 6), profile: opt('profile', 'smart'), touch: flag('touch'), restartCheck: false };
@@ -145,6 +193,11 @@ function SNAP() {
     names: s.players.map(p => p.name),
     round: s.round, turn: s.turn, active: s.activeIndex, finished: s.finished, won: s.won, dawn: s.dawn,
     players, types, drops, draw: s.drawPile.length, discardN: s.discardPile.length,
+    locks: [...s.encounterLocks],
+    lanternPiles: {
+      draw: s.drawPile.filter(c => c.type === 'lantern').length, discard: s.discardPile.filter(c => c.type === 'lantern').length,
+      floor: [...s.roomDrops.values()].reduce((n, cs) => n + cs.filter(c => c.type === 'lantern').length, 0),
+    },
     exitRoom: g.floor.exitRoom, rooms, movers,
     inAction: g.inActionPhase(), walking: g.activeMover().walking || g.activeMover().path.length > 0, searchPending: g.searchPending(),
     overlays,
@@ -397,6 +450,7 @@ const roomById = (s, id) => s.rooms.find(r => r.id === id);
 const worst = (cards, exclude = []) => [...cards].filter(c => !exclude.includes(c.type)).sort((a, b) => VALUE[a.type] - VALUE[b.type])[0];
 
 function seatStyle(i) {
+  if (cur.personas) return 'persona';
   if (cur.profile === 'chaos') return 'random';
   if (cur.profile === 'mixed') return (i + cur.seed) % 3 === 0 ? 'random' : 'smart';
   return 'smart';
@@ -606,7 +660,12 @@ async function onHandoff(s) {
     return;
   }
   if (h.kind === 'note' && /POSSESSED/.test(h.notes) && /now POSSESSED/.test(h.notes)) cur.stats.convertNotes++;
-  if (h.kind === 'note' && /burned away/.test(h.notes)) cur.stats.blocks++;
+  if (h.kind === 'note' && /burned away/.test(h.notes)) {
+    cur.stats.blocks++;
+    const owner = ownerOf(s);
+    const who = s.players.find(p => p.name === owner);
+    if (cur.seats && who && /Your Lantern burned away/.test(h.notes)) { cur.seats[who.i].blocks++; cur.blocks.push({ by: owner, round: s.round }); }
+  }
   if (h.kind === 'found') cur.stats.searchesRevealed++;
   if (h.kind === 'turn') cur.holderTurn = ownerOf(s);
   if (!h.next) {
@@ -620,6 +679,14 @@ async function onHandoff(s) {
 
 function pickTradeCard(s, picker, other, cards) {
   const style = seatStyle(picker.i);
+  if (style === 'persona') {
+    const id = PERS.decideTradeCard(fullFromSnap(s), picker.i, other.i, cards.map(c => c.id), cur.mem, rng);
+    const c = cards.find(x => x.id === id) || cards[0];
+    const seat = cur.seats[picker.i];
+    seat.trades++;
+    if (c.type === 'possession') { seat.attempts++; cur.attempts.push({ by: picker.name, to: other.name, round: s.round }); }
+    return c;
+  }
   if (style === 'random') return cards[Math.floor(rng() * cards.length)];
   const poss = cards.find(c => c.type === 'possession');
   if (picker.possessed) {
@@ -644,7 +711,8 @@ async function onMeeting(s) {
     const target = cur.attackTarget && s.players.find(p => p.name === cur.attackTarget);
     const ws = m.cards.map(id => ({ id, type: s.types[id] }));
     const rev = ws.find(w => w.type === 'revolver');
-    const w = style === 'random' ? ws[Math.floor(rng() * ws.length)] : (rev && target && target.health <= 2 ? rev : ws.find(x => x.type === 'knife') || ws[0]);
+    const planned = style === 'persona' && cur.plannedWeapon ? ws.find(x => x.id === cur.plannedWeapon) : null;
+    const w = planned || (style === 'random' ? ws[Math.floor(rng() * ws.length)] : (rev && target && target.health <= 2 ? rev : ws.find(x => x.type === 'knife') || ws[0]));
     act(`attack with ${w.type}`);
     cur.pendingAttack = { target: target?.name, before: target?.health, weapon: w.type, attacker: me.name };
     await tapSel(`#encounter-body .card-tile[data-card-id="${w.id}"]`, 'weapon');
@@ -661,7 +729,11 @@ async function onMeeting(s) {
     cur.stats.meetings++;
     let attack = false;
     if (has('Attack')) {
-      if (style === 'random') attack = rng() < 0.4;
+      if (style === 'persona') {
+        cur.plannedWeapon = q ? PERS.decideAttack(fullFromSnap(s), me.i, q.i, cur.mem, rng) : null;
+        attack = !!cur.plannedWeapon;
+        if (attack) { cur.seats[me.i].attacks++; PERS.observe(cur.mem, { type: 'attack', by: me.id, target: q.id }); }
+      } else if (style === 'random') attack = rng() < 0.4;
       else if (me.possessed) attack = q && !q.possessed && (rng() < 0.45 || q.health <= 1);
       else attack = q && me.knows.includes(q.id) ? true : rng() < 0.04;
     }
@@ -674,7 +746,12 @@ async function onMeeting(s) {
     // Choose whom to meet.
     const cands = m.actions.filter(a => a.text !== 'Cancel');
     let pickIdx = Math.floor(rng() * cands.length);
-    if (style === 'smart' && me.possessed) {
+    if (style === 'persona') {
+      const idx = cands.map(a => s.players.find(p => p.name === a.text)?.i).filter(x => x != null);
+      const j = PERS.decideMeetWhom(fullFromSnap(s), me.i, idx, cur.mem, rng);
+      const k = cands.findIndex(a => a.text === s.players[j].name);
+      if (k >= 0) pickIdx = k;
+    } else if (style === 'smart' && me.possessed) {
       const k = cands.findIndex(a => s.players.some(p => p.name === a.text && !p.possessed));
       if (k >= 0) pickIdx = k;
     }
@@ -688,7 +765,15 @@ async function onMeeting(s) {
       const t = s.players.find(p => p.name === pa.target);
       const dmg = pa.weapon === 'revolver' ? 2 : 1;
       if (t && pa.before != null && t.health !== Math.max(0, pa.before - dmg)) await violation('high', 'attack-damage', `${pa.attacker} hit ${pa.target} with a ${pa.weapon}: health ${pa.before} -> ${t.health}`, s);
-      if (t && !t.alive) { cur.stats.deaths++; if (cur.sampleShots) await shot('attack-death'); }
+      if (t && !t.alive) {
+        cur.stats.deaths++;
+        if (cur.seats) {
+          const a = s.players.find(p => p.name === pa.attacker);
+          cur.seats[a.i].kills++; cur.seats[t.i].killedBy = a.name;
+          cur.kills.push({ by: a.name, byPersona: cur.personas[a.i], byPossessed: a.possessed, victim: t.name, victimPersona: cur.personas[t.i], victimPossessed: t.possessed, weapon: pa.weapon, round: s.round });
+        }
+        if (cur.sampleShots) await shot('attack-death');
+      }
     }
     act(`meeting: Continue (${m.title})`);
     await click('Continue');
@@ -705,7 +790,8 @@ async function onDiscard(s) {
   if (s.discard.cards.some(id => s.types[id] === 'possession')) await violation('critical', 'discard-shows-possession', 'The discard prompt offers a Possession card', s);
   if (!s.discard.doneDisabled) { act('discard: Keep these'); await tapSel('#btn-discard-done', 'Keep these 6'); return; }
   const cards = s.discard.cards.map(id => ({ id, type: s.types[id] }));
-  const c = seatStyle(me.i) === 'random' ? cards[Math.floor(rng() * cards.length)] : worst(cards, ['lantern']) || worst(cards);
+  const c = seatStyle(me.i) === 'persona' ? (cards.find(x => x.id === PERS.decideDiscard(fullFromSnap(s), me.i, cards.map(y => y.id))) || cards[0])
+    : seatStyle(me.i) === 'random' ? cards[Math.floor(rng() * cards.length)] : worst(cards, ['lantern']) || worst(cards);
   act(`discard ${c.type}`);
   // Two steps since the playtest fix round: tap the card to pick it, then confirm with the button.
   await tapSel(`#discard-cards .card-tile[data-card-id="${c.id}"]`, 'discard card');
@@ -718,7 +804,7 @@ async function onFullHand(s) {
   const f = s.fullhand;
   if (f.hand.length) {
     const cards = f.hand.map(id => ({ id, type: s.types[id] }));
-    const c = worst(cards, ['lantern']) || worst(cards);
+    const c = (seatStyle(me.i) === 'persona' && cards.find(x => x.id === cur.fullHandDrop)) || worst(cards, ['lantern']) || worst(cards);
     act(`full hand: drop ${c.type}`);
     await tapSel(`#fullhand-hand .card-tile[data-card-id="${c.id}"]`, 'full-hand drop');
     await tapSel('#btn-fullhand-drop', 'full-hand drop (confirm)');   // (pick, then confirm)
@@ -728,7 +814,9 @@ async function onFullHand(s) {
   const foundType = /found an? ([A-Za-z ]+)\./.exec(f.sub)?.[1];
   const found = Object.keys(VALUE).find(t => foundType && foundType.toLowerCase().replace(/ /g, '') === t.toLowerCase()) || 'barricade';
   const worstHeld = worst(me.hand.filter(c => c.type !== 'possession'));
-  const take = seatStyle(me.i) === 'random' ? rng() < 0.5 : (found === 'lantern' || (worstHeld && VALUE[found] > VALUE[worstHeld.type]));
+  let take;
+  if (seatStyle(me.i) === 'persona') { const d = PERS.decideFullHand(fullFromSnap(s), me.i, found); take = d.take; cur.fullHandDrop = d.dropId; }
+  else take = seatStyle(me.i) === 'random' ? rng() < 0.5 : (found === 'lantern' || (worstHeld && VALUE[found] > VALUE[worstHeld.type]));
   act(`full hand: found ${found} → ${take ? 'take' : 'leave'}`);
   await tapSel(take ? '#btn-fullhand-take' : '#btn-fullhand-leave', take ? 'Take it' : 'Leave it');
 }
@@ -757,7 +845,7 @@ async function takeAction(s) {
     if (cur.sampleShots && [1, 4, 8].includes(s.round) && !cur.layoutSeen.has(`round-shot-${s.round}`)) { cur.layoutSeen.add(`round-shot-${s.round}`); await shot(`round${s.round}-action`); }
   }
   if (cur.turnActions > 25) { act('end turn (action budget)'); return endTurn(s); }
-  const options = style === 'random' ? randomOptions(s, me, room) : smartOptions(s, me, room);
+  const options = style === 'persona' ? personaOptions(s, me, room) : style === 'random' ? randomOptions(s, me, room) : smartOptions(s, me, room);
   for (const o of options) {
     if (cur.fails.has(o.key)) continue;
     const ok = await o.run();
@@ -786,6 +874,74 @@ async function endTurn(s) {
 }
 
 function hasCard(me, type) { return me.hand.find(c => c.type === type); }
+
+// --- personalities (tools/balance/personalities.mjs) -------------------------------------------------
+// The common view the personality rules read, from a snapshot (the module masks what a guest may not know).
+function fullFromSnap(s) {
+  return {
+    round: s.round, turn: s.turn, exitRoom: s.exitRoom, lobby: s.rooms[0].id, locks: s.locks,
+    players: s.players.map(p => ({ ...p, persona: cur.personas[p.i] })),
+    rooms: s.rooms.map(r => ({
+      id: r.id, name: r.name, isExit: r.isExit, safe: r.safe, dark: r.dark, searchable: r.searchable, searched: r.searched,
+      locked: r.locked, job: r.job, drops: r.drops, doors: r.doors.map(d => ({ id: d.id, to: d.to, barricaded: d.barricaded })), frontier: r.frontier,
+    })),
+  };
+}
+const reEsc = t => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+function personaOptions(s, me, room) {
+  const plan = PERS.decideAction(fullFromSnap(s), me.i, cur.mem, rng);
+  return plan.map(a => ({ key: JSON.stringify(a), run: () => runPersona(s, me, room, a) }));
+}
+async function runPersona(s, me, room, a) {
+  const seat = cur.seats[me.i];
+  switch (a.k) {
+    case 'end': await endTurn(s); return true;
+    case 'escape': return roomJob(s, 'Escape');
+    case 'search': {
+      if (!(s.spot.visible && s.spot.mode === 'live')) return false;
+      cur.searchWatch = { i: me.i, lanterns: lanternsOf(me), turn: s.turn };
+      const ok = await doSearch(s);
+      if (ok) seat.searches++; else cur.searchWatch = null;
+      return ok;
+    }
+    case 'open': {
+      const f = room.frontier.find(x => x.id === a.door);
+      if (!f) return false;
+      const ok = await openDoor(s, f);
+      if (ok) seat.opens++;
+      return ok;
+    }
+    case 'move': {
+      const d = room.doors.find(x => x.id === a.door);
+      if (!d) return false;
+      const ok = await moveThrough(s, d, a.to, `${me.possessed ? 'possessed ' : ''}${cur.personas[me.i]} → ${a.goal ?? a.to}`);
+      if (ok) seat.moves++;
+      return ok;
+    }
+    case 'job': return roomJob(s, room.job === 'infirmary' ? 'Infirmary' : 'Switchboard');
+    case 'card': {
+      const card = me.hand.find(c => c.id === a.card);
+      if (!card) return false;
+      let re;
+      if (a.type === 'bandage') re = /^Use/;
+      else if (a.type === 'espresso') return useCard(s, card, /^Drink/, () => { cur.turnEspresso++; cur.stats.espresso++; });
+      else if (a.type === 'handMirror') re = new RegExp(`^${reEsc(s.players.find(p => p.id === a.target)?.name ?? '?')}$`);
+      else if (a.type === 'masterKey' || a.type === 'lockPick') re = new RegExp(`^Open ${reEsc(roomById(s, a.target)?.name ?? '?')} ·`);
+      else if (a.type === 'barricade') {
+        const d = room.doors.find(x => x.id === a.target);
+        const other = d && roomById(s, d.to);
+        re = new RegExp(`^Seal the door to ${reEsc(other ? other.name : 'the unknown room')} ·`);
+      } else return false;
+      const ok = await useCard(s, card, re, () => {
+        if (a.type === 'handMirror') cur.stats.mirror++;
+        if (a.type === 'barricade') cur.stats.barricade++;
+        if (a.type === 'masterKey' || a.type === 'lockPick') cur.stats.unlock++;
+      });
+      return ok;
+    }
+    default: return false;
+  }
+}
 
 function smartOptions(s, me, room) {
   const o = [];
@@ -1138,15 +1294,19 @@ async function playMatch(M) {
     ...M, t0: Date.now(), violations: [], ux: [], fallbacks: [], actions: [], console: [], shots: [], seen: new Map(), uxSeen: new Map(), pendingUx: [],
     layoutSeen: new Set(), holder: null, prof: {}, profShots: 0, turnEspresso: 0, turns: 0, sampleShots: M.k % 6 === 0,
     stats: { meetings: 0, trades: 0, attacks: 0, deaths: 0, searches: 0, searchesRevealed: 0, opens: 0, jammed: 0, moves: 0, discards: 0, fullhand: 0, mirror: 0, espresso: 0, unlock: 0, barricade: 0, escapes: 0, voluntary: 0, jobs: {}, conversions: 0, convertNotes: 0, blocks: 0, exitVisits: 0 },
+    personas: M.personas || null, mem: PERS.newMemory(), kills: [], attempts: [], blocks: [], conversionLog: [], exitRound: null,
+    seats: M.personas ? M.personas.map(persona => ({ persona, searches: 0, lanternsFound: 0, opens: 0, moves: 0, attacks: 0, kills: 0, killedBy: null, trades: 0, attempts: 0, blocks: 0 })) : null,
   };
   const query = `?mode=hotseat&players=${M.players}&seed=${M.seed}&timer=off`;
-  console.log(`\n#${M.k} seed ${M.seed} · ${M.players} players · ${M.profile} · ${M.touch ? 'touch' : 'mouse'}`);
+  console.log(`\n#${M.k} seed ${M.seed} · ${M.players} players · ${M.profile}${M.personas ? ` [${M.personas.join(',')}]` : ''} · ${M.touch ? 'touch' : 'mouse'}`);
   await loadMatch(M, query);
   cur.pageT0 = await page.evaluate(() => performance.now() - (window.__ap.frames ? 0 : 0));
   await page.evaluate(() => { window.__ap.frames = 0; });
   const init = await page.evaluate(SNAP);
   cur.lastSnap = init;
   cur.possessedStart = init.players.filter(p => p.possessed).map(p => p.name);
+  cur.possSet = new Set(cur.possessedStart);
+  if (M.personas) console.log(`   possessed at the start: ${cur.possessedStart.join(', ')} (${init.players.filter(p => p.possessed).map(p => M.personas[p.i]).join(', ')})`);
   // Start state sanity.
   if (init.players.length !== M.players) await violation('high', 'player-count', `${init.players.length} guests for players=${M.players}`, init);
   if (init.players.filter(p => p.possessed).length !== 1) await violation('critical', 'possessed-start', `${init.players.filter(p => p.possessed).length} possessed at start`, init);
@@ -1165,6 +1325,7 @@ async function playMatch(M) {
     cur.prevSnap = cur.lastSnap; cur.prevTurn = cur.prevSnap?.turn;
     cur.lastSnap = s;
     await checkInvariants(s);
+    if (cur.seats) personaWatch(s);
     cur.prof.snap = (cur.prof.snap || 0) + (Date.now() - tSnap);
     if (cur.abort) break;
     // Soft-lock watchdog: nothing changes for many steps in a row.
@@ -1219,9 +1380,44 @@ async function playMatch(M) {
     dead: cur.lastSnap?.players.filter(p => !p.alive).map(p => p.name), rooms: cur.lastSnap?.rooms.length,
     stats: cur.stats, violations: cur.violations, ux: cur.ux, fallbacks: cur.fallbacks, console: cur.console, shots: cur.shots,
   };
+  if (cur.seats && cur.lastSnap) {
+    const L = cur.lastSnap;
+    res.personas = cur.personas;
+    res.seats = cur.seats.map((x, i) => {
+      const p = L.players[i];
+      return { name: p.name, ...x, startPossessed: cur.possessedStart.includes(p.name), endPossessed: p.possessed, alive: p.alive, escaped: p.escaped, lanternsHeld: lanternsOf(p), health: p.health };
+    });
+    res.kills = cur.kills; res.attempts = cur.attempts; res.blocks = cur.blocks; res.conversionLog = cur.conversionLog; res.exitRound = cur.exitRound;
+    res.lanternsEnd = {
+      clean: L.players.filter(p => p.alive && !p.possessed).reduce((n, p) => n + lanternsOf(p), 0),
+      possessed: L.players.filter(p => p.alive && p.possessed).reduce((n, p) => n + lanternsOf(p), 0),
+      escaped: L.players.filter(p => p.escaped).reduce((n, p) => n + lanternsOf(p), 0),
+      ...L.lanternPiles,
+    };
+    res.lanternsFound = res.seats.reduce((n, x) => n + x.lanternsFound, 0);
+    res.lanternsDrawnFromDeck = 14 - L.lanternPiles.draw;
+  }
   fs.appendFileSync(resultsFile, JSON.stringify(res) + '\n');
   console.log(`   → ${res.outcome} · round ${res.round} · ${res.turns} turns · ${res.seconds}s · ${cur.violations.length} bugs, ${cur.ux.length} ux, ${cur.fallbacks.length} fallbacks`);
   return res;
+}
+
+// Personality runs: who became possessed (and after trading with whom), Lanterns found by searching,
+// when the Fire Exit turned up.
+function personaWatch(s) {
+  for (const p of s.players) {
+    if (p.possessed && !cur.possSet.has(p.name)) {
+      cur.possSet.add(p.name);
+      const by = cur.lastTrade && (cur.lastTrade.a === p.name ? cur.lastTrade.b : cur.lastTrade.b === p.name ? cur.lastTrade.a : null);
+      cur.conversionLog.push({ who: p.name, persona: cur.personas[p.i], by, byPersona: by ? cur.personas[s.players.find(q => q.name === by).i] : null, round: s.round });
+    }
+  }
+  const w = cur.searchWatch;
+  if (w && s.inAction && !s.handoff.open && !s.fullhand.open && !s.searchPending && s.active === w.i) {
+    cur.seats[w.i].lanternsFound += Math.max(0, lanternsOf(s.players[w.i]) - w.lanterns);
+    cur.searchWatch = null;
+  } else if (w && s.turn !== w.turn) cur.searchWatch = null;
+  if (s.exitRoom && cur.exitRound == null) cur.exitRound = s.round;
 }
 
 async function finishMatch(s) {
@@ -1277,9 +1473,9 @@ async function restartCheck() {
 // ---------------------------------------------------------------------------------------------
 await openBrowser();
 const all = [];
-const count = opt('seed', null) ? 1 : MATCHES;
+const count = (opt('seed', null) && !PERSONA_STUDY) ? 1 : MATCHES;
 for (let n = 0; n < count; n++) {
-  const M = schedule(FIRST + n);
+  const M = await scheduleAsync(FIRST + n);
   if (n > 0 && n % 20 === 0) await openBrowser();   // a fresh browser now and then (memory)
   try { all.push(await playMatch(M)); }
   catch (e) {

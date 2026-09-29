@@ -91,7 +91,7 @@
 //   decideFullHand(full, i, foundType)         -> { take: bool, dropId }
 //   newMemory(), observe(mem, event)           -> public events: {type:'attack', by, target, killed}
 //
-// `full` = { round, turn, exitRoom, lobby, locks: ['room:a-b'...],
+// `full` = { round, turn, exitRoom, lobby, lanternsToEscape, locks: ['room:a-b'...],
 //            players: [{ i, id, name, persona, room, ap, health, alive, escaped, possessed,
 //                        hand: [{id, type, shots}], knows: [ids] }],
 //            rooms: [{ id, name, isExit, safe, dark, searchable, searched, locked, job, drops,
@@ -195,11 +195,12 @@ function ctx(full, i, mem, rng) {
   const frontierRooms = () => full.rooms.filter(r => !r.locked && r.frontier.some(f => !f.jammed)).map(r => r.id);
   const closedHere = () => (here?.frontier || []).filter(f => !f.jammed);
   const lanterns = lan(me.hand);
-  const escaping = !me.possessed && lanterns >= LANTERNS_TO_ESCAPE;
+  const need = full.lanternsToEscape ?? LANTERNS_TO_ESCAPE;
+  const escaping = !me.possessed && lanterns >= need;
   return {
     full, i, me, mem, rng, rooms, here, persona, lan, claimed, has, weapons, met, known, suspect, attacked,
     isAlly, cleanTarget, others, othersIn, meetable, bfs, fromMe, fromMeSafe, lobbyDist, occupied, stepToward,
-    canSearchRoom, lootRooms, dropRooms, frontierRooms, closedHere, lanterns, escaping, hasLight,
+    canSearchRoom, lootRooms, dropRooms, frontierRooms, closedHere, lanterns, escaping, hasLight, need,
     possCards: me.hand.filter(c => c.type === 'possession').length,
     used: AP_PER_TURN - me.ap,
   };
@@ -248,11 +249,14 @@ function escapeNow(c) {
   if (!c.escaping || !c.here?.isExit) return null;
   return c.me.ap >= 1 ? { k: 'escape' } : { k: 'end' };
 }
-// Walk to meet someone matching `filter`, within `reach` steps.
-function hunt(c, filter, reach = 99, score = null) {
+// Walk to meet someone matching `filter`, within `reach` steps. `strike`: arrive with an action left
+// to attack (an armed hunter does not step in with its last action; it waits a turn instead).
+function hunt(c, filter, reach = 99, score = null, strike = false) {
   const ids = c.full.rooms.map(r => r.id).filter(id => id !== c.me.room && c.meetable(id, filter).length);
   const s = c.stepToward(ids, { score });
-  return s && s.d <= reach ? s : null;
+  if (!s || s.d > reach) return null;
+  if (strike && s.d === 1 && c.me.ap < 2) return null;
+  return s;
 }
 function barricadeNear(c) {
   const b = c.has('barricade');
@@ -268,9 +272,14 @@ const PLANS = {
     if (c.escaping) return [...out, ...goExit(c)];
     if (c.me.possessed) {
       out.push(searchHere(c), hunt(c, q => c.cleanTarget(q), 1));
-    } else if (c.lanterns < LANTERNS_TO_ESCAPE) out.push(searchHere(c));
+    } else if (c.lanterns < c.need) out.push(searchHere(c));
     const outward = (id, d) => d - 0.6 * c.lobbyDist(id);
-    if (!c.full.exitRoom) out.push(openHere(c), c.stepToward(c.frontierRooms(), { score: outward }));
+    if (!c.full.exitRoom) {
+      // Push outward: into a room next door that still has closed doors and lies further from the
+      // lobby than this one; otherwise open a door here; otherwise walk to the edge of the hotel.
+      const further = c.frontierRooms().filter(id => c.fromMe.get(id)?.d === 1 && c.lobbyDist(id) > c.lobbyDist(c.me.room));
+      out.push(c.stepToward(further, { score: (id, d) => -c.lobbyDist(id) }), openHere(c), c.stepToward(c.frontierRooms(), { score: outward }));
+    }
     else {
       const toExit = c.bfs(c.full.exitRoom);
       out.push(c.stepToward(c.lootRooms(), { score: (id, d) => d + 0.5 * (toExit.get(id)?.d ?? 9) }));
@@ -315,8 +324,10 @@ const PLANS = {
     if (c.escaping) return [...out, ...goExit(c)];
     const target = c.me.possessed ? (q => c.cleanTarget(q)) : (() => true);
     const first = c.me.possessed ? null : (q => c.suspect(q));
-    if (first) out.push(hunt(c, first, c.me.ap));
-    out.push(hunt(c, target, c.me.ap));
+    const armed = c.weapons.length > 0;
+    const reach = armed ? c.me.ap - 1 : c.me.ap;
+    if (first) out.push(hunt(c, first, reach, null, armed));
+    out.push(hunt(c, target, reach, null, armed));
     out.push(searchHere(c), unlockNear(c));
     if (!c.full.exitRoom) out.push(openHere(c));
     out.push(c.stepToward(c.lootRooms()), openHere(c), c.stepToward(c.frontierRooms()));
@@ -326,7 +337,7 @@ const PLANS = {
     const out = [heal(c, 1)];
     if (c.escaping) return [...out, ...goExit(c)];
     const prey = c.me.possessed ? (q => c.cleanTarget(q)) : (() => true);
-    if (c.weapons.length) out.push(hunt(c, prey, 99, (id, d) => d * 10 + Math.min(...c.meetable(id, prey).map(q => q.health))));
+    if (c.weapons.length) out.push(hunt(c, prey, 99, (id, d) => d * 10 + Math.min(...c.meetable(id, prey).map(q => q.health)), true));
     out.push(searchHere(c), c.stepToward(c.dropRooms()));
     if (c.me.possessed) out.push(hunt(c, prey, 2));
     out.push(c.stepToward(c.lootRooms()), unlockNear(c), openHere(c), c.stepToward(c.frontierRooms()));

@@ -208,4 +208,6 @@ node tests/browser-hotseat.mjs    # hot-seat in a real browser: roles, private t
 node tests/browser-lobby.mjs      # the baked starting room, door cues, path preview, camera, draw calls
 node tests/autoplay.mjs --url http://127.0.0.1:8123/ --matches 10   # bots play whole hot-seat matches through the real UI (tests/autoplay-report.md)
 node tools/balance/hotseat-sim.mjs 400 6   # 400 six-player matches under the rules as they stand (--before: same bots on the rules before Part 2; --compare: Lantern variants; --cautious)
+node tools/balance/hotseat-sim.mjs --study  # six player personalities (tools/balance/personalities.mjs) + rule proposals, in memory only (tests/personality-report.md)
+node tests/autoplay.mjs --url http://127.0.0.1:8123/ --persona-study --matches 30   # the same personalities through the real UI
 ```

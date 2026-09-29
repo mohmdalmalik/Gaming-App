@@ -82,6 +82,14 @@ const N = parseInt(process.argv[2], 10) || 400;
 const PLAYERS = parseInt(process.argv[3], 10) || 6;
 applyMode('hotseat', PLAYERS);
 const floor = createHotel(hotel, config);   // rebuilt for every match by createState
+
+// PERSONALITIES (tools/balance/personalities.mjs): a separate mode, so the default run below is
+// unchanged. See personality-study.mjs for the options.
+if (process.argv.some(a => a === '--study' || a === '--personalities')) {
+  const { runPersonalityCli } = await import('./personality-study.mjs');
+  await runPersonalityCli({ floor, roster, argv: process.argv.slice(2) });
+  process.exit(0);
+}
 const COMPARE = process.argv.includes('--compare');
 // Bots: 'explorer' (default) — clean guests open doors whenever the Fire Exit is still hidden;
 // 'cautious' (--cautious) — they only open doors once nothing known is left to search.

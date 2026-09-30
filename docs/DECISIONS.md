@@ -818,3 +818,40 @@ Target: `docs/art-reference.jpg` (style, palette and finish; not its layout or i
 - The harness's `ring-inner-edge-miss` message now reads the game's real tap zone
   (`__game.doorTapAcross()`, 1.22 m) instead of the stale 0.85 m. `tap-failed-move-confirm`
   ("element is not stable") is Playwright's stability wait during a slow headless frame; not changed.
+
+## Locked doors re-lock at the end of the opener's turn (owner-approved rule)
+
+- **The rule** (docs/GAME_RULES.md, Rooms): the two locked rooms are dead ends with a single doorway;
+  a Master Key or Lock Pick opens that one door from the room on the other side, until the end of the
+  opener's turn, then it locks again; a locked door only stops guests going in.
+- **The Cloakroom became a dead end** (it was a corner with two doorways): with one door per locked room
+  the lock is the door. The deck stays at 24 (now 3 corners, 5 dead ends); the tile keeps its place in
+  the `tiles` list so seeded decks still shuffle as before. Its model was rebuilt with the room pipeline
+  (east wall panelled, bench against it). Its one doorway holds the locked door, which the game draws
+  as its usual single door with padlocks, not the reference picture's gold-handled double front door.
+- **State** (`src/game/state.js`): `state.lockedRooms` (rooms whose one door is locked now — keyed by the
+  room, which is the same thing as its single door) and `state.openLocks` (room → `{ by, turn, doorway }`,
+  written by `useUnlock`). `endTurn` calls `relockDoors` (like `expireBarricades`) and returns `relocked`.
+- **Direction-aware passing**: `lockedAgainst(state, doorway, fromRoom)` / `doorwayPassable(..., fromRoom)`
+  block only going IN; `usableDoorways`, `canAffordRoute` (entering a locked room is refused, leaving
+  never is) and the path allow-list `buildAllowed(state, floor, grid, player)` (seals a locked door's
+  landing cells unless the guest stands inside that room) all follow it. So a guest who was inside when
+  the door re-locked always walks out, and can't come back in without another key.
+- **Hotel growth** (`keepsHotelOpen` in `src/game/hotel.js`) treats locked TILES (`room.locked`) as walls
+  at all times, not the current lock state, so a door locking again can never close the hotel off; and
+  since locked rooms are dead ends the Fire Exit can never be behind one (rules-check and logic-check
+  test this over 400 hotels each).
+- **Looks**: the door leaf swings shut again, padlocks on, when it re-locks (`roomView.js` now also
+  animates closing), and stands open (still padlocked) while the active guest is inside the locked room
+  — the way out. The map shows 🔒 locked / 🔓 open this turn. Toasts say "open until the end of your
+  turn" and "has locked again" (hot-seat: shown when the next guest's action phase starts).
+- The simulator bots play a key only with the actions to step straight in, and do.
+- **Wasted keys** (review follow-up): `useUnlock` refuses, spending nothing, when the door is also
+  barricaded (reason `sealed`: the door always locks again before the Barricade comes down, so the card
+  could never help) and when the guest is not the one taking their turn (`notYourTurn`: the door locks
+  again at the end of the opener's turn, so only the active guest may open one). The card view greys
+  out a barricaded door's button and says why, and warns "You will have no action left to go in" when
+  the key would use the guest's last action and they hold no Espresso (allowed by the rules, just
+  wasted). A door a key has open this turn shows an OPEN padlock sign in the scene (`openedNow` in
+  `createDoorwayViews`), so it is clear it will lock again.
+

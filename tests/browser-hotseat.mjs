@@ -806,6 +806,108 @@ console.log('\n10e. Espresso');
   check(await game(() => window.__game.activePlayer().hand.some(c => c.id === 'es2')), 'the unused Espresso is still in hand');
 }
 
+console.log('\n10f. a locked door: open until the end of the opener\'s turn, then locked again');
+{
+  await load(JOBS);
+  await tap('#btn-begin'); await throughRoles(); await intoTurn();
+  check(await game(() => window.__game.revealTile('cloakroom')), 'the Cloakroom (a locked room) is revealed');
+  const L = 'cloakroom';
+  const info = await game(l => { const g = window.__game, r = g.floor.rooms.get(l); return { nb: [...r.neighbours][0], door: r.doorways[0].id, n: r.doorways.length }; }, L);
+  check(info.n === 1 && await game(l => window.__game.lockedRooms().includes(l), L), 'it has a single doorway, and its door is locked');
+  // Everyone else waits in the lobby, so nobody is met on the way.
+  await game(() => { const g = window.__game; g.state.players.forEach((p, i) => { p.possessed = i === 5; }); g.refresh(); });
+  await put(info.nb, 4);
+  await give(0, [{ id: 'mkh', type: 'masterKey' }]);
+  await handCard('mkh');
+  const btns = await detailButtons();
+  check(btns.some(b => /^Open the Cloakroom door/.test(b.text)), `the Master Key offers to open that door (${btns.map(b => b.text).join(' | ')})`);
+  check(/for the rest of your turn/.test(await page.textContent('#hand-detail')), 'and says it opens for the rest of your turn');
+  check(!/no action left to go in/.test(await page.textContent('#hand-detail')), 'with actions to spare, no warning');
+  await clickBtn('#hand-detail .btn', 'Open the Cloakroom door');
+  check(await game(l => !window.__game.lockedRooms().includes(l) && window.__game.openLocks().includes(l), L), 'the key opens it');
+  check(/Cloakroom door is open until the end of your turn/.test(await page.textContent('#toast')), `the toast says for how long ("${(await page.textContent('#toast')).trim()}")`);
+  await game(l => window.__game.moveToRoom(l), L);
+  await settle();
+  check(await game(() => window.__game.activePlayer().currentRoom) === L, 'the guest who opened it walks in');
+  // End of turn: the door locks again.
+  await tap('#btn-end-turn');
+  await intoTurn();
+  check(await game(() => window.__game.state.activeIndex) === 1, 'the next guest\'s turn');
+  check(await game(l => window.__game.lockedRooms().includes(l) && !window.__game.openLocks().includes(l), L), 'the door locked again at the end of the opener\'s turn');
+  check(/Cloakroom door has locked again/.test(await page.textContent('#toast')), `the next guest is told ("${(await page.textContent('#toast')).trim()}")`);
+  await page.waitForFunction(d => window.__game.doorways.views.get(d).leaf.userData.swing < 0.05, info.door, { timeout: 8000 }).catch(() => {});
+  check(await game(d => { const v = window.__game.doorways.views.get(d), u = v.leaf.userData; return v.locked && v.shut && u.swing < 0.05 && u.pads.every(p => p.visible); }, info.door),
+    'the door swings shut, padlocked, in the scene');
+  // The next guest cannot follow in.
+  await put(info.nb, 4);
+  check(await game(l => window.__game.moveToRoom(l).ok, L) === false, 'the next guest cannot follow in');
+  check(await game(d => !window.__game.doorways.views.get(d).blink.visible, info.door), 'and the door has no ring for them');
+  await shot('hs-14-locked-again');
+  await game(() => { const g = window.__game, p = g.activePlayer(), c = g.roomCenter('hall'); p.currentRoom = 'hall'; g.movers[p.index].reset(c[0], c[1]); g.discovery.refresh(); g.refresh(); });
+  // Round the table to the guest inside: they can walk out, and the door stays locked behind them.
+  for (let i = 1; i < 6; i++) { await tap('#btn-end-turn'); await intoTurn(); }
+  check(await game(() => window.__game.state.activeIndex) === 0 && await game(() => window.__game.activePlayer().currentRoom) === L, 'back to the guest inside the locked room');
+  check(await game(d => { const v = window.__game.doorways.views.get(d); return v.locked && !v.shut && v.blink.visible; }, info.door),
+    'for them the padlocked door stands open, with a ring: it is the way out');
+  const out = await game(n => window.__game.moveToRoom(n).ok, info.nb);
+  await settle();
+  check(out && await game(() => window.__game.activePlayer().currentRoom) === info.nb, 'the guest inside walks out');
+  check(await game(l => window.__game.lockedRooms().includes(l), L), 'the door stays locked behind them');
+  check(await game(l => window.__game.moveToRoom(l).ok, L) === false, 'and getting back in takes another key');
+}
+
+console.log('\n10g. a key or pick is never wasted without a word');
+{
+  await load(JOBS);
+  await tap('#btn-begin'); await throughRoles(); await intoTurn();
+  check(await game(() => window.__game.revealTile('cloakroom')), 'the Cloakroom (a locked room) is revealed');
+  const info = await game(() => { const r = window.__game.floor.rooms.get('cloakroom'); return { nb: [...r.neighbours][0], door: r.doorways[0].id }; });
+  await game(() => { const g = window.__game; g.state.players.forEach((p, i) => { p.possessed = i === 5; }); g.refresh(); });
+  const noEspresso = () => game(() => { const p = window.__game.activePlayer(); p.hand = p.hand.filter(c => c.type !== 'espresso'); window.__game.refresh(); });
+  // The last action, and no Espresso: the key may still be played, but the card view warns.
+  await noEspresso();
+  await put(info.nb, 1);
+  await give(0, [{ id: 'mkw', type: 'masterKey' }]);
+  await handCard('mkw');
+  let btns = await detailButtons();
+  check(/You will have no action left to go in/.test(await page.textContent('#hand-detail')) && btns.some(b => /^Open the Cloakroom door/.test(b.text) && !b.disabled),
+    `with one action and no Espresso the key can still be played, and the card warns there will be no action left to go in (${btns.map(b => b.text).join(' | ')})`);
+  await shot('hs-15-key-last-action-warning');
+  await give(0, [{ id: 'esw', type: 'espresso' }]);
+  await handCard('mkw');
+  check(!/no action left to go in/.test(await page.textContent('#hand-detail')), 'holding an Espresso, no warning (it gives the actions to go in)');
+  await noEspresso();
+  await put(info.nb, 2);
+  await handCard('mkw');
+  check(!/no action left to go in/.test(await page.textContent('#hand-detail')), 'with two actions, no warning');
+  // A barricaded locked door: the key is refused, and nothing is spent.
+  await game(d => { const g = window.__game; g.state.barricades.set(d, { by: g.state.players[3].id, placedTurn: g.state.turn }); g.refresh(); }, info.door);
+  await handCard('mkw');
+  btns = await detailButtons();
+  check(/Cloakroom door is barricaded/.test(await page.textContent('#hand-detail')) && btns.some(b => /^Open the Cloakroom door/.test(b.text) && b.disabled),
+    `on a barricaded door the button is greyed out, and the card says why (${btns.map(b => `${b.text}${b.disabled ? ' [off]' : ''}`).join(' | ')})`);
+  await shot('hs-16-key-barricaded-door');
+  await game(() => window.__game.unlock('mkw', 'cloakroom'));
+  check(/barricaded/.test(await page.textContent('#toast')) && await game(() => { const g = window.__game, p = g.activePlayer();
+    return p.actionPoints === 2 && p.hand.some(c => c.id === 'mkw') && g.lockedRooms().includes('cloakroom'); }),
+    'played anyway, it is refused: the key stays in hand, the actions too, the door stays locked');
+  // The door a key has open this turn shows an OPEN padlock; when it locks again, the closed one is back.
+  await game(() => { window.__game.state.barricades.clear(); window.__game.refresh(); });
+  await put(info.nb, 4);
+  const sign = () => game(d => { const v = window.__game.doorways.views.get(d); return { opened: v.openedNow, locked: v.locked, mark: v.mark.visible, mat: v.mark.material.uuid }; }, info.door);
+  const before = await sign();
+  await handCard('mkw');
+  await clickBtn('#hand-detail .btn', 'Open the Cloakroom door');
+  const during = await sign();
+  check(before.locked && before.mark && !before.opened, 'a locked door shows the closed padlock sign');
+  check(during.opened && !during.locked && during.mark && during.mat !== before.mat, `opened by the key, it shows an OPEN padlock sign: it will lock again (${JSON.stringify(during)})`);
+  await shot('hs-17-open-padlock-this-turn');
+  await tap('#btn-end-turn');
+  await intoTurn();
+  const after = await sign();
+  check(after.locked && !after.opened && after.mark && after.mat === before.mat, 'at the end of the turn it locks again, and the closed padlock is back');
+}
+
 console.log('\n11. practice is untouched');
 await load('');
 check(await game(() => window.__game.mode === 'practice' && window.__game.state.players.length === 1), 'the plain address is still one guest alone');

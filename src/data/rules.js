@@ -61,7 +61,8 @@ export const rules = {
   // --- Rooms ---------------------------------------------------------------------------------
   // The hotel itself — tile size, the room deck (incl. the 2 locked and the dark rooms), the lobby's
   // 3 or 4 doorways, the Fire Exit in the last five tiles — is in src/data/hotel.js.
-  lockPickChance: 0.5,      // a Lock Pick works half the time; discarded either way
+  lockPickChance: 0.5,      // a Lock Pick works half the time; discarded either way. A key or pick opens
+                            // one locked door until the end of that guest's turn (src/game/state.js)
   barricadeRounds: 1,       // a Barricade seals one doorway of your room until your next turn starts
 
   // Rooms with jobs (which tiles have them is in src/data/hotel.js, `job`).
@@ -93,9 +94,9 @@ export const rules = {
     barricade:  { name: 'Barricade',  glyph: '▤', tint: '#c89a6a', active: true,
                   desc: 'Seals one doorway of your room for one round. 1 action.' },
     lockPick:   { name: 'Lock Pick',  glyph: '⚹', tint: '#b8b09a', active: true, unlock: true,
-                  desc: 'Tries a locked room next door: works half the time. Used up either way. 1 action.' },
+                  desc: 'Use it next to a locked door: half the time it opens, for the rest of your turn. Used up either way. 1 action.' },
     masterKey:  { name: 'Master Key', glyph: '⚷', tint: '#e6cf8a', active: true, unlock: true,
-                  desc: 'Opens a locked room next door. Always works, then used up. 1 action.' },
+                  desc: 'Use it next to a locked door: it opens for the rest of your turn. Always works, then used up. 1 action.' },
     handMirror: { name: 'Hand Mirror', glyph: '◐', tint: '#b9c8d8', active: true,
                   desc: 'Choose a guest in your room: they show you their whole hand, in private. Used up. 1 action.' },
     espresso:   { name: 'Espresso',   glyph: '☕', tint: '#c08a5a', active: true, extraActions: 2,

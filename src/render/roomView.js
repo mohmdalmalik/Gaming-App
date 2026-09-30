@@ -180,7 +180,8 @@ function lockedDoorTexture() {
 }
 
 // The padlock sign over a locked door: a brass padlock on a dark round plate, readable from afar.
-function padlockTexture() {
+// `open`: the shackle lifted and swung aside — a locked door a key has opened for the rest of this turn.
+function padlockTexture(open = false) {
   const S = 128;
   const c = document.createElement('canvas');
   c.width = c.height = S;
@@ -190,7 +191,8 @@ function padlockTexture() {
   g.strokeStyle = '#c9a24e'; g.lineWidth = 5;
   g.beginPath(); g.arc(64, 64, 57, 0, Math.PI * 2); g.stroke();
   g.strokeStyle = '#b9bcc4'; g.lineWidth = 10; g.lineCap = 'round';          // steel shackle
-  g.beginPath(); g.moveTo(44, 62); g.lineTo(44, 44); g.arc(64, 44, 20, Math.PI, 0); g.lineTo(84, 62); g.stroke();
+  if (open) { g.beginPath(); g.moveTo(44, 48); g.lineTo(44, 30); g.arc(64, 30, 20, Math.PI, 0); g.lineTo(84, 40); g.stroke(); }
+  else { g.beginPath(); g.moveTo(44, 62); g.lineTo(44, 44); g.arc(64, 44, 20, Math.PI, 0); g.lineTo(84, 62); g.stroke(); }
   const grad = g.createLinearGradient(0, 58, 0, 104);                         // brass body
   grad.addColorStop(0, '#f0d27a'); grad.addColorStop(1, '#b08a36');
   g.fillStyle = grad;
@@ -210,7 +212,11 @@ const INTO = { north: [0, 1], south: [0, -1], east: [-1, 0], west: [1, 0] };   /
 // swings the leaf into the new room, and from then on it is an open doorway. A gold ring (a slow
 // pulse; the tests know it as `blink`) sits on the active guest's side of every door they can use
 // this turn — to open, or to walk through. A jammed door keeps its leaf, and no cue.
-export function createDoorwayViews(floor, cfg, scene, { isLocked = () => false } = {}) {
+// `isLocked(roomId)`: whether that room's door is locked right now. `standingIn()`: the room the active
+// guest stands in — a locked door opens for a guest INSIDE the locked room (the way out is always open;
+// the padlock stays on it, since it is still locked against anyone going in). `openedNow(roomId)`: that
+// room's door is locked, but a key has it open until the end of this turn (an open padlock hangs there).
+export function createDoorwayViews(floor, cfg, scene, { isLocked = () => false, standingIn = () => null, openedNow = () => false } = {}) {
   const views = new Map();
   const t = cfg.walls.thickness, H = cfg.walls.height;
   const warm = new THREE.Color(cfg.palette.frontier);
@@ -235,6 +241,7 @@ export function createDoorwayViews(floor, cfg, scene, { isLocked = () => false }
   const padShackleMat = new THREE.MeshBasicMaterial({ color: new THREE.Color('#9da0a8') });
   const lockGlowMat = new THREE.MeshBasicMaterial({ map: radial, color: new THREE.Color('#c0392b'), transparent: true, opacity: 0.35, depthWrite: false, toneMapped: false, blending: THREE.AdditiveBlending });
   const padlockMat = new THREE.SpriteMaterial({ map: padlockTexture(), transparent: true, depthTest: false, depthWrite: false, toneMapped: false });
+  const padlockOpenMat = new THREE.SpriteMaterial({ map: padlockTexture(true), transparent: true, depthTest: false, depthWrite: false, toneMapped: false });
   // (door leaves fade like the room models where they would hide the guest: xray.js)
   for (const m of [leafMat, leafJammedMat, knobMat, lockedMat, padBodyMat, padShackleMat]) applyXray(m);
   const LEAF_H = 2.02;
@@ -369,10 +376,12 @@ export function createDoorwayViews(floor, cfg, scene, { isLocked = () => false }
     strip.position.set(d.center[0], 0.02, d.center[1]);
     scene.add(strip);
     const { glow, blink } = makeCues(d);
-    // A doorway into a LOCKED room keeps a door in it — the locked kind, shut — until the room is
-    // opened with a key or a pick; then it swings open like any other. (A locked room revealed next
-    // to other rooms gets one in every doorway, even where no door was opened.)
-    const lockedNow = () => isLocked(d.a) || isLocked(d.b);
+    // A doorway into a LOCKED room keeps a door in it — the locked kind, shut — until the door is
+    // opened with a key or a pick; then it swings open like any other, and it swings shut again, padlock
+    // and all, when it locks again at the end of that turn. It also stands open (still padlocked) while
+    // the active guest is INSIDE the locked room: from inside the way out is always open.
+    const lockedRoom = () => (isLocked(d.a) ? d.a : isLocked(d.b) ? d.b : null);
+    const lockedNow = () => !!lockedRoom();
     if (!leaf && lockedNow()) leaf = makeLeaf({ ...d, side: d.sideA }, floor.rooms.get(d.a));
     // a red warning glow on the floor on the unlocked side
     const warn = new THREE.Mesh(unitPlane, lockGlowMat);
@@ -385,23 +394,34 @@ export function createDoorwayViews(floor, cfg, scene, { isLocked = () => false }
     mark.visible = false;
     scene.add(mark);
     const view = {
-      kind: 'open', doorway: d, strip, leaf, glow, blink, warn, mark, locked: null,
+      kind: 'open', doorway: d, strip, leaf, glow, blink, warn, mark, locked: null, shut: null, openedNow: false,
       sync() {
-        const locked = lockedNow();
-        if (locked === this.locked || !leaf) { warn.visible = !!locked; mark.visible = !!locked && !!leaf; return; }
-        this.locked = locked;
+        const inRoom = lockedRoom();
+        const locked = !!inRoom;
+        const shut = locked && standingIn() !== inRoom;     // open for the guest inside, shut to everyone else
+        // A key has this door open for the rest of the turn: an OPEN padlock hangs in front of it, so
+        // the scene shows it will lock again (the closed padlock comes back when it does).
+        const keyed = !locked && !!leaf ? (openedNow(d.a) ? d.a : openedNow(d.b) ? d.b : null) : null;
+        this.openedNow = !!keyed;
+        mark.material = keyed ? padlockOpenMat : padlockMat;
+        if (keyed) {
+          const [ix, iz] = INTO[d.sideFor(keyed === d.a ? d.b : d.a)];
+          mark.position.set(d.center[0] + ix * 0.45, 1.5, d.center[1] + iz * 0.45);
+        }
+        if ((locked === this.locked && shut === this.shut) || !leaf) { warn.visible = !!locked; mark.visible = (!!locked || !!keyed) && !!leaf; return; }
+        this.locked = locked; this.shut = shut;
         const u = leaf.userData;
         u.leaf.material = locked ? lockedMat : leafMat;
         u.knob.visible = !locked;
         for (const p of u.pads) p.visible = locked;
-        if (!locked && u.swing === 0) chooseHinge(leaf, u.room === d.a ? d.b : d.a);
-        u.target = locked ? 0 : 1;
-        u.locked = locked;
+        if (!shut && u.swing === 0) chooseHinge(leaf, u.room === d.a ? d.b : d.a);
+        u.target = shut ? 0 : 1;
+        u.locked = shut;
         warn.visible = locked;
-        mark.visible = locked;
+        mark.visible = locked || !!keyed;
         if (locked) {
           // the glow sits on the side of the room that is NOT locked
-          const openSide = isLocked(d.a) ? d.b : d.a;
+          const openSide = inRoom === d.a ? d.b : d.a;
           const [ix, iz] = INTO[d.sideFor(openSide)];
           const deep = 1.0;
           warn.scale.set(along ? d.width + 0.6 : deep, 1, along ? deep : d.width + 0.6);
@@ -458,6 +478,7 @@ export function createDoorwayViews(floor, cfg, scene, { isLocked = () => false }
         if (!leaf) continue;
         const u = leaf.userData;
         if (u.swing < u.target) u.swing = Math.min(u.target, u.swing + dt / 0.45);
+        else if (u.swing > u.target) u.swing = Math.max(u.target, u.swing - dt / 0.45);   // a door locking again swings shut
         // swing away from the room the door belongs to, into the room that was revealed
         leaf.rotation.y = swingAngle(u, easeOutCubic(u.swing));
         const rv = roomViews.get(u.room);

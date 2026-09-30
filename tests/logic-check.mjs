@@ -88,6 +88,7 @@ for (const doors of layouts) {
 
 console.log('\n400 generated hotels, opened door by door');
 let problems = [], closed = 0, walkOk = 0, exitWalk = 0, slowest = 0, placed = [], jobRooms = true, jobsSeen = 0;
+let lockedDead = true, lockedSeen = 0, exitPastLocks = 0, lockedByLobby = false;
 for (let seed = 1; seed <= 400; seed++) {
   resetHotel(floor, seed);
   const rng = makeRng(seed * 13 + 5);
@@ -110,6 +111,24 @@ for (let seed = 1; seed <= 400; seed++) {
   const path = exit && findPath(grid, start, nearestWalkable(grid, exit.center[0], exit.center[1], 1.5));
   if (path && roomSequence(grid, path).at(-1) === exit.id) exitWalk++;
   for (const r of floor.roomList) if (r.job !== (JOBS[r.id] || null)) jobRooms = false;
+  // Locked rooms: dead ends with a single doorway, never next to the lobby; the Fire Exit is reached
+  // from the lobby without ever passing through one (a locked tile counts as a wall).
+  for (const r of floor.roomList.filter(x => x.locked)) {
+    lockedSeen++;
+    if (r.doorways.length !== 1 || r.frontier.length || r.neighbours.size !== 1) lockedDead = false;
+    if (r.neighbours.has(floor.start.room)) lockedByLobby = true;
+  }
+  if (exit) {
+    const seen = new Set([floor.start.room]), queue = [floor.start.room];
+    while (queue.length) {
+      const here = queue.shift();
+      for (const d of floor.rooms.get(here).doorways) {
+        const n = d.otherRoom(here);
+        if (!seen.has(n) && !floor.rooms.get(n).locked) { seen.add(n); queue.push(n); }
+      }
+    }
+    if (seen.has(exit.id)) exitPastLocks++;
+  }
   jobsSeen += floor.roomList.filter(r => r.job).length;
 }
 check(closed === 0, 'the hotel never closed itself off before the Fire Exit was placed');
@@ -117,6 +136,9 @@ check(problems.length === 0, `no overlaps, every doorway has floor on both sides
 check(walkOk === 400, `every room of every hotel can be walked to from the lobby (${walkOk}/400)`);
 check(exitWalk === 400, `the Fire Exit can be walked to in every hotel (${exitWalk}/400)`);
 check(jobRooms && jobsSeen > 400 * 3, `every job room placed carries its job, and no other room has one (${jobsSeen} job rooms placed in 400 hotels)`);
+check(lockedDead && lockedSeen > 400, `every locked room placed is a dead end with a single doorway (${lockedSeen} placed)`);
+check(!lockedByLobby, 'a locked room never joins the lobby');
+check(exitPastLocks === 400, `the Fire Exit is never behind a locked room: reached from the lobby without passing one (${exitPastLocks}/400)`);
 const avg = placed.reduce((a, b) => a + b, 0) / placed.length;
 console.log(`       tiles placed when every door had been tried: average ${avg.toFixed(1)}, fewest ${Math.min(...placed)}; slowest walkable-grid rebuild ${slowest.toFixed(1)} ms`);
 check(slowest < 150, 'rebuilding the walkable grid after a door opens stays quick');

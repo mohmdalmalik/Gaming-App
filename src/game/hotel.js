@@ -10,7 +10,7 @@
 //   • one of its doorways meets the door that was opened;
 //   • every side that touches an existing room matches it: doorway meets doorway (they connect),
 //     wall meets wall — no doorway ever opens into a wall;
-//   • a locked room never joins the lobby (docs/GAME_RULES.md: never the lobby or a room next to it);
+//   • a locked room never joins the lobby (docs/GAME_RULES.md: "A locked room never joins the lobby");
 //   • until the Fire Exit is placed, the hotel must not close itself off: after placing, at least
 //     one reachable closed door must still lead to a cell with no other room around it, so the
 //     next tile — ultimately the Fire Exit — always fits somewhere.
@@ -255,8 +255,9 @@ function buildWalls(floor, room) {
 }
 
 // --- placing a tile behind a door -----------------------------------------------------------------
-// Does tile `def`, turned `rot` quarter turns, fit in `cell`? `ctx.isLocked(roomId)` says which
-// placed rooms are locked right now (they cannot be walked through).
+// Does tile `def`, turned `rot` quarter turns, fit in `cell`? (`ctx` is accepted for older callers
+// and no longer used: whether a room counts as a wall for growth is its tile's `locked` flag, never
+// its lock state right now — see keepsHotelOpen.)
 export function tileFits(floor, def, cell, rot, ctx = {}) {
   const sides = new Set(def.doors.map(s => turnSide(s, rot)));
   const [i, j] = cell;
@@ -272,18 +273,21 @@ export function tileFits(floor, def, cell, rot, ctx = {}) {
     if (def.locked && theirs && other.id === floor.start?.room) return false;   // never next to the lobby
   }
   if (!touchesSomething) return false;
-  if (!exitPlaced(floor) && !def.isExit && !keepsHotelOpen(floor, cell, sides, !!def.locked, ctx)) return false;
+  if (!exitPlaced(floor) && !def.isExit && !keepsHotelOpen(floor, cell, sides, !!def.locked)) return false;
   return true;
 }
 
 // Would the hotel still have somewhere to grow if a tile with doorways `sides` went into `cell`?
 // True when a room reachable from the lobby (not through a locked room) keeps a closed door into a
-// cell that has no other room around it — any tile, the Fire Exit included, fits there.
-function keepsHotelOpen(floor, cell, sides, newLocked, ctx) {
+// cell that has no other room around it — any tile, the Fire Exit included, fits there. A locked
+// TILE counts as a wall whether its door is locked right now or not (its door locks again at the end
+// of a turn), so a door locking again can never cut the hotel off. (Locked tiles are dead ends with
+// a single doorway, so nothing is ever reached only through one anyway.)
+function keepsHotelOpen(floor, cell, sides, newLocked) {
   const newKey = key(cell[0], cell[1]);
   const occupied = (i, j) => floor.cells.has(key(i, j)) || key(i, j) === newKey;
   const doorsOf = (i, j) => key(i, j) === newKey ? sides : roomAtCell(floor, i, j)?.doorSides;
-  const locked = (i, j) => key(i, j) === newKey ? newLocked : !!ctx.isLocked?.(roomAtCell(floor, i, j)?.id);
+  const locked = (i, j) => key(i, j) === newKey ? newLocked : !!roomAtCell(floor, i, j)?.locked;
   const jammed = (i, j, side) => key(i, j) !== newKey && roomAtCell(floor, i, j).frontier.some(d => d.side === side && d.jammed);
   const start = floor.rooms.get(floor.start.room).cell;
   const seen = new Set([key(...start)]);

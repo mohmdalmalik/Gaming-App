@@ -140,13 +140,15 @@ export function createMap(doc, floor, cfg) {
     const outward = { north: [0, -1], south: [0, 1], east: [1, 0], west: [-1, 0] };
     for (const d of floor.doorways) {
       const lockedRoom = isLocked(state, d.a) ? d.a : isLocked(state, d.b) ? d.b : null;
+      // a locked door a key opened this turn: an open padlock (it locks again when the turn ends)
+      const openedNow = !lockedRoom && (state.openLocks?.has(d.a) || state.openLocks?.has(d.b));
       const sealed = isBarricaded(state, d.id);
-      doorLine(d, sealed ? '#cf6a5c' : lockedRoom ? '#c9a24e' : 'rgba(239,231,214,0.35)');
-      if (sealed || lockedRoom) {
+      doorLine(d, sealed ? '#cf6a5c' : lockedRoom ? '#c9a24e' : openedNow ? '#c9a24e' : 'rgba(239,231,214,0.35)', openedNow && !sealed ? [4, 3] : []);
+      if (sealed || lockedRoom || openedNow) {
         // on the doorway itself, on a small dark disc (not inside the room, where its name is)
         ctx.fillStyle = 'rgba(20,16,12,0.92)'; ctx.strokeStyle = sealed ? '#cf6a5c' : '#c9a24e'; ctx.lineWidth = 1.5;
         ctx.beginPath(); ctx.arc(X(d.center[0]), Z(d.center[1]), 11, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
-        mark(sealed ? '▬' : '🔒', d.center[0], d.center[1], sealed ? '#f0b4ae' : BRASS_BRIGHT);
+        mark(sealed ? '▬' : lockedRoom ? '🔒' : '🔓', d.center[0], d.center[1], sealed ? '#f0b4ae' : BRASS_BRIGHT);
       }
     }
     // Closed doors: a solid brass door with a "?" beyond it (still to be opened); a jammed door is

@@ -3537,8 +3537,7 @@
     "ambient": 0.6
    },
    "doors": [
-    "south",
-    "east"
+    "south"
    ],
    "walls": [
     {
@@ -3562,23 +3561,11 @@
      ],
      "max": [
       4,
-      -0.6
-     ]
-    },
-    {
-     "id": "cloakroom:east:2",
-     "side": "east",
-     "min": [
-      3.85,
-      0.6
-     ],
-     "max": [
-      4,
       3.85
      ]
     },
     {
-     "id": "cloakroom:south:3",
+     "id": "cloakroom:south:2",
      "side": "south",
      "min": [
       -4,
@@ -3590,7 +3577,7 @@
      ]
     },
     {
-     "id": "cloakroom:south:4",
+     "id": "cloakroom:south:3",
      "side": "south",
      "min": [
       0.6,
@@ -3602,7 +3589,7 @@
      ]
     },
     {
-     "id": "cloakroom:west:5",
+     "id": "cloakroom:west:4",
      "side": "west",
      "min": [
       -4,
@@ -3615,15 +3602,6 @@
     }
    ],
    "doorways": [
-    {
-     "side": "east",
-     "axis": "z",
-     "center": [
-      4,
-      0
-     ],
-     "width": 1.2
-    },
     {
      "side": "south",
      "axis": "x",
@@ -3686,8 +3664,8 @@
     {
      "kind": "tuftedBench",
      "center": [
-      2.9,
-      2.2
+      3.45,
+      2.4
      ],
      "size": [
       0.65,

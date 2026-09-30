@@ -222,10 +222,12 @@ function heal(c, below) {
   const b = c.has('bandage');
   return b ? { k: 'card', type: 'bandage', card: b.id } : null;
 }
+// A key opens a locked door only until the end of this turn (docs/GAME_RULES.md), so it is played only
+// with an action left to step in straight after.
 function unlockNear(c) {
   const key = c.has('masterKey') || c.has('lockPick');
-  if (!key) return null;
-  const lockedNext = (c.here?.doors || []).map(d => c.rooms.get(d.to)).filter(r => r && r.locked && !r.searched);
+  if (!key || c.me.ap < 2) return null;
+  const lockedNext = (c.here?.doors || []).filter(d => !d.barricaded).map(d => c.rooms.get(d.to)).filter(r => r && r.locked && !r.searched);
   return lockedNext.length ? { k: 'card', type: key.type, card: key.id, target: lockedNext[0].id } : null;
 }
 function mirror(c) {

@@ -507,6 +507,7 @@ html, body {
 .hand-detail .d-line b { color: var(--brass-bright); font-weight: 700; }
 .hand-detail .d-desc { font-size: 14.5px; line-height: 1.5; color: var(--ivory); }
 .hand-detail .d-tag { font-size: 13px; line-height: 1.4; color: var(--ivory-dim); }
+.hand-detail .d-tag.d-warn { color: var(--brass-bright); }   /* a card that can be played, but would be wasted */
 .hand-detail .d-empty { color: var(--muted); font-size: 15px; margin: auto 0; }
 .hand-detail .btn { align-self: flex-start; }
 /* Hand Mirror: one short name button per guest in the room, wrapping two or three to a row. */

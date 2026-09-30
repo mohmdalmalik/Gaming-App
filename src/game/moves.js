@@ -4,16 +4,20 @@
 import { findPath, smoothPath, roomSequence, nearestWalkable } from './grid.js';
 import { canAffordRoute, doorwayPassable } from './state.js';
 
-// Cells the player may use right now: discovered rooms, plus a step inside any undiscovered
-// room that a discovered doorway leads to (its "landing"). A doorway that cannot be passed — a
-// barricade, or a door into a locked room — has the cells just inside it on BOTH sides taken
-// away, so no route can thread through the opening.
-export function buildAllowed(state, floor, grid) {
+// Cells `player` (by default the active guest) may use right now: discovered rooms, plus a step
+// inside any undiscovered room that a discovered doorway leads to (its "landing"). A doorway that
+// cannot be passed — a barricade, or a locked door into a locked room — has the cells just inside it
+// on BOTH sides taken away, so no route can thread through the opening. A locked door only stops
+// guests going in: for a guest standing INSIDE the locked room it is the way out, and stays open.
+export function buildAllowed(state, floor, grid, player = state.players?.[state.activeIndex]) {
   const frontier = new Set();
   const sealed = new Set();
+  const from = player?.currentRoom ?? null;
   for (const d of floor.doorways) {
     const landings = grid.landings.get(d.id) || {};
-    if (!doorwayPassable(state, d)) {
+    // (a guest who is in neither room of this doorway can only reach it from outside a locked room)
+    const side = from === d.a || from === d.b ? from : null;
+    if (!doorwayPassable(state, d, side)) {
       for (const idx of landings[d.a] || []) sealed.add(idx);
       for (const idx of landings[d.b] || []) sealed.add(idx);
       continue;

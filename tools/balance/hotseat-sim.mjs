@@ -140,6 +140,22 @@ function spend(st, p, m, cost) {
 const ready = p => (p.actionPoints > 0 || !hasEspresso(p) ? p
   : { ...p, actionPoints: rules.cards.espresso.extraActions - rules.actionCost.espresso });
 
+// Locked doors (docs/GAME_RULES.md): a Master Key or Lock Pick opens the door of a locked room next
+// door only until the end of this turn, then it locks again; a guest inside can always walk out. So a
+// bot plays a key only with the actions to step straight in (the key, then the move), and does.
+const canStepIn = p => p.actionPoints >= rules.actionCost.useCard + rules.actionCost.move || hasEspresso(p);
+// Returns true when the match ended (it cannot here, but keeps the callers' shape).
+function unlockAndEnter(st, p, m, opener, roomId) {
+  const r = A.useUnlock(st, floor, p, opener.id, roomId);
+  m.unlocks = (m.unlocks || 0) + 1;
+  if (!r.ok || !r.opened) return false;
+  m.unlocked = (m.unlocked || 0) + 1;
+  if (!spend(st, p, m, rules.actionCost.move)) return false;
+  S.enterRoom(st, floor, p, roomId);
+  meet(st, p, m);
+  return !!st.finished;
+}
+
 // Shortest room path, honouring locked rooms and barricades. A locked room is allowed only as the
 // final step when the bot can open it.
 function pathTo(st, from, targets, canOpen = false) {
@@ -403,8 +419,13 @@ function botTurn(st, p, m) {
         takeFinds(st, p, A.search(st, floor, p), m);
         continue;
       }
-      const lockedNear = S.adjacentLockedRooms(st, floor, p).filter(r => !st.searchedRooms.has(r));
-      if (lockedNear.length && opener && spend(st, p, m, rules.actionCost.useCard)) { A.useUnlock(st, floor, p, opener.id, lockedNear[0]); continue; }
+      // A key opens a locked door only until the end of this turn: used only when I can step in now.
+      const lockedNear = S.adjacentLockedRooms(st, floor, p)
+        .filter(r => !st.searchedRooms.has(r) && !S.isBarricaded(st, S.doorBetween(floor, here, r)?.id));   // (a barricaded door: refused)
+      if (lockedNear.length && opener && canStepIn(p) && spend(st, p, m, rules.actionCost.useCard)) {
+        if (unlockAndEnter(st, p, m, opener, lockedNear[0])) return;
+        continue;
+      }
       // The Switchboard, once the room is searched, with an action to spare (never an Espresso for it).
       if (room.job === 'switchboard' && worthRinging(st, p) && A.canUseRoom(st, floor, p).ok) { ring(st, p, m); continue; }
       const clinic = infirmaryNear(st, p);
@@ -450,7 +471,10 @@ function botTurn(st, p, m) {
     const path = pathTo(st, here, targets, !!opener);
     const step = path && path.length > 1 ? path[1] : null;
     if (!step) { m.stuckTurns++; break; }
-    if (S.isLocked(st, step)) { if (opener && spend(st, p, m, rules.actionCost.useCard)) { A.useUnlock(st, floor, p, opener.id, step); continue; } break; }
+    if (S.isLocked(st, step)) {
+      if (opener && canStepIn(p) && spend(st, p, m, rules.actionCost.useCard)) { if (unlockAndEnter(st, p, m, opener, step)) return; continue; }
+      break;
+    }
     if (!spend(st, p, m, rules.actionCost.move)) break;
     S.enterRoom(st, floor, p, step);
     // In the Fire Exit with three Lanterns: Escape (1 AP) — or next turn, if this move used the last one.

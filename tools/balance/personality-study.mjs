@@ -152,7 +152,7 @@ function playMatch(seed, players, assign, ov = {}) {
       case 'move': {
         const room = floor.rooms.get(p.currentRoom);
         const d = room.doorways.find(x => x.id === a.door);
-        if (!d || d.otherRoom(p.currentRoom) !== a.to || !S.doorwayPassable(st, d)) return false;
+        if (!d || d.otherRoom(p.currentRoom) !== a.to || !S.doorwayPassable(st, d, p.currentRoom)) return false;
         if (!S.canAffordRoute(st, floor, p, [p.currentRoom, a.to]).ok) return false;
         S.enterRoom(st, floor, p, a.to);
         s.moves++;

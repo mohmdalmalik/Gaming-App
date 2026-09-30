@@ -268,6 +268,17 @@ console.log('\n7b. locked rooms look locked');
       info: views.map(v => [v.leaf.userData.swing.toFixed(2), v.leaf.userData.target, v.locked, v.warn.visible, v.leaf.userData.pads.map(p => p.visible)]) };
   });
   check(u.ok, `once it is opened, the door swings open and the padlocks go ${u.ok ? '' : JSON.stringify(u.info)}`);
+  // The door locks again (the end of the opener's turn): it swings shut, padlocks back on.
+  await game(() => { const g = window.__game; g.state.lockedRooms.add('cloakroom'); g.refresh(); g.doorways.sync(); });
+  await page.waitForFunction(() => [...window.__game.doorways.views.values()]
+    .filter(v => v.kind === 'open' && [v.doorway.a, v.doorway.b].includes('cloakroom'))
+    .every(v => v.leaf.userData.swing < 0.05), null, { timeout: 8000 }).catch(() => {});
+  const re = await game(() => { const g = window.__game;
+    const views = [...g.doorways.views.values()].filter(v => v.kind === 'open' && [v.doorway.a, v.doorway.b].includes('cloakroom'));
+    return { ok: views.every(v => v.leaf.userData.swing < 0.05 && v.leaf.userData.target === 0 && v.leaf.userData.pads.every(p => p.visible) && v.warn.visible),
+      info: views.map(v => [v.leaf.userData.swing.toFixed(2), v.leaf.userData.target, v.locked, v.warn.visible]) };
+  });
+  check(re.ok, `when it locks again, the door swings shut and the padlocks come back ${re.ok ? '' : JSON.stringify(re.info)}`);
 }
 
 console.log('\n8. console');

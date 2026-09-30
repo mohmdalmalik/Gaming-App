@@ -12,7 +12,7 @@ import { buildGrid } from './game/grid.js';
 import {
   createState, resetState, endTurn, activePlayer, nextPlayer, checkWin, canEscape,
   usableDoorways, openableDoors, pendingEncounters, lockEncounter, playersInRoom, isLocked,
-  isBarricaded, canTradeVoluntarily,
+  isBarricaded, canTradeVoluntarily, lockedAgainst,
 } from './game/state.js';
 import {
   search, canSearch, escape, useBandage, useUnlock, useBarricade, resolveFullHand, resolveTrade, resolveAttack,
@@ -100,7 +100,13 @@ function trackDressing(promise) {
   promise.catch(err => console.warn('room dressing failed:', err && err.message))
     .finally(() => { dressing.delete(promise); if (!dressing.size) dressingDone = true; });
 }
-const doorways = createDoorwayViews(floor, cfg, view.scene, { isLocked: id => !!state?.lockedRooms?.has(id) });
+const doorways = createDoorwayViews(floor, cfg, view.scene, {
+  isLocked: id => !!state?.lockedRooms?.has(id),
+  // a locked door stands open for the active guest while they are inside that room (the way out)
+  standingIn: () => (state && !state.finished ? activePlayer(state)?.currentRoom : null),
+  // a locked door a key has opened until the end of this turn (an open padlock hangs in front of it)
+  openedNow: id => !!state?.openLocks?.has(id),
+});
 const characters = cast.map(def => createCharacterView(def, cfg, view.scene));
 const searchMarks = createSearchMarks(floor, view.scene);
 const pathPreview = createPathPreview(view.scene, view.camera, view.renderer.domElement, container);
@@ -250,8 +256,14 @@ function beginTurn() {
   });
 }
 
+// Hot-seat: a locked door that locked again as the last turn ended is announced once the next guest's
+// action phase starts (the hand-over screens cover the toast before that).
+let lockNews = '';
 function openPrivateTurn(p) {
-  handoff.privateTurn(state, floor, p, { onStart: () => { inActionPhase = true; startTimer(); refresh(); } });
+  handoff.privateTurn(state, floor, p, { onStart: () => {
+    inActionPhase = true; startTimer(); refresh();
+    if (lockNews) { hud.toast(lockNews); lockNews = ''; }
+  } });
 }
 
 // --- Turn timer --------------------------------------------------------------------------
@@ -289,15 +301,17 @@ function passTurn() {
   stopTimer();
   const result = endTurn(state, floor);
   if (PRACTICE) endTurnGuardUntil = performance.now() + END_TURN_GUARD_MS;   // (hot-seat: the pass screen catches it)
+  // A locked door opened this turn has locked again (its door swings shut in syncViews below).
+  const relocked = (result.relocked || []).map(id => `The ${floor.rooms.get(id)?.name ?? 'locked room'} door has locked again.`).join(' ');
   movers[result.from.index]?.halt();
   syncViews(false);
   if (result.finished) { refresh(); showEnd(); return; }
   if (checkWin(state, floor)) { refresh(); showEnd(); return; }
-  if (HOTSEAT) { beginTurn(); return; }
+  if (HOTSEAT) { lockNews = relocked; beginTurn(); return; }
   rig.setFocus(...followPoint());
   mood.snap(activePlayer(state).currentRoom);
   refresh();
-  hud.toast(`Turn ${state.turn} — ${rules.actionPointsPerTurn} action points.`);
+  hud.toast(`Turn ${state.turn} — ${rules.actionPointsPerTurn} action points.${relocked ? ` ${relocked}` : ''}`);
 }
 
 // End the turn, forcing the hand-limit discard first if it applies.
@@ -578,9 +592,15 @@ function onUseBandage(cardId) {
 
 function onUnlock(cardId, roomId) {
   const r = useUnlock(state, floor, activePlayer(state), cardId, roomId);
-  if (!r.ok) { hud.toast(r.reason === 'ap' ? 'No action points left.' : 'Cannot use that here.'); return; }
-  const name = floor.rooms.get(roomId)?.name ?? 'the room';
-  hud.toast(r.opened ? `${name} is open.` : `The lock pick snapped. ${name} stays locked.`);
+  const name = floor.rooms.get(roomId)?.name ?? 'locked room';
+  if (!r.ok) {
+    hud.toast(r.reason === 'ap' ? 'No action points left.'
+      : r.reason === 'sealed' ? `The ${name} door is barricaded: a key or pick cannot get you through it until the barricade comes down.`
+        : 'Cannot use that here.');
+    return;
+  }
+  hud.toast(r.opened ? `The ${name} door is open until the end of your turn.`
+    : `The lock pick snapped. The ${name} door stays locked.`);
   hand.close();
   syncViews(false); refresh();
 }
@@ -938,9 +958,8 @@ function tapGroundPoint(p) {
   // 1b. A door that is there but cannot be used: say why.
   const blocked = doorwayNear(p.x, p.z, player);
   if (blocked) {
-    const dest = blocked.otherRoom(player.currentRoom);
     hud.toast(isBarricaded(state, blocked.id) ? 'That doorway is barricaded.'
-      : isLocked(state, dest) ? 'That door is locked — a Master Key or Lock Pick opens it from here.'
+      : lockedAgainst(state, blocked, player.currentRoom) ? 'That door is locked. A Master Key or Lock Pick used here opens it for the rest of your turn.'
         : 'Not enough action points to go through.');
     return;
   }
@@ -1107,6 +1126,7 @@ window.__game = {
   possessedIndexes: () => state.players.filter(p => p.possessed).map(p => p.index),
   lanterns: () => activePlayer(state).hand.filter(c => c.type === 'lantern').length,
   lockedRooms: () => [...state.lockedRooms],
+  openLocks: () => [...state.openLocks.keys()],       // locked doors a key opened this turn
   canEscape: () => canEscape(state, floor, activePlayer(state)),
   escape: () => onRoom(),
   openHand: () => hand.open(state, floor),

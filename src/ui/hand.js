@@ -3,7 +3,7 @@
 // card in the hand fan (src/ui/handFan.js) or the "Private details" link; ‹ › step through the hand.
 // Private to whoever holds the device: it shows their Lanterns, their Possession cards and who they
 // have unmasked. Tap outside the panel, or Close, to put it away.
-import { activePlayer, adjacentLockedRooms, isBarricaded, playersInRoom } from '../game/state.js';
+import { activePlayer, adjacentLockedRooms, isBarricaded, playersInRoom, doorBetween, moveCostInto } from '../game/state.js';
 import { rules } from '../data/rules.js';
 import { CARDS, countableCount } from '../game/cards.js';
 import { bigCard, sortHand, cardDesc } from './cards.js';
@@ -104,10 +104,18 @@ export function createHand(doc, cfg, { onUseBandage, onUnlock, onBarricade, onEs
     }
     if (meta.unlock) {
       const targets = adjacentLockedRooms(state, floor, p);
-      if (!targets.length) { line('No locked room next door to use it on.', 'd-tag'); return; }
+      if (!targets.length) { line('No locked door next to you to use it on.', 'd-tag'); return; }
       if (noAp) line('No actions left this turn.', 'd-tag');
       for (const roomId of targets) {
-        actionBtn(`Open ${floor.rooms.get(roomId)?.name ?? roomId} · ${rules.actionCost.useCard} action`, noAp, () => onUnlock(card.id, roomId));
+        const name = floor.rooms.get(roomId)?.name ?? roomId;
+        // A barricaded door stays shut to everyone until the door has locked again: the card would be wasted.
+        const sealed = isBarricaded(state, doorBetween(floor, p.currentRoom, roomId)?.id);
+        if (sealed) line(`The ${name} door is barricaded: no key or pick can get you through it until the barricade comes down.`, 'd-tag');
+        // Allowed, but the door locks again when the turn ends: say so when there is no action left to go in.
+        else if (!noAp && p.actionPoints - rules.actionCost.useCard < moveCostInto(state, roomId) && !p.hand.some(c => c.type === 'espresso')) {
+          line('You will have no action left to go in: the door locks again when your turn ends.', 'd-tag d-warn');
+        }
+        actionBtn(`Open the ${name} door · ${rules.actionCost.useCard} action`, noAp || sealed, () => onUnlock(card.id, roomId));
       }
       return;
     }

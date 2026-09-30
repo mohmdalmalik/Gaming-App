@@ -57,7 +57,8 @@ export function resetState(state, floor, seed) {
   if (possessedIndex >= 0) state.players[possessedIndex].hand.push(...buildPossessionSupply());
 
   state.roomDrops = new Map();           // roomId -> cards lying on the floor (a dead guest's hand)
-  state.lockedRooms = new Set();         // the locked tiles, from the moment they are revealed
+  state.lockedRooms = new Set();         // locked rooms whose (single) door is locked right now
+  state.openLocks = new Map();           // roomId -> { by, turn, doorway }: unlocked until the end of `by`'s turn
   state.barricades = new Map();          // doorwayId -> { by: playerId, until: turn number }
   state.switchboardCalls = new Map();    // playerId -> the turn they last rang the Switchboard
 
@@ -82,8 +83,51 @@ export function logPublic(state, text) {
 }
 
 // --- Rooms: locked doors and barricades --------------------------------------------------------
+// A locked room (a tile with `locked`, src/data/hotel.js) has a SINGLE doorway, and its door is locked
+// from the moment the room is revealed. So the lock is kept per locked room — "the door of room X" —
+// and it is always exactly one door: the one between the locked room and its only neighbour.
+//   state.lockedRooms  the locked rooms whose door is locked right now;
+//   state.openLocks    roomId -> { by, turn, doorway }: a door a Master Key or Lock Pick opened. It
+//                      stays open until the end of the turn of the guest who opened it (relockDoors,
+//                      called by endTurn), then locks again.
+// A locked door only stops guests going IN: a guest inside can always walk out (doorwayPassable /
+// canAffordRoute are direction-aware), and the door stays locked behind them.
 export const isLocked = (state, roomId) => state.lockedRooms?.has(roomId) ?? false;
-export function unlockRoom(state, roomId) { state.lockedRooms.delete(roomId); }
+
+// The door between room `fromRoom` and the room `roomId` next to it, or null: for a locked room, the
+// door a Master Key or Lock Pick played from `fromRoom` works on.
+export function doorBetween(floor, fromRoom, roomId) {
+  return (floor.rooms.get(fromRoom)?.doorways || []).find(d => d.otherRoom(fromRoom) === roomId) || null;
+}
+
+// A Master Key or Lock Pick worked: `player` opened the door of locked room `roomId`. It stays open
+// until the end of their turn. (Called without a player — tests, debugging — it stays open for good.)
+export function unlockRoom(state, roomId, player = null, doorwayId = null) {
+  state.lockedRooms.delete(roomId);
+  if (player) state.openLocks?.set(roomId, { by: player.id, turn: state.turn, doorway: doorwayId });
+}
+
+// Called as a turn ends (endTurn, after the turn counter moves on): every door opened during the
+// turn that has just ended locks again. Only the active guest can play a key, so these are exactly
+// the doors "the guest who unlocked it" opened this turn. Returns the rooms locked again.
+export function relockDoors(state) {
+  const relocked = [];
+  for (const [roomId, u] of state.openLocks || []) {
+    if (u.turn >= state.turn) continue;
+    state.openLocks.delete(roomId);
+    state.lockedRooms.add(roomId);
+    relocked.push(roomId);
+  }
+  return relocked;
+}
+
+// Is this doorway's door locked against a guest going through it from `fromRoom`? Only going IN to a
+// locked room is stopped; from inside, the way out is always open. Without `fromRoom` (no particular
+// guest), a locked door counts as shut both ways.
+export function lockedAgainst(state, doorway, fromRoom = null) {
+  if (fromRoom == null) return isLocked(state, doorway.a) || isLocked(state, doorway.b);
+  return isLocked(state, doorway.otherRoom(fromRoom));
+}
 
 export const isBarricaded = (state, doorwayId) => !!state.barricades?.has(doorwayId);
 // A Barricade stands until the guest who placed it starts their next turn.
@@ -100,11 +144,12 @@ export function expireBarricades(state) {
   }
 }
 
-// Can `player` step through this doorway right now?
-export function doorwayPassable(state, doorway) {
+// Can a guest standing in `fromRoom` step through this doorway right now? A barricade stops everyone,
+// both ways; a locked door stops only guests going in (see lockedAgainst). Without `fromRoom`, a locked
+// door counts as shut both ways.
+export function doorwayPassable(state, doorway, fromRoom = null) {
   if (isBarricaded(state, doorway.id)) return false;
-  if (isLocked(state, doorway.a) || isLocked(state, doorway.b)) return false;
-  return true;
+  return !lockedAgainst(state, doorway, fromRoom);
 }
 
 // Entering a room costs the move. Every room costs the same, new or known.
@@ -135,6 +180,7 @@ export function canAffordRoute(state, floor, player, roomSequence) {
   const { transitions, cost } = routeCost(state, floor, roomSequence);
   if (state.finished) return { ok: false, cost, transitions, reason: 'finished' };
   if (!player.alive) return { ok: false, cost, transitions, reason: 'dead' };
+  // Going INTO a locked room is refused; walking out of one (the first room of the route) never is.
   for (let i = 1; i < roomSequence.length; i++) {
     if (roomSequence[i] !== roomSequence[i - 1] && isLocked(state, roomSequence[i])) {
       return { ok: false, cost, transitions, reason: 'locked' };
@@ -159,7 +205,8 @@ export function enterRoom(state, floor, player, roomId) {
 }
 
 // Pass control to the next living guest and refill their action points. A new lap round the
-// table increments the round and clears the per-room meeting locks.
+// table increments the round and clears the per-room meeting locks. A locked door opened this turn
+// locks again (`relocked` lists those rooms).
 export function endTurn(state, floor) {
   const from = activePlayer(state);
   const to = nextPlayer(state);
@@ -168,8 +215,10 @@ export function endTurn(state, floor) {
   state.activeIndex = to.index;
   to.actionPoints = rules.actionPointsPerTurn;
   state.turn += 1;
+  const relocked = relockDoors(state);
+  for (const id of relocked) logPublic(state, `The ${floor?.rooms.get(id)?.name ?? 'locked room'} door locked again.`);
   expireBarricades(state);
-  return { from, to, finished: false, round: state.round };
+  return { from, to, finished: false, round: state.round, relocked };
 }
 
 // --- Escape and winning -----------------------------------------------------------------------
@@ -205,11 +254,11 @@ export function checkWin(state, floor) {
 // --- Rooms & doorways --------------------------------------------------------------------
 
 // Doorways the active guest can step through this turn: affordable, not barricaded, not into a
-// locked room.
+// locked room (the way out of a locked room is always usable).
 export function usableDoorways(state, floor, player) {
   if (state.finished || !player.alive) return [];
   return (floor.rooms.get(player.currentRoom)?.doorways || [])
-    .filter(d => doorwayPassable(state, d) && player.actionPoints >= moveCostInto(state, d.otherRoom(player.currentRoom)));
+    .filter(d => doorwayPassable(state, d, player.currentRoom) && player.actionPoints >= moveCostInto(state, d.otherRoom(player.currentRoom)));
 }
 
 // Closed doors, anywhere in the hotel: the places still to be explored.
@@ -226,7 +275,8 @@ export function openableDoors(state, floor, player) {
 
 export const isDiscovered = (state, roomId) => state.discovered.has(roomId);
 
-// Locked rooms next door to where the guest is standing (where a key or pick could be used).
+// Locked rooms next door to where the guest is standing (where a key or pick could be used on the door
+// between them).
 export function adjacentLockedRooms(state, floor, player) {
   const room = floor.rooms.get(player.currentRoom);
   return [...(room?.neighbours || [])].filter(id => isLocked(state, id));

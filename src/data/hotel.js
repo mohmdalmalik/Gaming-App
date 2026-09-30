@@ -98,7 +98,9 @@ export const hotel = {
 
   // THE ROOM DECK: 24 tiles. 1 Fire Exit, 2 locked rooms, 5 dark rooms, 5 rooms with jobs
   // (2 Linen Stores, 2 Infirmaries, 1 Switchboard), the rest ordinary rooms and corridors.
-  // Doorways: 4 crossings, 7 T-junctions, 4 straight, 4 corners, 4 dead ends + the exit (a dead end).
+  // Doorways: 4 crossings, 7 T-junctions, 4 straight, 3 corners, 5 dead ends + the exit (a dead end).
+  // The 2 locked rooms (`locked`: the Cloakroom and Guest Suite 416) are both dead ends: a locked room
+  // has a single doorway, and its door is locked from the moment it is revealed (docs/GAME_RULES.md).
   tiles: [
     // --- four-way ------------------------------------------------------------------------------
     // (Layouts follow the owner's reference images, tools/room-pipeline/ref/<room>.jpg.)
@@ -163,13 +165,17 @@ export const hotel = {
         at('stool', 3.1, -2.4, 0.55, 0.6, 0.55), at('trayCabinet', 3.5, 2.0, 0.6, 0.85, 0.9), at('plant', 3.45, 3.2, 0.55, 1.2, 0.55)],
       colors: { infirmaryBed: { color: '#e4e2dc' }, medicineCabinet: { color: '#d8e2e4', emissive: '#3a0c0c' } } },
 
-    // --- corners (north and west are walls) ------------------------------------------------------
+    // --- corners (north and west are walls) — and the Cloakroom, a dead end --------------------------
     { id: 'backCorridor', name: 'Back Stairs Passage', short: 'Back Stairs', doors: CORNER, searchPoint: 'the stacked crates', dark: true, mood: FLICKER,
       furniture: [at('crates', -2.9, -3.2, 1.6, 1.55, 1.3), at('platformCart', -3.3, -1.6, 1.0, 1.05, 1.2),
         searchSpot(at('crates2', 0.0, -3.3, 1.7, 1.25, 1.1)), at('crate', 1.75, -3.45, 0.75, 0.8, 0.75), at('canisters', 2.95, -3.5, 1.1, 0.8, 0.6)] },
-    { id: 'cloakroom', name: 'Cloakroom', doors: CORNER, searchPoint: 'the coat rail', locked: true, mood: QUIET,
+    // A DEAD END, though it is listed here (where it was a corner) so the seeded room deck shuffles as
+    // before. Locked: its one doorway holds the locked door (the game draws its usual single padlocked
+    // door there, not the double front door of the reference picture). The east wall that once had a
+    // second doorway is solid now; the tufted bench stands against it.
+    { id: 'cloakroom', name: 'Cloakroom', doors: DEAD, searchPoint: 'the coat rail', locked: true, mood: QUIET,
       furniture: [searchSpot(at('rail', -1.2, -3.5, 2.3, 1.95, 0.7)), at('rail', -3.5, -0.5, 0.7, 1.95, 2.8), at('plant', -3.35, -3.35, 0.6, 1.3, 0.6),
-        at('console', 2.2, -3.6, 1.5, 0.82, 0.45), at('tuftedBench', 2.9, 2.2, 0.65, 0.47, 1.4)] },
+        at('console', 2.2, -3.6, 1.5, 0.82, 0.45), at('tuftedBench', 3.45, 2.4, 0.65, 0.47, 1.4)] },
     { id: 'cornerCorridor', name: 'Corner Corridor', short: 'Corner Corr.', doors: CORNER, searchPoint: 'the window seat', mood: CORRIDOR,
       furniture: [searchSpot(at('windowSeat', -3.1, -2.8, 1.3, 0.82, 1.3)), at('plant', -3.45, 3.35, 0.55, 1.2, 0.55), at('console', 1.6, -3.6, 1.5, 0.82, 0.45)] },
     // Room with a job: 1 AP to restore 2 health (maximum 3).

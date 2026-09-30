@@ -369,11 +369,35 @@ check((await page.textContent('#hand-detail')).includes('Open '), 'a Master Key 
 await page.click('#hand-detail .btn.primary');
 await page.waitForTimeout(150);
 check(await game(l => !window.__game.state.lockedRooms.has(l), locked), 'the room is unlocked');
+check(/door is open until the end of your turn/.test(await page.textContent('#toast')), 'and says it is open until the end of your turn');
 check(!(await visible('#hand-overlay')) && !(await fanIds()).includes('mk'), 'the used-up key leaves the hand and the card view closes');
 check(await game(() => window.__game.activePlayer().actionPoints) === 3, 'for 1 action point');
 await game(l => window.__game.moveToRoom(l), locked);
 await settle();
 check(await game(() => window.__game.activePlayer().currentRoom) === locked, 'and can now be entered');
+
+console.log('\n5a. the door locks again at the end of the turn; the guest inside can still walk out');
+{
+  const lockDoor = await game(l => window.__game.floor.rooms.get(l).doorways[0].id, locked);
+  const doorView = () => game(d => { const v = window.__game.doorways.views.get(d), u = v.leaf.userData;
+    return { locked: v.locked, shut: v.shut, swing: u.swing, target: u.target, pads: u.pads.every(p => p.visible) }; }, lockDoor);
+  await game(() => window.__game.endTurn());
+  await page.waitForTimeout(200);
+  check(await game(l => window.__game.lockedRooms().includes(l) && !window.__game.openLocks().includes(l), locked), 'ending the turn locks the door again');
+  check(/door has locked again/.test(await page.textContent('#toast')), 'and the game says so');
+  const inside = await doorView();
+  check(inside.locked && !inside.shut && inside.pads, `the door is padlocked again, yet stands open for the guest inside (${JSON.stringify(inside)})`);
+  check(await game(() => window.__game.activePlayer().currentRoom) === locked, 'the guest is still inside');
+  const outPlan = await game(n => window.__game.moveToRoom(n).ok, nb);
+  await settle();
+  check(outPlan && await game(() => window.__game.activePlayer().currentRoom) === nb, 'the guest inside walks out through the locked door');
+  check(await game(l => window.__game.lockedRooms().includes(l), locked), 'the door stays locked behind them');
+  await page.waitForFunction(d => window.__game.doorways.views.get(d).leaf.userData.swing < 0.05, lockDoor, { timeout: 8000 }).catch(() => {});
+  const behind = await doorView();
+  check(behind.shut && behind.target === 0 && behind.swing < 0.05 && behind.pads, `and the padlocked door swings shut behind them (${JSON.stringify(behind)})`);
+  await shot('ui-locked-door-relocked');
+  check(await game(l => window.__game.moveToRoom(l).ok, locked) === false, 'getting back in takes another key');
+}
 
 console.log('\n5b. standing at a door that opens onto a locked room (never stuck)');
 {

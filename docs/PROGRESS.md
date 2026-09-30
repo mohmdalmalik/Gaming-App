@@ -1,5 +1,20 @@
 # PROGRESS
 
+## Locked doors: open until the end of the opener's turn (2026-09-30)
+
+Owner-approved rule (GAME_RULES, Rooms) implemented end to end; no other rule changed.
+- Two locked rooms, each a dead end with one doorway: the **Cloakroom is now a dead end** (model rebuilt
+  with the room pipeline; walk-check passes). Deck still 24: 4 crossings, 7 T, 4 straight, 3 corners,
+  5 dead ends + the exit.
+- A Master Key / Lock Pick opens only that door, until the end of the opener's turn; then it locks again
+  (door swings shut, padlocked; map 🔒/🔓; toasts). A guest inside can always walk out; nobody can follow
+  in after it re-locks. Card texts reworded.
+- Tests: rules-check (locked-door section: only that door, re-lock, no following in, walking out, nobody
+  stranded from any spot inside, 400 hotels never closed off and the Fire Exit never behind a lock),
+  logic-check (400 hotels: locked rooms are single-door dead ends, never by the lobby), browser: practice
+  5a, hot-seat 10f (key → enter → end turn → re-locked → next guest can't enter → guest inside leaves),
+  lobby 7b (the door swings shut again).
+
 ## Playtest fix round (2026-09-28)
 
 Fixes from the two playtest reports (`tests/qa-visual-report.md`, `tests/autoplay-report.md`). One

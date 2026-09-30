@@ -1683,10 +1683,14 @@ def dec_back():
     fuse_box('north', 2.75, 1.45)
 
 def dec_cloakroom():
+    # A dead end since the locked-door rule: its one doorway (south) holds the locked door, drawn by the game; the east
+    # wall, where a second doorway was, is panelled now, with a painting over the tufted bench.
     door_sconces(y=1.55)
     paint('north', 2.2, 1.62, 0.9, 0.6, 0)
     sconce_at('north', 1.2); sconce_at('north', 3.2)
     sconce_at('west', -2.55, 1.9); sconce_at('north', -2.6, 1.9)
+    paint('east', 2.4, 1.5, 0.8, 0.56, 1)
+    sconce_at('east', -2.4); sconce_at('east', 0.0)
 
 def dec_corner():
     door_sconces()
@@ -1779,7 +1783,7 @@ def rugs_infirmary():
     doors = [d for d in ('north', 'south', 'east') if d in R['doors']]
     return border_band(0.22, 0.5, fill=S('#5a6e4e'), lines=((0.08, 0.035, '#e0d6b8'), (0.4, 0.035, '#e0d6b8')), doors=doors)
 def rugs_cloakroom():
-    return door_mats(['south', 'east']) + square_rug(-2.2, 2.2, -1.8, 1.9) + square_rug(2.2, 3.55, 1.25, 3.2, lines=((0.12, 0.04, None),))
+    return door_mats(['south']) + square_rug(-2.2, 2.2, -1.8, 1.9) + square_rug(2.75, 3.8, 1.5, 3.3, lines=((0.12, 0.04, None),))
 def rugs_back():
     return door_mats(['south', 'east'])
 def rugs_corner():

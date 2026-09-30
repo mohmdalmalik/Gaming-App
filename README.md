@@ -64,7 +64,8 @@ readout at the top left (below the room name), for measuring speed on the iPad.
   empty, so nothing happens there yet); you stay where you are.
 - **Move** (1 AP) — tap the ring of an open doorway, then **Move**. Tapping empty floor in your room
   repositions for free. A locked room says so; a Master Key or Lock Pick (tap it in your hand) opens
-  it from next door.
+  its one door from next door, until the end of your turn — then it locks again (the map shows 🔓 while
+  it is open). A guest inside can always walk out; the door stays locked behind them.
 - **Search** (1 AP) — there is no Search button: a room that can still be searched shows a pulsing
   brass magnifier over its search spot (the drawer, the shelves, the trolley…). Tap it and the guest
   walks up to that furniture and searches; the card(s) found are shown large, then go into the hand.
@@ -79,7 +80,7 @@ readout at the top left (below the room name), for measuring speed on the iPad.
 - **Hand** — held as a fan of face-up cards at the bottom of the screen (resting partly below the
   edge; a card rises when touched). Tap a card to see it large with what it does and its action
   (‹ › step through the hand; tap outside or ✕ to close). Bandage (heal 1), Master Key / Lock Pick
-  (open a locked room next door), Barricade (seal a doorway of your room for one round), Hand Mirror
+  (open a locked door next to you, until the end of your turn), Barricade (seal a doorway of your room for one round), Hand Mirror
   (1 AP: see the whole hand of a guest in your room, in private) and Espresso (free: +2 actions this
   turn) are played from there. Lantern, Flashlight and weapons are used in context. In hot-seat the
   fan shows only during your own turn, and never shows Possession cards (they are seen through

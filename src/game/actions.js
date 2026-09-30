@@ -5,7 +5,7 @@ import { rules } from '../data/rules.js';
 import { CARDS, takeCard, isWeapon, countableCount, shuffle } from './cards.js';
 import {
   checkWin, canEscape, logPublic, convertToPossessed, isLocked, unlockRoom, placeBarricade, isBarricaded,
-  adjacentLockedRooms,
+  adjacentLockedRooms, doorBetween,
 } from './state.js';
 import { openFrontierDoor } from './hotel.js';
 
@@ -219,19 +219,34 @@ export function useHandMirror(state, floor, player, cardId, targetId) {
   return { ok: true, target: target.id, hand: shown, unmasked };
 }
 
-// Master Key or Lock Pick (1 AP) on a locked room next door. The key always works; the pick
-// works `lockPickChance` of the time. Both are used up whatever happens.
+// Master Key or Lock Pick (1 AP) on the locked door of a room next door, used from the room on the
+// other side of that door. The key always works; the pick works `lockPickChance` of the time. Both
+// are used up whatever happens. It opens only that door, and only until the end of this guest's turn
+// (endTurn locks it again); getting in again later takes another key or pick.
 export function useUnlock(state, floor, player, cardId, roomId) {
   const bad = needAp(state, player); if (bad) return bad;
+  if (!player.alive) return { ok: false, reason: 'dead' };
+  // Only the guest taking their turn: the door locks again at the end of "the turn of the guest who
+  // unlocked it", which is this turn (relockDoors).
+  if (state.players[state.activeIndex] !== player) return { ok: false, reason: 'notYourTurn' };
   const card = player.hand.find(c => c.id === cardId && CARDS[c.type]?.unlock);
   if (!card) return { ok: false, reason: 'noCard' };
   if (!adjacentLockedRooms(state, floor, player).includes(roomId)) return { ok: false, reason: 'notAdjacentLocked' };
+  // the door between the guest's room and the locked room: the one this card works on
+  const door = doorBetween(floor, player.currentRoom, roomId);
+  if (!door) return { ok: false, reason: 'notAdjacentLocked' };
+  // A barricaded door: nobody can go through it this turn, and the door locks again before the
+  // Barricade comes down (at its placer's next turn start), so the card would be wasted. Refused, and
+  // nothing is spent.
+  if (isBarricaded(state, door.id)) return { ok: false, reason: 'sealed' };
   player.actionPoints -= rules.actionCost.useCard;
   takeCard(player.hand, cardId); toDiscard(state, card);
   const opened = card.type === 'masterKey' || state.rng() < rules.lockPickChance;
-  if (opened) unlockRoom(state, roomId);
-  logPublic(state, `${player.name} ${opened ? 'opened' : 'failed to open'} ${floor.rooms.get(roomId)?.name ?? 'a locked room'}.`);
-  return { ok: true, opened, room: roomId, card: card.type };
+  const name = floor.rooms.get(roomId)?.name ?? 'the locked room';
+  if (opened) unlockRoom(state, roomId, player, door.id);
+  logPublic(state, opened ? `${player.name} unlocked the ${name} door: it is open until the end of their turn.`
+    : `${player.name} failed to open the ${name} door.`);
+  return { ok: true, opened, room: roomId, doorway: door.id, card: card.type };
 }
 
 // Barricade (1 AP): seal one doorway of the room you are in for one round. Used up.

@@ -121,7 +121,7 @@ console.log('\nthe random hotel');
   check(tiles.length === 24 && tiles.filter(t => t.isExit).length === 1, 'a room deck of 24 tiles with one Fire Exit');
   check(tiles.filter(t => t.locked).length === 2, 'two locked rooms');
   check(tiles.filter(t => t.dark).length === 5, 'five dark rooms (about the share there was before)');
-  check(nDoors(4) === 4 && nDoors(3) === 7 && nDoors(2) === 8 && nDoors(1) === 4, 'doorways: 4 crossings, 7 T-junctions, 8 two-way, 4 dead ends');
+  check(nDoors(4) === 4 && nDoors(3) === 7 && nDoors(2) === 7 && nDoors(1) === 5, 'doorways: 4 crossings, 7 T-junctions, 7 two-way, 5 dead ends (the two locked rooms among them)');
   check(tiles.every(t => t.doors.length >= 1 && t.doors.length <= 4), 'every tile has 1 to 4 doorways');
   let lobbyOk = true, exitOk = true; const shapes = new Set(); const decks = new Set();
   for (let seed = 1; seed <= 300; seed++) {
@@ -275,35 +275,204 @@ console.log('\nlocked rooms, keys and picks');
 {
   const s = hs(11), p = activePlayer(s);
   ensureRoom(s, 'cloakroom');
-  const locked = [...s.lockedRooms][0];
-  const neighbour = [...floor.rooms.get(locked).neighbours][0];
+  const locked = 'cloakroom';
+  const L = floor.rooms.get(locked);
+  const neighbour = [...L.neighbours][0];
+  const door = L.doorways[0];
   p.currentRoom = neighbour; s.discovered.add(neighbour); p.actionPoints = 4;
-  check(isLocked(s, locked), 'a room is locked');
+  check(L.doorways.length === 1 && L.frontier.length === 0 && L.neighbours.size === 1, 'a locked room has a single doorway');
+  check(isLocked(s, locked), 'its door is locked');
   check(canAffordRoute(s, floor, p, [neighbour, locked]).reason === 'locked', 'you cannot walk into it');
   check(!usableDoorways(s, floor, p).some(d => d.otherRoom(neighbour) === locked), 'its door is not offered');
+  check(!doorwayPassable(s, door, neighbour) && doorwayPassable(s, door, locked), 'a locked door stops guests going in, never going out');
   check(adjacentLockedRooms(s, floor, p).includes(locked), 'it is listed as a locked room next door');
   p.hand.push({ id: 'mk', type: 'masterKey' });
   const r = useUnlock(s, floor, p, 'mk', locked);
   check(r.ok && r.opened && !isLocked(s, locked) && p.actionPoints === 3, 'a Master Key always opens it for 1 action point');
+  check(r.doorway === door.id && s.openLocks.get(locked)?.doorway === door.id && s.openLocks.get(locked)?.by === p.id,
+    'it opens only that door (the one between the two rooms), for the guest who used it');
   check(!p.hand.some(c => c.id === 'mk') && s.discardPile.some(c => c.id === 'mk'), 'and is used up');
-  check(usableDoorways(s, floor, p).some(d => d.otherRoom(neighbour) === locked), 'the door is now offered — it stays open');
-  // Lock Pick: half the time, used up either way.
-  let opened = 0, tries = 0;
+  check(usableDoorways(s, floor, p).some(d => d.otherRoom(neighbour) === locked), 'the door is now offered for the rest of the turn');
+  check(s.log.at(-1).text.includes('until the end of their turn'), 'the table is told it is open until the end of the turn');
+  enterRoom(s, floor, p, locked);
+  check(p.currentRoom === locked && p.actionPoints === 2, 'the guest who opened it walks in (a normal move)');
+  check(canAffordRoute(s, floor, p, [locked, neighbour, locked]).ok, 'and may go out and back in again this same turn');
+  // Searching inside works normally.
+  p.hand.push({ id: 'flx', type: 'flashlight' });
+  const sr = search(s, floor, p);
+  check(sr.ok && s.searchedRooms.has(locked), 'searching inside a locked room works normally');
+  // The end of the opener's turn: the door locks again.
+  const et = endTurn(s, floor);
+  const q = activePlayer(s);
+  check(isLocked(s, locked) && !s.openLocks.has(locked) && et.relocked?.includes(locked), 'it locks again at the end of the turn of the guest who unlocked it');
+  check(s.log.some(l => l.text === `The ${L.name} door locked again.`), 'and the table is told');
+  // Others cannot follow in.
+  q.currentRoom = neighbour; q.actionPoints = 4;
+  check(canAffordRoute(s, floor, q, [neighbour, locked]).reason === 'locked' && !usableDoorways(s, floor, q).some(d => d.id === door.id),
+    'the next guest cannot follow in: the door is locked again');
+  let grid = buildGrid(floor, config);
+  const qPlan = planMove(s, floor, grid, config, q, floor.rooms.get(neighbour).center, L.center, buildAllowed(s, floor, grid));
+  check(!qPlan.ok, `no walk can take them in either (${qPlan.reason})`);
+  // The guest inside can always walk out — on every later turn — and the door stays locked behind them.
+  while (activePlayer(s) !== p) endTurn(s, floor);
+  check(p.currentRoom === locked && isLocked(s, locked), 'back to the guest inside: the door is still locked');
+  check(usableDoorways(s, floor, p).some(d => d.id === door.id), 'the way out is offered to the guest inside');
+  check(canAffordRoute(s, floor, p, [locked, neighbour]).ok, 'they may walk out');
+  grid = buildGrid(floor, config);
+  const out = planMove(s, floor, grid, config, p, L.center, floor.rooms.get(neighbour).center, buildAllowed(s, floor, grid));
+  check(out.ok && out.cost === 1 && out.rooms.join() === `${locked},${neighbour}`, 'a walk out of the locked room is planned like any other move (1 AP)');
+  check(canAffordRoute(s, floor, p, [locked, neighbour, locked]).reason === 'locked', 'but they cannot come back in without another key');
+  enterRoom(s, floor, p, neighbour);
+  check(isLocked(s, locked), 'the door stays locked behind them');
+  // Death drops inside a locked room stay there.
+  const V = s.players.find(x => x !== p && x.alive);
+  V.currentRoom = locked; V.hand = [{ id: 'dl', type: 'lantern' }];
+  dropEverything(s, V); V.alive = false;
+  endTurn(s, floor); endTurn(s, floor);
+  check((s.roomDrops.get(locked) || []).some(c => c.id === 'dl') && isLocked(s, locked), 'cards dropped inside a locked room stay there, behind the locked door');
+  // Lock Pick: half the time, used up either way; a failed pick leaves the door locked.
+  let opened = 0, tries = 0, failKept = true;
   for (let seed = 1; seed <= 200; seed++) {
-    const t = hs(seed), q = activePlayer(t);
+    const t = hs(seed), q2 = activePlayer(t);
     ensureRoom(t, 'suite416');
-    const L = [...t.lockedRooms][0], nb = [...floor.rooms.get(L).neighbours][0];
-    q.currentRoom = nb; q.actionPoints = 4; q.hand.push({ id: 'lp', type: 'lockPick' });
-    const res = useUnlock(t, floor, q, 'lp', L);
+    const LL = 'suite416', nb = [...floor.rooms.get(LL).neighbours][0];
+    q2.currentRoom = nb; q2.actionPoints = 4; q2.hand.push({ id: 'lp', type: 'lockPick' });
+    const res = useUnlock(t, floor, q2, 'lp', LL);
     tries++; if (res.opened) opened++;
-    if (q.hand.some(c => c.id === 'lp')) { opened = -999; break; }
+    if (!res.opened && (!isLocked(t, LL) || t.openLocks.has(LL))) failKept = false;
+    if (q2.hand.some(c => c.id === 'lp')) { opened = -999; break; }
   }
-  check(opened > 70 && opened < 130, `a Lock Pick opened ${opened} of ${tries} locked rooms (about half)`);
+  check(opened > 70 && opened < 130, `a Lock Pick opened ${opened} of ${tries} locked doors (about half)`);
   check(opened !== -999, 'a Lock Pick is used up whether or not it works');
-  const t2 = hs(12), q2 = activePlayer(t2);
+  check(failKept, 'a Lock Pick that fails leaves the door locked');
+  const t2 = hs(12), q3 = activePlayer(t2);
   ensureRoom(t2, 'cloakroom');
-  q2.hand.push({ id: 'mk2', type: 'masterKey' });
-  check(useUnlock(t2, floor, q2, 'mk2', [...t2.lockedRooms][0]).reason === 'notAdjacentLocked', 'a key only works on a locked room next door');
+  q3.hand.push({ id: 'mk2', type: 'masterKey' });
+  check(useUnlock(t2, floor, q3, 'mk2', 'cloakroom').reason === 'notAdjacentLocked', 'a key only works on a locked door next to you');
+}
+{
+  // Nobody is ever stranded by a door locking again: from anywhere inside a locked room, the guest
+  // can walk out, whoever opened the door and however many turns later.
+  let cases = 0, freed = 0, sealedIn = 0;
+  for (let seed = 1; seed <= 40; seed++) {
+    const s = hs(seed);
+    for (const id of ['cloakroom', 'suite416']) {
+      if (!ensureRoom(s, id)) continue;
+      const L = floor.rooms.get(id), nb = [...L.neighbours][0];
+      const opener = activePlayer(s), inside = s.players[(s.activeIndex + 1) % 6];
+      opener.currentRoom = nb; opener.actionPoints = 4; opener.hand.push({ id: 'mk' + id, type: 'masterKey' });
+      useUnlock(s, floor, opener, 'mk' + id, id);
+      enterRoom(s, floor, opener, id);
+      inside.currentRoom = id;        // (a second guest who was already in there)
+      endTurn(s, floor);
+      const grid = buildGrid(floor, config);
+      for (const guest of [opener, inside]) {
+        s.activeIndex = guest.index; guest.actionPoints = 4;
+        const allowed = buildAllowed(s, floor, grid, guest);
+        // every standing spot in the room
+        for (let idx = 0; idx < grid.walkable.length; idx += 3) {
+          if (!grid.walkable[idx] || grid.roomIdOf(idx) !== id) continue;
+          cases++;
+          const plan = planMove(s, floor, grid, config, guest, grid.center(idx), floor.rooms.get(nb).center, allowed);
+          if (plan.ok && plan.rooms.at(-1) === nb) freed++;
+        }
+      }
+      if (!isLocked(s, id)) sealedIn++;
+      s.activeIndex = 0;
+    }
+  }
+  check(cases > 500 && freed === cases, `the door locking again strands nobody: from every spot inside, the guest walks out (${freed}/${cases})`);
+  check(sealedIn === 0, 'while the door behind them is locked again');
+}
+{
+  // 400 hotels grown door by door, with locked doors opened and locked again as play goes on: the
+  // hotel never closes itself off, the Fire Exit is always there to reach without passing a locked
+  // door, and every locked room stays a dead end with a single doorway.
+  let closed = 0, exitReach = 0, exits = 0, lockedShape = true, exitLocked = false;
+  for (let seed = 1; seed <= 400; seed++) {
+    const s = createState(floor, SIX, seed, { mode: 'hotseat' });
+    const p = activePlayer(s);
+    for (let step = 0; step < 120; step++) {
+      const doors = openDoors(floor);
+      if (!doors.length) { if (!exitPlaced(floor)) closed++; break; }
+      const d = doors[(seed * 17 + step * 5) % doors.length];
+      p.currentRoom = d.room; p.actionPoints = 4;
+      openDoor(s, floor, p, d.id);
+      // now and then a key opens a locked door; the turn ends and it locks again
+      const near = [...s.lockedRooms].find(id => floor.rooms.get(id).neighbours.size);
+      if (near && step % 3 === 0) {
+        const L = floor.rooms.get(near);
+        p.currentRoom = [...L.neighbours][0]; p.hand.push({ id: `k${step}`, type: 'masterKey' });
+        useUnlock(s, floor, p, `k${step}`, near);
+      }
+      endTurn(s, floor); s.activeIndex = 0;
+    }
+    for (const r of floor.roomList) if (r.locked && (r.doorways.length !== 1 || r.frontier.length)) lockedShape = false;
+    if (!floor.exitRoom) continue;
+    exits++;
+    if (floor.rooms.get(floor.exitRoom).locked || isLocked(s, floor.exitRoom)) exitLocked = true;
+    // walk the doorways from the lobby, never into a locked room
+    const seen = new Set([lobby]), queue = [lobby];
+    while (queue.length) {
+      const here = queue.shift();
+      for (const d of floor.rooms.get(here).doorways) {
+        const n = d.otherRoom(here);
+        if (seen.has(n) || isLocked(s, n) || floor.rooms.get(n).locked) continue;
+        seen.add(n); queue.push(n);
+      }
+    }
+    if (seen.has(floor.exitRoom)) exitReach++;
+  }
+  check(closed === 0, 'over 400 hotels, with locked doors opening and locking again, the hotel never closed itself off');
+  check(exits === 400 && exitReach === 400, `the Fire Exit is never locked away: reached from the lobby without passing a locked door (${exitReach}/${exits})`);
+  check(!exitLocked, 'the Fire Exit itself is never locked');
+  check(lockedShape, 'every locked room placed is a dead end with a single doorway');
+}
+
+{
+  // Review follow-ups: a key or pick is never wasted on a door nobody can go through.
+  // (1) A locked door that is also barricaded: refused, nothing spent.
+  const s = hs(21), P = activePlayer(s);
+  ensureRoom(s, 'cloakroom');
+  const L = floor.rooms.get('cloakroom'), nb = [...L.neighbours][0], door = L.doorways[0];
+  P.currentRoom = nb; P.actionPoints = 4; P.hand.push({ id: 'mkA', type: 'masterKey' });
+  useUnlock(s, floor, P, 'mkA', 'cloakroom'); enterRoom(s, floor, P, 'cloakroom');
+  P.hand.push({ id: 'barA', type: 'barricade' });
+  check(useBarricade(s, floor, P, 'barA', door.id).ok, 'a guest inside barricades the locked room\'s only doorway');
+  endTurn(s, floor);
+  const Q = activePlayer(s);
+  Q.currentRoom = nb; Q.actionPoints = 4; Q.hand.push({ id: 'mkB', type: 'masterKey' }, { id: 'lpB', type: 'lockPick' });
+  check(isLocked(s, 'cloakroom') && isBarricaded(s, door.id), 'the door is locked and barricaded');
+  const k = useUnlock(s, floor, Q, 'mkB', 'cloakroom'), lp = useUnlock(s, floor, Q, 'lpB', 'cloakroom');
+  check(!k.ok && k.reason === 'sealed' && !lp.ok && lp.reason === 'sealed', `a Master Key or Lock Pick is refused on a barricaded door (${k.reason}, ${lp.reason})`);
+  check(Q.actionPoints === 4 && Q.hand.some(c => c.id === 'mkB') && Q.hand.some(c => c.id === 'lpB') && isLocked(s, 'cloakroom'),
+    'and nothing is spent: the cards stay in hand, the action points too, the door stays locked');
+  // (2) Only the guest taking their turn can open a locked door (it locks again at the end of THEIR turn).
+  const R = s.players.find(x => x !== Q && x.alive);
+  s.barricades.clear();
+  R.currentRoom = nb; R.actionPoints = 4; R.hand.push({ id: 'mkC', type: 'masterKey' });
+  const off = useUnlock(s, floor, R, 'mkC', 'cloakroom');
+  check(!off.ok && off.reason === 'notYourTurn' && R.hand.some(c => c.id === 'mkC') && isLocked(s, 'cloakroom'),
+    `a guest who is not taking their turn cannot open it (${off.reason})`);
+  check(useUnlock(s, floor, Q, 'mkB', 'cloakroom').opened, 'once the barricade is gone, the guest taking their turn can');
+}
+{
+  // (3) A Barricade placed from OUTSIDE on a locked room's only doorway also keeps the guest inside
+  // from walking out until it comes down (the Barricade rule, "seals one doorway"). The owner was
+  // asked to confirm this reading of "a guest inside can always walk out".
+  const s = hs(22), P = activePlayer(s);
+  ensureRoom(s, 'cloakroom');
+  const L = floor.rooms.get('cloakroom'), nb = [...L.neighbours][0], door = L.doorways[0];
+  P.currentRoom = 'cloakroom';
+  endTurn(s, floor);
+  const Q = activePlayer(s);
+  Q.currentRoom = nb; Q.actionPoints = 4; Q.hand.push({ id: 'barO', type: 'barricade' });
+  useBarricade(s, floor, Q, 'barO', door.id);
+  while (activePlayer(s) !== P) endTurn(s, floor);
+  check(!usableDoorways(s, floor, P).some(d => d.id === door.id), 'a Barricade from outside seals the way out of a locked room until it comes down');
+  while (activePlayer(s) !== Q) endTurn(s, floor);
+  while (activePlayer(s) !== P) endTurn(s, floor);
+  check(usableDoorways(s, floor, P).some(d => d.id === door.id) && isLocked(s, 'cloakroom'), 'once it is down, the guest inside walks out through the locked door');
 }
 
 console.log('\nbarricades');
@@ -739,8 +908,9 @@ console.log('\nthe room deck: rooms with jobs');
     && tiles.find(t => t.id === 'switchboard')?.job === 'switchboard', 'the job rooms are the tiles linenStore1/2, infirmary1/2 and switchboard');
   check(!['suite410', 'suite412', 'suite414', 'suite418', 'gardenLounge'].some(id => tiles.some(t => t.id === id)),
     'Suites 410, 412, 414, 418 and the Garden Lounge are gone');
-  check(n(4) === 4 && n(3) === 7 && straight === 4 && bend === 4 && n(1) === 4,
-    `doorways unchanged: 4 four-way, 7 T, 4 straight, 4 corner, 4 dead ends (${n(4)}/${n(3)}/${straight}/${bend}/${n(1)})`);
+  // (the Cloakroom became a dead end with the locked-door rule: one corner fewer, one dead end more)
+  check(n(4) === 4 && n(3) === 7 && straight === 4 && bend === 3 && n(1) === 5,
+    `doorways: 4 four-way, 7 T, 4 straight, 3 corner, 5 dead ends (${n(4)}/${n(3)}/${straight}/${bend}/${n(1)})`);
   check(tiles.find(t => t.isExit)?.doors.length === 1, '...plus the Fire Exit (a dead end)');
   check(tiles.filter(t => t.dark).length === 5 && tiles.filter(t => t.locked).length === 2, 'still 5 dark rooms and 2 locked rooms');
   check(tiles.filter(t => t.job).every(t => t.searchable !== false && !t.dark && !t.locked && !t.isExit && !t.safe),

@@ -58,18 +58,21 @@ Guests are trapped on a hotel floor. Lanterns are the way out: a clean guest car
 - The Fire Exit is shuffled into the last five tiles of the room deck.
 - A new tile is turned automatically to a random orientation that fits: one of its doorways meets the door that was opened, and none of its doorways opens into a wall. Where two doorways meet, they connect. If a tile can't fit, it goes to the bottom of the deck and the next tile is tried.
 - The hotel never closes itself off before the Fire Exit is placed: there is always at least one reachable unexplored doorway.
-- Tile mix: 1 Fire Exit, 2 locked rooms, dark rooms in about the same share as before, 5 rooms with jobs (2 Linen Stores, 2 Infirmaries, 1 Switchboard, in place of ordinary tiles; the deck stays at 24), and the rest ordinary rooms and corridors, with doorway counts that give branching routes and a few dead ends. The exact mix is in src/data/hotel.js (awaiting the owner's approval).
+- Tile mix: 1 Fire Exit, 2 locked rooms (each a dead end with a single doorway), dark rooms in about the same share as before, 5 rooms with jobs (2 Linen Stores, 2 Infirmaries, 1 Switchboard, in place of ordinary tiles; the deck stays at 24), and the rest ordinary rooms and corridors, with doorway counts that give branching routes and a few dead ends. The exact mix is in src/data/hotel.js (awaiting the owner's approval).
 - *Placeholder, awaiting approval:* if no remaining tile can fit behind a door, the door is jammed: it stays shut for the rest of the match, and trying it costs nothing.
 
 ## Doors and exploring
 - Unexplored doorways are closed doors. Opening one costs 1 AP and reveals the room behind it, but you stay where you are. Entering is a normal move (1 AP). You are never forced to enter.
-- Opened doors stay open.
+- Opened doors stay open. (A locked door is different: see Rooms.)
 - A newly revealed room is empty, so opening a door never triggers a meeting.
 
 ## Rooms
 - Start in the lobby. Rooms stay visible once revealed.
 - Dark rooms: anyone can enter; searching needs a Flashlight (not used up).
-- Two locked rooms are tiles in the room deck. A locked room is locked from the moment it is revealed, and never joins the lobby. It is opened from a room next door with a Master Key (always works, then discarded) or a Lock Pick (works half the time, discarded either way). Once opened, it stays open.
+- Two locked rooms are tiles in the room deck. Each has a single doorway, and its door is locked from the moment the room is revealed. A locked room never joins the lobby.
+- A Master Key (always works, then discarded) or a Lock Pick (works half the time, discarded either way) unlocks a locked door from the room on the other side of it. It opens only that door.
+- An unlocked door stays open until the end of the turn of the guest who unlocked it, then locks again. Getting in again later takes another Master Key or Lock Pick.
+- A locked door only stops guests going in; a guest inside can always walk out, and the door stays locked behind them.
 - Barricade: seals one doorway of your room until your next turn starts.
 
 ### Rooms with jobs

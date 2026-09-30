@@ -235,8 +235,10 @@ def swivel_chair(x, z, yaw, seat=S('#2e5a48')):
     cyl(ST, x, z, 0.08, 0.42, 0.025, color=C['steelDark'], segs=8)
     cyl(ST, x, z, 0.42, 0.5, 0.23, 0.23, seat, segs=16, bevel=0.03)
     bx, bz = x - 0.2 * math.sin(yaw), z - 0.2 * math.cos(yaw)
-    obox(ST, bx, 0.78, bz, 0.4, 0.42, 0.08, seat, -yaw, 0.12, 0.03)
-    obox(ST, x - 0.17 * math.sin(yaw), 0.56, z - 0.17 * math.cos(yaw), 0.05, 0.14, 0.04, WOOD_D, -yaw, 0, 0.0)
+    # obox's yaw t leans a positive tilt toward (sin t, cos t); the chair faces (sin yaw, cos yaw), so the
+    # back uses yaw + pi to lean away from the seat (backward) whichever way the chair faces
+    obox(ST, bx, 0.78, bz, 0.4, 0.42, 0.08, seat, yaw + math.pi, 0.12, 0.03)
+    obox(ST, x - 0.17 * math.sin(yaw), 0.56, z - 0.17 * math.cos(yaw), 0.05, 0.14, 0.04, WOOD_D, yaw + math.pi, 0, 0.0)
 
 def bench(fr, top=S('#8a2430'), tufted=False, legs=WOOD_D):
     W, D = fr.W, fr.D
@@ -1453,7 +1455,7 @@ def build_furniture(f, room):
         'rail': lambda: coat_rail(fr, f.get('alcove', True)),
         'bed': lambda: bed(fr),
         'wardrobe': lambda: wardrobe(fr),
-        'windowSeat': lambda: window_seat(Fr(f, 's')),
+        'windowSeat': lambda: window_seat(Fr(f, f.get('facing', 'e'))),   # back to the window (dec_corner)
         'exitDoor': lambda: exit_door(fr),
         'linenShelf': lambda: shelving(fr, 'linens', frame=WOOD_D, board=WOOD_T, bays=2),
         'laundryBasket': lambda: laundry_basket(fr),
@@ -1688,7 +1690,9 @@ def dec_cloakroom():
 
 def dec_corner():
     door_sconces()
-    window(seg_at('west', -2.4), -2.4, 1.5, 0.75, 1.1)
+    # the window over the window seat (its back is to the west wall; the seat's footprint is in hotel.js)
+    seat = next(f for f in R['furniture'] if f['kind'] == 'windowSeat')['center'][1]
+    window(seg_at('west', seat), seat, 1.5, 0.72, 1.1)
     paint('north', 1.4, 1.55, 1.0, 0.66, 0)
     sconce_at('north', -0.2); sconce_at('north', 3.0)
 

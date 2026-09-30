@@ -21,7 +21,8 @@ const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromi
 let failures = 0, walked = 0;
 const errs = [];
 for (const room of ROOMS) {
-  const ctx = await browser.newContext({ viewport: { width: 400, height: 300 }, hasTouch: true });
+  const ctx = await browser.newContext({ viewport: { width: 960, height: 640 }, hasTouch: true });
+  // landscape and wider than 900 px: a narrower or portrait page is covered by the "turn your iPad" overlay
   const page = await ctx.newPage();
   page.on('pageerror', e => errs.push(`${room}: ${e}`));
   page.on('console', m => { if (m.type() === 'error') errs.push(`${room}: ${m.text()}`); });

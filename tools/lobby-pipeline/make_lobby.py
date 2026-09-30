@@ -518,11 +518,11 @@ def F(kind):
 
 def sofa(cx, cz, facing, width, depth, seats):
     """Red velvet sofa/armchair. `facing` is the direction the sitter looks: 'n', 'e'."""
-    # local frame: u along the back, w toward the front
+    # local frame: u along the back, w toward the BACK (the seat front is at -w, the backrest at +w)
     def at(u0, u1, w0, w1):
-        if facing == 'n':   # front toward -z
-            return (cx + u0, cx + u1, cz - w1, cz - w0)
-        return (cx + w0, cx + w1, cz + u0, cz + u1)   # 'e': front toward +x
+        if facing == 'n':   # sitter looks north (-z): backrest at +z, against the south wall
+            return (cx + u0, cx + u1, cz + w0, cz + w1)
+        return (cx - w1, cx - w0, cz + u0, cz + u1)   # 'e': sitter looks east (+x), backrest at -x (west wall)
     hw, hd = width / 2, depth / 2
     arm = 0.2
     def bx(u0, u1, w0, w1, y0, y1, col, bev):

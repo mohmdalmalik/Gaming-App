@@ -158,7 +158,7 @@ export const hotel = {
         at('stairs', 2.45, -3.0, 2.8, 1.6, 1.7), at('binTrolley', 3.5, -1.4, 0.7, 1.0, 1.4)] },
     // Room with a job: 1 AP to restore 2 health (maximum 3).
     { id: 'infirmary2', name: 'Infirmary', doors: STRAIGHT, job: 'infirmary', searchPoint: 'the medicine cabinet', mood: CLINIC,
-      furniture: [at('infirmaryBed', -3.1, -1.75, 1.05, 1.0, 2.1), at('nightstand', -2.15, -3.5, 0.6, 1.1, 0.6), at('plant', -1.2, -3.5, 0.55, 1.2, 0.55),
+      furniture: [at('infirmaryBed', -2.9, -2.75, 1.05, 1.0, 2.1), at('nightstand', -2.0, -3.5, 0.6, 1.1, 0.6), at('plant', -1.2, -3.5, 0.55, 1.2, 0.55),
         at('towelChest', -3.5, 2.5, 0.6, 0.8, 0.9), searchSpot(at('medicineCabinet', 2.0, -3.55, 1.4, 1.9, 0.55)),
         at('stool', 3.1, -2.4, 0.55, 0.6, 0.55), at('trayCabinet', 3.5, 2.0, 0.6, 0.85, 0.9), at('plant', 3.45, 3.2, 0.55, 1.2, 0.55)],
       colors: { infirmaryBed: { color: '#e4e2dc' }, medicineCabinet: { color: '#d8e2e4', emissive: '#3a0c0c' } } },
@@ -171,10 +171,10 @@ export const hotel = {
       furniture: [searchSpot(at('rail', -1.2, -3.5, 2.3, 1.95, 0.7)), at('rail', -3.5, -0.5, 0.7, 1.95, 2.8), at('plant', -3.35, -3.35, 0.6, 1.3, 0.6),
         at('console', 2.2, -3.6, 1.5, 0.82, 0.45), at('tuftedBench', 2.9, 2.2, 0.65, 0.47, 1.4)] },
     { id: 'cornerCorridor', name: 'Corner Corridor', short: 'Corner Corr.', doors: CORNER, searchPoint: 'the window seat', mood: CORRIDOR,
-      furniture: [searchSpot(at('windowSeat', -3.1, -3.1, 1.3, 0.82, 1.3)), at('plant', -3.45, 3.35, 0.55, 1.2, 0.55), at('console', 1.6, -3.6, 1.5, 0.82, 0.45)] },
+      furniture: [searchSpot(at('windowSeat', -3.1, -2.8, 1.3, 0.82, 1.3)), at('plant', -3.45, 3.35, 0.55, 1.2, 0.55), at('console', 1.6, -3.6, 1.5, 0.82, 0.45)] },
     // Room with a job: 1 AP to restore 2 health (maximum 3).
     { id: 'infirmary1', name: 'Infirmary', doors: CORNER, job: 'infirmary', searchPoint: 'the medicine cabinet', mood: CLINIC,
-      furniture: [at('infirmaryBed', -3.1, -1.6, 1.05, 1.0, 2.1), at('nightstand', -2.15, -3.5, 0.6, 1.1, 0.6), at('plant', -1.2, -3.5, 0.55, 1.2, 0.55),
+      furniture: [at('infirmaryBed', -2.9, -2.75, 1.05, 1.0, 2.1), at('nightstand', -2.0, -3.5, 0.6, 1.1, 0.6), at('plant', -1.2, -3.5, 0.55, 1.2, 0.55),
         searchSpot(at('medicineCabinet', 0.9, -3.55, 1.4, 1.9, 0.55)), at('stool', 1.9, -2.5, 0.55, 0.6, 0.55),
         at('trayCabinet', 3.5, -2.2, 0.6, 0.85, 0.9), at('plant', 3.4, -3.4, 0.55, 1.2, 0.55),
         at('towelChest', -3.5, 2.4, 0.6, 0.8, 0.9), at('plant', 3.4, 3.4, 0.55, 1.2, 0.55)],

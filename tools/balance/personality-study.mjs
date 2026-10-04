@@ -181,6 +181,18 @@ function playMatch(seed, players, assign, ov = {}) {
     }
   }
 
+  // Snapshot of the table at the end of round 2 (or at the end of the match, if it ended sooner).
+  const origPossessed = st.players.find(p => p.possessed);
+  const possIn = cards => cards.filter(c => c.type === 'possession').length;
+  let r2 = null;
+  const snapR2 = () => ({
+    ended: st.finished,
+    supplyLeft: origPossessed.alive ? possIn(origPossessed.hand) : 0,   // the starting 3, still in the first possessed guest's hand
+    inPlay: st.players.filter(p => p.alive).reduce((n, p) => n + possIn(p.hand), 0),   // Possession cards anyone living still holds
+    clean: st.players.filter(p => p.alive && !p.possessed).length,     // living clean guests (an escaped guest counts: still clean)
+    conversions: m.conversions,
+  });
+
   let turns = 0;
   while (!st.finished && turns++ < MAX_TURNS) {
     const p = S.activePlayer(st);
@@ -203,9 +215,13 @@ function playMatch(seed, players, assign, ov = {}) {
       const id = P.decideDiscard(view(), p.index, p.hand.filter(c => c.type !== 'possession').map(c => c.id));
       if (!A.discardCard(st, p, id).ok) break;
     }
-    if (S.endTurn(st, floor).finished) break;
+    const roundBefore = st.round;
+    const endedNow = S.endTurn(st, floor).finished;
+    if (!r2 && roundBefore === 2 && st.round === 3) r2 = snapR2();
+    if (endedNow) break;
     S.checkWin(st, floor);
   }
+  if (!r2) r2 = snapR2();   // the match ended before round 2 was over
   st.players.forEach((p, i) => { seats[i].alive = p.alive; seats[i].endPossessed = p.possessed; });
   const how = st.won === 'humans' ? 'escape' : st.dawn ? 'dawn' : st.won === 'possessed' ? 'allGone' : 'unfinished';
   const cleanDead = st.players.filter(p => !p.alive && !p.possessed).length;
@@ -217,7 +233,7 @@ function playMatch(seed, players, assign, ov = {}) {
   };
   return {
     seed, players, won: st.won === 'humans' ? 'clean' : 'hotel', how, rounds: Math.min(st.round, rules.roundLimit), turns: st.turn,
-    deaths: st.players.filter(p => !p.alive).length, cleanDead, seats, m, where,
+    deaths: st.players.filter(p => !p.alive).length, cleanDead, seats, m, where, r2,
     tilesOpened: floor.roomList.length - 1,
   };
 }
@@ -289,6 +305,13 @@ export function summarise(label, list, players, ms = 0) {
     killsOfPossessed: mean(list.map(r => r.m.kills.filter(k => k.victimPossessed).length)),
     killsByPossessed: mean(list.map(r => r.m.kills.filter(k => k.byPossessed).length)),
     where: Object.fromEntries(['clean', 'possessed', 'deck', 'discard', 'floor'].map(k => [k, mean(list.map(r => r.where[k]))])),
+    // The owner's five measurements (4 Oct 2026).
+    r2SupplyGone: cnt(r => r.r2.supplyLeft === 0), r2NoneInPlay: cnt(r => r.r2.inPlay === 0),
+    noConversion: cnt(r => r.m.conversions === 0),
+    r2CleanMean: mean(list.map(r => r.r2.clean)), r2CleanMed: med(list.map(r => r.r2.clean)),
+    r2CleanHist: (() => { const h = {}; for (const r of list) h[r.r2.clean] = (h[r.r2.clean] || 0) + 1; return Object.fromEntries(Object.entries(h).map(([k, v]) => [k, +(v / list.length * 100).toFixed(1)])); })(),
+    r2Ended: cnt(r => r.r2.ended),
+    roundsP90: [...list.map(r => r.rounds)].sort((a, b) => a - b)[Math.floor(n * 0.9)] ?? 0,
     per: {},
   };
   s.cleanPct = s.clean / n * 100; s.cleanCI = ci(s.clean, n);
@@ -327,6 +350,7 @@ export function printSummary(s) {
   console.log('| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |');
   console.log(`| ${s.cleanPct.toFixed(1)}% ±${s.cleanCI.toFixed(1)} | ${(100 - s.cleanPct).toFixed(1)}% | ${pc('escape')} | ${pc('allGone')} | ${pc('allGoneKilled')} | ${pc('dawn')} | ${s.roundsMed} / ${f1(s.roundsMean)} | ${s.turnsMed} / ${f1(s.turnsMean)} (${s.turnsP10}–${s.turnsP90}) | ${f2(s.deaths)} | ${f2(s.attacks)} | ${f1(s.trades)} | ${f2(s.attempts)} / ${f2(s.conversions)} / ${f2(s.blocks)} | ${f1(s.lanternsFound)} |`);
   console.log(`\nLanterns at the end — clean hands ${f1(s.where.clean)}, possessed hands ${f1(s.where.possessed)}, deck ${f1(s.where.deck)}, discard (burned) ${f1(s.where.discard)}, floor ${f1(s.where.floor)}. Fire Exit found in ${f0(s.exitFound / s.n * 100)} (mean round ${f1(s.exitRound)}). Kills per match: clean-on-clean ${f2(s.killsCleanOnClean)}, of possessed ${f2(s.killsOfPossessed)}, by possessed ${f2(s.killsByPossessed)}.`);
+  console.log(`Owner measures — after round 2: starting Possession cards all handed out ${pc('r2SupplyGone')}, no Possession card left in play ${pc('r2NoneInPlay')}, living clean guests mean ${f1(s.r2CleanMean)} (median ${s.r2CleanMed}) of ${s.players - 1} ${JSON.stringify(s.r2CleanHist)}, match already over ${pc('r2Ended')}. No successful conversion all match: ${pc('noConversion')}. Fire Exit found: ${pc('exitFound')}. Rounds median ${s.roundsMed} (90th pct ${s.roundsP90}), turns median ${s.turnsMed} (10–90% ${s.turnsP10}–${s.turnsP90}).`);
   console.log(`Possession attempts on a guest holding a Lantern: ${f0(s.attemptsOnHolderPct)}. Conversions by round (%): ${JSON.stringify(s.convByRound)}. Match ends by round (%): ${JSON.stringify(s.endRoundHist)}.`);
   console.log('\n| Personality | Seats | Survive | Escaped | Got possessed (clean start) | Kills/match | Killed | Clean-side win when starting clean | Hotel win when starting possessed | Searches | Lanterns found | Attacks | Trades |');
   console.log('| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |');

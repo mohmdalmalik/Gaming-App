@@ -358,3 +358,33 @@ re-locks at the end of the opener's turn). Margin about ±1 point.
   which is still early.
 
 Run: `node tools/balance/hotseat-sim.mjs --study --only proposals --pkeys dealt1,nextRound,dealt1+nextRound --pplayers 6,5,4`
+
+## 11. Follow-up (4 October 2026): the owner's five measurements for tests A, B and C
+
+Same runs as section 10 (6,000 matches per row; win rates identical). Simulator only, no rule changed. Three
+independent reviewers checked the new measurements: one recomputed every number with its own bookkeeping and agreed
+exactly; their corrections (dawn turn counted twice, death mislabelled as "handed out", finished matches mixed into
+the round-2 figures) are fixed in the numbers below. "After round 2" = when every living guest has had their round-2
+turn; a match already over by then is counted in its end state (0 clean guests if the hotel had won).
+
+| Measure | A 6p | B 6p | C 6p | A 5p | B 5p | C 5p | A 4p | B 4p | C 4p |
+|---|---|---|---|---|---|---|---|---|---|
+| Clean side wins | 8.3% | 22.2% | 23.7% | 5.4% | 17.1% | 18.0% | 3.6% | 13.0% | 13.3% |
+| All Possession cards out of the game after round 2 | 1.0% | 1.8% | 1.1% | 0.6% | 1.2% | 0.8% | 0.6% | 1.4% | 1.0% |
+| First possessed guest has none of his 3 left after round 2 (passed on or burned) | 38.6% | 43.5% | 48.7% | 28.4% | 34.0% | 38.6% | 14.4% | 20.5% | 23.8% |
+| No successful conversion all match | 1.8% | 11.4% | 11.4% | 2.1% | 12.8% | 12.8% | 3.0% | 15.5% | 15.5% |
+| Clean guests left after round 2, average (out of) | 1.4 (5) | 2.2 (5) | 2.6 (5) | 1.0 (4) | 1.7 (4) | 1.9 (4) | 0.7 (3) | 1.3 (3) | 1.4 (3) |
+| …only matches still running after round 2 | 2.0 | 2.6 | 2.7 | 1.7 | 2.2 | 2.3 | 1.5 | 1.9 | 1.9 |
+| Match already lost by the end of round 2 | 27.3% | 12.8% | 4.7% | 41.1% | 22.5% | 14.3% | 53.5% | 32.2% | 25.9% |
+| Fire Exit found before the match ended | 34.1% | 56.4% | 60.3% | 23.6% | 43.0% | 45.7% | 15.3% | 31.8% | 32.5% |
+| Match length: median rounds · turns (long match, 90th pct) | 4 · 20 (43) | 5 · 28 (47) | 6 · 29 (47) | 3 · 13 (36) | 5 · 22 (40) | 5 · 23 (40) | 2 · 8 (29) | 4 · 15 (32) | 5 · 17 (32) |
+| Typical hot-seat time (35–50 s per turn) | 12–17 min | 16–23 min | 17–24 min | 8–11 min | 13–18 min | 13–19 min | 5–7 min | 9–13 min | 10–14 min |
+
+Notes:
+- Under the current rules a converted guest keeps the Possession card, so Possession cards almost never leave the
+  game (about 1%). The second row says how often the first possessed guest has emptied his own hand; in about 97% of
+  those matches converted guests still carry cards and keep spreading them.
+- "No successful conversion" is the same for B and C because C only delays guests who were already converted.
+- Test C as measured: a guest converted in round R cannot pass possession during round R. About 40% of conversions
+  happen after that guest's own round-R turn, so for them the limit never covers one of their turns. A stricter
+  version ("not until after their next own turn") was not measured.

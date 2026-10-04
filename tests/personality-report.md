@@ -336,3 +336,25 @@ node tools/balance/hotseat-sim.mjs --personalities rusher,slow,safe,aggressive,k
 
 `node tools/balance/hotseat-sim.mjs 400 6` without these options still runs the original bots exactly as
 before.
+
+## 10. Follow-up (4 October 2026): tests A, B and C after the locked-door change
+
+Asked by the owner. Simulator only: **no game rule or game code was changed**. The same mixed table as section 7,
+6,000 matches per row, same seeds, rules as they stand after the locked-door change (one door per locked room,
+re-locks at the end of the opener's turn). Margin about ±1 point.
+
+| Test | Change | Clean side wins: 6 players | 5 players | 4 players | 6 players: median rounds · turns | 6 players: how the hotel wins (all possessed or dead / dawn) |
+|---|---|---|---|---|---|---|
+| A | Current rules | 8.3% | 5.4% | 3.6% | 4 · 20 | 81% / 10% |
+| B | Each guest starts with 1 Lantern | 22.2% | 17.1% | 13.0% | 5 · 28 | 61% / 17% |
+| C | B + a newly possessed guest can pass possession on only from the next round | 23.7% | 18.0% | 13.3% | 6 · 29 | 58% / 19% |
+| (C without B, for comparison) | next-round possession only | 10.1% | 5.8% | 3.9% | 4 · 24 | 77% / 13% |
+
+- **A:** the door change made no measurable difference (8.1% → 8.3%, within the margin).
+- **B:** the earlier improvement still holds (22.3% before, 22.2% now).
+- **C:** slowing the chain adds only about 1.5 points on top of B. It does not create a competitive game. The
+  original possessed guest still holds 3 Possession cards and converts most victims in rounds 1–2 (conversions in
+  round 1 fall only from 41% to 34% with B), and a converted guest is free to pass possession on one round later,
+  which is still early.
+
+Run: `node tools/balance/hotseat-sim.mjs --study --only proposals --pkeys dealt1,nextRound,dealt1+nextRound --pplayers 6,5,4`

@@ -87,8 +87,12 @@ function playMatch(seed, players, assign, ov = {}) {
     }
     if (!A.canTrade(p, Q).ok) { A.skipTrade(st, floor, p, Q); m.skipped++; return; }
     const f = view();
-    const cp = P.decideTradeCard(f, p.index, Q.index, A.tradeableCards(p).map(c => c.id), mem, rng);
-    const cq = P.decideTradeCard(f, Q.index, p.index, A.tradeableCards(Q).map(c => c.id), mem, rng);
+    // Proposal: a guest possessed this round cannot hand over a Possession card until the next round.
+    const giveable = X => A.tradeableCards(X)
+      .filter(c => !(ov.possessNextRound && c.type === 'possession' && seats[X.index].possessedRound === st.round))
+      .map(c => c.id);
+    const cp = P.decideTradeCard(f, p.index, Q.index, giveable(p), mem, rng);
+    const cq = P.decideTradeCard(f, Q.index, p.index, giveable(Q), mem, rng);
     const holding = st.players.map(x => lanternsIn(x.hand));
     const r = A.resolveTrade(st, floor, p, Q, cp, cq);
     if (!r.ok) return;
@@ -347,6 +351,8 @@ export const PROPOSALS = [
   { key: 'supply2+dealt1', label: '2 Possession cards + each guest starts with 1 Lantern', rulesOver: { possessionSupply: 2, lanternsDealtEach: 1 } },
   { key: 'spend+dealt1+supply2', label: 'Spent on conversion + 1 Lantern each + 2 Possession cards', ov: { spendOnConvert: true }, rulesOver: { lanternsDealtEach: 1, possessionSupply: 2 } },
   { key: 'spend+dealt1+supply2+dawn10', label: 'Spent on conversion + 1 Lantern each + 2 Possession cards + dawn after round 10', ov: { spendOnConvert: true }, rulesOver: { lanternsDealtEach: 1, possessionSupply: 2, roundLimit: 10 } },
+  { key: 'nextRound', label: 'A newly possessed guest can pass possession on only from the next round', ov: { possessNextRound: true } },
+  { key: 'dealt1+nextRound', label: 'Each guest starts with 1 Lantern + a newly possessed guest can pass possession on only from the next round', ov: { possessNextRound: true }, rulesOver: { lanternsDealtEach: 1 } },
   { key: 'spend+dealt1+dawn10', label: 'Spent on conversion + 1 Lantern each + dawn after round 10', ov: { spendOnConvert: true }, rulesOver: { lanternsDealtEach: 1, roundLimit: 10 } },
 ];
 

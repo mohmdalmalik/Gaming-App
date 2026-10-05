@@ -44,7 +44,7 @@ Guests are trapped on a hotel floor. Lanterns are the way out: a clean guest car
 
 ## Lanterns and escape
 - Lanterns do double duty: given in a trade they block a possession attempt, and three of them open the fire exit.
-- Lanterns are never dealt. They are found only by searching.
+- Every guest starts with one Lantern (see Cards and deck). All other Lanterns are found by searching.
 - The Fire Exit is revealed like any other room, when the door to it is opened. Walking into the Fire Exit is a normal move (1 AP). Escaping is a separate action: a clean guest with three Lanterns standing in the Fire Exit spends 1 AP to escape. If you arrive with no AP left, you can escape on your next turn — the Fire Exit stays a safe zone meanwhile; dawn can still beat you. A possessed guest can hold Lanterns but can never escape.
 
 ## Winning
@@ -91,5 +91,5 @@ Guests are trapped on a hotel floor. Lanterns are the way out: a clean guest car
 - Lantern: give it in a trade to block a possession attempt; three of them let a clean guest escape.
 - Hand Mirror: 1 AP. Choose a guest in your room; they show you their whole hand in private. Used up.
 - Espresso: free to use (no AP). Gain 2 extra AP this turn. Used up.
-- Starting hand: 4 cards dealt from the deck with the Lanterns taken out. Lanterns are never dealt; they are shuffled into the rest of the deck afterwards.
-- Hand limit: 6, checked at the end of your turn. Lanterns count like other cards; Possession cards don't count.
+- Starting hand: 4 cards. Every guest, the possessed guest included, is dealt 1 Lantern and 3 cards from the deck with the Lanterns taken out; the remaining Lanterns are then shuffled back into the deck.
+- Hand limit: 6, checked at the end of your turn. During your turn you keep everything you find or receive, even past 6; when you end your turn with more than 6, you choose cards to discard until you hold 6. Cards received on someone else's turn are settled at the end of your own next turn. Lanterns count like other cards; Possession cards don't count.

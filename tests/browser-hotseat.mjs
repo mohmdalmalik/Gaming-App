@@ -149,7 +149,8 @@ await load('mode=hotseat&players=6&seed=4242');
 const st = await game(() => ({
   mode: window.__game.mode, n: window.__game.state.players.length, poss: window.__game.possessedIndexes(),
   supply: window.__game.state.players.map(p => p.hand.filter(c => c.type === 'possession').length),
-  lanterns: window.__game.state.players.every(p => !p.hand.some(c => c.type === 'lantern')),
+  lanterns: window.__game.state.players.every(p => p.hand.filter(c => c.type === 'lantern').length === 1),
+  others: window.__game.state.players.every(p => p.hand.filter(c => c.type !== 'lantern' && c.type !== 'possession').length === 3),
   pileLanterns: window.__game.state.drawPile.filter(c => c.type === 'lantern').length,
   four: window.__game.state.players.every(p => p.hand.filter(c => c.type !== 'possession').length === 4),
   locked: window.__game.lockedRooms(), pile: window.__game.state.drawPile.length,
@@ -158,8 +159,9 @@ const st = await game(() => ({
 }));
 check(st.mode === 'hotseat' && st.n === 6, 'six guests, hot-seat');
 check(st.poss.length === 1 && st.supply[st.poss[0]] === 3 && st.supply.filter(x => x > 0).length === 1, 'exactly one possessed guest, holding 3 Possession cards');
-check(st.lanterns && st.four, 'four cards each, and not one Lantern dealt');
-check(st.pileLanterns === 14 && st.pile === 24, `all 14 Lanterns wait in the ${st.pile}-card deck (48 less six hands of 4)`);
+check(st.lanterns && st.others && st.four, 'every guest starts with exactly 1 Lantern + 3 other cards');
+check(st.supply[st.poss[0]] === 3, 'the possessed guest too — with the 3 Possession cards on top of those 4');
+check(st.pileLanterns === 8 && st.pile === 24, `the other 8 Lanterns wait in the ${st.pile}-card deck (48 less six hands of 4)`);
 check(st.locked.length === 0, 'nothing is locked until a locked room is revealed');
 check(st.east && st.rooms.includes('corridorW'), 'the random hotel has grown the rooms these checks use');
 check(st.timer, 'the 45-second timer is on');
@@ -197,16 +199,33 @@ check(!(await visible('#search-spot')), 'and no search icon in the lobby');
 // Possessed guest's private screen carries the tell.
 const evilIdx = st.poss[0];
 {
-  // Their own action phase: the fan shows their ordinary cards; a Possession card never goes on the
-  // always-on screen, and the strip still counts only the ordinary ones.
+  // Their own action phase: as the approved rules say (GAME_RULES.md > Possession), the main screen
+  // shows their reminder — a POSSESSED label, "Souls to trade: 3" and the Possession cards as one ×3
+  // card in the fan — but no possessed portrait or tint, and the strip still counts ordinary cards only.
   await game(i => { window.__game.state.activeIndex = i; window.__game.refresh(); }, evilIdx);
   await page.waitForTimeout(150);
-  const ev = await game(i => { const p = window.__game.state.players[i]; return { ord: p.hand.filter(c => c.type !== 'possession').map(c => c.id), n: p.hand.length }; }, evilIdx);
+  const ev = await game(i => { const p = window.__game.state.players[i]; return { ord: p.hand.filter(c => c.type !== 'possession').map(c => c.id),
+    first: p.hand.find(c => c.type === 'possession')?.id, n: p.hand.length }; }, evilIdx);
   const fan = await fanIds();
-  check(sameSet(fan, ev.ord) && ev.n === ev.ord.length + 3, `the possessed guest's fan shows their ${ev.ord.length} ordinary cards and none of the 3 Possession cards`);
-  check(!/POSSESS/i.test(await page.evaluate(() => document.getElementById('hud').innerText)) && !(await page.$('#hand-fan .fan-card.evil')), 'nothing on the shared screen says possessed');
+  check(await game(() => window.__game.cfg.ui.hotseatPossessedOnMainScreen === true), 'the main-screen reminder is on by default (approved rule)');
+  check(fan.length === ev.ord.length + 1 && ev.ord.every(id => fan.includes(id)) && ev.n === ev.ord.length + 3
+    && (await page.textContent('#hand-fan .fan-badge.souls'))?.replace(/\s+/g, ' ').trim() === '×3 souls',
+    `the possessed guest's fan shows their ${ev.ord.length} ordinary cards and the 3 Possession cards as one ×3 card`);
+  check(await visible('#panel-role') && /POSSESSED/i.test(await page.textContent('#panel-role'))
+    && await visible('#panel-souls') && /Souls to trade:\s*3/.test(await page.textContent('#panel-souls')),
+    'their panel shows POSSESSED and "Souls to trade: 3" during their own action phase');
+  check(!(await visible('#possess-tint')) && await page.evaluate(() => !document.getElementById('player-panel').classList.contains('possessed')),
+    'but no possessed tint or portrait on the shared screen');
+  await shot('hs-02b-possessed-action-phase');
   const strip = await page.evaluate(i => document.querySelectorAll('#players-strip .mini-where')[i].textContent, evilIdx);
   check(strip.includes(`${ev.ord.length} cards`), `the strip shows the public count only ("${strip}")`);
+  // The switch off (?possessedTell=off): nothing of it on the shared screen.
+  await game(() => { window.__game.cfg.ui.hotseatPossessedOnMainScreen = false; window.__game.refresh(); });
+  await page.waitForTimeout(150);
+  check(sameSet(await fanIds(), ev.ord) && !(await visible('#panel-role')) && !(await visible('#panel-souls'))
+    && !/POSSESS/i.test(await page.evaluate(() => document.getElementById('hud').innerText)),
+    'with the switch off, the shared screen shows none of it');
+  await game(() => { window.__game.cfg.ui.hotseatPossessedOnMainScreen = true; window.__game.refresh(); });
 }
 await game(i => { window.__game.state.activeIndex = i; window.__game.refresh(); }, evilIdx);
 await game(() => window.__game.endTurn());
@@ -216,10 +235,128 @@ await game(i => { window.__game.state.activeIndex = i; window.__game.refresh(); 
 await game(() => window.__game.handoff.privateTurn(window.__game.state, window.__game.floor, window.__game.activePlayer(), { onStart: () => {} }));
 check(/POSSESSED/.test(await page.textContent('#handoff-role')) && await page.evaluate(() => document.querySelector('#handoff-role').classList.contains('evil')),
   'the possessed guest sees POSSESSED on their own private screen');
-check(await page.evaluate(() => [...document.querySelectorAll('#handoff-hand .card-tile')].filter(t => t.classList.contains('evil')).length) === 3,
-  'with their three Possession cards');
+check(await page.evaluate(() => { const t = [...document.querySelectorAll('#handoff-hand .card-tile')].filter(t => t.classList.contains('evil'));
+  return t.length === 1 && t[0].querySelector('.face-badge.souls')?.textContent === '×3'; }),
+  'with their three Possession cards (one tile marked ×3)');
+check(/Souls to trade:\s*3/.test(await page.textContent('#handoff-role .souls-chip')) && !!(await page.$('#handoff-role .role-portrait'))
+  && await page.evaluate(() => document.getElementById('handoff-card').classList.contains('possessed')),
+  'their private screen shows their possessed portrait and "Souls to trade: 3"');
 await shot('hs-03-possessed-private');
 await next();
+// Outside their action phase (the private screen put away, the turn not started) the shared main
+// screen shows none of it: the reminder is only on while their own turn runs.
+check(!(await game(() => window.__game.inActionPhase())) && !(await visible('#panel-role')) && !(await visible('#panel-souls'))
+  && !(await page.$('#hand-fan .fan-badge.souls')),
+  'outside their own action phase the shared main screen carries no POSSESSED label, souls count or Possession card');
+// The card view (private) carries the same tell; the next pass screen carries none of it.
+await game(() => window.__game.openHand());
+check((await page.textContent('#hand-big .face-badge.souls')) === '×3' && /^Souls to trade:\s*3$/.test((await page.textContent('#hand-detail .souls-line')).trim())
+  && /1 of \d/.test(await page.textContent('#hand-pos')),
+  'their card view shows the Possession cards as one ×3 stack and "Souls to trade: 3"');
+{
+  // The Possession card's words are said once: one count line and one description, no repeats.
+  const v = await page.evaluate(() => ({ detail: document.getElementById('hand-detail').innerText, banner: document.getElementById('hand-banner').innerText,
+    note: document.getElementById('hand-note').textContent, lines: document.querySelectorAll('#hand-detail .d-desc, #hand-detail .d-tag, #hand-detail .d-line').length }));
+  const all = `${v.banner} ${v.detail} ${v.note}`;
+  check((all.match(/souls to trade/gi) || []).length === 1 && (all.match(/unless they hand you a Lantern/g) || []).length === 1 && v.lines === 2,
+    `on the Possession card the count and what it does appear once each (${JSON.stringify(v)})`);
+  // On any other card the banner carries the reminder and the count (once: not again in the footer),
+  // and the ‹ › arrows stay where they were, so a second tap on the same spot steps on again.
+  const arrowAt = () => page.evaluate(() => Math.round(document.getElementById('btn-hand-next').getBoundingClientRect().top));
+  await page.evaluate(() => document.querySelector('#hand-overlay .cv-panel').getAnimations().forEach(a => a.finish()));   // (the opening slide is over)
+  const y0 = await arrowAt();
+  await page.click('#btn-hand-next');
+  const y1 = await arrowAt();
+  check(/Souls to trade:\s*3/.test(await page.textContent('#hand-banner .souls-chip')) && /In a trade, give a Possession card/.test(await page.textContent('#hand-banner')),
+    'on their other cards the banner keeps the reminder and "Souls to trade: 3"');
+  check((await page.evaluate(() => document.querySelector('#hand-overlay .cv-panel').innerText.match(/souls to trade/gi) || [])).length === 1,
+    'and says the count once (the footer leaves it out)');
+  await page.click('#btn-hand-prev');
+  const y2 = await arrowAt();
+  check(y0 === y1 && y1 === y2, `the arrows do not move when stepping to and from the Possession card (top ${y0} / ${y1} / ${y2})`);
+}
+// It can open from a fan card on the shared screen too: in hot-seat no portrait and no violet wash.
+check(await page.evaluate(() => !document.getElementById('hand-overlay').classList.contains('possessed') && !document.querySelector('#hand-banner .banner-portrait')),
+  'in hot-seat the card view has no possessed portrait and no violet wash (seen across the table)');
+await game(i => { const p = window.__game.state.players[i]; p.hand.splice(p.hand.findIndex(c => c.type === 'possession'), 1); window.__game.refresh(); }, evilIdx);
+check((await page.textContent('#hand-big .face-badge.souls')) === '×2' && /Souls to trade:\s*2/.test(await page.textContent('#hand-detail .souls-line')),
+  'and the count follows the hand at once (one given away: ×2)');
+await page.click('#btn-hand-close');
+check(await page.evaluate(() => { const b = document.getElementById('hand-banner'); return b.innerHTML === '' && b.className === 'banner'; }),
+  'closing the card view leaves nothing of the banner behind');
+check(await page.evaluate(() => !document.getElementById('hand-big').innerHTML && !document.getElementById('hand-detail').innerHTML && !document.getElementById('hand-note').textContent),
+  'nor of the Possession card, its detail or the souls count (the hidden view is emptied)');
+await game(() => window.__game.handoff.passTo(window.__game.activePlayer(), '', () => {}));
+check(!(await page.$('#handoff-overlay .souls-chip')) && !(await page.$('#handoff-overlay .role-portrait'))
+  && !(await visible('#panel-role')) && !(await visible('#panel-souls'))
+  && await page.evaluate(() => !document.getElementById('handoff-card').classList.contains('possessed') && !document.getElementById('hand-overlay').classList.contains('possessed')),
+  'the pass screen after it shows no portrait, no count and no wash');
+await next();
+
+console.log('\n3b. the possessed guest\'s real turn: their reminder on the main screen, gone before the pass');
+{
+  // A real round from the start, guest by guest (no staging): the reminder is on during the possessed
+  // guest's own action phase only — not on any pass or private hand-over screen behind the card, not for
+  // a clean guest, and gone the moment their turn ends, before the next guest's pass screen.
+  await load('mode=hotseat&players=6&seed=4242&timer=off');
+  const evil = (await game(() => window.__game.possessedIndexes()))[0];
+  const tellOff = async () => !(await visible('#panel-role')) && !(await visible('#panel-souls'))
+    && !(await page.$('#hand-fan .fan-badge.souls')) && !(await page.$('#hand-fan .fan-card[data-type="possession"]'))
+    && !/POSSESS|souls to trade/i.test(await page.evaluate(() => document.getElementById('hud').innerText))
+    && !(await visible('#possess-tint')) && await page.evaluate(() => !document.getElementById('player-panel').classList.contains('possessed'));
+  await tap('#btn-begin');
+  await throughRoles();
+  // One full round (six turns), plus the turn after the possessed guest's if theirs is the last one.
+  let sawEvil = false, cleanTurns = 0, passes = 0, privates = 0, nextChecked = false, prevWasEvil = false;
+  for (let t = 0; t < 8 && (t < 6 || !nextChecked); t++) {
+    // The private turn screen: the main screen behind it carries no reminder.
+    check(await kind() === 'turn' && await tellOff(), `turn ${t + 1}: nothing of the reminder on the main screen behind the private turn screen`);
+    privates++;
+    await next();
+    const i = await game(() => window.__game.state.activeIndex);
+    check(await game(() => window.__game.inActionPhase()), `turn ${t + 1}: ${i === evil ? 'the possessed' : 'a clean'} guest's action phase runs`);
+    if (i === evil) {
+      sawEvil = true;
+      const ord = await game(i => window.__game.state.players[i].hand.filter(c => c.type !== 'possession').length, i);
+      const panelRole = (await visible('#panel-role')) ? (await page.textContent('#panel-role')).trim() : '';
+      const panelSouls = (await visible('#panel-souls')) ? (await page.textContent('#panel-souls')).replace(/\s+/g, ' ').trim() : '';
+      const badge = ((await page.textContent('#hand-fan .fan-badge.souls', { timeout: 3000 }).catch(() => '')) || '').replace(/\s+/g, ' ').trim();
+      const fan = await game(() => [...document.querySelectorAll('#hand-fan .fan-card')].map(e => e.dataset.type));
+      check(/^possessed$/i.test(panelRole) && /Souls to trade:\s*3/.test(panelSouls),
+        `the possessed guest's own action phase: POSSESSED and "Souls to trade: 3" in their panel ("${panelRole}" / "${panelSouls}")`);
+      check(badge === '×3 souls' && fan.filter(x => x === 'possession').length === 1 && fan.length === ord + 1,
+        `their fan shows their ${ord} ordinary cards and the Possession cards as one ×3 card ("${badge}")`);
+      check(!(await visible('#possess-tint')) && await page.evaluate(() => !document.getElementById('player-panel').classList.contains('possessed')),
+        'but no possessed portrait and no violet tint on the shared screen');
+      await shot('hs-03b-possessed-own-turn');
+      await tap('#btn-end-turn');
+      check(await kind() === 'pass' && await tellOff(), 'their turn ended: the next pass screen comes up with the reminder already gone');
+      check(await page.evaluate(() => !document.querySelector('#hand-fan [data-card-id]') && !document.querySelector('#hand-fan .fan-badge.souls')
+        && !document.querySelector('#handoff-overlay .souls-chip') && !document.querySelector('#handoff-overlay .role-portrait')),
+        'and nothing of their hand or count waits in hidden markup behind it');
+      await shot('hs-03c-pass-after-possessed');
+    } else {
+      check(await tellOff(), `turn ${t + 1}: ${prevWasEvil ? "the next guest's (clean) action phase, right after the possessed guest's" : "a clean guest's action phase"} shows no reminder`);
+      if (prevWasEvil) { nextChecked = true; await shot('hs-03d-next-guest-turn'); }
+      cleanTurns++;
+      await tap('#btn-end-turn');
+      check(await kind() === 'pass' && await tellOff(), `turn ${t + 1}: the pass screen after it shows none of it`);
+    }
+    passes++;
+    prevWasEvil = i === evil;
+    await next();
+  }
+  check(sawEvil && nextChecked, `the possessed guest's turn came round and the next guest's was checked (${cleanTurns} clean turns; ${passes} pass and ${privates} private screens)`);
+  // ?possessedTell=private turns the main-screen reminder off (private screens only).
+  await load('mode=hotseat&players=6&seed=4242&timer=off&possessedTell=private');
+  check(await game(() => window.__game.cfg.ui.hotseatPossessedOnMainScreen === false), '?possessedTell=private switches the main-screen reminder off');
+  await tap('#btn-begin');
+  await throughRoles();
+  await next();
+  await game(i => { window.__game.state.activeIndex = i; window.__game.refresh(); }, evil);
+  await page.waitForTimeout(150);
+  check(await game(() => window.__game.inActionPhase()) && await tellOff(), 'with it off, even the possessed guest\'s own action phase shows none of it on the main screen');
+}
 
 console.log('\n4. a trade, each side choosing in private');
 await load('mode=hotseat&players=6&seed=4242');
@@ -582,9 +719,54 @@ await next();
   check(await kind() === 'pass' && (await page.textContent('#handoff-title')).includes(active),
     `then the device goes back to the guest whose turn it is (${active}) before the game carries on`);
 }
-await next(); await tap('#encounter-actions .btn.primary');
+await next();
+check(await kind() === 'note' && /Knife/.test(await page.textContent('#handoff-notes')),
+  'and they privately read what they received (a Knife) before the public screen');
+await next();
+check(await game(() => window.__game.meetingOpen()), 'then the table sees the public result');
+await tap('#encounter-actions .btn.primary');
 check(await game(() => window.__game.inActionPhase() && !window.__game.handoffOpen()), 'and their turn carries on');
 check(await game(() => window.__game.state.players[0].hand.some(c => c.id === 'q1') && window.__game.state.players[1].hand.some(c => c.id === 'p1')), 'the cards swapped — a Lantern passes to a teammate like any card');
+{
+  // The guest whose turn it is chooses second in a Fire Exit trade. Converted there, they must learn it
+  // in private first — never from their own main screen in front of the table.
+  await game(() => {
+    const g = window.__game, s = g.state;
+    s.players.forEach((p, i) => { p.possessed = i === 1; p.notes = []; p.roleChangePending = false; });
+    s.players[0].hand = [{ id: 'v1', type: 'bandage' }];
+    s.players[1].hand = [{ id: 'e1', type: 'knife' }, { id: 'x1', type: 'possession' }, { id: 'x2', type: 'possession' }];
+    g.refresh();
+  });
+  const roleShown = () => visible('#panel-role');
+  await tap('#btn-trade');
+  await next();
+  await clickBtn('#offer-intent .btn', 'Accept');
+  await page.click('#offer-cards .card-tile[data-card-id="x1"]'); await page.waitForTimeout(80);
+  await next();
+  await page.click('#offer-cards .card-tile[data-card-id="v1"]'); await page.waitForTimeout(80);
+  await next();
+  check(await kind() === 'note' && /bandage/i.test(await page.textContent('#handoff-notes')), 'Fire Exit trade 2: the possessed guest (first) reads what they received');
+  await next();
+  check(await kind() === 'pass' && !(await roleShown()), 'the device goes back to the guest whose turn it is, with no reminder on the screen');
+  await next();
+  check(await kind() === 'note' && /now POSSESSED/.test(await page.textContent('#handoff-notes')) && !(await roleShown()),
+    'the converted guest whose turn it is reads it in private at once — before the public screen and before their main screen shows anything');
+  check(await game(() => window.__game.state.players[0].possessed && !window.__game.state.players[0].roleChangePending),
+    'told now, so no second "something has changed" screen at their next turn');
+  await next();
+  check(await game(() => window.__game.meetingOpen()) && !(await roleShown())
+    && !/Possession|POSSESS/i.test(await page.textContent('#encounter-body')), 'the public result names no card and shows no reminder');
+  await tap('#encounter-actions .btn.primary');
+  await page.waitForTimeout(120);
+  check(await game(() => window.__game.inActionPhase() && !window.__game.handoffOpen()), 'and their turn carries on');
+  // Give the cards back so the sections below start from the same hands as before.
+  await game(() => {
+    const s = window.__game.state;
+    s.players.forEach((p, i) => { p.possessed = i === 5; p.notes = []; p.roleChangePending = false; });
+    s.players[0].hand = [{ id: 'q1', type: 'knife' }]; s.players[1].hand = [{ id: 'p1', type: 'lantern' }];
+    window.__game.refresh();
+  });
+}
 
 console.log('\n10. the clock');
 check(await game(() => window.__game.inActionPhase()), 'the turn is still running');
@@ -593,6 +775,69 @@ await page.waitForFunction(() => window.__game.state.activeIndex === 1, null, { 
 check(await game(() => window.__game.state.activeIndex) === 1 && await kind() === 'pass', 'when the clock runs out the turn ends and the device is passed');
 check(await game(() => window.__game.timeLeft()) === 0, 'the clock does not run on the hand-over screen');
 check(await fanGone(), 'and the last guest\'s cards are off the screen before the device changes hands');
+
+console.log('\n10a. the hand limit is settled at the end of the turn (the clock, and End turn)');
+{
+  // Over the limit during a turn is fine; when the clock runs out the discard screen comes first —
+  // still the active guest's own private moment — and only then the pass screen.
+  check(await intoTurn(), 'the next guest starts their turn');
+  const me = await game(() => window.__game.state.activeIndex);
+  await game(() => {
+    const g = window.__game, p = g.activePlayer();
+    p.hand = [...['lantern', 'bandage', 'knife', 'flashlight', 'barricade', 'lockPick', 'espresso', 'handMirror'].map((t, i) => ({ id: `ov${i}`, type: t })),
+      ...p.hand.filter(c => c.type === 'possession')];
+    g.refresh();
+  });
+  await page.waitForTimeout(200);
+  check((await page.textContent('#hand-fan .fan-limit')) === 'Cards 8/6 · discard 2 at end of turn', 'with 8 cards the fan shows a calm reminder');
+  await shot('hs-20-hand-8');
+  await game(() => window.__game.forceTimeUp());
+  await page.waitForFunction(() => !document.getElementById('discard-overlay').hidden || window.__game.handoffOpen(), null, { timeout: 20000 }).catch(() => {});
+  const d = await page.evaluate(() => ({ open: !document.getElementById('discard-overlay').hidden, pass: window.__game.handoffOpen(), active: window.__game.state.activeIndex,
+    kicker: document.getElementById('discard-kicker').hidden ? '' : document.getElementById('discard-kicker').textContent, n: document.querySelectorAll('#discard-cards .card-tile').length,
+    types: [...document.querySelectorAll('#discard-cards .card-tile')].map(t => t.dataset.cardId), timer: window.__game.timeLeft(), name: window.__game.activePlayer().name }));
+  check(d.open && !d.pass && d.active === me, 'when the clock runs out with 8 cards the discard screen opens — before any pass screen');
+  check(d.kicker === `Private — ${d.name} only`, `it is marked private ("${d.kicker}")`);
+  check(d.n === 8 && d.types.every(id => id.startsWith('ov')), 'it offers the 8 ordinary cards and never a Possession card');
+  check(d.timer === 0 && await fanGone(), 'the clock has stopped, and the fan is off the screen');
+  await shot('hs-21-discard-timeup');
+  await game(() => document.getElementById('btn-discard-done').click());   // (a stray press on the disabled button)
+  await page.waitForTimeout(100);
+  check(await game(i => window.__game.state.activeIndex === i && !document.getElementById('discard-overlay').hidden
+    && document.getElementById('btn-discard-done').disabled, me), 'the turn cannot pass while still over the limit (the button waits for a pick)');
+  for (const id of ['ov1', 'ov2']) { await page.click(`#discard-cards .card-tile[data-card-id="${id}"]`); await page.waitForTimeout(80); await tap('#btn-discard-done'); }
+  check((await page.textContent('#btn-discard-done')).trim() === 'Keep these 6', 'two discards later: "Keep these 6"');
+  await tap('#btn-discard-done');
+  check(await game(i => window.__game.state.activeIndex === (i + 1) % 6, me) && await kind() === 'pass', 'then the turn passes, to the pass screen');
+  check(await game(i => window.__game.state.players[i].hand.filter(c => c.type !== 'possession').length === 6, me), 'with that guest down to 6 cards');
+  // The possessed guest ending their turn with End turn: the same screen, and the Possession cards stay.
+  check(await intoTurn(), 'the next guest starts their turn');
+  const v = await game(() => window.__game.state.activeIndex);
+  await game(() => {
+    const g = window.__game, p = g.activePlayer();
+    p.hand = [...['lantern', 'lantern', 'knife', 'knife', 'bandage', 'bandage', 'espresso', 'barricade'].map((t, i) => ({ id: `pv${i}`, type: t })),
+      ...['x1', 'x2', 'x3'].map(id => ({ id, type: 'possession' }))];
+    g.refresh();
+  });
+  await tap('#btn-end-turn');
+  const e = await page.evaluate(() => ({ open: !document.getElementById('discard-overlay').hidden, ids: [...document.querySelectorAll('#discard-cards .card-tile')].map(t => t.dataset.cardId),
+    sub: document.getElementById('discard-sub').textContent, page: document.getElementById('discard-overlay').innerText }));
+  check(e.open && e.ids.length === 8 && !e.ids.some(id => /^x/.test(id)) && !/Possess|soul/i.test(e.page),
+    'End turn with 8 ordinary cards + 3 Possession cards: the discard screen offers only the 8, and says nothing of possession');
+  check(/You hold 8 cards/.test(e.sub), 'the count ignores Possession cards');
+  for (const id of ['pv4', 'pv5']) { await page.click(`#discard-cards .card-tile[data-card-id="${id}"]`); await page.waitForTimeout(80); await tap('#btn-discard-done'); }
+  await tap('#btn-discard-done');
+  check(await game(i => window.__game.state.players[i].hand.filter(c => c.type === 'possession').length === 3
+    && window.__game.state.players[i].hand.length === 9 && window.__game.state.activeIndex === (i + 1) % 6, v), 'the 3 Possession cards are kept; the turn passes');
+  // Nothing of that hand waits in hidden markup during the next guest's pass screen: not the kept
+  // cards on the discard screen, not the old fan, not the card view.
+  await page.waitForTimeout(150);
+  const left = await page.evaluate(() => ({ discard: document.querySelectorAll('#discard-cards *').length,
+    fan: [...document.querySelectorAll('#hand-fan [data-card-id]')].map(e => e.dataset.cardId), souls: !!document.querySelector('#hand-fan .fan-badge.souls'),
+    big: document.getElementById('hand-big').innerHTML, detail: document.getElementById('hand-detail').innerHTML, note: document.getElementById('hand-note').textContent }));
+  check(await kind() === 'pass' && left.discard === 0 && !left.fan.some(id => /^(pv|x)/.test(id)) && !left.souls && !left.big && !left.detail && !left.note,
+    `on the next pass screen no hidden screen still holds the previous guest's cards (${JSON.stringify(left)})`);
+}
 
 // Part 2 stagings run with ?timer=off: headless software rendering is slow, and a turn that ran out
 // of time half-way would hand the device on in the middle of a check.
@@ -698,6 +943,28 @@ console.log('\n10c. the Switchboard');
   await tap('#btn-notice-ok');
   log = await game(() => window.__game.publicLog());
   check(log.slice(logBefore).every(l => !evil.some(n => l.includes(n))), 'the public log still never names a possessed guest');
+
+  // A possessed guest rings it in their own turn. The notice is for the whole table, so their reminder
+  // leaves the main screen behind it (the hidden fan included) and comes back once it is put away.
+  await tap('#btn-end-turn');
+  await intoTurn();
+  await game(() => {
+    const g = window.__game, p = g.activePlayer();
+    p.possessed = true; p.roleChangePending = false; p.hand.push({ id: 'sx1', type: 'possession' }); g.refresh();
+  });
+  await put('switchboard', 4);
+  await page.waitForTimeout(150);
+  check(await visible('#panel-role') && await visible('#panel-souls'), 'a possessed guest in their own turn, in the Switchboard: their reminder is on');
+  await tap('#btn-room');
+  await page.waitForTimeout(150);
+  check(await game(() => window.__game.noticeOpen()) && !(await visible('#panel-role')) && !(await visible('#panel-souls'))
+    && !/POSSESS|souls to trade/i.test(await page.evaluate(() => document.getElementById('hud').innerText))
+    && !(await page.$('#hand-fan .fan-card[data-type="possession"]')) && !(await page.$('#hand-fan .fan-badge.souls')),
+    'while the Switchboard notice is up, no POSSESSED label, souls count or Possession card on the main screen behind it (nor in the hidden fan)');
+  await shot('hs-11b-switchboard-possessed-own-turn');
+  await tap('#btn-notice-ok');
+  await page.waitForTimeout(150);
+  check(await visible('#panel-role') && await visible('#panel-souls'), 'and it comes back once the notice is put away');
 }
 
 console.log('\n10d. the Hand Mirror');
@@ -793,7 +1060,6 @@ console.log('\n10e. Espresso');
   await settle();
   await searchHere();
   while (await game(() => window.__game.handoffOpen())) await next();
-  if (await game(() => window.__game.fullHandOpen())) await tap('#btn-fullhand-leave');
   check(await game(() => window.__game.activePlayer().actionPoints) === 5 && (await pips()).label === '5', `a search spends one of the six (${(await pips()).label})`);
   // End turn and go round the table: the extra actions do not carry over.
   await tap('#btn-end-turn');

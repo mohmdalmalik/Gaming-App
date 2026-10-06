@@ -8,13 +8,20 @@
 // Cards shrink and overlap more as the hand grows (six cards plus a few found ones still fit).
 //
 // Privacy (hot-seat): main.js shows the fan only during the active guest's own action phase, and CSS
-// hides it whenever a hand-over, private or public screen is up. A Possession card is never put on
-// this always-on strip in hot-seat — on a shared device it would tell the table who is possessed; it is
-// seen, as before, only by opening the card view ("Private details"). Practice has nobody to hide from.
+// hides it whenever a hand-over, private or public screen is up. The Possession cards go on it — as
+// ONE card with a ×N badge — only when main.js passes `withPossession`: during the possessed guest's
+// own action phase, as the owner-approved rules say (docs/GAME_RULES.md > Possession;
+// cfg.ui.hotseatPossessedOnMainScreen, on by default). Before the pass screen it is false again, and
+// once the turn has moved on the hidden fan drops the previous guest's cards from the page.
+//
+// Over the hand limit: during a turn a guest keeps everything, even past 6 (approved rule), so a
+// small calm label sits just above the fan — "Cards 8/6 · discard 2 at end of turn", on one line. It
+// is the active guest's own count, shown only during their own action phase like the fan itself, and
+// Possession cards never count, so it gives no role away.
 //
 // Cheap on the iPad: the cards are rebuilt only when the hand changes; positions are CSS transforms.
 import { CARDS } from '../game/cards.js';
-import { CARD_FACE, sortHand } from './cards.js';
+import { CARD_FACE, sortHand, handLimitWarning } from './cards.js';
 
 const STEP = 0.62;       // spacing between card centres, as a share of the card width, when there is room
 const MIN_STEP = 0.36;   // closest the cards may crowd before they shrink instead
@@ -29,6 +36,14 @@ export function createHandFan(doc, { onOpen }) {
   let shownFor = -1;
   let visible = false;
   let cards = [];               // [{ card, el }]
+  const limit = doc.createElement('div');   // the over-the-limit reminder (kept across rebuilds)
+  limit.className = 'fan-limit'; limit.hidden = true; limit.setAttribute('role', 'status');
+  root.appendChild(limit);
+  function syncLimit(player) {
+    const text = handLimitWarning(player);
+    if (limit.textContent !== text) limit.textContent = text;
+    if (limit.hidden !== !text) limit.hidden = !text;
+  }
 
   const cardWidth = () => Math.round(Math.max(72, Math.min(108, window.innerHeight * 0.115)));
 
@@ -48,18 +63,23 @@ export function createHandFan(doc, { onOpen }) {
   const shotsText = card => (card.type === 'revolver' && card.shots != null ? `${card.shots} shot${card.shots === 1 ? '' : 's'}` : '');
 
   // The Revolver's shots: a badge at the top LEFT (the next card covers each card's right-hand side).
-  // When the fan is crowded only the number shows (.hand-fan.tight).
-  function setShots(b, card) {
+  // When the fan is crowded only the number shows (.hand-fan.tight). The Possession stack (only where
+  // the fan may show it) carries its count the same way: "×3 souls".
+  function setShots(b, card, souls = 0) {
     const meta = CARDS[card.type] || { name: card.type };
     const shots = shotsText(card);
-    b.setAttribute('aria-label', `${meta.name}${shots ? ` · ${shots}` : ''} — show this card`);
+    const stack = card.type === 'possession' && souls > 0;
+    b.setAttribute('aria-label', stack ? `${meta.name} ×${souls} — souls to trade — show this card`
+      : `${meta.name}${shots ? ` · ${shots}` : ''} — show this card`);
     let badge = b.querySelector('.fan-badge');
-    if (!shots) { badge?.remove(); return; }
+    if (!shots && !stack) { badge?.remove(); return; }
     if (!badge) { badge = doc.createElement('span'); badge.className = 'fan-badge'; b.appendChild(badge); }
-    badge.innerHTML = `<b>${card.shots}</b><span class="unit"> shot${card.shots === 1 ? '' : 's'}</span>`;
+    badge.classList.toggle('souls', stack);
+    badge.innerHTML = stack ? `<b>×${souls}</b><span class="unit"> soul${souls === 1 ? '' : 's'}</span>`
+      : `<b>${card.shots}</b><span class="unit"> shot${card.shots === 1 ? '' : 's'}</span>`;
   }
 
-  function makeCard(card, dealt) {
+  function makeCard(card, dealt, souls = 0) {
     const meta = CARDS[card.type] || { name: card.type };
     const b = doc.createElement('button');
     b.type = 'button';
@@ -72,7 +92,7 @@ export function createHandFan(doc, { onOpen }) {
     } else {
       const n = doc.createElement('span'); n.className = 'fan-name'; n.textContent = meta.name; b.appendChild(n);
     }
-    setShots(b, card);
+    setShots(b, card, souls);
     let press = null;
     // Touch has no hover: lift the card while a finger is on it.
     b.addEventListener('pointerdown', e => {
@@ -87,9 +107,9 @@ export function createHandFan(doc, { onOpen }) {
       if (!e.isTrusted || !p || p.id !== e.pointerId || Math.hypot(e.clientX - p.x, e.clientY - p.y) > 28) return;
       openedAt = performance.now();
       swallowClick();
-      onOpen(card.id);
+      onOpen(b.dataset.cardId);
     });
-    b.addEventListener('click', e => { e.preventDefault(); if (performance.now() - openedAt > 350) onOpen(card.id); });
+    b.addEventListener('click', e => { e.preventDefault(); if (performance.now() - openedAt > 350) onOpen(b.dataset.cardId); });
     for (const t of ['pointercancel', 'lostpointercapture']) b.addEventListener(t, () => { press = null; b.classList.remove('lift'); });
     b.addEventListener('pointerleave', () => { if (!press) b.classList.remove('lift'); });
     if (dealt) b.addEventListener('animationend', () => b.classList.remove('dealt'), { once: true });
@@ -138,22 +158,27 @@ export function createHandFan(doc, { onOpen }) {
   // The cards already on screen are KEPT (only new ones are made, only gone ones removed), so a card
   // being pressed is never swapped for a copy mid-tap. Their stacking is z-index, not page order.
   const els = new Map();          // `${id}|${type}` -> the card's element
-  const keyOf = c => `${c.id}|${c.type}`;
+  // The Possession stack keeps one element however many are given away (its card id is updated).
+  const keyOf = c => (c.type === 'possession' ? 'possession|stack' : `${c.id}|${c.type}`);
   function render(player, withPossession) {
-    const hand = sortHand(player.hand).filter(c => withPossession || c.type !== 'possession');
+    // Possession cards (where they may show at all) are one stack with a ×N badge.
+    const sorted = sortHand(player.hand);
+    const souls = sorted.filter(c => c.type === 'possession').length;
+    const firstSoul = sorted.find(c => c.type === 'possession');
+    const hand = sorted.filter(c => c.type !== 'possession' || (withPossession && c === firstSoul));
     const fresh = shownFor === player.index;   // same guest as last time: new cards deal in
     const keep = new Set(hand.map(keyOf));
     for (const [k, el] of els) if (!keep.has(k)) { el.remove(); els.delete(k); }
     cards = hand.map(card => {
       let el = els.get(keyOf(card));
       if (!el) {
-        el = makeCard(card, fresh && !shownIds.has(card.id));
+        el = makeCard(card, fresh && !shownIds.has(keyOf(card)), souls);
         root.appendChild(el);
         els.set(keyOf(card), el);
-      } else setShots(el, card);
+      } else { el.dataset.cardId = card.id; setShots(el, card, souls); }
       return { card, el };
     });
-    shownIds = new Set(hand.map(c => c.id));
+    shownIds = new Set(hand.map(keyOf));
     shownFor = player.index;
     root.classList.toggle('empty', !hand.length);
     layout();
@@ -171,18 +196,34 @@ export function createHandFan(doc, { onOpen }) {
     }).observe(root);
   }
 
+  function dropCards() {
+    sig = ''; shownIds = new Set(); shownFor = -1; els.clear(); root.innerHTML = ''; cards = [];
+    limit.hidden = true; limit.textContent = ''; root.appendChild(limit);
+  }
+
   return {
     // Every frame (cheap): `show` says whether the fan may be up at all right now.
     update(player, show, { withPossession = false } = {}) {
       const appeared = show && !visible;
       if (show !== visible) { visible = show; root.hidden = !show; }
-      if (!show) return;
+      if (!show) {
+        // Hidden and the turn has moved on (a pass screen): drop the previous guest's cards from the
+        // page, so nothing of their hand waits in hidden markup. The next guest's deal in as usual.
+        if (els.size && player.index !== shownFor) dropCards();
+        // Same guest, but the Possession card may not show right now (a meeting, a pass screen):
+        // take the ×N card out of the hidden markup too. It comes back when the fan does.
+        else if (!withPossession && els.has('possession|stack')) {
+          els.get('possession|stack').remove(); els.delete('possession|stack');
+          cards = cards.filter(c => c.card.type !== 'possession'); sig = '';
+        }
+        return;
+      }
       const s = `${player.index}|${withPossession}|${player.hand.map(c => `${c.id}:${c.shots ?? ''}`).join(',')}`;
-      if (s !== sig) { sig = s; render(player, withPossession); }
+      if (s !== sig) { sig = s; render(player, withPossession); syncLimit(player); }
       else if (appeared) layout();     // the width may have changed while it was hidden
     },
     // A new match: forget what was drawn (no deal-in animation for a fresh deal).
-    reset() { sig = ''; shownIds = new Set(); shownFor = -1; els.clear(); root.innerHTML = ''; cards = []; },
+    reset() { dropCards(); },
     get visible() { return visible; },
     get ids() { return cards.map(c => c.card.id); },
     layout,

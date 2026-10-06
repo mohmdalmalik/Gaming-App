@@ -258,9 +258,9 @@ Implements `docs/GAME_RULES.md`. Kept pure and separate from rendering so a serv
   the 2D map until every objective is found. This is the Panic Station "Hive at the bottom of the
   deck" idea: it guarantees a real exploration phase before the endgame instead of hoping the
   exit is found late.
-- **A found card is never discarded silently.** Searching on a full hand opens a choice (take it
-  and drop one / use it now / leave it). The room is marked searched either way, so a full hand
-  cannot be used to farm the same room twice.
+- **A found card is never discarded silently.** (Superseded: the owner-approved hand-limit rule keeps
+  every found card and settles the limit at the end of the turn — see "Owner-approved: 1 Lantern each;
+  hand limit at the end of your turn" below.)
 - **Health is hidden, not faked.** With no damage, no combat and no action-point penalty, health
   cannot change, so showing three bars would imply a rule that does not exist. `healthEnabled`
   hides the row; the value and the Bandage logic stay for Phase 1.
@@ -444,10 +444,16 @@ the lessons). Key decisions:
   on one iPad between six people, a purple wash during someone's turn is the opposite of private.
   So the possessed portrait and tint appear on the private screens and in the hand sheet, and the
   public HUD stays neutral. Online, with one device each, the tell can be on the main screen.
+  (Since changed by the owner: during the possessed guest's own turn the main screen now shows a
+  POSSESSED label, the souls count and the ×N Possession card — still no portrait or tint. See
+  "The main screen (player panel + fan)" below.)
 - **Trades pass the device.** The entering guest picks a card in private, the device goes to the
   other guest who picks in private, the cards swap, and the device comes back with a private
   "you received…" card. The other guest reads theirs on their own next private screen. The public
-  panel says only that a trade was made.
+  panel says only that a trade was made. In a voluntary trade (the Fire Exit) the other guest picks
+  first and the guest whose turn it is picks second; they then read their own result in private as soon
+  as the device comes back to them, before the public panel, so a guest converted there never learns it
+  from their main screen in front of the table.
 - **Superseded by the approved Lantern rules** (next section): key pieces are gone.
 - **Locked and barricaded doorways are enforced in pathfinding**, not just in the door blink: the
   landing cells on both sides of such a doorway are removed from the walkable set, so no route can
@@ -461,24 +467,24 @@ the lessons). Key decisions:
 - **Lanterns do double duty.** Three in a clean guest's hand open the exit (`rules.lanternsToEscape`);
   given in a trade they block possession. The key pieces, their hiding and the `pieceRooms` state
   are gone.
-- **Lanterns are never dealt.** `deal()` takes the Lanterns out, deals the four-card hands from the
-  rest, then shuffles the Lanterns back into what is left using the match's seeded RNG — so they are
-  spread through the pile, not stacked at the bottom.
+- **Lanterns are never dealt.** (Superseded — every guest now starts with 1; see the section at the end.)
+  `deal()` takes the Lanterns out, deals `rules.lanternsDealtEach` of them to each guest, fills the
+  four-card hands from the rest, then shuffles the remaining Lanterns back in with the match's seeded RNG.
 - **A blocking Lantern is used up.** Both it and the Possession card are discarded (the Possession
   card leaves the game; the Lantern goes to the discard pile). In an ordinary trade a Lantern moves
   like any card.
 - **Comparison variants live in the rules file but only the simulator touches them.**
-  `rules.lanternBlock` ('discard' approved / 'attacker') and `rules.lanternsDealtEach` (0 approved /
-  1) let `tools/balance/hotseat-sim.mjs` compare the alternatives through the real engine rather
+  `rules.lanternBlock` ('discard' approved / 'attacker') and `rules.lanternsDealtEach` (1 approved /
+  0 the old rule) let `tools/balance/hotseat-sim.mjs` compare the alternatives through the real engine rather
   than a copy of it; the game and every test run the approved values, and a rules test asserts it.
 - **Search results are private.** `search()` writes only "X searched the Kitchen." to the public log;
   in hot-seat the result goes on the searcher's private card and the shared toast just says someone
-  searched. The full-hand take/leave toasts are suppressed in hot-seat for the same reason. The exit's
+  searched. The exit's
   refusal message is the same words for everyone, so it gives away neither possession nor Lanterns.
 - **Barricade expiry is tied to the placer, not a turn count.** It comes down when the guest who
   placed it starts their next turn; the earlier "turn + living guests" count ran one turn long if
   someone died in between. A dead placer's barricade comes down at the next turn start.
-- **The full-hand and discard prompts wrap.** Six cards in one row overflowed the box and clipped the
+- **The discard prompt wraps.** Six cards in one row overflowed the box and clipped the
   outer cards out of reach on an iPad; with Lanterns counting toward the hand limit, full hands are
   common, so the rows now wrap with compact tiles and the browser test checks every card is on
   screen and tappable.
@@ -610,8 +616,8 @@ Target: `docs/art-reference.jpg` (style, palette and finish; not its layout or i
   414, 418 and the Garden Lounge), so the hotel generator's mix of dead ends, corners, straights, Ts and
   crossroads — and everything the never-close-off rule was tested on — is unchanged.
 - **Linen Store: "the first search" is the room's card draw.** A search that picks up a dead guest's
-  dropped cards does not use it (as for any room). Each drawn card that does not fit in a full hand gets the
-  usual take-or-leave prompt, one after another.
+  dropped cards does not use it (as for any room). Both cards always go into the hand, even past 6 (the
+  limit is settled at the end of the turn).
 - **Switchboard counts living guests** (the dead are out of the game) and the answer is public: a notice
   the whole table dismisses, plus the public log. "Once per player per turn" is kept per guest, per turn.
 - **Hand Mirror: contents private, the act public.** What the mirror shows appears only on the user's
@@ -725,7 +731,9 @@ Target: `docs/art-reference.jpg` (style, palette and finish; not its layout or i
   rule hides them the instant any of those overlays appears. In hot-seat the fan never shows Possession
   cards: on a shared device a purple card on the always-on screen would reveal the role (the same
   reason the possessed tint is off in hot-seat). They are seen, as before, only through *Private
-  details*. Practice (and later online play, one device each) can show them.
+  details*. Practice (and later online play, one device each) can show them. (Since changed by the
+  owner: in hot-seat the fan shows them as one ×N card during the possessed guest's own turn only —
+  see "The main screen (player panel + fan)" below.)
 - **Not added:** discarding from the card view. Discarding is only the end-of-turn hand-limit prompt
   in the rules, so the existing discard prompt stays the only place for it.
 
@@ -854,4 +862,87 @@ Target: `docs/art-reference.jpg` (style, palette and finish; not its layout or i
   the key would use the guest's last action and they hold no Espresso (allowed by the rules, just
   wasted). A door a key has open this turn shows an OPEN padlock sign in the scene (`openedNow` in
   `createDoorwayViews`), so it is clear it will lock again.
+
+
+## The possessed guest's own interface (interface only; no rule changed)
+
+- **"Souls to trade"** is the owner's word for the Possession cards a possessed guest still holds
+  (`soulsHeld` in `src/ui/souls.js`, simply the Possession cards in their hand). It is shown as a small
+  violet chip with a mini Possession card, and with 0 left it says so calmly ("No souls left to trade —
+  you still win with the possessed side if dawn breaks first"), never as an error.
+- **Where it shows in hot-seat — the private surfaces, and the main screen during their own turn**, as
+  the owner-approved `docs/GAME_RULES.md` (Possession) says. Private surfaces: the role screen (also the "Something has changed" screen of a newly converted guest) and the private
+  turn screen (possessed portrait beside the POSSESSED badge, the count on the same line, a violet wash on
+  that card, the Possession cards as ONE tile with a ×N badge, and the hand's tiles sharing one row,
+  118px wide at most and narrower as the hand grows (`--n` set in `renderHand`), so 3 Possession + 7
+  cards and a note still fit above the Start button on a 1024×768 iPad). The card view shows the Possession cards as one
+  stack with a ×N badge; on that card the count and what it does are said ONCE, beside it ("Souls to
+  trade: 3" and one description — the banner then keeps only "You are POSSESSED. You can never escape."
+  and the footer leaves the count out); on every other card the banner carries the trade reminder and
+  the souls chip beside it (the footer never repeats the count). The banner is the same height on every
+  card (room for two lines, the chip beside the words), so the card and the ‹ › arrows never move while
+  you step through the hand. In hot-seat the card view has NO possessed
+  portrait and NO violet wash behind it, because it also opens from a fan card during the action phase on
+  the screen the whole table sees (a full-screen colour change is visible from across the table; the
+  in-panel text was already there before). Outside hot-seat the card view gets the portrait and wash too. The handoff card's `possessed` class is cleared by
+  `reset()` and the card view's on `close()`, and `passTurn` closes the card view before the pass screen,
+  so nothing of it survives to the next hand-over (tested in `tests/browser-hotseat.mjs`).
+- **The main screen (player panel + fan)** has the same tell built in — a POSSESSED label by the name,
+  the souls chip under the action pips, the Possession cards as one ×N fan card. Outside hot-seat it shows
+  (with the possessed portrait and tint), ready for online play (one device each). In hot-seat, where the
+  always-on screen is shared, the owner approved (GAME_RULES.md > Possession, commit acacf88) showing
+  the label, the chip and the ×N fan card — NOT the portrait or the violet tint, which the approved list
+  does not include — during the possessed guest's own action phase only. It is the switch
+  `cfg.ui.hotseatPossessedOnMainScreen` (`src/config.js`), `true` by default; `false` (or
+  `?possessedTell=private` in the address) keeps the tell on the private screens only, and
+  `?possessedTell=main` forces it on. `possessedTellOnMain()` in `src/main.js`, re-checked every frame,
+  is false before any pass, private, meeting, public notice (the Switchboard's count, read by the whole
+  table) or end screen, so it is gone before the iPad is passed on — and false while a converted guest
+  has not yet been told in private (`roleChangePending`). A CSS `:has()` rule in `styles.css` also hides
+  the label and the souls chip the moment any of those screens is up, as it does for the fan.
+  While the fan is hidden and the turn has moved on, it drops the previous guest's cards from the page
+  (and while it is hidden for a meeting in the possessed guest's own turn it takes the ×N card out of
+  the hidden markup too), and the card view (`close()`: big card, detail, footer, banner) and the discard screen (`close()`:
+  its cards) are emptied too, so nothing of that hand waits in hidden markup. Tested in
+  `tests/browser-hotseat.mjs` (section 3b plays a real round: the tell during the possessed guest's
+  own turn, absent on every pass and private screen, for every clean guest and on the next turn) and
+  watched by `tests/autoplay.mjs` (a tell outside that guest's own action phase is a critical violation).
+- **A barricade shows to every guest** (`isBarricaded` in `createDoorwayViews`): boards nailed across
+  both faces of the doorway (one merged mesh), a red floor glow and an X sign hung low on the boards
+  (0.8 m) and 0.45 m out from the doorway on the side facing the camera (`camera` option), so it stays
+  clear of the top guest strip even when the doorway is on the far wall, at all four rotations. The door
+  leaf in that doorway swings shut behind the boards while it is sealed (an open leaf beside them still
+  read as an open door and could hide them) and swings open again when they come down. The messages are
+  short ("Door to the Library barricaded until your next turn.", "Barricade down: door to the
+  Library.") and stay up 5 s (`hud.toast(message, seconds)`).
+
+## Owner-approved: 1 Lantern each; hand limit at the end of your turn
+- **Starting Lantern.** `rules.lanternsDealtEach` is 1: `deal()` (src/game/cards.js) gives every guest 1
+  Lantern + 3 cards from the deck with the Lanterns taken out, then shuffles the other Lanterns back in.
+  The possessed guest's 3 Possession cards are added on top (state.js). Practice uses the same deal, so a
+  practice run starts with 1 Lantern and needs to find 2 more — practice should match the rules it teaches.
+  The practice start screen says so ("You start with 1 Lantern — find 2 more and escape through the Fire
+  Exit", `buildStartScreen()` in main.js, worked out from the rules numbers).
+- **Hand limit only at the end of your own turn.** `search()` always puts what it finds in the hand (a
+  Linen Store's 2 cards too) and returns `over` (how many would have to go). The old take-or-leave prompt
+  (`src/ui/fullHand.js`, `resolveFullHand`) is gone. `endTurnNow()` in main.js is the one gate: End turn
+  and the clock running out both go through it, and over the limit it closes the card view/map, stops the
+  clock and opens the discard screen (`src/ui/discard.js`, marked "Private — Name only" in hot-seat) before
+  `passTurn`; `passTurn` itself refuses to run while over the limit. The rule also lives in the pure
+  engine, so a future server enforces it the same way: `canEndTurn(state)` in `src/game/state.js` says
+  `{ ok: false, reason: 'overHandLimit', over }` while the active guest holds more than
+  `rules.handLimit` countable cards, and `endTurn()` returns that refusal and changes nothing (tested in
+  `tests/rules-check.mjs`). The simulators discard first (and throw if they ever hit the refusal); the
+  browser autoplay goes through the real discard screen. Possession cards are never counted or
+  offered. Cards received on someone else's turn simply wait until that guest ends their own next turn.
+- **Gentle warning, not an error.** `handLimitWarning()` (src/ui/cards.js) gives "Cards 8/6 · discard 2
+  at end of turn" — short so the label above the fan stays on ONE line (`white-space: nowrap`) at
+  1180×820 and 1024×768 — in the same words in the card view footer and the private turn screen; End
+  turn's second line says "Discard 2 first". The count is public anyway (top strip), so it gives nothing away.
+- **The clock never ends a turn mid-arrival.** If it hits 0 while a guest is stepping into a room
+  (`pendingArrival`), it waits for the arrival (a forced meeting pauses it), then ends the turn; ending it
+  mid-arrival would hand that arrival to the next guest.
+- **Simulator.** The bots keep everything and discard at the end of the turn (they already did); the
+  baseline now deals 1 Lantern each. Six players, mixed table: clean side wins ~23% (was ~22% when measured
+  as the 'dealt1' proposal); `--pkeys dealt0` measures the old rule.
 

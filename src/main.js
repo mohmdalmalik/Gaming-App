@@ -15,11 +15,11 @@ import {
   isBarricaded, canTradeVoluntarily, lockedAgainst,
 } from './game/state.js';
 import {
-  search, canSearch, escape, useBandage, useUnlock, useBarricade, resolveFullHand, resolveTrade, resolveAttack,
+  search, canSearch, escape, useBandage, useUnlock, useBarricade, resolveTrade, resolveAttack,
   discardCard, overHandLimit, tradeableCards, canTrade, skipTrade, openDoor,
   canUseRoom, useInfirmary, useSwitchboard, useHandMirror, useEspresso,
 } from './game/actions.js';
-import { CARDS, weaponsIn } from './game/cards.js';
+import { CARDS, weaponsIn, countableCount } from './game/cards.js';
 import { createScene } from './render/scene.js';
 import { addRoomView, clearRoomViews, createDoorwayViews } from './render/roomView.js';
 import { dressRoom } from './render/roomDressing.js';
@@ -39,7 +39,6 @@ import { createHand } from './ui/hand.js';
 import { createHandFan } from './ui/handFan.js';
 import { createSearchSpot } from './ui/searchSpot.js';
 import { createDiscard } from './ui/discard.js';
-import { createFullHand } from './ui/fullHand.js';
 import { createHandoff } from './ui/handoff.js';
 import { createMeeting } from './ui/meeting.js';
 import { roundLabel, finalRoundNote, isFinal } from './ui/roundLabel.js';
@@ -59,11 +58,18 @@ const floor = createHotel(hotel, cfg);
 //   ?camera=square            the previous square-on view (the standard view is corner-on)
 //   ?camera=classic           the older, higher square-on view (for comparison)
 //   ?stats=1                  a small frame-rate / draw-call readout, for measuring on the iPad
+//   ?possessedTell=private    hot-seat: the possessed guest's reminder on their private screens only
+//   ?possessedTell=main       hot-seat: also on the main screen during their own turn (the default)
 const params = new URLSearchParams(window.location.search);
 if (params.get('camera') === 'square') Object.assign(cfg.camera, cfg.cameraSquare);     // the previous square-on view
 if (params.get('camera') === 'classic') Object.assign(cfg.camera, cfg.cameraClassic);   // the old, higher view
 if (params.get('camera') === 'diagonal') Object.assign(cfg.camera, cfg.cameraDiagonal); // (the standard view; old links)
 const MODE = params.get('mode') === 'hotseat' ? 'hotseat' : 'practice';
+// ?possessedTell=private (or =off) / =main override cfg.ui.hotseatPossessedOnMainScreen (hot-seat: the
+// possessed guest's reminder on the shared main screen during their own action phase; on by default, as
+// the owner-approved docs/GAME_RULES.md > Possession says).
+if (['private', 'off'].includes(params.get('possessedTell'))) cfg.ui.hotseatPossessedOnMainScreen = false;
+if (params.get('possessedTell') === 'main') cfg.ui.hotseatPossessedOnMainScreen = true;
 const askedPlayers = parseInt(params.get('players'), 10);
 applyMode(MODE, Number.isFinite(askedPlayers) ? askedPlayers : 6);
 if (params.get('timer') === 'off') rules.turnTimerEnabled = false;
@@ -106,6 +112,9 @@ const doorways = createDoorwayViews(floor, cfg, view.scene, {
   standingIn: () => (state && !state.finished ? activePlayer(state)?.currentRoom : null),
   // a locked door a key has opened until the end of this turn (an open padlock hangs in front of it)
   openedNow: id => !!state?.openLocks?.has(id),
+  // a doorway sealed by a Barricade (boards across it, seen by every guest)
+  isBarricaded: id => !!state?.barricades?.has(id),
+  camera: view.camera,      // the barricade sign hangs out on the side facing the camera
 });
 const characters = cast.map(def => createCharacterView(def, cfg, view.scene));
 const searchMarks = createSearchMarks(floor, view.scene);
@@ -130,14 +139,13 @@ function followPoint() {
 }
 
 // --- Interface -------------------------------------------------------------------------
-const hud = createHud(document, cfg);
+const hud = createHud(document, cfg, { possessedTellOnMain: () => possessedTellOnMain() });
 const map = createMap(document, floor, cfg);
 const overlays = createOverlays(document);
 const hand = createHand(document, cfg, { onUseBandage, onUnlock, onBarricade, onEspresso, onHandMirror });
 const discard = createDiscard(document, cfg, {
   onDiscard: cardId => { const r = discardCard(state, activePlayer(state), cardId); if (!r.ok) hud.toast('That card cannot be discarded.'); refresh(); },
 });
-const fullHand = createFullHand(document);
 // The hand, held as a fan of face-up cards; tapping one opens it large in the card view.
 const fan = createHandFan(document, { onOpen: cardId => { if (running && !uiBusy()) hand.open(state, floor, cardId); } });
 const handoff = createHandoff(document);
@@ -148,7 +156,7 @@ let pendingArrival = null;   // enterRoom result waiting for the walk to finish
 let selectedMove = null;     // a door move awaiting confirmation
 let pendingSearch = null;    // { room, face: [x, z] }: walking to the search spot, then searching
 
-const uiBusy = () => map.isOpen || hand.isOpen || discard.isOpen || fullHand.isOpen
+const uiBusy = () => map.isOpen || hand.isOpen || discard.isOpen
   || overlays.endOpen || overlays.noticeOpen || overlays.askOpen || handoff.isOpen || meeting.isOpen;
 
 const discovery = createDiscovery({
@@ -171,11 +179,23 @@ const searchSpot = createSearchSpot(document, { camera: view.camera, container, 
 function actionPhaseClear() {
   return running && !state.finished && (PRACTICE || inActionPhase)
     && !handoff.isOpen && !meeting.isOpen && !overlays.endOpen && !overlays.noticeOpen && !overlays.askOpen
-    && !map.isOpen && !discard.isOpen && !fullHand.isOpen;
+    && !map.isOpen && !discard.isOpen;
+}
+// The possessed guest's reminder (POSSESSED label + souls count in the panel, the Possession cards as
+// one ×N card in the fan) on the main screen. Outside hot-seat: always. In hot-seat the whole table can
+// see that screen, so only when cfg.ui.hotseatPossessedOnMainScreen is on (the default), and only during the guest's
+// own action phase: never on a pass, private, meeting, public notice (the Switchboard) or end screen
+// (it is re-checked every frame), and never before a converted guest has been told in private.
+function possessedTellOnMain() {
+  if (!state.hotseat) return true;
+  return !!cfg.ui.hotseatPossessedOnMainScreen && running && inActionPhase && !state.finished
+    && !handoff.isOpen && !meeting.isOpen && !overlays.endOpen && !overlays.noticeOpen && !overlays.askOpen
+    && !activePlayer(state).roleChangePending;
 }
 function syncHandFan() {
-  // A Possession card never goes on the always-on fan in hot-seat (see src/ui/handFan.js).
-  fan.update(activePlayer(state), actionPhaseClear(), { withPossession: !HOTSEAT });
+  // A Possession card goes on the always-on fan in hot-seat only with that switch on (src/ui/handFan.js).
+  fan.update(activePlayer(state), actionPhaseClear(), { withPossession: possessedTellOnMain() });
+  hud.syncTell(state);
 }
 function syncSearchSpot() {
   searchSpot.update(activePlayer(state), actionPhaseClear() && !hand.isOpen && !pendingArrival);
@@ -262,7 +282,7 @@ let lockNews = '';
 function openPrivateTurn(p) {
   handoff.privateTurn(state, floor, p, { onStart: () => {
     inActionPhase = true; startTimer(); refresh();
-    if (lockNews) { hud.toast(lockNews); lockNews = ''; }
+    if (lockNews) { hud.toast(lockNews, 5); lockNews = ''; }
   } });
 }
 
@@ -279,12 +299,15 @@ function stopTimer() { timerLeft = 0; hud.hideTimer(); }
 // waits while it is up.
 const sideways = window.matchMedia?.('(orientation: portrait), (max-width: 900px)');
 const timerPaused = () => handoff.handingOver || overlays.endOpen || overlays.noticeOpen || overlays.askOpen
-  || meeting.isOpen || fullHand.isOpen || discard.isOpen || !!sideways?.matches;
+  || meeting.isOpen || discard.isOpen || !!sideways?.matches;
 
 function tickTimer(dt) {
   if (!rules.turnTimerEnabled || !inActionPhase || state.finished || timerLeft <= 0) return;
   if (timerPaused()) return;
   timerLeft -= dt;
+  // A guest who has just stepped into a room finishes arriving first (a forced meeting there pauses the
+  // clock); the turn then ends at once. Ending it mid-arrival would leave that arrival for the next guest.
+  if (timerLeft <= 0 && pendingArrival) timerLeft = 0.001;
   hud.showTimer(timerLeft, rules.turnTimerSeconds);
   if (timerLeft <= 0) onTimeUp();
 }
@@ -295,14 +318,33 @@ function onTimeUp() {
   endTurnNow();
 }
 
+// "the door to the Library" (seen from `fromRoom`), or "door between the Hall and the Library".
+function doorName(doorwayId, fromRoom = null) {
+  const d = floor.doorways.find(x => x.id === doorwayId);
+  if (!d) return 'doorway';
+  const name = id => (state.discovered?.has(id) ?? true) ? floor.rooms.get(id)?.name ?? 'next room' : 'unknown room';
+  if (fromRoom === d.a || fromRoom === d.b) return `door to the ${name(d.otherRoom(fromRoom))}`;
+  return `door between the ${name(d.a)} and the ${name(d.b)}`;
+}
+
+const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
+
 function passTurn() {
+  // Never past the hand limit: anything that ends a turn goes through the discard screen first.
+  if (!state.finished && overHandLimit(activePlayer(state)) > 0) { endTurnNow(); return; }
   hud.hideConfirm(); selectedMove = null; pendingSearch = null;
   hand.close();
   stopTimer();
+  const sealedBefore = [...(state.barricades?.keys() ?? [])];
   const result = endTurn(state, floor);
+  if (!result.ok) { endTurnNow(); return; }   // (the rules refuse it over the hand limit too: canEndTurn)
   if (PRACTICE) endTurnGuardUntil = performance.now() + END_TURN_GUARD_MS;   // (hot-seat: the pass screen catches it)
   // A locked door opened this turn has locked again (its door swings shut in syncViews below).
-  const relocked = (result.relocked || []).map(id => `The ${floor.rooms.get(id)?.name ?? 'locked room'} door has locked again.`).join(' ');
+  const relocked = [
+    ...(result.relocked || []).map(id => `The ${floor.rooms.get(id)?.name ?? 'locked room'} door has locked again.`),
+    // a barricade that came down as this turn started (its boards go in syncViews below)
+    ...sealedBefore.filter(id => !state.barricades.has(id)).map(id => `Barricade down: ${doorName(id, activePlayer(state).currentRoom)}.`),
+  ].join(' ');
   movers[result.from.index]?.halt();
   syncViews(false);
   if (result.finished) { refresh(); showEnd(); return; }
@@ -311,12 +353,22 @@ function passTurn() {
   rig.setFocus(...followPoint());
   mood.snap(activePlayer(state).currentRoom);
   refresh();
-  hud.toast(`Turn ${state.turn} — ${rules.actionPointsPerTurn} action points.${relocked ? ` ${relocked}` : ''}`);
+  hud.toast(`Turn ${state.turn} — ${rules.actionPointsPerTurn} action points.${relocked ? ` ${relocked}` : ''}`, relocked ? 5 : undefined);
 }
 
-// End the turn, forcing the hand-limit discard first if it applies.
+// End the turn (the End turn button, or the 45-second clock running out). The hand limit is settled
+// HERE and only here (approved rule): a guest holding more than 6 cards (Possession cards don't count)
+// chooses what to discard on the discard screen first, and the turn passes only once they are down to
+// 6. In hot-seat that screen comes before the pass screen, so it is still the active guest's own,
+// private moment. Nothing else is left open behind it.
 function endTurnNow() {
-  if (overHandLimit(activePlayer(state)) > 0) { discard.open(activePlayer(state), passTurn); return; }
+  if (overHandLimit(activePlayer(state)) > 0) {
+    hand.close(); map.close(); hud.hideConfirm(); selectedMove = null; pendingSearch = null;
+    if (activeMover().walking) activeMover().halt();
+    stopTimer();
+    discard.open(activePlayer(state), passTurn, { hotseat: HOTSEAT });
+    return;
+  }
   passTurn();
 }
 
@@ -378,7 +430,8 @@ function afterMeeting() {
 
 // A trade between A and B. `first` holds the device now and picks first; then it is passed to
 // `second`, who picks; the cards swap; `first` gets the device back and privately reads what they
-// received. `second` reads theirs on their own next private screen.
+// received. `second` reads theirs on their own next private screen — or, when `second` is the guest
+// whose turn it is (a voluntary trade in the Fire Exit), straight after the device comes back to them.
 // If either has no card they may give, the trade is skipped (GAME_RULES, Trade): see skippedTrade.
 function runTrade(A, B, { first, second }, onDone = afterMeeting) {
   if (!canTrade(A, B).ok) { skippedTrade(A, B, first, onDone); return; }
@@ -395,22 +448,30 @@ function runTrade(A, B, { first, second }, onDone = afterMeeting) {
       pick(second, first, secondCard => {
         const [cardA, cardB] = first === A ? [firstCard, secondCard] : [secondCard, firstCard];
         const events = resolveTrade(state, floor, A, B, cardA, cardB);
-        handoff.passTo(first, 'Back to you', () => {
-          const got = events.ok ? events.received[first.id] : null;
-          // A Possession card is explained by the engine's own note ("…You are now POSSESSED"), so it
-          // gets no separate "You received" line.
+        // What `who` reads in private about the trade: what they received, then the engine's own
+        // notes. A Possession card is explained by the engine's note ("…You are now POSSESSED"), so it
+        // gets no separate "You received" line. Told privately now that they were converted: no second
+        // role screen at their next turn.
+        const readResult = (who, other, then) => {
+          const got = events.ok ? events.received[who.id] : null;
           const lines = !events.ok ? ['The trade could not be made.']
             : got === 'possession' ? []
-              : [got ? `You received ${aCard(got)} from ${second.name}.` : `The card ${second.name} gave you burned away in your Lantern's light.`];
-          const mine = first.notes.splice(0, first.notes.length);
-          // Told privately just now that they were converted: no second role screen at their next turn.
-          if (events.possessed?.some(e => e.newly === first.id)) first.roleChangePending = false;
-          // The device must end with the guest whose turn it is. In a lobby trade the other guest picks
-          // first and reads their result last, so the device is handed back before the game carries on.
+              : [got ? `You received ${aCard(got)} from ${other.name}.` : `The card ${other.name} gave you burned away in your Lantern's light.`];
+          const mine = who.notes.splice(0, who.notes.length);
+          if (events.possessed?.some(e => e.newly === who.id)) who.roleChangePending = false;
+          handoff.privateNote(who, [...lines, ...mine], then);
+        };
+        handoff.passTo(first, 'Back to you', () => {
+          // The device must end with the guest whose turn it is. In a voluntary trade (the Fire Exit)
+          // the other guest picks first and reads their result first; the device then goes back to the
+          // guest whose turn it is, who reads their own result in private at once — before the public
+          // "Trade complete" screen and before their main screen (which, if they were just possessed,
+          // shows the reminder) — never learning it in front of the table.
           const active = activePlayer(state);
           const finish = () => meeting.tradeDone(A, B, onDone);
-          handoff.privateNote(first, [...lines, ...mine], () => (first === active
-            ? finish() : handoff.passTo(active, `The trade is done — back to ${active.name}'s turn`, finish)));
+          readResult(first, second, () => (first === active ? finish()
+            : handoff.passTo(active, `The trade is done — back to ${active.name}'s turn`,
+              () => (active === second ? readResult(second, first, finish) : finish()))));
         });
       });
     });
@@ -478,11 +539,9 @@ function onSearch() {
   if (!r.ok) { hud.toast(SEARCH_FAIL[r.reason] || 'Cannot search now.'); return; }
   const where = r.searchPoint || 'the room';
   syncViews(false);
-  // A card that does not fit goes straight to the take-or-leave prompt, on the searcher's own turn.
-  if (r.kind === 'card' && r.full) { askFullHand(player, r.card, where); return; }
-  // A Linen Store's draw gives two cards; any that did not fit then go through the take-or-leave
-  // prompt one after another, once the searcher has seen what they found.
-  const overflow = r.kind === 'cards' ? r.overflow : [];
+  // Everything found goes into the hand, even past the limit of 6 (approved rule): the limit is
+  // settled only when the turn ends (endTurnNow -> the discard screen). Over it, the reveal adds a
+  // calm reminder, and the hand fan shows "Cards 8/6 · discard 2 at end of turn".
   const found = r.kind === 'found' || r.kind === 'cards' ? r.cards : r.kind === 'card' ? [r.card] : [];
   const line = r.kind === 'found'
     ? `Lying in ${where}: ${r.cards.map(c => CARDS[c.type].name).join(', ')}. You take it all.`
@@ -491,9 +550,10 @@ function onSearch() {
         : `You search ${where} and find ${aCard(r.card.type)}.`;
   const lanterns = player.hand.filter(c => c.type === 'lantern').length;
   const tally = lanterns ? ` You now hold ${lanterns} Lantern${lanterns === 1 ? '' : 's'}.` : '';
-  const noRoom = overflow.length
-    ? ` Your hand is full — choose what to do with ${andList(overflow.map(c => `the ${CARDS[c.type].name}`))} next.` : '';
-  const then = () => { refresh(); askEachFullHand(player, overflow, where); };
+  const over = r.over || 0;
+  const limitNote = over > 0
+    ? ` You hold ${countableCount(player.hand)} cards, more than ${rules.handLimit}: keep them all for now, and discard ${over} when you end your turn.` : '';
+  const then = () => refresh();
   // Search results are PRIVATE. In hot-seat the table sees only that a search happened; the found
   // cards are shown large on a private screen for the searcher. Practice has nobody to hide them from,
   // so the same reveal sits on a lighter backdrop with the room still in view.
@@ -502,8 +562,7 @@ function onSearch() {
     kicker: HOTSEAT ? `Private — ${player.name} only · ${where}` : `You search ${where}`,
     title: !found.length ? 'Nothing here' : r.kind === 'found' ? `You pick up ${andList(found.map(c => aCard(c.type)))}` : `You found ${andList(found.map(c => aCard(c.type)))}`,
     cards: found,
-    lines: [line + tally + noRoom],
-    button: found.length && overflow.length === found.length ? 'Continue' : undefined,
+    lines: [line + tally + limitNote],
     soft: PRACTICE,
   }, then);
 }
@@ -556,33 +615,6 @@ function faceTowards([x, z]) {
   if (Math.hypot(x - m.x, z - m.z) > 0.05) m.heading = Math.atan2(x - m.x, z - m.z);
 }
 
-// Every drawn card that did not fit, through the take-or-leave prompt one at a time.
-function askEachFullHand(player, cards, where) {
-  if (!cards.length) { refresh(); return; }
-  askFullHand(player, cards[0], where, () => askEachFullHand(player, cards.slice(1), where));
-}
-
-// A drawn card with no room for it: never dropped silently — the guest decides. `then` runs once
-// they have (the next card of a Linen Store's two, if that did not fit either).
-function askFullHand(player, card, where = 'the room', then = null) {
-  fullHand.open(state, player, card, {
-    // Search results are private: in hot-seat nothing about the card goes on the shared toast.
-    onTake: dropId => {
-      const res = resolveFullHand(state, player, card, 'take', dropId);
-      if (!res.ok) hud.toast('That card cannot be dropped.');
-      else if (PRACTICE) hud.toast(`Kept the ${CARDS[card.type].name} — the ${CARDS[res.dropped.type].name} goes to the discard pile.`);
-      refresh(); then?.();
-    },
-    onUse: () => { resolveFullHand(state, player, card, 'leave'); refresh(); then?.(); },
-    onLeave: () => {
-      resolveFullHand(state, player, card, 'leave');
-      // (a card left behind is not put back where it was found: it goes to the discard pile)
-      if (PRACTICE) hud.toast(`Left the ${CARDS[card.type].name} — it goes to the discard pile.`);
-      refresh(); then?.();
-    },
-  });
-}
-
 function onUseBandage(cardId) {
   const r = useBandage(state, activePlayer(state), cardId);
   if (!r.ok) { hud.toast(r.reason === 'full' ? 'Already at full health.' : r.reason === 'ap' ? 'No action points left.' : 'Cannot use that now.'); return; }
@@ -608,9 +640,9 @@ function onUnlock(cardId, roomId) {
 function onBarricade(cardId, doorwayId) {
   const r = useBarricade(state, floor, activePlayer(state), cardId, doorwayId);
   if (!r.ok) { hud.toast(r.reason === 'ap' ? 'No action points left.' : 'Cannot barricade that.'); return; }
-  hud.toast('Doorway barricaded for one round.');
+  hud.toast(`${cap(doorName(doorwayId, activePlayer(state).currentRoom))} barricaded until your next turn.`, 5);
   hand.close();
-  refresh();
+  syncViews(false); refresh();
 }
 
 // Espresso (free): extra action points for this turn only.
@@ -693,6 +725,7 @@ function onRoom() {
     overlays.showNotice('The Switchboard', PRACTICE
       ? 'You rang the Switchboard. In a match it tells everyone how many guests are possessed. You are alone in the hotel, so there is nobody to count.'
       : `${player.name} rang the Switchboard. ${switchboardLine(r.count)}`, refresh);
+    syncHandFan();   // the possessed guest's reminder leaves the screen with the notice, not a frame later
   }
 }
 
@@ -737,7 +770,7 @@ function restart() {
   rig.reset();
   mood.snap(activePlayer(state).currentRoom);
   overlays.hideEnd(); overlays.hideNotice(); overlays.hideAsk(); hand.close(); map.close();
-  fullHand.close(); discard.close(); handoff.close(); meeting.close(); hud.hideConfirm();
+  discard.close(); handoff.close(); meeting.close(); hud.hideConfirm();
   stopTimer();
   refresh();
   if (HOTSEAT) { inActionPhase = false; if (running) revealRoles(0); return; }
@@ -1008,7 +1041,7 @@ function buildStartScreen() {
     // line break and balances each line).
     sub.textContent = HOTSEAT
       ? `Hot-seat · ${rules.playerCount} guests, one device · one is secretly possessed\nFind ${rules.lanternsToEscape} Lanterns and get one clean guest out before dawn (${rules.roundLimit} rounds)`
-      : `Practice · explore the hotel alone\nFind ${rules.lanternsToEscape} Lanterns and escape through the fire exit`;
+      : `Practice · explore the hotel alone\nYou start with ${rules.lanternsDealtEach} Lantern${rules.lanternsDealtEach === 1 ? '' : 's'} — find ${rules.lanternsToEscape - rules.lanternsDealtEach} more and escape through the Fire Exit`;
   }
   document.title = HOTSEAT ? `Hotel Escape — Hot-seat (${rules.playerCount})` : 'Hotel Escape — Practice';
   if (!host) return;
@@ -1109,7 +1142,6 @@ window.__game = {
   unlock: (id, room) => onUnlock(id, room),
   barricade: (id, door) => onBarricade(id, door),
   trade: () => onTrade(),
-  fullHandOpen: () => fullHand.isOpen,
   mode: MODE, hotseat: HOTSEAT,
   handoff, meeting,
   handoffOpen: () => handoff.isOpen, handoffKind: () => handoff.kind,

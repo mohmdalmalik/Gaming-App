@@ -1,5 +1,9 @@
-// End-of-turn discard: when a player is over the hand limit they choose cards to drop until
-// they are back to the limit, before control passes on. Two steps, so nothing is thrown away by a
+// End-of-turn discard: the ONLY place the hand limit is settled (approved rule). During a turn a
+// guest keeps everything they find or receive, even past 6; when they end the turn (the button, or the
+// clock running out) holding more than 6, they choose cards to discard until they hold 6, before
+// control passes on. Possession cards never count and are never offered here, so the screen looks the
+// same whatever the guest's role. In hot-seat it comes before the pass screen: the device is still in
+// the active guest's hands, and the kicker says so. Two steps, so nothing is thrown away by a
 // stray tap: tap a card to pick it (tap it again, or another, to change your mind), then confirm with
 // the button, which names the card.
 import { rules } from '../data/rules.js';
@@ -9,6 +13,7 @@ import { cardTile } from './cards.js';
 export function createDiscard(doc, cfg, { onDiscard }) {
   const overlay = doc.getElementById('discard-overlay');
   const sub = doc.getElementById('discard-sub');
+  const kicker = doc.getElementById('discard-kicker');
   const cards = doc.getElementById('discard-cards');
   const doneBtn = doc.getElementById('btn-discard-done');
   let ctx = null;
@@ -22,8 +27,8 @@ export function createDiscard(doc, cfg, { onDiscard }) {
     const over = count - rules.handLimit;
     if (!items.some(c => c.id === picked)) picked = null;
     sub.textContent = over > 0
-      ? `${p.name} holds ${count} cards, ${over} over the limit of ${rules.handLimit}. Tap a card to discard.`
-      : `${p.name} is down to ${rules.handLimit} cards.`;
+      ? `You hold ${count} cards — at the end of your turn the limit is ${rules.handLimit}. Choose ${over} to discard${over === 1 ? '' : ', one at a time'}: tap a card, then the button.`
+      : `You are down to ${rules.handLimit} cards.`;
     cards.innerHTML = '';
     for (const card of items) {
       cards.appendChild(cardTile(doc, card, {
@@ -44,12 +49,14 @@ export function createDiscard(doc, cfg, { onDiscard }) {
 
   const api = {
     get isOpen() { return !overlay.hidden; },
-    open(player, onComplete) {
+    open(player, onComplete, { hotseat = false } = {}) {
       ctx = { player, onComplete }; picked = null;
+      if (kicker) { kicker.hidden = !hotseat; kicker.textContent = hotseat ? `Private — ${player.name} only` : ''; }
       overlay.hidden = false;
       render();
     },
-    close() { overlay.hidden = true; ctx = null; },
+    // Nothing of this guest's hand waits in the hidden screen for the next guest.
+    close() { overlay.hidden = true; ctx = null; picked = null; cards.innerHTML = ''; sub.textContent = ''; },
   };
   doneBtn.addEventListener('click', e => {
     e.preventDefault();

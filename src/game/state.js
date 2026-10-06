@@ -7,7 +7,7 @@
 // hand and the hidden possession flag are per guest.
 import { rules } from '../data/rules.js';
 import {
-  makeRng, buildDrawDeck, buildPossessionSupply, deal, shuffle, hasEscapeLanterns,
+  makeRng, buildDrawDeck, buildPossessionSupply, deal, shuffle, hasEscapeLanterns, countableCount,
 } from './cards.js';
 import { resetHotel, openDoors } from './hotel.js';
 
@@ -27,7 +27,8 @@ export function resetState(state, floor, seed) {
   resetHotel(floor, seed ?? 1);          // a new random hotel: the lobby and a shuffled room deck
   state.discovered = new Set([floor.start.room]);   // every placed room is revealed
 
-  // Deal from a shuffled draw pile. Lanterns are never dealt — they are found only by searching.
+  // Deal from a shuffled draw pile: 1 Lantern + 3 other cards each (deal() in cards.js); the
+  // remaining Lanterns are found only by searching.
   const drawPile = shuffle(buildDrawDeck(rules.deck), rng);
   const { hands, deck } = deal(drawPile, state.roster.length, rng);
   state.drawPile = deck;
@@ -204,13 +205,27 @@ export function enterRoom(state, floor, player, roomId) {
   return result;
 }
 
+// Whether the active guest may end their turn now. The hand limit is settled at the end of your own
+// turn (approved rule, docs/GAME_RULES.md > Cards and deck): a living guest holding more than
+// rules.handLimit ordinary cards (Possession cards don't count) must discard first (discardCard in
+// actions.js). `over` is how many cards that is. The rules check this themselves, whoever ends the
+// turn (the interface, the simulator, a future server).
+export function canEndTurn(state) {
+  const p = activePlayer(state);
+  const over = !state.finished && p?.alive ? Math.max(0, countableCount(p.hand) - rules.handLimit) : 0;
+  return over > 0 ? { ok: false, reason: 'overHandLimit', over } : { ok: true, over: 0 };
+}
+
 // Pass control to the next living guest and refill their action points. A new lap round the
 // table increments the round and clears the per-room meeting locks. A locked door opened this turn
-// locks again (`relocked` lists those rooms).
+// locks again (`relocked` lists those rooms). Refused, with nothing changed, while the active guest
+// is over the hand limit: { ok: false, reason: 'overHandLimit', over } (canEndTurn above).
 export function endTurn(state, floor) {
   const from = activePlayer(state);
+  const gate = canEndTurn(state);
+  if (!gate.ok) return { ...gate, from, to: from, finished: false };
   const to = nextPlayer(state);
-  if (!to) { state.finished = true; return { from, to: null, finished: true }; }
+  if (!to) { state.finished = true; return { ok: true, from, to: null, finished: true }; }
   if (to.index <= from.index) { state.round += 1; state.encounterLocks.clear(); }
   state.activeIndex = to.index;
   to.actionPoints = rules.actionPointsPerTurn;
@@ -218,7 +233,7 @@ export function endTurn(state, floor) {
   const relocked = relockDoors(state);
   for (const id of relocked) logPublic(state, `The ${floor?.rooms.get(id)?.name ?? 'locked room'} door locked again.`);
   expireBarricades(state);
-  return { from, to, finished: false, round: state.round, relocked };
+  return { ok: true, from, to, finished: false, round: state.round, relocked };
 }
 
 // --- Escape and winning -----------------------------------------------------------------------

@@ -269,6 +269,16 @@ html, body {
   transition: transform 0.16s ease-out, box-shadow 0.16s ease-out;
 }
 .hand-fan.settling .fan-card { transition: none; }
+/* Over the hand limit during a turn (allowed; settled when the turn ends): a calm brass label just
+   above the fan, centred. Never catches taps. */
+.fan-limit {
+  position: absolute; left: 50%; bottom: calc(100% + 8px); transform: translateX(-50%); z-index: 70;
+  width: max-content; max-width: min(92vw, 480px); padding: 4px 12px; border-radius: 999px; pointer-events: none;
+  white-space: nowrap;   /* one line on every iPad: the words are kept short (handLimitWarning in src/ui/cards.js) */
+  font: 700 12.5px/1.35 var(--sans); letter-spacing: 0.02em; color: var(--ivory); text-align: center;
+  background: rgba(14, 16, 22, 0.86); border: 1px solid var(--brass); box-shadow: 0 4px 12px rgba(0,0,0,0.45);
+}
+.fan-limit[hidden] { display: none; }
 .fan-card img { display: block; width: 100%; height: 100%; object-fit: cover; pointer-events: none; -webkit-user-drag: none; }
 .fan-card .fan-name { display: flex; align-items: center; justify-content: center; height: 100%; padding: 6px; font-family: var(--serif); font-weight: 700; color: var(--ivory); }
 /* The Revolver's shots, top LEFT: the next card in the fan covers each card's right-hand side. When
@@ -339,7 +349,11 @@ html, body {
    private, public or end screen is up they are gone (the script hides them too). */
 #app:has(#handoff-overlay:not([hidden]), #encounter-overlay:not([hidden]), #end-overlay:not([hidden]),
   #notice-overlay:not([hidden]), #map-overlay:not([hidden]), #discard-overlay:not([hidden]),
-  #fullhand-overlay:not([hidden]), #start-overlay:not([hidden]), #ask-overlay:not([hidden])) :is(#hand-fan, #search-spot) { display: none !important; }
+  #start-overlay:not([hidden]), #ask-overlay:not([hidden])) :is(#hand-fan, #search-spot) { display: none !important; }
+/* The possessed guest's POSSESSED label and souls count in the panel go the same moment a hand-over,
+   meeting, public notice (the Switchboard) or end screen is up (main.js possessedTellOnMain hides them too). */
+#app:has(#handoff-overlay:not([hidden]), #encounter-overlay:not([hidden]), #end-overlay:not([hidden]),
+  #notice-overlay:not([hidden]), #ask-overlay:not([hidden])) :is(#panel-role, #panel-souls) { display: none !important; }
 
 /* ---- Bottom-right: camera controls (separate) + action buttons ---- */
 .hud-bottom-right { display: flex; flex-direction: column; align-items: flex-end; gap: 12px; }
@@ -610,6 +624,7 @@ html, body {
 .map-legend .sw.frontier { background: var(--brass-bright); border-color: var(--brass); height: 4px; margin-top: 5px; }
 .map-legend .sw.objective { background: rgba(201,162,78,0.35); border-color: var(--brass-bright); border-radius: 50%; }
 /* Rooms with jobs carry a small mark on the plan (drawn in src/map.js in the same colours). */
+.map-legend .mk-bar { width: 18px; height: 18px; flex: none; }
 .map-legend .mk { font-family: var(--serif); font-weight: 700; font-size: 14px; line-height: 1; }
 .map-legend .mk.infirmary { color: #f08c84; }
 .map-legend .mk.switchboard { color: #9fd0f0; }
@@ -625,9 +640,6 @@ html, body {
 
 /* The "hands are full" prompt reuses the modal/card styles; it only needs its found card
    centred and a little breathing room above the choice buttons. */
-#fullhand-found { justify-content: center; margin-bottom: 4px; }
-#fullhand-step:empty { display: none; }
-#fullhand-hand { justify-content: center; }
 
 /* Smaller landscape iPads (≈1024–1080 wide): tighten the bottom row so the player panel, the hand
    button and the action buttons never overlap. Camera settings and gestures are untouched. */
@@ -747,7 +759,11 @@ html, body {
 
 .handoff-hand { justify-content: center; margin-bottom: 14px; }
 .handoff-hand[hidden] { display: none; }
-.handoff-hand .card-tile { width: 118px; }
+/* Your own hand on the role / turn screens: the tiles share one row, as wide as fits (--n tiles, set
+   in src/ui/handoff.js; 118px at most, 72px at least, then the row wraps), so a full hand (the rules
+   allow more than 6 during a turn, plus a stack of Possession cards) stays above the Start button. */
+.handoff-hand { --n: 5; gap: 10px; }
+.handoff-hand .card-tile { width: clamp(72px, calc((100% - (var(--n) - 1) * 10px) / var(--n) - 0.5px), 118px); }
 .handoff-hand .card-tile .art { min-height: 70px; }
 /* A whole hand can hold 7 or more cards (a possessed guest's Possession cards, a Hand Mirror look at
    someone else's), so the row wraps instead of running off both sides. */
@@ -787,16 +803,17 @@ html, body {
 .mode-buttons { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
 .btn.mode { text-decoration: none; min-height: 46px; display: inline-flex; align-items: center; font-family: var(--serif); }
 
-/* Full-hand and discard prompts: the whole hand must fit on an iPad at once. Six cards in a
+/* The end-of-turn discard prompt: the whole hand must fit on an iPad at once. Six cards in a
    single row overflowed the box and clipped the outer cards out of reach, so the rows wrap and
    the tiles are compact; the found card shrinks once the player is choosing what to drop. */
-#fullhand-overlay .modal, #discard-overlay .modal { max-height: 94vh; overflow-y: auto; }
-#fullhand-hand, #discard-cards, #fullhand-found { flex-wrap: wrap; justify-content: center; padding: 4px 0; }
-#fullhand-hand .card-tile, #discard-cards .card-tile { width: 112px; }
-#fullhand-hand .card-tile .art, #discard-cards .card-tile .art { min-height: 70px; }
-#fullhand-hand .card-tile .cdesc, #discard-cards .card-tile .cdesc { display: none; }
-#fullhand-overlay .modal:has(#fullhand-hand:not([hidden])) #fullhand-found .card-tile { width: 112px; }
-#fullhand-overlay .modal:has(#fullhand-hand:not([hidden])) #fullhand-found .cdesc { display: none; }
+#discard-overlay .modal { max-height: 94vh; overflow-y: auto; }
+#discard-cards { flex-wrap: wrap; justify-content: center; padding: 4px 0; }
+#discard-cards .card-tile { width: 112px; }
+#discard-cards .card-tile .art { min-height: 70px; }
+#discard-cards .card-tile .cdesc { display: none; }
+/* Hot-seat: whose private moment this is (the turn has not passed yet). */
+.discard-kicker { margin-bottom: 4px; font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--brass); }
+.discard-kicker[hidden] { display: none; }
 
 /* The last round before dawn: the header round label says so and turns a warning colour. */
 .round-label.final { color: #f0b4ae; border-color: rgba(207, 74, 64, 0.65); background: rgba(80, 24, 22, 0.55); }
@@ -820,3 +837,65 @@ html, body {
 .rotate-icon .ri-portrait { stroke: var(--brass-dim); stroke-dasharray: 5 5; }
 .rotate-icon .ri-landscape { stroke: var(--brass-bright); fill: rgba(201,162,78,0.12); }
 .rotate-icon path { fill: none; stroke: var(--brass); stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
+
+/* ---- The possessed guest's own tell (src/ui/souls.js): how many Possession cards ("souls") they can
+   still trade, their possessed portrait and a violet wash. Only on that guest's private surfaces —
+   the role / turn hand-over screens and the card view — and, outside hot-seat, their own panel. ---- */
+.souls-chip {
+  display: inline-flex; align-items: center; gap: 8px; align-self: center;
+  padding: 4px 12px 4px 5px; border-radius: 999px; font-size: 14px; font-weight: 600; line-height: 1.3;
+  background: rgba(122,43,208,0.28); border: 1px solid rgba(180,107,255,0.65); color: #ecdcff;
+}
+.souls-chip b { font-size: 17px; font-weight: 800; color: #fff; }
+.souls-chip .souls-card { width: 20px; aspect-ratio: 2 / 3; border-radius: 2px; object-fit: cover; flex: none;
+  box-shadow: 0 0 0 1px rgba(180,107,255,0.8), 0 0 8px rgba(180,107,255,0.5); }
+/* None left: said calmly — no red, no warning look, the card greyed. */
+.souls-chip.none { background: rgba(255,255,255,0.05); border-color: rgba(180,107,255,0.35); color: var(--ivory-dim); font-weight: 500; border-radius: 12px; }
+.souls-chip.none .souls-card { filter: grayscale(1) brightness(0.6); box-shadow: 0 0 0 1px rgba(180,107,255,0.35); }
+.souls-chip.compact { padding: 2px 9px 2px 4px; font-size: 12px; gap: 6px; }
+.souls-chip.compact b { font-size: 14px; }
+.souls-chip.compact .souls-card { width: 14px; }
+
+/* Hand-over screens (role reveal, private turn): portrait beside the POSSESSED badge, violet wash. */
+.handoff-card.possessed {
+  border-color: rgba(180,107,255,0.6);
+  background: radial-gradient(120% 90% at 50% 0%, rgba(122,43,208,0.22), rgba(122,43,208,0) 60%), var(--panel-solid);
+  box-shadow: 0 0 0 1px rgba(180,107,255,0.35), 0 0 40px rgba(122,43,208,0.35), 0 18px 50px rgba(0,0,0,0.6);
+}
+.role-badge.with-portrait { flex-direction: row; align-items: center; gap: 16px; text-align: left; padding: 10px 16px 10px 10px; }
+.role-badge .role-portrait { width: 62px; height: 74px; flex: none; border-radius: 10px; overflow: hidden;
+  border: 1px solid rgba(180,107,255,0.8); box-shadow: 0 0 14px rgba(180,107,255,0.45); }
+.role-badge .role-text { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; min-width: 0; }
+.role-badge .role-head { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 14px; }
+.role-badge .role-head .souls-chip { align-self: center; }
+.role-badge.with-portrait .role-text { gap: 3px; }
+
+/* The card view: the banner carries the portrait and the count; the backdrop takes the wash. */
+.card-view.possessed { background: radial-gradient(120% 90% at 50% 40%, rgba(40,12,70,0.55), rgba(20,6,40,0.78)); }
+.card-view.possessed .cv-panel { border-color: rgba(180,107,255,0.55); box-shadow: inset 0 0 0 1px rgba(0,0,0,0.5), 0 0 34px rgba(122,43,208,0.35), 0 18px 50px rgba(0,0,0,0.6); }
+.banner.possessed { display: flex; align-items: center; gap: 12px; padding: 8px 12px 8px 8px; font-weight: 500; }
+.banner.possessed[hidden] { display: none; }
+.banner.possessed b { font-weight: 800; letter-spacing: 0.06em; color: #e6d0ff; }
+.banner .banner-portrait { width: 50px; height: 60px; flex: none; border-radius: 8px; overflow: hidden;
+  border: 1px solid rgba(180,107,255,0.8); box-shadow: 0 0 10px rgba(180,107,255,0.4); }
+/* The words, with the souls chip beside them, in room for two lines on every card: on the Possession
+   card (one short line, no chip) the banner stays the same height, so the card and the ‹ › arrows below
+   it do not jump as you step through the hand. */
+.banner .banner-text { display: flex; align-items: center; gap: 12px; min-width: 0; flex: 1; min-height: 40px; }
+.banner .banner-words { flex: 1; min-width: 0; line-height: 1.4; }
+.banner .banner-text .souls-chip { flex: none; align-self: center; }
+/* The ×N badge sits in the dark corner beside the mirror, clear of the card's printed title. */
+.big-card .face-badge.souls { top: auto; bottom: 21%; right: 6%; padding: 3px 12px; font-size: 22px; color: #fff;
+  background: #7a2bd0; border: 1px solid #d7b3ff; box-shadow: 0 0 12px rgba(180,107,255,0.75), 0 2px 6px rgba(0,0,0,0.6); }
+.card-tile.face .face-badge.souls { top: 6%; right: 7%; padding: 2px 9px; font-size: 16px; color: #fff;
+  background: #7a2bd0; border: 1px solid #d7b3ff; box-shadow: 0 0 8px rgba(180,107,255,0.7); }
+.card-view .d-line.souls-line { color: #e6d0ff; }
+.card-view .d-line.souls-line b { color: #fff; }
+
+/* The player panel and the fan, where the tell may be on the main screen (not hot-seat). */
+.player-name-row { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.panel-role { flex: none; padding: 2px 7px; border-radius: 6px; font-size: 10.5px; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase;
+  color: #f1e4ff; background: rgba(122,43,208,0.55); border: 1px solid rgba(200,150,255,0.8); }
+.panel-role[hidden], .panel-souls[hidden] { display: none; }
+.panel-souls { display: flex; margin: -2px 0 -4px; }
+.fan-card .fan-badge.souls { color: #fff; background: #7a2bd0; border: 1px solid #d7b3ff; box-shadow: 0 0 8px rgba(180,107,255,0.7); }

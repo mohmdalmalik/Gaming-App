@@ -50,9 +50,10 @@
           <div id="player-panel" class="player-panel">
             <div id="portrait-slot" class="portrait-slot"></div>
             <div class="player-meta">
-              <div id="active-player" class="player-name">—</div>
+              <div class="player-name-row"><div id="active-player" class="player-name">—</div><span id="panel-role" class="panel-role" hidden>Possessed</span></div>
               <div id="health-row" class="stat"><span class="stat-label">Health</span><div id="health" class="health" aria-label="Health"></div></div>
               <div class="stat"><span class="stat-label">Actions</span><div id="ap-pips" class="ap-pips" aria-hidden="true"></div><span id="action-points" class="ap-count">— / —</span></div>
+              <div id="panel-souls" class="panel-souls" hidden></div>
               <button id="btn-private" class="private-link" type="button">&#x25B8; Private details</button>
             </div>
           </div>
@@ -87,28 +88,12 @@
       <div id="toast" class="toast" hidden></div>
     </div>
 
-    <!-- Found a card with a full hand: take it (dropping one), use it now, or leave it. -->
-    <div id="fullhand-overlay" class="overlay center" hidden>
-      <div class="modal">
-        <div class="modal-title">Your hand is full</div>
-        <div id="fullhand-sub" class="modal-sub"></div>
-        <div id="fullhand-found" class="cards"></div>
-        <div id="fullhand-step" class="modal-sub"></div>
-        <div id="fullhand-hand" class="cards" hidden></div>
-        <div class="modal-actions">
-          <button id="btn-fullhand-take" class="btn primary" type="button">Take it &#8212; drop a card</button>
-          <button id="btn-fullhand-use" class="btn" type="button" hidden>Use it now &#183; 1 action</button>
-          <button id="btn-fullhand-leave" class="btn" type="button">Leave it</button>
-          <button id="btn-fullhand-drop" class="btn primary" type="button" hidden disabled>Tap a card to discard</button>
-          <button id="btn-fullhand-cancel" class="btn" type="button" hidden>Back</button>
-        </div>
-      </div>
-    </div>
-
-    <!-- Discard-down-to-the-hand-limit modal (shown at end of turn when over the limit) -->
+    <!-- Discard-down-to-the-hand-limit modal: the ONLY place the hand limit is settled, when a guest
+         ends their turn holding more than 6 cards (src/ui/discard.js). -->
     <div id="discard-overlay" class="overlay center" hidden>
       <div class="modal">
-        <div class="modal-title">Your hand is full</div>
+        <div id="discard-kicker" class="discard-kicker" hidden></div>
+        <div class="modal-title">End of your turn: too many cards</div>
         <div id="discard-sub" class="modal-sub"></div>
         <div id="discard-cards" class="cards"></div>
         <div class="modal-actions">
@@ -168,6 +153,7 @@
           <span><span class="mk switchboard">&#x260E;&#xFE0E;</span> Switchboard &#183; count the possessed</span>
           <span><span class="mk linen">&#x2261;</span> Linen Store &#183; 2 cards</span>
           <span><span class="mk">&#x1F512;</span> Locked door &#183; &#x1F513; open this turn only</span>
+          <span><svg class="mk-bar" viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="14" fill="#14100c" stroke="#d9604f" stroke-width="2.5"/><g fill="#d2a265" stroke="#5a3a1e" stroke-width="1"><rect x="5" y="13.5" width="22" height="5" transform="rotate(45 16 16)"/><rect x="5" y="13.5" width="22" height="5" transform="rotate(-45 16 16)"/><rect x="5" y="13.5" width="22" height="5"/></g></svg> Barricaded doorway &#183; shut both ways until its placer&#8217;s next turn</span>
         </div>
       </div>
     </div>
@@ -198,7 +184,8 @@
     <div id="start-overlay" class="overlay center">
       <div class="card">
         <h1>Hotel Escape</h1>
-        <p id="start-sub" class="muted">Practice mode &#183; explore the hotel alone, find three Lanterns, reach the fire exit</p>
+        <p id="start-sub" class="muted">Practice &#183; explore the hotel alone
+You start with 1 Lantern &#8212; find 2 more and escape through the Fire Exit</p>
         <button id="btn-begin" class="btn primary big" type="button" disabled>Loading&#8230;</button>
         <div class="mode-switch">
           <span class="mode-label">Or start a different game:</span>

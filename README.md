@@ -16,8 +16,9 @@ technical choices are in **[docs/DECISIONS.md](docs/DECISIONS.md)**; status and 
 design; `CLAUDE.md` says no rule or number changes without the owner's approval of a before/after
 list). Two ways to play the same rules, chosen on the start screen:
 
-- **Practice (default).** One guest alone in a random hotel: open doors to explore, find three
-  Lanterns by searching (dark rooms need a Flashlight, two rooms are locked), reach the fire exit.
+- **Practice (default).** One guest alone in a random hotel: you start with 1 Lantern; open doors to
+  explore, find 2 more by searching (dark rooms need a Flashlight, two rooms are locked), and escape
+  through the Fire Exit.
 - **Hot-seat — `?mode=hotseat&players=6`.** Four to six people passing **one device**: one hidden
   Possessor with three Possession cards, private role screens, forced meetings with Trade or
   Attack, trades chosen in private on the passed device, health and weapons, Lanterns that block
@@ -46,7 +47,12 @@ Published with GitHub Pages from `main`: **https://mohmdalmalik.github.io/Gaming
 
 `?players=4` / `?players=5` for a smaller table, `?timer=off` to play without the clock,
 `?seed=123` to deal the same hands, pick the same Possessor and shuffle the same hotel (the same
-lobby doors and room deck).
+lobby doors and room deck). During the possessed guest's own action phase the main screen shows their
+reminder — a POSSESSED label, "Souls to trade: N" and their Possession cards as one ×N card in the fan —
+as the owner-approved rules say (no possessed portrait or violet tint there); it is gone before the iPad
+is passed on. It is on by default (`ui.hotseatPossessedOnMainScreen` in `src/config.js`);
+`?possessedTell=private` previews the game with the reminder on the private screens only, `?possessedTell=main`
+forces it on.
 
 The standard view is **corner-on**, like the owner's room pictures: the whole room at the default zoom,
 its two near walls cut down, rooms nearer the camera cut down too, and anything else that would hide the
@@ -72,8 +78,13 @@ readout at the top left (below the room name), for measuring speed on the iPad.
   It takes anything lying in the room (a dead guest's cards); otherwise draws one card, once per room
   (two in a Linen Store) — once searched, the icon is gone. Dark rooms need a Flashlight in hand (the
   icon is dimmed with a flashlight mark and says so when tapped); with no actions left it is dimmed
-  too. What you find is private: the table only sees that you searched. Lanterns are never dealt —
-  searching is the only way to get one.
+  too. What you find is private: the table only sees that you searched. Everything found goes into
+  the hand, even past 6. Every guest (practice included) starts with 1 Lantern + 3 other cards; the
+  other Lanterns are found by searching.
+- **Hand limit (6)** — settled only when you END your turn: over 6 (Possession cards don't count), the
+  End turn button reads "Discard N first", a calm one-line "Cards 8/6 · discard 2 at end of turn" sits
+  above the fan, and End turn (or the 45 s clock running out) opens the discard screen before the turn
+  passes. Cards received on someone else's turn are settled at the end of your own next turn.
 - **Rooms with jobs** — in an Infirmary or the Switchboard a room button appears by End turn:
   Infirmary (1 AP, heal 2), Switchboard (1 AP, once a turn: the whole table learns how many guests
   are possessed, not who). The map marks them (✚ ☎ ≡).
@@ -83,8 +94,9 @@ readout at the top left (below the room name), for measuring speed on the iPad.
   (open a locked door next to you, until the end of your turn), Barricade (seal a doorway of your room for one round), Hand Mirror
   (1 AP: see the whole hand of a guest in your room, in private) and Espresso (free: +2 actions this
   turn) are played from there. Lantern, Flashlight and weapons are used in context. In hot-seat the
-  fan shows only during your own turn, and never shows Possession cards (they are seen through
-  *Private details*, as before).
+  fan shows only during your own turn. A possessed guest's Possession cards show there as one ×N card
+  (with POSSESSED and "Souls to trade: N" in their panel) during their own turn only, gone before the
+  pass screen; the card view shows them too.
 - **Meetings** (hot-seat) — walk in on a guest you have not met in that room this round and you
   must Trade or Attack. In a trade each side picks a card in private and sees only what they
   received. If either guest has no ordinary card (Possession cards don't count), the trade is
@@ -96,7 +108,8 @@ readout at the top left (below the room name), for measuring speed on the iPad.
   If nobody has escaped when it ends, dawn breaks and the hotel wins. Practice has no deadline.
 - **End turn** — refills action points to 4; if you hold more than 6 ordinary cards you discard
   first (Lanterns count; Possession cards never do): tap a card to pick it, then confirm with the
-  button. A double tap on End turn ends only one turn. *Restart practice* asks before it wipes the game.
+  button. The rules engine itself refuses to end a turn over the limit (`canEndTurn` in
+  `src/game/state.js`), so a future server enforces it too. A double tap on End turn ends only one turn. *Restart practice* asks before it wipes the game.
 - **Landscape only** — in portrait (or a window under ~900 px wide) a card asks you to turn the iPad
   sideways; the turn clock waits meanwhile.
 
@@ -144,8 +157,10 @@ src/
     searchSpot.js                     the search icon over the room's flagged search furniture
     handoff.js                        pass-the-device + every private screen (role, turn, card pick,
                                       result, the found-card reveal)
+    souls.js                          the possessed guest's own "Souls to trade: N" count (their private screens,
+                                      and the main screen during their own turn)
     meeting.js                        the PUBLIC side of a meeting: who, Trade or Attack, weapon, outcome
-    fullHand.js  discard.js           hand-limit prompts
+    discard.js                        the end-of-turn discard down to the hand limit (the only hand-limit screen)
 docs/                 GAME_RULES (spec), GAME_CONCEPT, DECISIONS, PROGRESS
 tests/                Node checks (rules-check, logic-check) + a headless browser walkthrough
 ```

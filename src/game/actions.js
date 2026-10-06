@@ -96,12 +96,15 @@ export function searchLeft(state, room) {
 // Search the current room (1 AP). If dropped cards are lying there you take them all (always
 // possible). Otherwise you draw one card, once per room — a Linen Store's draw gives
 // `linenStoreDraws` (2) cards. Results are PRIVATE to the searcher: the public log records only
-// that a search happened. A drawn card that does not fit is reported with `full` so the caller can
-// ask what to do with it; the room counts as searched either way.
+// that a search happened.
 //
-// Result: `kind: 'card'` with `card` (one draw), or `kind: 'cards'` with `cards` (a Linen Store);
-// `overflow` lists the drawn cards that did not fit (each goes to the take-or-leave prompt, like a
-// single card that does not fit), and `full` says whether there are any.
+// Hand limit (approved rule): during your turn you keep everything you find, even past 6 — every
+// found card goes straight into the hand. The limit is settled only when you END your turn
+// (overHandLimit + discardCard below). `over` says how many cards the guest would have to discard if
+// the turn ended now (0 when within the limit), so the interface can warn gently.
+//
+// Result: `kind: 'found'` with `cards` (picked up off the floor), `kind: 'card'` with `card` (one
+// draw), `kind: 'cards'` with `cards` (a Linen Store), or `kind: 'nothing'`.
 export function search(state, floor, player) {
   const gate = canSearch(state, floor, player);
   if (!gate.ok) return gate;
@@ -114,42 +117,21 @@ export function search(state, floor, player) {
   if (drops?.length) {
     state.roomDrops.delete(room.id);
     player.hand.push(...drops);
-    return {
-      ...base, kind: 'found', cards: drops,
-      full: countableCount(player.hand) > rules.handLimit,   // settled at the end of the turn
-    };
+    return { ...base, kind: 'found', cards: drops, over: overHandLimit(player) };
   }
 
   state.searchedRooms.add(room.id);
   const draws = room.job === 'linenStore' ? rules.linenStoreDraws : 1;
   const drawn = [];
   for (let k = 0; k < draws; k++) { const c = drawCard(state); if (c) drawn.push(c); }
-  if (!drawn.length) return { ...base, kind: 'nothing' };
-  const overflow = [];
-  for (const c of drawn) {
-    if (countableCount(player.hand) >= rules.handLimit) overflow.push(c);
-    else player.hand.push(c);
-  }
-  if (draws === 1) return { ...base, kind: 'card', card: drawn[0], full: overflow.length > 0, overflow };
-  return { ...base, kind: 'cards', cards: drawn, card: drawn[0], full: overflow.length > 0, overflow };
+  if (!drawn.length) return { ...base, kind: 'nothing', over: overHandLimit(player) };
+  player.hand.push(...drawn);
+  const over = overHandLimit(player);
+  if (draws === 1) return { ...base, kind: 'card', card: drawn[0], over };
+  return { ...base, kind: 'cards', cards: drawn, card: drawn[0], over };
 }
 
-// A drawn card the guest could not hold: 'take' it (dropping `dropId`) or 'leave' it.
-export function resolveFullHand(state, player, card, choice, dropId = null) {
-  if (choice === 'take') {
-    if (!dropId) return { ok: false, reason: 'noChoice' };
-    const dropped = takeCard(player.hand, dropId);
-    if (!dropped) return { ok: false, reason: 'noCard' };
-    if (dropped.type === 'possession') { player.hand.push(dropped); return { ok: false, reason: 'undroppable' }; }
-    toDiscard(state, dropped);
-    player.hand.push(card);
-    return { ok: true, kept: card, dropped };
-  }
-  toDiscard(state, card);
-  return { ok: true, left: card };
-}
-
-// Discard a card to obey the hand limit at the end of a turn. Free. Never a Possession card.
+// Discard a card to obey the hand limit at the end of your turn. Free. Never a Possession card.
 export function discardCard(state, player, cardId) {
   const card = player.hand.find(c => c.id === cardId);
   if (!card) return { ok: false, reason: 'noCard' };
@@ -159,7 +141,9 @@ export function discardCard(state, player, cardId) {
   return { ok: true, card };
 }
 
-// How many cards a guest must shed to obey the hand limit (Possession cards excluded).
+// How many cards a guest must shed to obey the hand limit (Possession cards excluded). The turn
+// cannot pass while this is above 0: endTurn() in state.js refuses, so the interface (and the
+// simulator) discard first.
 export function overHandLimit(player) {
   return Math.max(0, countableCount(player.hand) - rules.handLimit);
 }

@@ -59,8 +59,7 @@ const visible = sel => page.evaluate(s => {
 }, sel);
 const kind = () => game(() => window.__game.handoffKind());
 const tap = async sel => { await page.click(sel); await page.waitForTimeout(70); };
-// A search into a full hand asks whether to keep the card; for the staging checks, leave it.
-const leaveIfFull = async () => { if (await game(() => window.__game.fullHandOpen())) await tap('#btn-fullhand-leave'); };
+// Taps the hand-over screen's own button (Continue, Done, I understand…).
 const next = () => tap('#btn-handoff-next');
 // Stand a guest in a room for real: the figure moves too, or the discovery watcher walks the
 // rules back to where the figure is on the next frame.
@@ -104,8 +103,8 @@ async function throughRoles() {
   }
 }
 // Searching is the magnifier over the room's search spot (#search-spot): tap it, the guest walks up to
-// the furniture and searches. Resolves once the walk and the search are done (the reveal is then up,
-// or the take-or-leave prompt for a card that does not fit).
+// the furniture and searches. Resolves once the walk and the search are done (the reveal is then up;
+// everything found goes into the hand, even past the limit).
 async function searchHere() {
   await page.click('#search-spot');
   await page.waitForFunction(() => !window.__game.searchPending() && !window.__game.activeMover().walking && window.__game.activeMover().path.length === 0, null, { timeout: 40000, polling: 50 });
@@ -161,15 +160,20 @@ const info = await game(() => ({
   practice: window.__game.state.practice, players: window.__game.state.players.length,
   ap: window.__game.rules.actionPointsPerTurn, move: window.__game.rules.actionCost.move, open: window.__game.rules.actionCost.open,
   dealt: window.__game.activePlayer().hand.filter(c => c.type === 'lantern').length,
+  hand: window.__game.activePlayer().hand.length,
   inPile: window.__game.state.drawPile.filter(c => c.type === 'lantern').length, pile: window.__game.state.drawPile.length,
   locked: window.__game.lockedRooms(), timer: window.__game.rules.turnTimerEnabled,
 }));
 check(info.problems.length === 0, 'no floor problems');
 check(info.practice && info.players === 1, 'one guest, practice mode');
 check(info.ap === 4 && info.move === 1 && info.open === 1, '4 action points; opening a door costs 1, a move costs 1');
-check(info.dealt === 0 && info.inPile === 14 && info.pile === 44, `no Lantern is dealt; all 14 are in the ${info.pile}-card deck (48 less a hand of 4), to be found by searching`);
+check(info.dealt === 1 && info.hand === 4, 'the same deal as a match: the guest starts with 1 Lantern + 3 other cards');
+check(info.inPile === 13 && info.pile === 44, `the other 13 Lanterns are in the ${info.pile}-card deck (48 less a hand of 4), to be found by searching`);
 check(info.locked.length === 0 && info.rooms === 1, 'the hotel starts as just the lobby; nothing is locked yet');
 check(info.timer === false, 'no turn timer in practice');
+const startSub = (await page.textContent('#start-sub')).replace(/\s+/g, ' ').trim();
+check(/You start with 1 Lantern — find 2 more and escape through the Fire Exit/.test(startSub),
+  `the start screen says the guest starts with 1 Lantern and must find 2 more ("${startSub}")`);
 await tap('#btn-begin');
 await page.waitForFunction(() => window.__game.isRunning(), null, { timeout: 8000 });
 check(!(await visible('#handoff-overlay')), 'no pass-the-device screens alone');
@@ -291,7 +295,6 @@ await page.waitForTimeout(200);
 check((await spot()).mode === 'live', 'with a Flashlight in hand the icon lights up');
 await searchHere();
 await takeReveal();
-await leaveIfFull();
 check(await game(() => window.__game.state.searchedRooms.has(window.__game.activePlayer().currentRoom)), 'with a Flashlight the dark room can be searched');
 check(await game(() => window.__game.activePlayer().hand.some(c => c.id === 'fl1')), 'and the Flashlight is kept');
 // No action points left: dimmed, and a tap explains.
@@ -350,6 +353,28 @@ console.log('\n4b. the hand, held as a fan of cards');
     requestAnimationFrame(look);
   }));
   check(lifted.before > lifted.h && lifted.after <= lifted.h + 1, `a card rests partly below the edge and rises fully when touched (bottom ${Math.round(lifted.before)} → ${Math.round(lifted.after)} px of ${lifted.h})`);
+  // Over the limit during a turn is allowed: a calm reminder sits above the fan, clear of everything.
+  const warn = await page.evaluate(() => {
+    const el = document.querySelector('#hand-fan .fan-limit');
+    if (!el || el.hidden) return null;
+    const r = el.getBoundingClientRect(), pp = document.getElementById('player-panel').getBoundingClientRect();
+    const btns = [...document.querySelectorAll('.hud-bottom-right .btn, .hud-bottom-right .ctl')].filter(b => b.offsetParent).map(b => b.getBoundingClientRect());
+    const hit = (a, b) => a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
+    return { text: el.textContent, inside: r.left >= 0 && r.right <= innerWidth && r.top >= 0, clear: !hit(r, pp) && !btns.some(b => hit(r, b)),
+      end: document.getElementById('btn-end-turn').textContent };
+  });
+  check(warn?.text === 'Cards 8/6 · discard 2 at end of turn', `with 8 cards a gentle reminder shows above the fan ("${warn?.text}")`);
+  check(warn?.inside && warn?.clear, 'on screen, clear of the guest panel and the buttons');
+  check(/Discard 2 first/.test(warn?.end || ''), `and End turn says what comes first ("${(warn?.end || '').replace(/\s+/g, ' ').trim()}")`);
+  // One line at both iPad sizes (it wrapped to two before it was shortened).
+  const lines = () => page.evaluate(() => {
+    const el = document.querySelector('#hand-fan .fan-limit'), r = document.createRange(); r.selectNodeContents(el);
+    return new Set([...r.getClientRects()].map(q => Math.round(q.top))).size;
+  });
+  const sizes = [];
+  for (const [w, h] of [[1180, 820], [1024, 768]]) { await page.setViewportSize({ width: w, height: h }); await page.waitForTimeout(250); sizes.push(`${w}x${h}: ${await lines()}`); }
+  await page.setViewportSize({ width: 1180, height: 820 }); await page.waitForTimeout(250);
+  check(sizes.every(t => t.endsWith(': 1')), `the reminder stays on one line on both iPad sizes (${sizes.join(', ')})`);
   await shot('ui-hand-8');
   await game(() => { const p = window.__game.activePlayer(); p.hand = p.hand.slice(0, 4); window.__game.refresh(); });
 }
@@ -482,14 +507,15 @@ console.log('\n6b. a Linen Store');
   await next();
   const ls = await game(ids => ({
     n: window.__game.activePlayer().hand.length, has: ids.every(id => window.__game.activePlayer().hand.some(c => c.id === id)),
-    ap: window.__game.activePlayer().actionPoints, full: window.__game.fullHandOpen(),
+    ap: window.__game.activePlayer().actionPoints, full: !document.getElementById('discard-overlay').hidden,
   }), top);
   check(ls.n === before + 2 && ls.has, `the first search there draws two cards (${before} -> ${ls.n}), the top two of the deck`);
   check(ls.ap === 3 && !ls.full, 'for one action, with no prompt while there is room for both');
   check(/find an? .+ and an? /.test(toast), `the message names both cards ("${toast.slice(0, 80)}")`);
   check((await spot()).mode === null, 'and the room gives up its draw once, like any other: no icon now');
 
-  // A full hand: each of the two cards gets the take-or-leave prompt, one after the other.
+  // Six cards in hand: both cards are KEPT (8 in hand) — the hand limit is settled only at the end of the
+  // turn (approved rule), on the discard screen.
   check(await game(() => window.__game.revealTile('linenStore2')), 'the second Linen Store is revealed');
   await game(() => window.__game.state.lockedRooms.clear());
   await put('linenStore2', 4);
@@ -501,36 +527,50 @@ console.log('\n6b. a Linen Store');
     g.refresh();
   });
   await searchHere();
-  check(await kind() === 'found' && sameSet(await revealIds(), ['ls1', 'ls2']), 'the reveal shows both, even with no room for them');
-  check(/choose what to do/.test(await revealText()) && (await page.textContent('#btn-handoff-next')).trim() === 'Continue', 'and says the hands are full');
+  check(await kind() === 'found' && sameSet(await revealIds(), ['ls1', 'ls2']), 'with 6 cards in hand the reveal shows both new cards');
+  const keepText = await revealText();
+  check(/You hold 8 cards, more than 6: keep them all for now, and discard 2 when you end your turn\./.test(keepText), `and says calmly that they are kept for now ("…${keepText.slice(-80)}")`);
   await next();
-  const firstUp = await page.evaluate(() => [...document.querySelectorAll('#fullhand-found .card-tile')].map(t => t.dataset.cardId));
-  check(await game(() => window.__game.fullHandOpen()) && firstUp.length === 1 && firstUp[0] === 'ls1', `with a full hand the first card gets the take-or-leave prompt (${firstUp.join(',')})`);
-  check(/Bandage/.test(await page.textContent('#fullhand-sub')), 'which names it');
-  await shot('pr-02c-linen-full');
-  await tap('#btn-fullhand-take');
-  // Choosing the card to make room is two steps: tap it (nothing is thrown away yet), then confirm.
-  await page.click('#fullhand-hand .card-tile[data-card-id="k2"]'); await page.waitForTimeout(80);
-  await page.click('#fullhand-hand .card-tile[data-card-id="k1"]'); await page.waitForTimeout(80);
-  const picked = await page.evaluate(() => ({ sel: [...document.querySelectorAll('#fullhand-hand .card-tile.selected')].map(t => t.dataset.cardId),
-    btn: document.getElementById('btn-fullhand-drop').textContent.trim(), dis: document.getElementById('btn-fullhand-drop').disabled }));
-  check(await game(() => window.__game.fullHandOpen() && window.__game.activePlayer().hand.some(c => c.id === 'k1') && window.__game.activePlayer().hand.some(c => c.id === 'k2')),
-    'tapping a card to make room only picks it: nothing is thrown away yet');
-  check(picked.sel.join() === 'k1' && !picked.dis && picked.btn === 'Discard the Knife', `tapping another moves the choice, and the button names it ("${picked.btn}")`);
-  await tap('#btn-fullhand-drop');
-  const secondUp = await page.evaluate(() => [...document.querySelectorAll('#fullhand-found .card-tile')].map(t => t.dataset.cardId));
-  check(await game(() => window.__game.fullHandOpen()) && secondUp.length === 1 && secondUp[0] === 'ls2', `then the second card gets its own prompt straight after (${secondUp.join(',')})`);
-  check(/Flashlight/.test(await page.textContent('#fullhand-sub')), 'which names it');
-  await tap('#btn-fullhand-leave');
-  const end = await game(() => {
+  const kept = await game(() => {
     const g = window.__game, p = g.activePlayer();
-    return { open: g.fullHandOpen(), ids: p.hand.map(c => c.id), discard: g.state.discardPile.map(c => c.id), ap: p.actionPoints };
+    return { ids: p.hand.map(c => c.id), discard: g.state.discardPile.map(c => c.id), ap: p.actionPoints, overlay: !document.getElementById('discard-overlay').hidden };
   });
-  check(!end.open, 'and no third prompt follows');
-  check(end.ids.length === 6 && end.ids.includes('ls1') && !end.ids.includes('k1') && !end.ids.includes('ls2'),
-    'the first was taken (a Knife dropped for it), the second left: still 6 cards');
-  check(end.discard.includes('k1') && end.discard.includes('ls2'), 'the dropped Knife and the left Flashlight go to the discard pile');
-  check(end.ap === 3, 'the whole search cost one action');
+  check(kept.ids.length === 8 && kept.ids.includes('ls1') && kept.ids.includes('ls2') && !kept.discard.some(id => /^(k|ls)\d$/.test(id)) && !kept.overlay,
+    'both are kept: 8 in hand, nothing discarded, no prompt during the turn');
+  check(kept.ap === 3, 'the search cost one action');
+  await page.waitForFunction(() => !document.querySelector('#hand-fan .fan-card.dealt'), null, { timeout: 10000 });
+  await fanStill();
+  check(sameSet(await fanIds(), kept.ids), 'the fan shows all 8 cards');
+  check((await page.textContent('#hand-fan .fan-limit')) === 'Cards 8/6 · discard 2 at end of turn', 'with the reminder above it');
+  await shot('pr-02c-linen-keep');
+  // Ending the turn opens the discard screen first; the turn passes only once the hand is back to 6.
+  const turn0 = await game(() => window.__game.state.turn);
+  await tap('#btn-end-turn');
+  check(await visible('#discard-overlay'), 'End turn with 8 cards opens the discard screen');
+  check(await game(() => window.__game.state.turn) === turn0, 'and the turn has not passed yet');
+  const d0 = await page.evaluate(() => ({ sub: document.getElementById('discard-sub').textContent, n: document.querySelectorAll('#discard-cards .card-tile').length,
+    dis: document.getElementById('btn-discard-done').disabled, kicker: !document.getElementById('discard-kicker').hidden }));
+  check(d0.n === 8 && d0.dis && /Choose 2 to discard/.test(d0.sub), `it offers all 8 and asks for 2 ("${d0.sub}")`);
+  check(!d0.kicker, 'practice has nobody to hide from: no "private" line');
+  await shot('pr-02d-discard');
+  await page.click('#discard-cards .card-tile[data-card-id="k2"]'); await page.waitForTimeout(80);
+  await page.click('#discard-cards .card-tile[data-card-id="k1"]'); await page.waitForTimeout(80);
+  const pick = await page.evaluate(() => ({ sel: [...document.querySelectorAll('#discard-cards .card-tile.selected')].map(t => t.dataset.cardId),
+    btn: document.getElementById('btn-discard-done').textContent.trim(), n: window.__game.activePlayer().hand.length }));
+  check(pick.sel.join() === 'k1' && pick.btn === 'Discard the Knife' && pick.n === 8, 'tapping a card only picks it (tap another to change your mind); the button names it');
+  await tap('#btn-discard-done');
+  await page.click('#discard-cards .card-tile[data-card-id="k3"]'); await page.waitForTimeout(80);
+  await tap('#btn-discard-done');
+  const d1 = await page.evaluate(() => ({ btn: document.getElementById('btn-discard-done').textContent.trim(), n: window.__game.activePlayer().hand.length, turn: window.__game.state.turn }));
+  check(d1.n === 6 && d1.btn === 'Keep these 6' && d1.turn === turn0, 'after two discards: 6 cards, "Keep these 6", still the same turn');
+  await tap('#btn-discard-done');
+  await page.waitForTimeout(150);
+  const after = await game(() => ({ turn: window.__game.state.turn, open: !document.getElementById('discard-overlay').hidden,
+    discard: window.__game.state.discardPile.map(c => c.id), hand: window.__game.activePlayer().hand.map(c => c.id) }));
+  check(!after.open && after.turn === turn0 + 1, 'then the turn passes');
+  check(after.discard.includes('k1') && after.discard.includes('k3') && after.hand.length === 6 && after.hand.includes('ls1') && after.hand.includes('ls2'),
+    'the two chosen Knives went to the discard pile; the new cards were kept');
+  check(!(await page.evaluate(() => { const el = document.querySelector('#hand-fan .fan-limit'); return el && !el.hidden; })), 'and the reminder is gone');
 }
 
 console.log('\n7. finding three Lanterns and the fire exit');
@@ -552,7 +592,7 @@ for (const t of ['lounge', 'ballroom', 'grandCorridor', 'dining', 'library', 'ki
 }
 const rooms = await game(() => window.__game.floor.roomList.filter(r => r.searchable).map(r => r.id));
 check(rooms.length >= 15, `the hotel has grown to ${rooms.length} searchable rooms`);
-let searched = 0, fullHandChecked = false;
+let searched = 0;
 const notes7 = [];
 for (const r of rooms) {
   if (await game(() => window.__game.lanterns()) >= 3) break;
@@ -561,28 +601,7 @@ for (const r of rooms) {
   await settle();
   await searchHere();
   if (await kind() === 'found') { notes7.push(await revealText()); await next(); }
-  // A full hand: keep a Lantern (dropping something that is not one); leave anything else. (A
-  // Linen Store's two cards can ask twice, one after the other.)
-  while (await game(() => window.__game.fullHandOpen())) {
-    const isLantern = await page.evaluate(() => !!document.querySelector('#fullhand-found .card-tile [alt="Lantern"], #fullhand-found .card-tile')
-      && /Lantern/.test(document.getElementById('fullhand-found').textContent));
-    if (isLantern) {
-      await tap('#btn-fullhand-take');
-      const drop = await page.evaluate(() => [...document.querySelectorAll('#fullhand-hand .card-tile')].find(t => !/Lantern|Flashlight/.test(t.textContent))?.dataset.cardId);
-      // Every card in the hand must be fully on screen and tappable (six cards used to overflow).
-      if (!fullHandChecked) {
-        fullHandChecked = true;
-        const fit = await page.evaluate(() => [...document.querySelectorAll('#fullhand-hand .card-tile')].map(t => {
-          const r = t.getBoundingClientRect(); const top = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
-          return r.left >= 0 && r.right <= innerWidth && r.top >= 0 && r.bottom <= innerHeight && t.contains(top);
-        }));
-        check(fit.length >= 6 && fit.every(Boolean), `with a full hand, all ${fit.length} cards to choose from are on screen and tappable`);
-        await shot('pr-02b-fullhand');
-      }
-      await page.click(`#fullhand-hand .card-tile[data-card-id="${drop}"]`); await page.waitForTimeout(80);
-      await tap('#btn-fullhand-drop');
-    } else await tap('#btn-fullhand-leave');
-  }
+  // (Everything found is kept, even past 6: the hand limit only matters when a turn ends.)
   searched++;
 }
 const held = await game(() => window.__game.lanterns());
@@ -671,8 +690,8 @@ console.log('\n7b. playtest fixes');
     sub: document.getElementById('discard-sub').textContent, btn: document.getElementById('btn-discard-done').textContent.trim(), dis: document.getElementById('btn-discard-done').disabled,
     sel: [...document.querySelectorAll('#discard-cards .card-tile.selected')].map(t => t.dataset.cardId), n: window.__game.activePlayer().hand.length }));
   let d = await dsc();
-  check(d.open && d.title === 'Your hand is full' && /Tap a card to discard/.test(d.sub), `over the limit, End turn asks for a discard: "${d.title}" — "${d.sub}"`);
-  check(await page.evaluate(() => document.querySelector('#fullhand-overlay .modal-title').textContent) === d.title, 'the take-or-leave prompt has the same title');
+  check(d.open && d.title === 'End of your turn: too many cards' && /Choose 2 to discard/.test(d.sub), `over the limit, End turn asks for a discard: "${d.title}" — "${d.sub}"`);
+  check(!(await page.$('#fullhand-overlay')), 'there is no take-or-leave prompt any more (the limit is settled only here)');
   check(d.dis && d.btn === 'Tap a card to discard', 'until a card is picked, the button says what to do and cannot be pressed');
   await page.click('#discard-cards .card-tile[data-card-id="d2"]'); await page.waitForTimeout(80);
   d = await dsc();

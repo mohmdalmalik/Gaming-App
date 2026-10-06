@@ -8,6 +8,7 @@
 import * as THREE from 'three';
 import { unitBox, unitPlane, lambert, tinted, makeShadow, easeOutCubic } from './materials.js';
 import { applyXray } from './xray.js';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 let seedCounter = 0;
 
@@ -205,6 +206,96 @@ function padlockTexture(open = false) {
   return tex;
 }
 
+// Raw pale timber for the boards of a barricade (grain along the plank, a nail head at each end
+// and one in the middle), so a sealed doorway reads against the dark walnut walls at a glance.
+function plankTexture() {
+  const W = 256, H = 32;
+  const c = document.createElement('canvas');
+  c.width = W; c.height = H;
+  const g = c.getContext('2d');
+  g.fillStyle = '#b57c42'; g.fillRect(0, 0, W, H);
+  let seed = 7;
+  const rnd = () => ((seed = (seed * 9301 + 49297) % 233280) / 233280);
+  for (let i = 0; i < 9; i++) {                                           // grain
+    const y = 2 + rnd() * (H - 4);
+    g.strokeStyle = `rgba(110, 66, 30, ${0.25 + rnd() * 0.3})`; g.lineWidth = 1 + rnd();
+    g.beginPath(); g.moveTo(0, y);
+    for (let x = 0; x <= W; x += 32) g.lineTo(x, y + (rnd() - 0.5) * 3);
+    g.stroke();
+  }
+  g.fillStyle = 'rgba(60, 32, 12, 0.8)'; g.fillRect(0, 0, W, 3); g.fillRect(0, H - 3, W, 3);     // edges
+  for (const x of [12, W / 2, W - 12]) {                                  // nail heads
+    g.fillStyle = '#3a3634'; g.beginPath(); g.arc(x, H / 2, 4, 0, Math.PI * 2); g.fill();
+    g.fillStyle = '#8d8a86'; g.beginPath(); g.arc(x - 1, H / 2 - 1, 1.6, 0, Math.PI * 2); g.fill();
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+
+// The barricade sign over a sealed doorway: boards nailed in an X on a dark plate ringed in red,
+// matching the mark on the map.
+function barricadeSignTexture() {
+  const S = 128;
+  const c = document.createElement('canvas');
+  c.width = c.height = S;
+  const g = c.getContext('2d');
+  g.fillStyle = 'rgba(20, 16, 12, 0.85)';
+  g.beginPath(); g.arc(64, 64, 60, 0, Math.PI * 2); g.fill();
+  g.strokeStyle = '#d9604f'; g.lineWidth = 6;
+  g.beginPath(); g.arc(64, 64, 56, 0, Math.PI * 2); g.stroke();
+  const board = (angle, y = 0) => {
+    g.save(); g.translate(64, 64 + y); g.rotate(angle);
+    g.fillStyle = '#5a3a1e'; g.fillRect(-46, -11, 92, 22);
+    g.fillStyle = '#d2a265'; g.fillRect(-44, -9, 88, 18);
+    g.fillStyle = '#3a3634';
+    for (const x of [-36, 36]) { g.beginPath(); g.arc(x, 0, 3.5, 0, Math.PI * 2); g.fill(); }
+    g.restore();
+  };
+  board(Math.PI / 4); board(-Math.PI / 4); board(0, 0);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+
+// The boards of a barricade, nailed across BOTH faces of the doorway (so it reads from either room):
+// on each face two crossed boards with two across them. One merged geometry (one draw call) per
+// doorway width, in a frame where the opening runs along x and the wall line is z = 0; front faces
+// are full brightness and the plank edges darker (vertex colours), so the boards have depth unlit.
+const barricadeGeos = new Map();
+function barricadeGeometry(width, t) {
+  const key = `${width.toFixed(3)}|${t}`;
+  if (barricadeGeos.has(key)) return barricadeGeos.get(key);
+  const parts = [];
+  const m = new THREE.Matrix4(), q = new THREE.Quaternion(), zAxis = new THREE.Vector3(0, 0, 1);
+  const board = (len, x, y, z, angle, thick = 0.2) => {
+    const geo = new THREE.BoxGeometry(1, 1, 1);
+    q.setFromAxisAngle(zAxis, angle);
+    geo.applyMatrix4(m.compose(new THREE.Vector3(x, y, z), q, new THREE.Vector3(len, thick, 0.05)));
+    const n = geo.attributes.normal, col = [];
+    for (let i = 0; i < n.count; i++) { const k = Math.abs(n.getZ(i)) > 0.5 ? 1 : 0.45; col.push(k, k, k); }
+    geo.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+    parts.push(geo);
+  };
+  const span = width + 0.34;                            // reaches over the jambs, nailed to the frame
+  const lo = 0.3, hi = 1.85, rise = hi - lo;
+  const diag = Math.hypot(width + 0.1, rise), ang = Math.atan2(rise, width + 0.1);
+  for (const f of [1, -1]) {
+    const z = f * (t + 0.03);
+    board(diag, 0, (lo + hi) / 2, z, ang);
+    board(diag, 0, (lo + hi) / 2, z + f * 0.02, -ang);
+    board(span, 0, 0.62, z + f * 0.045, 0, 0.22);
+    board(span, 0, 1.5, z + f * 0.045, 0.06, 0.22);     // a little askew: hammered up in a hurry
+  }
+  const merged = mergeGeometries(parts);
+  for (const p of parts) p.dispose();
+  barricadeGeos.set(key, merged);
+  return merged;
+}
+const BARRICADE_H = 1.95;
+const BAR_SIGN_Y = 0.8;      // the sign's height at full size: on the boards, a little below their middle
+const BAR_SIGN_OUT = 0.45;   // and how far it hangs out from the doorway, on the side facing the camera
+
 const INTO = { north: [0, 1], south: [0, -1], east: [-1, 0], west: [1, 0] };   // into the room from its wall
 
 // Doors and doorways. A CLOSED door (one that leads to a room not yet revealed) is a walnut door
@@ -216,7 +307,10 @@ const INTO = { north: [0, 1], south: [0, -1], east: [-1, 0], west: [1, 0] };   /
 // guest stands in — a locked door opens for a guest INSIDE the locked room (the way out is always open;
 // the padlock stays on it, since it is still locked against anyone going in). `openedNow(roomId)`: that
 // room's door is locked, but a key has it open until the end of this turn (an open padlock hangs there).
-export function createDoorwayViews(floor, cfg, scene, { isLocked = () => false, standingIn = () => null, openedNow = () => false } = {}) {
+// `isBarricaded(doorwayId)`: a Barricade seals that doorway right now — boards are nailed across it on
+// both faces, a red glow lies on the floor either side and a barricade sign hangs over it.
+// `camera` (optional): the barricade sign hangs out on the side of the doorway facing it.
+export function createDoorwayViews(floor, cfg, scene, { isLocked = () => false, standingIn = () => null, openedNow = () => false, isBarricaded = () => false, camera = null } = {}) {
   const views = new Map();
   const t = cfg.walls.thickness, H = cfg.walls.height;
   const warm = new THREE.Color(cfg.palette.frontier);
@@ -242,8 +336,13 @@ export function createDoorwayViews(floor, cfg, scene, { isLocked = () => false, 
   const lockGlowMat = new THREE.MeshBasicMaterial({ map: radial, color: new THREE.Color('#c0392b'), transparent: true, opacity: 0.35, depthWrite: false, toneMapped: false, blending: THREE.AdditiveBlending });
   const padlockMat = new THREE.SpriteMaterial({ map: padlockTexture(), transparent: true, depthTest: false, depthWrite: false, toneMapped: false });
   const padlockOpenMat = new THREE.SpriteMaterial({ map: padlockTexture(true), transparent: true, depthTest: false, depthWrite: false, toneMapped: false });
+  // A barricade's boards (unlit like the door leaves; vertex colours shade the plank edges) and its sign.
+  const plankMat = new THREE.MeshBasicMaterial({ map: plankTexture(), vertexColors: true });
+  const barGlowMat = lockGlowMat.clone();
+  barGlowMat.opacity = 0.6;
+  const barSignMat = new THREE.SpriteMaterial({ map: barricadeSignTexture(), transparent: true, depthTest: false, depthWrite: false, toneMapped: false });
   // (door leaves fade like the room models where they would hide the guest: xray.js)
-  for (const m of [leafMat, leafJammedMat, knobMat, lockedMat, padBodyMat, padShackleMat]) applyXray(m);
+  for (const m of [leafMat, leafJammedMat, knobMat, lockedMat, padBodyMat, padShackleMat, plankMat]) applyXray(m);
   const LEAF_H = 2.02;
 
   // A door leaf hinged at one jamb: a pivot group so it can swing open.
@@ -395,7 +494,12 @@ export function createDoorwayViews(floor, cfg, scene, { isLocked = () => false, 
     scene.add(mark);
     const view = {
       kind: 'open', doorway: d, strip, leaf, glow, blink, warn, mark, locked: null, shut: null, openedNow: false,
+      bar: null, barricaded: false,
       sync() {
+        // A barricade: boards across the doorway while it is sealed (both ways, for every guest).
+        this.barricaded = !!isBarricaded(d.id);
+        if (this.barricaded && !this.bar) this.bar = makeBarricade(d);
+        this.bar?.set(this.barricaded);
         const inRoom = lockedRoom();
         const locked = !!inRoom;
         const shut = locked && standingIn() !== inRoom;     // open for the guest inside, shut to everyone else
@@ -431,10 +535,33 @@ export function createDoorwayViews(floor, cfg, scene, { isLocked = () => false, 
       },
       setState() { this.sync(); },
       setUsable(v, fromRoom) { blink.visible = v; glow.visible = v; placeRing(blink, d, fromRoom); },
-      dispose() { scene.remove(strip, glow, blink, warn, mark); if (leaf) scene.remove(leaf); },
+      dispose() { scene.remove(strip, glow, blink, warn, mark); if (leaf) scene.remove(leaf); this.bar?.dispose(); },
     };
     view.sync();
     return view;
+  }
+
+  // A barricade across an open doorway, built the first time it is sealed and kept (hidden) after.
+  function makeBarricade(d) {
+    const planks = new THREE.Mesh(barricadeGeometry(d.width, t), plankMat);
+    planks.position.set(d.center[0], 0, d.center[1]);
+    if (d.axis !== 'x') planks.rotation.y = Math.PI / 2;
+    planks.renderOrder = 4;
+    const glow = new THREE.Mesh(unitPlane, barGlowMat);        // red on the floor, both sides
+    const along = d.axis === 'x', deep = 2 * t + 1.9;
+    glow.scale.set(along ? d.width + 0.8 : deep, 1, along ? deep : d.width + 0.8);
+    glow.position.set(d.center[0], 0.037, d.center[1]);
+    glow.renderOrder = 2;
+    const sign = new THREE.Sprite(barSignMat);
+    sign.scale.set(0.5, 0.5, 1);
+    sign.position.set(d.center[0], BAR_SIGN_Y, d.center[1]);
+    sign.renderOrder = 7;
+    scene.add(planks, glow, sign);
+    return {
+      planks, glow, sign, on: false,
+      set(on) { this.on = on; planks.visible = glow.visible = sign.visible = on; },
+      dispose() { scene.remove(planks, glow, sign); },
+    };
   }
 
   const at = d => `${d.center[0].toFixed(2)},${d.center[1].toFixed(2)}`;
@@ -474,11 +601,34 @@ export function createDoorwayViews(floor, cfg, scene, { isLocked = () => false, 
         const b = v.blink;
         const near = !!walker?.walking && Math.hypot(b.position.x - walker.x, b.position.z - walker.z) < 1.3;
         if (b.children[0].visible === near) for (const ch of b.children) ch.visible = !near;
+        if (v.bar?.on) {
+          // The boards stand as tall as the taller of the doorway's two walls, and at least waist
+          // high where both are cut down, so a sealed doorway still reads in the cutaway.
+          const d = v.doorway, ra = roomViews.get(d.a), rb = roomViews.get(d.b);
+          const h = Math.max(ra ? ra.sideHeight(d.sideA) : 0, rb ? rb.sideHeight(d.sideB) : 0);
+          const k = Math.max(0.5, Math.min(1, h / BARRICADE_H));
+          const shown = !!(ra?.group.visible || rb?.group.visible);
+          v.bar.planks.scale.y = k;
+          v.bar.planks.visible = v.bar.glow.visible = v.bar.sign.visible = shown;
+          // The sign hangs in the middle of the boards, not above them, and a little out from the
+          // doorway toward the camera: above the door it would sit under the guest strip at the top
+          // of the screen whenever the doorway is on the far wall.
+          const sg = v.bar.sign;
+          sg.position.y = BAR_SIGN_Y * k;
+          if (camera) {
+            const ax = d.axis === 'x' ? 1 : 0;           // the opening runs along x: its face looks along z
+            const out = Math.sign(camera.position.getComponent(ax ? 2 : 0) - d.center[ax]) * BAR_SIGN_OUT;
+            if (ax) sg.position.z = d.center[1] + out; else sg.position.x = d.center[0] + out;
+          }
+        }
         const leaf = v.leaf;
         if (!leaf) continue;
         const u = leaf.userData;
-        if (u.swing < u.target) u.swing = Math.min(u.target, u.swing + dt / 0.45);
-        else if (u.swing > u.target) u.swing = Math.max(u.target, u.swing - dt / 0.45);   // a door locking again swings shut
+        // A barricaded doorway swings its door shut behind the boards (an open leaf beside them would
+        // still read as an open door, and could hide them); it swings open again when they come down.
+        const target = v.bar?.on ? 0 : u.target;
+        if (u.swing < target) u.swing = Math.min(target, u.swing + dt / 0.45);
+        else if (u.swing > target) u.swing = Math.max(target, u.swing - dt / 0.45);   // a door locking again swings shut
         // swing away from the room the door belongs to, into the room that was revealed
         leaf.rotation.y = swingAngle(u, easeOutCubic(u.swing));
         const rv = roomViews.get(u.room);

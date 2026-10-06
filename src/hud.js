@@ -9,6 +9,7 @@ import { canUseRoom } from './game/actions.js';
 import { rules } from './data/rules.js';
 import { countableCount } from './game/cards.js';
 import { makePortrait } from './ui/portrait.js';
+import { soulsHeld, soulsChip } from './ui/souls.js';
 import { roundLabel, finalRoundShort, isFinal } from './ui/roundLabel.js';
 
 // The room-job button (Infirmary, Switchboard): its label, what it does for its cost, and a plain
@@ -26,7 +27,10 @@ const ROOM_REASON = {
   dead: '—',
 };
 
-export function createHud(doc, cfg) {
+// `possessedTellOnMain()`: whether the possessed guest's words-and-count reminder (POSSESSED label and
+// "Souls to trade") may show on the main screen right now. Outside hot-seat it always may; in hot-seat
+// only when cfg.ui.hotseatPossessedOnMainScreen is on, during that guest's own action phase (main.js).
+export function createHud(doc, cfg, { possessedTellOnMain = state => !state.hotseat } = {}) {
   const el = {
     root: doc.getElementById('hud'),
     strip: doc.getElementById('players-strip'),
@@ -42,6 +46,8 @@ export function createHud(doc, cfg) {
     panel: doc.getElementById('player-panel'),
     portrait: doc.getElementById('portrait-slot'),
     name: doc.getElementById('active-player'),
+    role: doc.getElementById('panel-role'),
+    souls: doc.getElementById('panel-souls'),
     health: doc.getElementById('health'),
     apPips: doc.getElementById('ap-pips'),
     ap: doc.getElementById('action-points'),
@@ -68,6 +74,7 @@ export function createHud(doc, cfg) {
   let pressedConfirm = false;   // a press began on the Move/Cancel bar since it appeared (onConfirm)
   let mini = null;            // the top-strip guest cells
   let portraitKey = '';       // so the panel portrait only rebuilds when it must
+  let soulsKey = '';          // so the panel's souls counter only rebuilds when it must
 
   // Top strip: one always-neutral portrait per guest, built once for the roster.
   function buildStrip(state) {
@@ -138,9 +145,10 @@ export function createHud(doc, cfg) {
         el.portrait.appendChild(makePortrait(doc, p, { possessed: showPossessed }));
       }
       el.name.textContent = p.name;
-      // In hot-seat the device sits on a table between six people, so the always-on HUD must
-      // never carry a hidden role: no possessed portrait and no possessed screen wash. That
-      // information lives on the private hand-over screens only.
+      // In hot-seat the device sits on a table between six people, so the always-on HUD never shows
+      // the possessed portrait or the possessed screen wash (they live on the private hand-over
+      // screens). The approved exception is the words-and-count reminder below (syncTell), during the
+      // possessed guest's own action phase only.
       const publicOnly = !!state.hotseat;
       // Health is a Phase 1 system. While it is off nothing can change it, so showing three
       // bars would imply a rule that does not exist yet.
@@ -148,6 +156,11 @@ export function createHud(doc, cfg) {
       if (rules.healthEnabled) renderHealth(p.health);
       renderAp(p.actionPoints);
       el.tint.hidden = !showPossessed;             // subtle possessed screen wash (never in hot-seat)
+      // The same tell, in words: a POSSESSED label by the name and how many Possession cards
+      // ("souls") are left to trade. Outside hot-seat it shows with the portrait and wash; in hot-seat
+      // during that guest's own action phase while cfg.ui.hotseatPossessedOnMainScreen is on (the
+      // default; it also lives on the private hand-over screens and in the card view).
+      hud.syncTell(state);
 
       // Header.
       const room = floor.rooms.get(p.currentRoom);
@@ -163,7 +176,13 @@ export function createHud(doc, cfg) {
 
       // End turn (prominent; names the next guest).
       if (state.finished) { el.endMain.textContent = 'Game over'; el.endSub.textContent = ''; el.endTurn.disabled = true; }
-      else { el.endMain.textContent = 'End turn ›'; el.endSub.textContent = next && next !== p ? `Next: ${next.name}` : `Refill to ${rules.actionPointsPerTurn}`; el.endTurn.disabled = false; }
+      else {
+        // Over the hand limit (allowed during the turn): ending it opens the discard screen first.
+        const over = countableCount(p.hand) - rules.handLimit;
+        el.endMain.textContent = 'End turn ›';
+        el.endSub.textContent = over > 0 ? `Discard ${over} first` : next && next !== p ? `Next: ${next.name}` : `Refill to ${rules.actionPointsPerTurn}`;
+        el.endTurn.disabled = false;
+      }
 
       // A room with a job: its button shows only while standing in one (Infirmary, Switchboard).
       // The Fire Exit uses the same button for Escape. It is enabled only for a guest it would let
@@ -227,12 +246,26 @@ export function createHud(doc, cfg) {
       el.timerSeconds.textContent = `${Math.ceil(Math.max(0, left))}s`;
       el.timer.classList.toggle('low', left <= 10);
     },
+    // The POSSESSED label and souls count in the panel. Cheap (touches the page only on a change), so
+    // main.js also runs it every frame: in hot-seat it must be gone before any pass screen is up.
+    syncTell(state) {
+      const p = activePlayer(state);
+      const on = !!p?.possessed && !!possessedTellOnMain(state);
+      el.role.hidden = !on;
+      el.souls.hidden = !on;
+      const sk = on ? `${p.index}:${soulsHeld(p)}` : '';
+      if (sk !== soulsKey) {
+        soulsKey = sk;
+        el.souls.replaceChildren(...(on ? [soulsChip(doc, soulsHeld(p), { compact: true })] : []));
+      }
+    },
     hideTimer() { el.timer.hidden = true; el.timer.classList.remove('low'); },
-    toast(message) {
+    // `seconds`: how long it stays (default cfg.ui.toastDuration); a longer message asks for longer.
+    toast(message, seconds = cfg.ui.toastDuration) {
       el.toast.textContent = message;
       el.toast.hidden = false;
       clearTimeout(toastTimer);
-      toastTimer = setTimeout(() => { el.toast.hidden = true; }, cfg.ui.toastDuration * 1000);
+      toastTimer = setTimeout(() => { el.toast.hidden = true; }, seconds * 1000);
     },
     showConfirm(text, moveLabel) {
       el.confirmText.textContent = text;

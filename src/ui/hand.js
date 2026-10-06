@@ -6,7 +6,9 @@
 import { activePlayer, adjacentLockedRooms, isBarricaded, playersInRoom, doorBetween, moveCostInto } from '../game/state.js';
 import { rules } from '../data/rules.js';
 import { CARDS, countableCount } from '../game/cards.js';
-import { bigCard, sortHand, cardDesc } from './cards.js';
+import { bigCard, sortHand, cardDesc, handLimitWarning } from './cards.js';
+import { makePortrait } from './portrait.js';
+import { soulsHeld, soulsChip } from './souls.js';
 
 export function createHand(doc, cfg, { onUseBandage, onUnlock, onBarricade, onEspresso, onHandMirror }) {
   const overlay = doc.getElementById('hand-overlay');
@@ -22,46 +24,88 @@ export function createHand(doc, cfg, { onUseBandage, onUnlock, onBarricade, onEs
   let open = false;
   let ctx = null;
   let selectedId = null;
+  let selectedType = null;      // so a Possession card given away hands the view to the next one
 
   function render() {
     const { state, floor } = ctx;
     const p = activePlayer(state);
     title.textContent = `${p.name}'s hand`;
+    const souls = soulsHeld(p);
 
+    // Possession cards first, then the rest grouped by type (Lanterns lead the catalogue). The
+    // Possession cards are one stack (×N): they are all the same card, and the count is what matters.
+    const sorted = sortHand(p.hand);
+    const firstSoul = sorted.find(c => c.type === 'possession');
+    const hand = sorted.filter(c => c.type !== 'possession' || c === firstSoul);
+    if (selectedType === 'possession' && firstSoul && !hand.some(c => c.id === selectedId)) selectedId = firstSoul.id;
+    else if (firstSoul && sorted.some(c => c.id === selectedId && c.type === 'possession')) selectedId = firstSoul.id;
+    if (!hand.some(c => c.id === selectedId)) selectedId = hand[0]?.id ?? null;
+    const at = hand.findIndex(c => c.id === selectedId);
+    const card = hand[at] || null;
+
+    const showingSouls = card?.type === 'possession';
+
+    // The possessed guest's reminder: how many Possession cards ("souls") they can still trade. In
+    // hot-seat this view also opens from a fan card during the action phase, on the screen the whole
+    // table can see, so there it stays as quiet as the main screen's own reminder: the words and the
+    // count inside the panel, but no possessed portrait and no violet wash that could be spotted from
+    // across the table (the approved list in docs/GAME_RULES.md > Possession does not include them).
+    const tell = !!p.possessed && !state.hotseat;
+    overlay.classList.toggle('possessed', tell);
+    banner.className = 'banner'; banner.innerHTML = '';   // nothing left behind for the next guest
     if (p.possessed) {
-      banner.hidden = false; banner.className = 'banner';
-      banner.textContent = 'You are POSSESSED. In a trade you may give a Possession card to convert someone — unless they hand you a Lantern. You can never escape.';
+      banner.hidden = false; banner.className = 'banner possessed';
+      if (tell) {
+        const port = doc.createElement('div'); port.className = 'banner-portrait';
+        port.appendChild(makePortrait(doc, p, { possessed: true }));
+        banner.appendChild(port);
+      }
+      const text = doc.createElement('div'); text.className = 'banner-text';
+      const words = doc.createElement('div'); words.className = 'banner-words';
+      // On the Possession card itself the count and what it does are in the detail beside it (said
+      // once), so the banner keeps only the role; on every other card it carries both. The banner is
+      // the same height either way (styles.css: two lines' room, the count chip beside the words), so
+      // the card and the ‹ › arrows below it stay put while you step through the hand.
+      words.innerHTML = showingSouls ? 'You are <b>POSSESSED</b>. You can never escape.'
+        : 'You are <b>POSSESSED</b>. In a trade, give a Possession card to possess the other guest — unless they hand you a Lantern. You can never escape.';
+      text.append(words);
+      if (!showingSouls) text.append(soulsChip(doc, souls));
+      banner.appendChild(text);
     } else if (p.knows.size) {
       const names = [...p.knows].map(id => state.players.find(q => q.id === id)?.name).filter(Boolean);
       banner.hidden = false; banner.className = 'banner info';
       banner.textContent = `You have unmasked: ${names.join(', ')} — possessed.`;
     } else banner.hidden = true;
 
-    // Possession cards first, then the rest grouped by type (Lanterns lead the catalogue).
-    const hand = sortHand(p.hand);
-    if (!hand.some(c => c.id === selectedId)) selectedId = hand[0]?.id ?? null;
-    const at = hand.findIndex(c => c.id === selectedId);
-    const card = hand[at] || null;
-
     big.innerHTML = '';
-    if (card) big.appendChild(bigCard(doc, card, { text: false }));
+    selectedType = card?.type ?? null;
+    if (card) {
+      const bc = bigCard(doc, card, { text: false });
+      if (card.type === 'possession') {
+        const b = doc.createElement('span'); b.className = 'face-badge souls'; b.textContent = `×${souls}`;
+        b.setAttribute('aria-label', `${souls} Possession card${souls === 1 ? '' : 's'}`);
+        bc.querySelector('.bc-face')?.appendChild(b);
+      }
+      big.appendChild(bc);
+    }
     else big.innerHTML = '<div class="panel-note">No cards.</div>';
     position.textContent = hand.length ? `${at + 1} of ${hand.length}` : '';
     prevBtn.disabled = nextBtn.disabled = hand.length < 2;
     prevBtn.onclick = e => { e.preventDefault(); selectedId = hand[(at - 1 + hand.length) % hand.length]?.id; render(); };
     nextBtn.onclick = e => { e.preventDefault(); selectedId = hand[(at + 1) % hand.length]?.id; render(); };
 
-    renderDetail(state, floor, p, card);
+    renderDetail(state, floor, p, card, souls);
 
     // An Espresso can lift a turn above the usual action points: say by how much.
     const base = rules.actionPointsPerTurn;
     const actions = p.actionPoints > base ? `Actions ${p.actionPoints} (+${p.actionPoints - base})` : `Actions ${p.actionPoints}/${base}`;
     const parts = [`Health ${p.health}/${rules.maxHealth}`, actions,
-      `Cards ${countableCount(p.hand)}/${rules.handLimit}`, `Lanterns ${p.hand.filter(c => c.type === 'lantern').length}/${rules.lanternsToEscape}`];
+      handLimitWarning(p) || `Cards ${countableCount(p.hand)}/${rules.handLimit}`, `Lanterns ${p.hand.filter(c => c.type === 'lantern').length}/${rules.lanternsToEscape}`];
+    // (No souls count here: the banner, or on the Possession card its own count line, already says it.)
     note.textContent = parts.join(' · ');
   }
 
-  function renderDetail(state, floor, p, card) {
+  function renderDetail(state, floor, p, card, souls = 0) {
     detail.innerHTML = '';
     if (!card) { detail.innerHTML = '<div class="d-empty">Select a card to see what it does.</div>'; return; }
     const meta = CARDS[card.type];
@@ -78,7 +122,8 @@ export function createHand(doc, cfg, { onUseBandage, onUnlock, onBarricade, onEs
     name.textContent = `${meta.name}${shots}`;
     if (meta.evil) name.style.color = 'var(--evil)';
     detail.appendChild(name);
-    line(cardDesc(card.type), 'd-desc');
+    // (A Possession card has its own count line and description below instead of the catalogue words.)
+    if (card.type !== 'possession') line(cardDesc(card.type), 'd-desc');
 
     const noAp = p.actionPoints < rules.actionCost.useCard;
     if (card.type === 'lantern') {
@@ -90,7 +135,9 @@ export function createHand(doc, cfg, { onUseBandage, onUnlock, onBarricade, onEs
       return;
     }
     if (card.type === 'possession') {
-      line('Give it in a trade to convert the other guest. If they gave you a Lantern, it fails and they learn what you are. Never counts toward your hand.', 'd-tag');
+      // One count line and one description, said once (docs/GAME_RULES.md > Meetings, Possession).
+      line(`Souls to trade: <b>${souls}</b>`, 'd-line souls-line');
+      line('Give one in a trade to possess the other guest — unless they hand you a Lantern: then both cards are used up and they learn you are possessed. Never counts toward your hand limit.', 'd-desc');
       return;
     }
     if (card.type === 'flashlight') { line('Kept in hand; lets you search a dark room. Never used up.', 'd-tag'); return; }
@@ -168,10 +215,19 @@ export function createHand(doc, cfg, { onUseBandage, onUnlock, onBarricade, onEs
     refresh() {
       if (!open) return;
       const p = activePlayer(ctx.state);
-      if (selectedId && !p.hand.some(c => c.id === selectedId)) { api.close(); return; }
+      const stillThere = p.hand.some(c => c.id === selectedId)
+        || (selectedType === 'possession' && p.hand.some(c => c.type === 'possession'));
+      if (selectedId && !stillThere) { api.close(); return; }
       render();
     },
-    close() { open = false; overlay.hidden = true; },
+    close() {
+      open = false; overlay.hidden = true; overlay.classList.remove('possessed');
+      banner.hidden = true; banner.className = 'banner'; banner.innerHTML = '';
+      // Nothing of this guest's hand (a Possession card, a souls count) waits in the hidden view for
+      // the next guest: open() renders it all again.
+      big.innerHTML = ''; detail.innerHTML = ''; note.textContent = ''; position.textContent = '';
+      ctx = null; selectedId = null; selectedType = null;
+    },
   };
   closeBtn.addEventListener('click', e => { e.preventDefault(); api.close(); });
   overlay.addEventListener('click', e => { if (e.target === overlay) api.close(); });

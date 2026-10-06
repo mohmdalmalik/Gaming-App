@@ -7,7 +7,8 @@ import {
   createHotel, resetHotel, openFrontierDoor, openDoors, exitPlaced, placeTile, roomAt, SIDES,
 } from '../src/game/hotel.js';
 import { buildGrid, findPath, nearestWalkable, roomSequence } from '../src/game/grid.js';
-import { makeRng } from '../src/game/cards.js';
+import { makeRng, buildDrawDeck, deal, shuffle } from '../src/game/cards.js';
+import { rules } from '../src/data/rules.js';
 
 let failures = 0;
 const check = (cond, msg) => { console.log((cond ? '  ok   ' : '  FAIL ') + msg); if (!cond) failures++; };
@@ -142,6 +143,21 @@ check(exitPastLocks === 400, `the Fire Exit is never behind a locked room: reach
 const avg = placed.reduce((a, b) => a + b, 0) / placed.length;
 console.log(`       tiles placed when every door had been tried: average ${avg.toFixed(1)}, fewest ${Math.min(...placed)}; slowest walkable-grid rebuild ${slowest.toFixed(1)} ms`);
 check(slowest < 150, 'rebuilding the walkable grid after a door opens stays quick');
+
+// The starting deal (pure, no hotel): 1 Lantern + 3 other cards for every guest, at every table size;
+// the remaining Lanterns are shuffled back into the pile. (rules-check covers the full setup.)
+console.log('\nthe starting deal');
+{
+  let ok = true;
+  for (const n of [1, 4, 5, 6]) for (let seed = 1; seed <= 100; seed++) {
+    const rng = makeRng(seed);
+    const { hands, deck } = deal(shuffle(buildDrawDeck(rules.deck), rng), n, rng);
+    const lanterns = h => h.filter(c => c.type === 'lantern').length;
+    if (hands.length !== n || !hands.every(h => h.length === rules.startingHandSize && lanterns(h) === 1)) ok = false;
+    if (lanterns(deck) !== rules.deck.lantern - n || deck.length + n * rules.startingHandSize !== 48) ok = false;
+  }
+  check(ok, 'every guest (1, 4, 5 or 6 at the table) is dealt exactly 1 Lantern + 3 other cards; the other Lanterns stay in the pile');
+}
 
 console.log(failures ? `\n${failures} FAILED` : '\nALL LOGIC CHECKS PASSED');
 process.exit(failures ? 1 : 0);

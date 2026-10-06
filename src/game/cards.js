@@ -46,11 +46,11 @@ export function shuffle(arr, rng) {
   return arr;
 }
 
-// Deal `handSize` cards to each of `playerCount` players, guaranteeing one Lantern each
-// when the rules ask for it. Mutates and returns the remaining draw pile.
-// Deal the starting hands. Lanterns are taken out first and never dealt (rules.lanternsDealtEach
-// is 0); the hands come from the rest of the shuffled deck, and the Lanterns are then shuffled
-// back into what is left. `rng` shuffles that remainder.
+// Deal the starting hands. The Lanterns are taken out first; every guest gets
+// rules.lanternsDealtEach (1, approved) of them, and the rest of each hand (up to handSize, 4) comes
+// from the shuffled deck without Lanterns — so 1 Lantern + 3 other cards each. The remaining Lanterns
+// are then shuffled back into what is left. `rng` shuffles that remainder. (The possessed guest's
+// Possession cards are added on top by resetState in state.js.)
 export function deal(deck, playerCount, rng) {
   const hands = Array.from({ length: playerCount }, () => []);
   const lanterns = deck.filter(c => c.type === 'lantern');

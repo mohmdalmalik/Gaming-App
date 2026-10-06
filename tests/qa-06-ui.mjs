@@ -158,15 +158,7 @@ await page.click('#discard-cards .card-tile:nth-child(3)'); await page.waitForTi
 await h.tap('#btn-discard-done'); await page.waitForTimeout(300);
 log('10b. after', JSON.stringify(await st()));
 
-// 11. Full-hand search prompt
-await game(() => window.__game.revealTile('kitchen'));
-await h.put('kitchen', 4); await h.setHand(0, ['bandage', 'knife', 'flashlight', 'espresso', 'lockPick', 'barricade'].map((t, i) => C(`e${i}`, t)));
-await game(() => window.__game.stackDeck?.('x')); await h.snapCam(); await page.waitForTimeout(500);
-await h.searchHere(); await page.waitForTimeout(300);
-log('11. fullhand open', await game(() => window.__game.fullHandOpen()), await page.textContent('#fullhand-sub').catch(() => ''));
-await S('11-fullhand');
-if (await game(() => window.__game.fullHandOpen())) { await h.tap('#btn-fullhand-take'); await S('11-fullhand-drop'); await audit('fullhand-drop'); await h.tap('#btn-fullhand-cancel'); await h.tap('#btn-fullhand-leave'); log('11b. leave toast', await toast()); }
-if (await h.handoffOpen()) { log('11c. reveal after full', await h.kind()); await S('11-reveal-after'); await h.tap('#btn-handoff-next'); }
+// 11. (The full-hand search prompt is gone: the hand limit is settled at the end of the turn.)
 
 // 12. Espresso
 await h.put('hall', 1); await h.setHand(0, [C('es', 'espresso')]);

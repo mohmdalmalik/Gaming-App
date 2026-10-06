@@ -140,10 +140,7 @@ function playMatch(seed, players, assign, ov = {}) {
         s.searches++;
         const drawn = r.kind === 'card' ? [r.card] : r.kind === 'cards' || r.kind === 'found' ? r.cards : [];
         if (r.kind !== 'found') { const L = lanternsIn(drawn); s.lanternsFound += L; m.lanternsFound += L; }
-        for (const c of r.overflow || []) {
-          const fh = P.decideFullHand(view(), p.index, c.type);
-          A.resolveFullHand(st, p, c, fh.take && fh.dropId ? 'take' : 'leave', fh.dropId);
-        }
+        // Everything found is kept, even past 6 (approved): settled by the end-of-turn discard below.
         return true;
       }
       case 'open': {
@@ -217,7 +214,10 @@ function playMatch(seed, players, assign, ov = {}) {
       if (!A.discardCard(st, p, id).ok) break;
     }
     const roundBefore = st.round;
-    const endedNow = S.endTurn(st, floor).finished;
+    const passed = S.endTurn(st, floor);
+    // (The rules refuse to end a turn over the hand limit; the bots always discard first.)
+    if (passed.ok === false) throw new Error(`bot ${p.name} ended a turn ${passed.over} over the hand limit`);
+    const endedNow = passed.finished;
     if (!r2 && roundBefore === 2 && st.round === 3) r2 = snapR2();
     if (endedNow) break;
     S.checkWin(st, floor);
@@ -366,7 +366,11 @@ export function printSummary(s) {
 
 // --- the study ----------------------------------------------------------------------------------------
 // Rule proposals (simulator only). Each is { label, rulesOver (in-memory rules), ov (sim-only post-steps) }.
+// Since the owner approved "every guest starts with 1 Lantern" (rules.lanternsDealtEach = 1), the
+// baseline already deals one: the 'dealt1' proposals below now equal the baseline on that point (kept so
+// old commands still run), and 'dealt0' measures the old search-only rule for comparison.
 export const PROPOSALS = [
+  { key: 'dealt0', label: 'The old rule: no Lantern dealt (search only)', rulesOver: { lanternsDealtEach: 0 } },
   { key: 'spend', label: 'A Possession card is spent when it converts someone', ov: { spendOnConvert: true } },
   { key: 'supply2', label: 'The possessed guest starts with 2 Possession cards (not 3)', rulesOver: { possessionSupply: 2 } },
   { key: 'keepLantern', label: 'A blocking Lantern is not used up (the blocker keeps it)', ov: { blockKeepsLantern: true } },

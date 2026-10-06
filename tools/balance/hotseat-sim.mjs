@@ -13,7 +13,7 @@
 // --compare it also runs three comparison variants side by side:
 //
 //   blocking Lantern:  'discard'  (APPROVED — used up)   vs  'attacker' (goes to the possessed guest)
-//   Lanterns at start: 0 dealt    (APPROVED — search only) vs  1 dealt to each guest
+//   Lanterns at start: 1 dealt to each guest (APPROVED)     vs  0 dealt (search only, the old rule)
 //
 // Only the simulator switches the variants on; the game always runs the approved rules.
 //
@@ -29,9 +29,9 @@
 //
 // Rooms with jobs and the new cards — what the bots do with them:
 //   Linen Store   searched like any room, and preferred a little: when one is at most one step
-//                 further than the nearest other goal, the bot goes there. Of the two cards, any that
-//                 do not fit are handled like a single card that does not fit: a Lantern is kept
-//                 (something else is dropped), anything else is left.
+//                 further than the nearest other goal, the bot goes there. Both cards are kept, like
+//                 every find: the hand limit is settled only at the end of the turn (approved), when
+//                 the bot discards its least useful cards (never a Lantern while it has another).
 //   Infirmary     a hurt guest standing in one is treated (1 AP). A guest who would get the full
 //                 treatment (health 1 of 3) walks to one that is at most two steps away, and skips the
 //                 Bandage that turn. Never for a clean guest carrying three Lanterns: getting out
@@ -292,18 +292,13 @@ function meet(st, p, m) {
 }
 
 // --- Rooms with jobs and the new cards ------------------------------------------------------------
-// A search's result: count what was drawn, and settle any card that did not fit.
+// A search's result: count what was drawn. Everything found is kept, even past 6 (approved rule); the
+// hand limit is settled at the end of the turn (the discard loop in playTurn).
 function takeFinds(st, p, r, m) {
   if (r.kind !== 'card' && r.kind !== 'cards') return;
   const drawn = r.kind === 'cards' ? r.cards : [r.card];
   for (const c of drawn) { m[`drawn:${c.type}`]++; if (c.type === 'lantern') m.found++; }
   if (r.kind === 'cards') { m.linenSearches++; m.linenCards += drawn.length; }
-  // Keep a Lantern (drop something else); otherwise leave the new card.
-  for (const c of r.overflow || []) {
-    const drop = c.type === 'lantern' ? spare(p) : null;
-    A.resolveFullHand(st, p, c, drop ? 'take' : 'leave', drop?.id);
-    if (!drop && r.kind === 'cards') m.linenLeft++;
-  }
 }
 
 // Infirmary: a known one close enough for a badly hurt guest to walk to, or null.
@@ -491,7 +486,7 @@ function match(seed) {
   memo = freshMemo();
   botRng = makeRng((seed * 2654435761) ^ 0xb07b07);
   const m = { meetings: 0, trades: 0, attacks: 0, deaths: 0, attempts: 0, possessed: 0, blocked: 0, burned: 0, found: 0, stuckTurns: 0, opened: 0, jammed: 0, closedOff: 0,
-    linenSearches: 0, linenCards: 0, linenLeft: 0, infirmaryUses: 0, healthRestored: 0, bandages: 0,
+    linenSearches: 0, linenCards: 0, infirmaryUses: 0, healthRestored: 0, bandages: 0,
     switchCalls: 0, switchLearned: 0, switchUnmasked: 0, mirrors: 0, mirrorOnPossessed: 0, mirrorUnmasked: 0, mirrorMissed: 0,
     espresso: 0, espressoAP: 0, espressoUnused: 0, emptyHanded: 0 };
   for (const t of DECK_TYPES) {
@@ -508,7 +503,10 @@ function match(seed) {
       const shed = spare(p) || p.hand.find(c => c.type === 'lantern');
       if (!shed || !A.discardCard(st, p, shed.id).ok) break;
     }
-    if (S.endTurn(st, floor).finished) break;
+    const passed = S.endTurn(st, floor);
+    // (The rules refuse to end a turn over the hand limit; the bots always discard first.)
+    if (passed.ok === false) throw new Error(`bot ${p.name} ended a turn ${passed.over} over the hand limit`);
+    if (passed.finished) break;
     S.checkWin(st, floor);
   }
   // Where every Lantern ended up — to explain the matches that never end.
@@ -576,7 +574,7 @@ function run(label, block, dealt) {
       out.cleanLeftSum = (out.cleanLeftSum || 0) + r.cleanAlive;
     }
   }
-  rules.lanternBlock = 'discard'; rules.lanternsDealtEach = 0;   // back to the approved rules
+  rules.lanternBlock = 'discard'; rules.lanternsDealtEach = 1;   // back to the approved rules
   return out;
 }
 
@@ -585,7 +583,7 @@ const avg = (v, k) => (v.sums[k] / N).toFixed(2);
 const median = a => (a.length ? [...a].sort((x, y) => x - y)[Math.floor(a.length / 2)] : '—');
 const perRound = (v, k) => (v.perRound[k] / N).toFixed(2);
 
-const approved = run('Approved rules', 'discard', 0);
+const approved = run('Approved rules', 'discard', 1);
 const v = approved;
 const ofDawn = n => (v.dawn ? `${n} (${Math.round(n / v.dawn * 100)}% of dawn matches)` : '0');
 const meanAt = k => (v.lanternsAtDawn.length ? (v.lanternsAtDawn.reduce((a, w) => a + w[k], 0) / v.lanternsAtDawn.length).toFixed(1) : '—');
@@ -628,7 +626,7 @@ const NAMES = Object.fromEntries(DECK_TYPES.map(t => [t, rules.cards[t].name]));
 const jobs = [
   ['Linen Stores on the board (of 2)', `${avg(v, 'linenOnBoard')} (at least one in ${inPct('linenOnBoard')})`],
   ['Linen Store searches (2-card draws)', use('linenSearches', 'linenOnBoard', 'one on the board')],
-  ['  … cards drawn there / left behind (hand full)', `${avg(v, 'linenCards')} / ${avg(v, 'linenLeft')}`],
+  ['  … cards drawn there', `${avg(v, 'linenCards')}`],
   ['Infirmaries on the board (of 2)', `${avg(v, 'infirmaryOnBoard')} (at least one in ${inPct('infirmaryOnBoard')})`],
   ['Infirmary treatments', use('infirmaryUses', 'infirmaryOnBoard', 'one on the board')],
   ['  … health restored / Bandages used (for comparison)', `${avg(v, 'healthRestored')} / ${avg(v, 'bandages')}`],
@@ -658,7 +656,7 @@ if (process.argv.includes('--before')) {
   const deck = rules.deck, data = floor.data;
   rules.deck = { lantern: 12, bandage: 7, flashlight: 5, knife: 4, barricade: 4, lockPick: 4, revolver: 2, masterKey: 2 };
   floor.data = { ...data, tiles: data.tiles.map(t => ({ ...t, job: undefined })) };
-  const before = run('Before Part 2', 'discard', 0);
+  const before = run('Before Part 2', 'discard', 1);   // (the same starting Lantern, so only Part 2 differs)
   rules.deck = deck; floor.data = data;
   const rows = [
     ['Clean guests win', x => pct(x.humans)],
@@ -683,7 +681,7 @@ if (process.argv.includes('--before')) {
 if (COMPARE) {
   const variants = [
     approved,
-    run('Burned · 1 dealt each', 'discard', 1),
+    run('Burned · search only (0 dealt)', 'discard', 0),
     run('To possessed · search only', 'attacker', 0),
     run('To possessed · 1 dealt each', 'attacker', 1),
   ];

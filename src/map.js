@@ -138,17 +138,39 @@ export function createMap(doc, floor, cfg) {
       ctx.fillText(text, X(x), Z(z));
     };
     const outward = { north: [0, -1], south: [0, 1], east: [1, 0], west: [-1, 0] };
+    // A barricaded doorway: a thick red bar across the gap and boards nailed in an X on a dark plate
+    // ringed in red (the same sign hangs over the doorway in the room view, and in the legend).
+    const barricadeMark = d => {
+      ctx.save();
+      ctx.lineWidth = 7; ctx.strokeStyle = '#d9604f'; ctx.lineCap = 'butt';
+      ctx.beginPath();
+      if (d.axis === 'x') { ctx.moveTo(X(d.center[0] - d.width / 2 - 0.1), Z(d.center[1])); ctx.lineTo(X(d.center[0] + d.width / 2 + 0.1), Z(d.center[1])); }
+      else { ctx.moveTo(X(d.center[0]), Z(d.center[1] - d.width / 2 - 0.1)); ctx.lineTo(X(d.center[0]), Z(d.center[1] + d.width / 2 + 0.1)); }
+      ctx.stroke();
+      const cx = X(d.center[0]), cz = Z(d.center[1]), r = 15;
+      ctx.fillStyle = 'rgba(20,16,12,0.94)'; ctx.strokeStyle = '#d9604f'; ctx.lineWidth = 2.5;
+      ctx.beginPath(); ctx.arc(cx, cz, r, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      ctx.translate(cx, cz);
+      for (const a of [Math.PI / 4, -Math.PI / 4, 0]) {
+        ctx.save(); ctx.rotate(a);
+        ctx.fillStyle = '#5a3a1e'; ctx.fillRect(-r * 0.78, -3.4, r * 1.56, 6.8);
+        ctx.fillStyle = '#d2a265'; ctx.fillRect(-r * 0.74, -2.6, r * 1.48, 5.2);
+        ctx.restore();
+      }
+      ctx.restore();
+    };
     for (const d of floor.doorways) {
       const lockedRoom = isLocked(state, d.a) ? d.a : isLocked(state, d.b) ? d.b : null;
       // a locked door a key opened this turn: an open padlock (it locks again when the turn ends)
       const openedNow = !lockedRoom && (state.openLocks?.has(d.a) || state.openLocks?.has(d.b));
       const sealed = isBarricaded(state, d.id);
-      doorLine(d, sealed ? '#cf6a5c' : lockedRoom ? '#c9a24e' : openedNow ? '#c9a24e' : 'rgba(239,231,214,0.35)', openedNow && !sealed ? [4, 3] : []);
-      if (sealed || lockedRoom || openedNow) {
+      if (sealed) { barricadeMark(d); continue; }
+      doorLine(d, lockedRoom ? '#c9a24e' : openedNow ? '#c9a24e' : 'rgba(239,231,214,0.35)', openedNow ? [4, 3] : []);
+      if (lockedRoom || openedNow) {
         // on the doorway itself, on a small dark disc (not inside the room, where its name is)
-        ctx.fillStyle = 'rgba(20,16,12,0.92)'; ctx.strokeStyle = sealed ? '#cf6a5c' : '#c9a24e'; ctx.lineWidth = 1.5;
+        ctx.fillStyle = 'rgba(20,16,12,0.92)'; ctx.strokeStyle = '#c9a24e'; ctx.lineWidth = 1.5;
         ctx.beginPath(); ctx.arc(X(d.center[0]), Z(d.center[1]), 11, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
-        mark(sealed ? '▬' : lockedRoom ? '🔒' : '🔓', d.center[0], d.center[1], sealed ? '#f0b4ae' : BRASS_BRIGHT);
+        mark(lockedRoom ? '🔒' : '🔓', d.center[0], d.center[1], BRASS_BRIGHT);
       }
     }
     // Closed doors: a solid brass door with a "?" beyond it (still to be opened); a jammed door is

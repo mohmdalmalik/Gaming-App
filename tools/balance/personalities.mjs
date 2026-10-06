@@ -88,7 +88,6 @@
 //   decideAttack(full, i, j, mem, rng)         -> weapon card id, or null to trade
 //   decideTradeCard(full, i, j, cardIds, mem, rng) -> card id to give
 //   decideDiscard(full, i, cardIds)            -> card id to drop at the hand limit
-//   decideFullHand(full, i, foundType)         -> { take: bool, dropId }
 //   newMemory(), observe(mem, event)           -> public events: {type:'attack', by, target, killed}
 //
 // `full` = { round, turn, exitRoom, lobby, lanternsToEscape, locks: ['room:a-b'...],
@@ -498,13 +497,4 @@ export function decideDiscard(full, i, cardIds) {
   const c = { persona: me.persona };
   const cards = cardIds.map(id => me.hand.find(x => x.id === id)).filter(Boolean);
   return (leastValuable(c, cards, { keep: ['lantern'] }) || cards[0])?.id ?? cardIds[0];
-}
-
-export function decideFullHand(full, i, foundType) {
-  const me = full.players[i];
-  const c = { persona: me.persona };
-  const held = me.hand.filter(x => x.type !== 'possession');
-  const worst = leastValuable(c, held, { keep: ['lantern'] });
-  const take = !!worst && (foundType === 'lantern' ? worst.type !== 'lantern' || false : value(me.persona, foundType) > value(me.persona, worst.type));
-  return { take, dropId: take ? worst.id : null };
 }

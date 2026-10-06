@@ -13,8 +13,10 @@
 // Nothing here ever appears on the public HUD, and the turn timer is paused while any of it is up.
 import { rules } from '../data/rules.js';
 import { CARDS, countableCards, countableCount } from '../game/cards.js';
-import { cardTile, bigCard } from './cards.js';
+import { cardTile, bigCard, handLimitWarning } from './cards.js';
 import { roundLabel, finalRoundNote, isFinal } from './roundLabel.js';
+import { makePortrait } from './portrait.js';
+import { soulsHeld, soulsChip } from './souls.js';
 
 export function createHandoff(doc) {
   const el = {
@@ -40,9 +42,9 @@ export function createHandoff(doc) {
   function reset(which) {
     kind = which;
     el.card.className = `card handoff-card ${which}`;
-    el.role.hidden = true; el.role.className = 'role-badge';
+    el.role.hidden = true; el.role.className = 'role-badge'; el.role.innerHTML = '';
     el.notes.hidden = true; el.notes.innerHTML = '';
-    el.hand.hidden = true; el.hand.innerHTML = '';
+    el.hand.hidden = true; el.hand.innerHTML = ''; el.hand.style.removeProperty('--n');
     el.found.hidden = true; el.found.innerHTML = '';
     el.overlay.className = el.overlayBase;
     el.pick.hidden = true; el.pickCards.innerHTML = '';
@@ -62,8 +64,24 @@ export function createHandoff(doc) {
     el.role.className = `role-badge ${player.possessed ? 'evil' : 'good'}`;
     el.role.innerHTML = `<span class="role-word">${player.possessed ? 'POSSESSED' : 'CLEAN GUEST'}</span>`
       + `<span class="role-line">${player.possessed
-        ? 'In a trade you may give a Possession card to convert someone — unless they hand you a Lantern, which burns it and tells them what you are. You can never escape.'
+        ? 'In a trade, give a Possession card to possess the other guest — unless they hand you a Lantern: then both cards are used up and they learn you are possessed. You can never escape.'
         : `Find Lanterns, pass them to one clean guest, and get that guest out through the fire exit with ${rules.lanternsToEscape}. Give a Lantern in a trade if you fear who you are trading with — it blocks possession, but is used up doing it.`}</span>`;
+    if (!player.possessed) return;
+    // The private tell (docs/GAME_RULES.md, Possession): their own possessed portrait, a violet wash
+    // on this card, and how many Possession cards ("souls") they can still trade. reset() clears all
+    // of it, so the next pass screen carries none of it.
+    el.card.classList.add('possessed');
+    el.role.classList.add('with-portrait');
+    // The souls count sits on the same line as the POSSESSED word, so the box is no taller than
+    // before and a full hand still fits above the Start button on a smaller iPad.
+    const text = doc.createElement('div'); text.className = 'role-text';
+    const head = doc.createElement('div'); head.className = 'role-head';
+    const [word, ...rest] = [...el.role.childNodes];
+    head.append(word, soulsChip(doc, soulsHeld(player)));
+    text.append(head, ...rest);
+    const port = doc.createElement('div'); port.className = 'role-portrait';
+    port.appendChild(makePortrait(doc, player, { possessed: true }));
+    el.role.append(port, text);
   }
 
   function renderNotes(player, extra = []) {
@@ -79,9 +97,23 @@ export function createHandoff(doc) {
 
   function renderHand(player) {
     el.hand.hidden = false;
-    const cards = [...player.hand.filter(c => c.type === 'possession'), ...countableCards(player.hand)];
+    // Possession cards are one stack with a ×N badge (all the same card; the count is what matters,
+    // and it keeps a full hand on one screen with the Start button).
+    const souls = player.hand.filter(c => c.type === 'possession');
+    const cards = [...souls.slice(0, 1), ...countableCards(player.hand)];
     if (!cards.length) { el.hand.innerHTML = '<div class="panel-note">No cards.</div>'; return; }
-    for (const c of cards) el.hand.appendChild(cardTile(doc, c, { hideDesc: true }));
+    // The tiles share one row (up to 8 of them; styles.css), so a full hand and the notes still fit
+    // above the Start button on a smaller iPad.
+    el.hand.style.setProperty('--n', cards.length);
+    for (const c of cards) {
+      const tile = cardTile(doc, c, { hideDesc: true });
+      if (c.type === 'possession') {
+        const b = doc.createElement('span'); b.className = 'face-badge souls'; b.textContent = `×${souls.length}`;
+        b.setAttribute('aria-label', `${souls.length} Possession card${souls.length === 1 ? '' : 's'}`);
+        tile.querySelector('.face-img')?.appendChild(b);
+      }
+      el.hand.appendChild(tile);
+    }
   }
 
   const api = {
@@ -115,7 +147,9 @@ export function createHandoff(doc) {
       el.title.textContent = `${player.name}'s turn`;
       const room = floor.rooms.get(player.currentRoom);
       const lanterns = player.hand.filter(c => c.type === 'lantern').length;
-      el.sub.textContent = `You are in ${room?.name ?? 'the hotel'}. Cards ${countableCount(player.hand)} / ${rules.handLimit}`
+      // Cards received on someone else's turn can take a guest past the limit: settled at the end of
+      // THIS turn (the discard screen), and said calmly here.
+      el.sub.textContent = `You are in ${room?.name ?? 'the hotel'}. ${handLimitWarning(player) || `Cards ${countableCount(player.hand)} / ${rules.handLimit}`}`
         + ` · Lanterns ${lanterns} / ${rules.lanternsToEscape}.`;
       renderRole(player);
       renderNotes(player);

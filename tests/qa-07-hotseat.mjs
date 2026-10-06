@@ -18,7 +18,7 @@ const origClick = page.click.bind(page);
 page.click = async (sel, opts = {}) => {
   try { return await origClick(sel, { timeout: 6000, force: true, ...opts }); }
   catch (e) {
-    const state = await page.evaluate(() => ({ handoff: window.__game.handoffKind(), meeting: window.__game.meetingOpen(), full: window.__game.fullHandOpen(), notice: window.__game.noticeOpen(), cardview: window.__game.cardViewOpen(), phase: window.__game.inActionPhase() }));
+    const state = await page.evaluate(() => ({ handoff: window.__game.handoffKind(), meeting: window.__game.meetingOpen(), notice: window.__game.noticeOpen(), cardview: window.__game.cardViewOpen(), phase: window.__game.inActionPhase() }));
     note(curSeed, `click ${sel} failed (${e.message.split('\n')[0].slice(0, 60)}) screens=${JSON.stringify(state)}`);
     await h.shot(`hs-${curSeed}-clickfail-${Date.now() % 100000}`);
   }
@@ -81,16 +81,6 @@ async function clearScreens(seed) {
       if (pick < 0) { note(seed, 'meeting with no enabled button'); return 'stuck'; }
       await page.click(`#encounter-actions .btn:nth-child(${pick + 1})`); await page.waitForTimeout(80); continue;
     }
-    if (await game(() => window.__game.fullHandOpen())) {
-      const isLan = await page.evaluate(() => /Lantern/.test(document.getElementById('fullhand-sub').textContent));
-      if (isLan) {
-        await h.tap('#btn-fullhand-take');
-        const n = await page.$$eval('#fullhand-hand .card-tile', els => els.findIndex(x => !/Lantern/i.test(x.textContent)));
-        if (n >= 0) await page.click(`#fullhand-hand .card-tile:nth-child(${n + 1})`);
-        if (await game(() => window.__game.fullHandOpen())) { if (await h.visible('#btn-fullhand-cancel')) await h.tap('#btn-fullhand-cancel'); await h.tap('#btn-fullhand-leave'); }
-      } else await h.tap('#btn-fullhand-leave');
-      continue;
-    }
     if (await h.visible('#discard-overlay')) {
       if (!seenKinds.has('discard')) { seenKinds.add('discard'); await snap(seed, 'discard'); }
       const n = await page.$$eval('#discard-cards .card-tile', els => els.findIndex(x => !/Lantern/i.test(x.textContent)));
@@ -102,7 +92,7 @@ async function clearScreens(seed) {
     if (await game(() => window.__game.cardViewOpen())) { await h.tap('#btn-hand-close'); continue; }
     return 'clear';
   }
-  const st = await page.evaluate(() => ({ handoff: window.__game.handoffKind(), title: document.getElementById('handoff-title').textContent, meeting: window.__game.meetingOpen(), mtitle: document.getElementById('encounter-title').textContent, mbody: document.getElementById('encounter-body').textContent.slice(0, 120), mbtns: [...document.querySelectorAll('#encounter-actions .btn')].map(b => b.textContent + (b.disabled ? '(off)' : '')), full: window.__game.fullHandOpen(), discard: !document.getElementById('discard-overlay').hidden, dsub: document.getElementById('discard-sub').textContent, notice: window.__game.noticeOpen() }));
+  const st = await page.evaluate(() => ({ handoff: window.__game.handoffKind(), title: document.getElementById('handoff-title').textContent, meeting: window.__game.meetingOpen(), mtitle: document.getElementById('encounter-title').textContent, mbody: document.getElementById('encounter-body').textContent.slice(0, 120), mbtns: [...document.querySelectorAll('#encounter-actions .btn')].map(b => b.textContent + (b.disabled ? '(off)' : '')), discard: !document.getElementById('discard-overlay').hidden, dsub: document.getElementById('discard-sub').textContent, notice: window.__game.noticeOpen() }));
   note(seed, 'SCREEN LOOP: ' + JSON.stringify(st));
   await h.shot(`hs-${seed}-loop`);
   return 'loop';

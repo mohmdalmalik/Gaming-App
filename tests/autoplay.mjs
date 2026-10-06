@@ -3,7 +3,7 @@
 // Plays full 4-6 guest matches through the real game in headless Chromium, the way people would:
 // tapping door rings and Confirm to open doors and move, the in-room search icon, cards in the hand
 // fan and the card view, Trade / Attack in meetings, private card picks, pass-the-device screens,
-// hand-limit discards, the full-hand prompt, room jobs and Escape. `window.__game` is used to READ
+// hand-limit discards at the end of a turn, room jobs and Escape. `window.__game` is used to READ
 // state (to check the rules and to let the bots choose sensibly); a hook is used to ACT only when a
 // tap is impractical or failed, and every such fallback is logged.
 //
@@ -162,7 +162,7 @@ function SNAP() {
   const players = s.players.map(p => ({
     i: p.index, id: p.id, name: p.name, room: p.currentRoom, ap: p.actionPoints, health: p.health, alive: p.alive,
     possessed: p.possessed, hand: p.hand.map(c => cardType(c)).map(c => ({ id: c.id, type: c.type, shots: c.shots })),
-    knows: [...p.knows], escaped: s.escaped.has(p.id),
+    knows: [...p.knows], escaped: s.escaped.has(p.id), roleChangePending: !!p.roleChangePending,
   }));
   let drops = 0;
   for (const [, cards] of s.roomDrops) { drops += cards.length; cards.forEach(cardType); }
@@ -185,7 +185,7 @@ function SNAP() {
     const hit = d.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2);
     endReach = !!hit && (hit === endBtn || endBtn.contains(hit)) ? 'ok' : (hit ? (hit.id || hit.className || hit.tagName) : 'none');
   }
-  const overlays = ['handoff-overlay', 'encounter-overlay', 'notice-overlay', 'discard-overlay', 'fullhand-overlay', 'hand-overlay', 'map-overlay', 'end-overlay', 'start-overlay', 'error-overlay']
+  const overlays = ['handoff-overlay', 'encounter-overlay', 'notice-overlay', 'discard-overlay', 'hand-overlay', 'map-overlay', 'end-overlay', 'start-overlay', 'error-overlay']
     .filter(id => vis(byId(id)));
   const strip = [...d.querySelectorAll('#players-strip .mini-where')].map(e => e.textContent);
   return {
@@ -213,10 +213,6 @@ function SNAP() {
     meeting: { open: g.meetingOpen(), title: txt('encounter-title'), body: txt('encounter-body'), actions: buttons('#encounter-actions .btn'), cards: tiles('#encounter-body .card-tile') },
     notice: { open: g.noticeOpen(), title: txt('notice-title'), body: txt('notice-body') },
     discard: { open: vis(byId('discard-overlay')), sub: txt('discard-sub'), cards: tiles('#discard-cards .card-tile'), doneDisabled: byId('btn-discard-done').disabled },
-    fullhand: {
-      open: g.fullHandOpen(), sub: txt('fullhand-sub'), found: tiles('#fullhand-found .card-tile'), hand: tiles('#fullhand-hand .card-tile'),
-      take: vis(byId('btn-fullhand-take')), use: vis(byId('btn-fullhand-use')), leave: vis(byId('btn-fullhand-leave')), back: vis(byId('btn-fullhand-cancel')),
-    },
     cardView: { open: g.cardViewOpen(), id: g.cardViewId(), buttons: buttons('#hand-detail .btn'), text: txt('hand-detail') },
     map: g.isMapOpen(),
     confirm: { open: vis(byId('confirm-bar')), text: txt('confirm-text') },
@@ -231,6 +227,10 @@ function SNAP() {
     timerVisible: vis(byId('turn-timer')),
     hudVisible: vis(byId('hud')),
     hudText: vis(byId('hud')) ? byId('hud').innerText : '',
+    // The possessed guest's own reminder on the main screen (approved: during their own action phase only).
+    tell: { on: !!g.cfg.ui.hotseatPossessedOnMainScreen, label: vis(byId('panel-role')), souls: vis(byId('panel-souls')),
+      labelText: vis(byId('panel-role')) ? byId('panel-role').innerText : '', soulsText: vis(byId('panel-souls')) ? byId('panel-souls').innerText : '',
+      tint: vis(byId('possess-tint')), portrait: !!byId('player-panel')?.classList.contains('possessed') },
     roundText: txt('round'), roomName: txt('room-name'), strip,
     log: g.publicLog().slice(-3),
   };
@@ -540,8 +540,8 @@ async function checkInvariants(s) {
   if (!s.finished && s.round > 8) await violation('critical', 'past-dawn', `Round ${s.round} is running; the match should have ended at dawn`, s);
   // Card conservation: every ordinary card is in the deck, the discard pile, a hand or on a floor.
   const ordinary = s.draw + s.discardN + s.drops + s.players.reduce((n, p) => n + countable(p), 0);
-  // (A found card waits outside every pile while the full-hand prompt decides where it goes.)
-  const limbo = s.fullhand.open || (s.handoff.open && s.handoff.kind === 'found');
+  // (Found cards go straight into the hand — the hand limit is settled at the end of the turn.)
+  const limbo = s.handoff.open && s.handoff.kind === 'found';
   if (cur.cardTotal == null) cur.cardTotal = ordinary;
   else if (ordinary !== cur.cardTotal && !limbo) await violation('critical', 'cards-not-conserved', `Ordinary cards total ${ordinary}, was ${cur.cardTotal} (deck ${s.draw}, discard ${s.discardN}, floor ${s.drops})`, s);
   const poss = s.players.reduce((n, p) => n + p.hand.filter(c => c.type === 'possession').length, 0);
@@ -556,14 +556,27 @@ async function checkInvariants(s) {
   if (s.timerVisible) await violation('low', 'timer-visible', 'The turn clock shows although ?timer=off', s);
 
   // --- Privacy on the shared screen (hot-seat) -------------------------------------------------
-  if (s.fan.cards.some(c => c.type === 'possession')) await violation('critical', 'fan-shows-possession', 'A Possession card is on the always-on hand fan', s);
-  if (s.fan.visible && (s.handoff.open || s.meeting.open || s.end.open || s.notice.open || s.discard.open || s.fullhand.open)) {
+  // The approved main-screen reminder (docs/GAME_RULES.md > Possession): a POSSESSED label, "Souls to
+  // trade" and the Possession cards as ONE ×N fan card, only while the possessed guest's own action phase
+  // runs — never on a pass, private, meeting, public notice (the Switchboard) or end screen, never for a
+  // clean guest, never a portrait or tint, and never before the guest has been told in private that they
+  // were converted.
+  const tellAllowed = s.tell.on && !!me?.possessed && s.inAction && !s.finished && !s.handoff.open && !s.meeting.open && !s.end.open
+    && !s.notice.open && !me?.roleChangePending;
+  const fanSouls = s.fan.cards.filter(c => c.type === 'possession').length;
+  if (fanSouls && !tellAllowed) await violation('critical', 'fan-shows-possession', 'A Possession card is on the always-on hand fan outside the possessed guest\'s own action phase', s);
+  if (fanSouls > 1) await violation('high', 'fan-possession-not-stacked', `${fanSouls} Possession cards on the fan (should be one ×N card)`, s);
+  if ((s.tell.label || s.tell.souls) && !tellAllowed) await violation('critical', 'tell-out-of-turn', `The POSSESSED label / souls count is on the main screen for ${me?.name} (possessed ${me?.possessed}, in action ${s.inAction}, ${s.overlays.join(', ') || 'no screen'})`, s);
+  if (s.tell.tint || s.tell.portrait) await violation('critical', 'tell-portrait-or-tint', 'The possessed portrait or violet tint is on the hot-seat main screen', s);
+  if (s.fan.visible && (s.handoff.open || s.meeting.open || s.end.open || s.notice.open || s.discard.open)) {
     await violation('high', `fan-over-${s.overlays.filter(o => o !== 'hand-overlay')[0] || 'screen'}`, `The hand fan is visible over ${s.overlays.join(', ')}`, s);
   }
   if (s.spot.visible && (s.handoff.open || s.meeting.open || s.end.open || s.notice.open)) await violation('medium', 'spot-over-screen', `Search icon visible over ${s.overlays.join(', ')}`, s);
   if (s.fan.visible && me && !s.finished) {
     const want = me.hand.filter(c => c.type !== 'possession').map(c => c.id).sort().join();
-    const got = s.fan.cards.map(c => c.id).sort().join();
+    const got = s.fan.cards.filter(c => c.type !== 'possession').map(c => c.id).sort().join();
+    const wantSouls = tellAllowed && me.hand.some(c => c.type === 'possession') ? 1 : 0;
+    if (fanSouls !== wantSouls && tellAllowed) await violation('medium', 'fan-souls-mismatch', `Fan shows ${fanSouls} Possession card(s); ${me.name} holds ${me.hand.filter(c => c.type === 'possession').length}`, s);
     if (want !== got) await violation('medium', 'fan-mismatch', `Fan shows [${s.fan.cards.map(c => c.type)}] but ${me.name} holds [${me.hand.map(c => c.type)}]`, s);
     if (cur.holder && cur.holder !== me.name) await violation('critical', 'fan-wrong-holder', `${me.name}'s hand fan is on screen while the device was last handed to ${cur.holder}`, s);
   }
@@ -572,7 +585,9 @@ async function checkInvariants(s) {
     if (/POSSESS|CLEAN GUEST|Lantern|Possession/i.test(s.handoff.text)) await violation('critical', 'pass-screen-words', `The pass screen text gives something away: "${s.handoff.text.slice(0, 200)}"`, s);
   }
   // Only the end screen, the Switchboard's public count and the rules text may say "possessed" publicly.
-  const publicText = [s.hudText, s.meeting.open ? `${s.meeting.title} ${s.meeting.body}` : ''].join(' ');
+  // (The possessed guest's own reminder is allowed during their own action phase: its words are left out here.)
+  const hudPublic = tellAllowed ? s.hudText.replace(s.tell.labelText, '').replace(s.tell.soulsText, '') : s.hudText;
+  const publicText = [hudPublic, s.meeting.open ? `${s.meeting.title} ${s.meeting.body}` : ''].join(' ');
   if (!s.finished && /possess/i.test(publicText)) await violation('critical', 'public-possessed-word', `The shared screen mentions possession: "${publicText.match(/.{0,60}possess.{0,60}/i)?.[0]}"`, s);
   if (s.meeting.open && /Trade complete/.test(s.meeting.title) && /Lantern|Bandage|Knife|Flashlight|Revolver|Barricade|Lock Pick|Master Key|Hand Mirror|Espresso/.test(s.meeting.body)) await violation('critical', 'trade-result-public', `The public trade result names a card: "${s.meeting.body}"`, s);
   if (/searched/.test(s.toast) && /Lantern|Bandage|Knife|Flashlight|Revolver|Barricade|Lock Pick|Master Key|Hand Mirror|Espresso|find/.test(s.toast)) await violation('critical', 'search-toast-leak', `Search toast leaks the result: "${s.toast}"`, s);
@@ -589,7 +604,9 @@ async function checkInvariants(s) {
     if (s.handoff.kind === 'role' || s.handoff.kind === 'turn') {
       const p = s.players.find(q => q.name === owner);
       if (p && /POSSESSED/.test(s.handoff.roleText) !== p.possessed) await violation('critical', 'role-screen-wrong', `${p.name}'s role screen says "${s.handoff.roleText.slice(0, 40)}" but possessed=${p.possessed}`, s);
-      if (p && s.handoff.kind === 'turn' && s.handoff.handTiles !== Math.max(1, p.hand.length) && !(p.hand.length === 0)) await violation('medium', 'turn-screen-hand', `${p.name}'s private turn screen shows ${s.handoff.handTiles} cards; they hold ${p.hand.length}`, s);
+      // (The Possession cards are one tile with a ×N badge.)
+      const tilesWanted = p ? countable(p) + (p.hand.some(c => c.type === 'possession') ? 1 : 0) : 0;
+      if (p && s.handoff.kind === 'turn' && s.handoff.handTiles !== Math.max(1, tilesWanted) && !(p.hand.length === 0)) await violation('medium', 'turn-screen-hand', `${p.name}'s private turn screen shows ${s.handoff.handTiles} tiles; they hold ${p.hand.length} cards (${tilesWanted} tiles with the Possession cards as one)`, s);
     }
   }
   // Two screens at once.
@@ -796,29 +813,6 @@ async function onDiscard(s) {
   // Two steps since the playtest fix round: tap the card to pick it, then confirm with the button.
   await tapSel(`#discard-cards .card-tile[data-card-id="${c.id}"]`, 'discard card');
   await tapSel('#btn-discard-done', 'Discard (confirm)');
-}
-
-async function onFullHand(s) {
-  if (!cur.layoutSeen.has('fullhand')) { cur.layoutSeen.add('fullhand'); await layoutCheck(s, 'fullhand'); if (cur.sampleShots) await shot('screen-fullhand'); }
-  const me = s.players[s.active];
-  const f = s.fullhand;
-  if (f.hand.length) {
-    const cards = f.hand.map(id => ({ id, type: s.types[id] }));
-    const c = (seatStyle(me.i) === 'persona' && cards.find(x => x.id === cur.fullHandDrop)) || worst(cards, ['lantern']) || worst(cards);
-    act(`full hand: drop ${c.type}`);
-    await tapSel(`#fullhand-hand .card-tile[data-card-id="${c.id}"]`, 'full-hand drop');
-    await tapSel('#btn-fullhand-drop', 'full-hand drop (confirm)');   // (pick, then confirm)
-    return;
-  }
-  cur.stats.fullhand++;
-  const foundType = /found an? ([A-Za-z ]+)\./.exec(f.sub)?.[1];
-  const found = Object.keys(VALUE).find(t => foundType && foundType.toLowerCase().replace(/ /g, '') === t.toLowerCase()) || 'barricade';
-  const worstHeld = worst(me.hand.filter(c => c.type !== 'possession'));
-  let take;
-  if (seatStyle(me.i) === 'persona') { const d = PERS.decideFullHand(fullFromSnap(s), me.i, found); take = d.take; cur.fullHandDrop = d.dropId; }
-  else take = seatStyle(me.i) === 'random' ? rng() < 0.5 : (found === 'lantern' || (worstHeld && VALUE[found] > VALUE[worstHeld.type]));
-  act(`full hand: found ${found} → ${take ? 'take' : 'leave'}`);
-  await tapSel(take ? '#btn-fullhand-take' : '#btn-fullhand-leave', take ? 'Take it' : 'Leave it');
 }
 
 async function layoutCheck(s, where) {
@@ -1140,8 +1134,8 @@ async function doSearch(s, expectRefusal = false) {
   act(`tap search icon (${s.spot.mode}) in ${me.room}`);
   const before = me.ap;
   const ok = await tapVisiblePart('#search-spot', 'search icon');
-  // Walk to the furniture, then a private reveal (or the full-hand prompt, or a refusal toast).
-  const done = await afterWait(`(() => { const g = window.__game; return g.handoffOpen() || g.fullHandOpen() || (!g.searchPending() && !g.activeMover().walking && g.activeMover().path.length === 0 && !document.getElementById('toast').hidden); })()`, 12000);
+  // Walk to the furniture, then a private reveal (or a refusal toast).
+  const done = await afterWait(`(() => { const g = window.__game; return g.handoffOpen() || (!g.searchPending() && !g.activeMover().walking && g.activeMover().path.length === 0 && !document.getElementById('toast').hidden); })()`, 12000);
   await frames(2);
   const after = await page.evaluate(SNAP);
   const me2 = after.players[after.active];
@@ -1156,7 +1150,6 @@ async function doSearch(s, expectRefusal = false) {
     if (!/searched\.?$/.test(after.toast.trim()) && after.toast) cur.pendingUx.push(['search-toast', `Search toast reads "${after.toast}"`]);
     return true;
   }
-  if (after.fullhand.open) { cur.stats.searches++; return true; }
   await ux('search-tap-nothing', `Tapping the search icon gave: toast "${after.toast}", no private reveal`, after);
   return false;
 }
@@ -1293,7 +1286,7 @@ async function playMatch(M) {
   cur = {
     ...M, t0: Date.now(), violations: [], ux: [], fallbacks: [], actions: [], console: [], shots: [], seen: new Map(), uxSeen: new Map(), pendingUx: [],
     layoutSeen: new Set(), holder: null, prof: {}, profShots: 0, turnEspresso: 0, turns: 0, sampleShots: M.k % 6 === 0,
-    stats: { meetings: 0, trades: 0, attacks: 0, deaths: 0, searches: 0, searchesRevealed: 0, opens: 0, jammed: 0, moves: 0, discards: 0, fullhand: 0, mirror: 0, espresso: 0, unlock: 0, barricade: 0, escapes: 0, voluntary: 0, jobs: {}, conversions: 0, convertNotes: 0, blocks: 0, exitVisits: 0 },
+    stats: { meetings: 0, trades: 0, attacks: 0, deaths: 0, searches: 0, searchesRevealed: 0, opens: 0, jammed: 0, moves: 0, discards: 0, mirror: 0, espresso: 0, unlock: 0, barricade: 0, escapes: 0, voluntary: 0, jobs: {}, conversions: 0, convertNotes: 0, blocks: 0, exitVisits: 0 },
     personas: M.personas || null, mem: PERS.newMemory(), kills: [], attempts: [], blocks: [], conversionLog: [], exitRound: null,
     seats: M.personas ? M.personas.map(persona => ({ persona, searches: 0, lanternsFound: 0, opens: 0, moves: 0, attacks: 0, kills: 0, killedBy: null, trades: 0, attempts: 0, blocks: 0 })) : null,
   };
@@ -1310,7 +1303,8 @@ async function playMatch(M) {
   // Start state sanity.
   if (init.players.length !== M.players) await violation('high', 'player-count', `${init.players.length} guests for players=${M.players}`, init);
   if (init.players.filter(p => p.possessed).length !== 1) await violation('critical', 'possessed-start', `${init.players.filter(p => p.possessed).length} possessed at start`, init);
-  if (init.players.some(p => p.hand.some(c => c.type === 'lantern'))) await violation('high', 'lantern-dealt', 'A Lantern was dealt', init);
+  // Approved deal: every guest (the possessed one too) starts with exactly 1 Lantern + 3 other cards.
+  if (init.players.some(p => p.hand.filter(c => c.type === 'lantern').length !== 1)) await violation('high', 'lantern-deal', `Lanterns dealt: ${init.players.map(p => p.hand.filter(c => c.type === 'lantern').length).join(',')} (each guest should start with 1)`, init);
   if (init.players.some(p => countable(p) !== 4)) await violation('high', 'start-hand', `Starting hands: ${init.players.map(p => countable(p)).join(',')}`, init);
   act('tap "Tap to begin"');
   await tapSel('#btn-begin', 'Tap to begin');
@@ -1330,7 +1324,7 @@ async function playMatch(M) {
     if (cur.abort) break;
     // Soft-lock watchdog: nothing changes for many steps in a row.
     const me = s.players[s.active];
-    const sig = JSON.stringify([s.turn, s.active, s.overlays, s.handoff.kind, s.handoff.title, s.meeting.title, s.meeting.body.length, s.discard.cards.length, s.fullhand.hand.length, s.cardView.id, me?.ap, me?.room, s.players.map(p => p.hand.length), s.movers[s.active], s.rooms.length, s.finished, s.walking]);
+    const sig = JSON.stringify([s.turn, s.active, s.overlays, s.handoff.kind, s.handoff.title, s.meeting.title, s.meeting.body.length, s.discard.cards.length, s.cardView.id, me?.ap, me?.room, s.players.map(p => p.hand.length), s.movers[s.active], s.rooms.length, s.finished, s.walking]);
     if (sig === lastSig) same++; else { same = 0; lastSig = sig; }
     if (same >= 30) {
       await violation('critical', 'soft-lock', `Nothing has changed for ${same} steps (${s.overlays.join(', ') || 'no screen'}; inAction ${s.inAction}; walking ${s.walking})`, s);
@@ -1349,7 +1343,6 @@ async function playMatch(M) {
       else if (s.handoff.open) await onHandoff(s);
       else if (s.notice.open) { act(`notice "${s.notice.title}": Continue`); await tapSel('#btn-notice-ok', 'notice Continue'); }
       else if (s.discard.open) await onDiscard(s);
-      else if (s.fullhand.open) await onFullHand(s);
       else if (s.meeting.open) await onMeeting(s);
       else if (s.cardView.open) { act('close card view'); await tapSel('#btn-hand-close', 'close card view'); }
       else if (s.map) { act('close map'); await tapSel('#btn-map-close', 'close map'); }
@@ -1413,7 +1406,7 @@ function personaWatch(s) {
     }
   }
   const w = cur.searchWatch;
-  if (w && s.inAction && !s.handoff.open && !s.fullhand.open && !s.searchPending && s.active === w.i) {
+  if (w && s.inAction && !s.handoff.open && !s.searchPending && s.active === w.i) {
     cur.seats[w.i].lanternsFound += Math.max(0, lanternsOf(s.players[w.i]) - w.lanterns);
     cur.searchWatch = null;
   } else if (w && s.turn !== w.turn) cur.searchWatch = null;

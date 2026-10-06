@@ -1,8 +1,19 @@
 // Render a card as a DOM tile, shared by the hand sheet, the encounter modal and the discard
 // prompt. Each tile has an illustrated "art" panel (a large tinted glyph placeholder now; a real
 // illustration drops in via CARD_ART without touching this code) plus the card's name.
-import { CARDS } from '../game/cards.js';
+import { CARDS, countableCount } from '../game/cards.js';
+import { rules } from '../data/rules.js';
 import { cardIcon } from './cardIcons.js';
+
+// Over the hand limit DURING a turn is allowed (approved rule: the limit is settled only when the turn
+// ends). This is the gentle reminder shown wherever the count is: '' when within the limit, otherwise
+// "Cards 8/6 · discard 2 at end of turn" (short, so it stays on one line above the fan on an iPad).
+// Possession cards never count (and never show here), so it reads the same whatever the guest's role.
+export function handLimitWarning(player) {
+  const n = countableCount(player.hand);
+  const over = n - rules.handLimit;
+  return over > 0 ? `Cards ${n}/${rules.handLimit} · discard ${over} at end of turn` : '';
+}
 
 // Drop-in artwork: map a card type to an image path under assets/cards/. Left empty on purpose —
 // the glyph placeholder is used until real illustrations are supplied. Add entries like

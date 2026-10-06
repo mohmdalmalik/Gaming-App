@@ -54,18 +54,6 @@ async function handlePrompts(seed) {
       const k = await h.kind();
       await h.tap('#btn-handoff-next'); continue;
     }
-    if (await game(() => window.__game.fullHandOpen())) {
-      // keep Lanterns (drop the first non-lantern), leave anything else
-      const found = await page.evaluate(() => document.querySelector('#fullhand-found [data-card-id]')?.dataset?.cardId);
-      const isLan = await page.evaluate(() => /Lantern/.test(document.getElementById('fullhand-sub').textContent));
-      if (isLan) {
-        await h.tap('#btn-fullhand-take');
-        const drop = await page.$$eval('#fullhand-hand .card-tile', els => { const e = els.find(x => !/Lantern/i.test(x.textContent)); return e ? [...e.parentNode.children].indexOf(e) : -1; });
-        if (drop >= 0) await page.click(`#fullhand-hand .card-tile:nth-child(${drop + 1})`); else await h.tap('#btn-fullhand-cancel');
-        if (await game(() => window.__game.fullHandOpen())) await h.tap('#btn-fullhand-leave');
-      } else await h.tap('#btn-fullhand-leave');
-      continue;
-    }
     if (await h.visible('#discard-overlay')) {
       const n = await page.$$eval('#discard-cards .card-tile', els => els.findIndex(x => !/Lantern/i.test(x.textContent)));
       if (n >= 0) await page.click(`#discard-cards .card-tile:nth-child(${n + 1})`);
@@ -116,10 +104,10 @@ for (let m = 0; m < COUNT; m++) {
       if (cover) { note(seed, `search icon covered by "${cover.what}" at ${Math.round(cover.x)},${Math.round(cover.y)}`); await h.shot(`p-${seed}-searchcovered`); }
       await h.searchHere();
       if (await game(() => window.__game.cardViewOpen())) { note(seed, 'tapping the search icon opened the card view instead'); await h.tap('#btn-hand-close'); }
-      if (!(await game(() => window.__game.handoffOpen() || window.__game.fullHandOpen()))) {
+      if (!(await game(() => window.__game.handoffOpen()))) {
         // tap might have been swallowed
         await page.waitForTimeout(300);
-        if (!(await game(() => window.__game.handoffOpen() || window.__game.fullHandOpen()))) { note(seed, 'tapping the search icon gave no reveal; using hook'); await game(() => window.__game.tapSearchSpot()); await h.settle(); }
+        if (!(await game(() => window.__game.handoffOpen()))) { note(seed, 'tapping the search icon gave no reveal; using hook'); await game(() => window.__game.tapSearchSpot()); await h.settle(); }
       }
       await handlePrompts(seed); continue;
     }

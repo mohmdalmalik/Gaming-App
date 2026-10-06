@@ -40,7 +40,8 @@ Guests are trapped on a hotel floor. Lanterns are the way out: a clean guest car
 ## Possession
 - One guest is secretly Possessed at setup and starts with 3 Possession cards.
 - Possessed guests see a private tell (portrait + screen tint). In hot-seat it shows on that guest's private screens and, during their own turn, on the main screen too: a POSSESSED label, how many Possession cards they still hold ("souls to trade") and their Possession cards in the hand. It disappears before the iPad is passed on.
-- Possession cards never count toward the hand limit, are hidden from the public card count, and can't be discarded.
+- Possession cards never count toward the hand limit and can't be discarded.
+- How many cards a guest holds is private: the table never shows other guests' card counts (only a Hand Mirror reveals a hand). Your own count is shown only to you.
 
 ## Lanterns and escape
 - Lanterns do double duty: given in a trade they block a possession attempt, and three of them open the fire exit.

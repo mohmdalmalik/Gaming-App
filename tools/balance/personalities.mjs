@@ -12,7 +12,10 @@
 // Shared by all (clean guests):
 //   • Escape first: a clean guest holding 3 Lanterns heads for the Fire Exit (or, while it is still
 //     hidden, opens doors to find it) and escapes the moment it can.
-//   • Heal when badly hurt: at 1 health, the Infirmary if standing in one, else a Bandage.
+//   • Heal when badly hurt: 2 or more health bars down (at 1 of 3 health; at 2 of 4 or less), the
+//     Infirmary if standing in one, else a Bandage. (Thresholds count bars LOST and read the maximum
+//     from rules.maxHealth, so a 4-health variant scales them; at 3 health they are exactly the
+//     original "at 1 health" / safe "at 2 or less". See HURT below.)
 //   • A guest it KNOWS is possessed (it blocked them with a Lantern, or saw a Possession card in a Hand
 //     Mirror) is attacked if it is armed, and otherwise handed a Lantern in a trade (the block).
 //   • A search that does not fit the hand keeps the more valuable card; the hand-limit discard drops
@@ -31,8 +34,9 @@
 //               Espresso. In a trade gives a Lantern only when it holds 2 or more (a block that still
 //               leaves it one). Attacks only known possessed guests.
 //   safe        Defensive. Plans its routes around rooms with other guests in them (and would rather wait
-//               than walk into one, unless it is escaping). Heals at 2 health or less. Keeps Lanterns as
-//               its shield: in a trade with anyone it is not sure of, it gives a Lantern if it has one (a
+//               than walk into one, unless it is escaping). Heals whenever hurt (1 bar down: at 2 of 3
+//               health or less; at 3 of 4 or less). Keeps Lanterns as its shield: in a trade with
+//               anyone it is not sure of, it gives a Lantern if it has one (a
 //               Lantern blocks a Possession card). With its last action, it Barricades a doorway that
 //               leads to a room with another guest in it. Uses a Hand Mirror on an unknown guest in its
 //               room. Drinks Espresso only to escape. Never attacks unless it knows the target is
@@ -90,11 +94,15 @@
 //   decideDiscard(full, i, cardIds)            -> card id to drop at the hand limit
 //   newMemory(), observe(mem, event)           -> public events: {type:'attack', by, target, killed}
 //
-// `full` = { round, turn, exitRoom, lobby, lanternsToEscape, locks: ['room:a-b'...],
+// `full` = { round, turn, exitRoom, lobby, lanternsToEscape, maxHealth?, bots?, locks: ['room:a-b'...],
 //            players: [{ i, id, name, persona, room, ap, health, alive, escaped, possessed,
 //                        hand: [{id, type, shots}], knows: [ids] }],
 //            rooms: [{ id, name, isExit, safe, dark, searchable, searched, locked, job, drops,
 //                      doors: [{id, to, barricaded}], frontier: [{id, jammed}] }] }
+//   bots (simulator-only options, absent = the usual bots): { heal: 'fixed' } heals at the original fixed health
+//   numbers (see HEAL_AT_FIXED); { noLanternLeak: true } (see decideAction).
+
+import { rules } from '../../src/data/rules.js';
 
 export const PERSONALITIES = ['rusher', 'slow', 'safe', 'aggressive', 'killer', 'team'];
 export const LABELS = { rusher: 'Rusher', slow: 'Slow', safe: 'Safe', aggressive: 'Aggressive', killer: 'Killer', team: 'Team player' };
@@ -111,6 +119,15 @@ const VALUE_TWEAKS = {
   team: {},
 };
 const DAMAGE = { knife: 1, revolver: 2 };
+// Healing thresholds, as health bars LOST (never a fixed health number), so they follow rules.maxHealth:
+//   badly   2 bars down — everyone but the safe one. maxHealth 3: heal at 1 (as always); 4: heal at 2 or less
+//           (also exactly "one Revolver shot from death", and the Infirmary's 2 bars are never wasted).
+//   any     1 bar down  — the safe one.            maxHealth 3: heal at 2 or less (as always); 4: at 3 or less.
+const HURT = { badly: 2, any: 1 };
+// Sensitivity option (simulator only, full.bots.heal === 'fixed'): heal at the original FIXED health numbers
+// instead, whatever the maximum — at 1, the safe one at 2 or less. Identical to HURT at maxHealth 3; at 4 the
+// bots heal later and less often, which shows how much of a health variant's effect is the bots' healing habit.
+const HEAL_AT_FIXED = { badly: 1, any: 2 };
 const value = (persona, type) => (VALUE_TWEAKS[persona]?.[type] ?? BASE_VALUE[type] ?? 1);
 
 export function newMemory() { return { attacks: new Map() }; }
@@ -195,11 +212,13 @@ function ctx(full, i, mem, rng) {
   const closedHere = () => (here?.frontier || []).filter(f => !f.jammed);
   const lanterns = lan(me.hand);
   const need = full.lanternsToEscape ?? LANTERNS_TO_ESCAPE;
+  const maxHealth = full.maxHealth ?? rules.maxHealth;
+  const bots = full.bots || {};       // simulator-only bot options (see HEAL_AT_FIXED, decideAction); none = the usual bots
   const escaping = !me.possessed && lanterns >= need;
   return {
     full, i, me, mem, rng, rooms, here, persona, lan, claimed, has, weapons, met, known, suspect, attacked,
     isAlly, cleanTarget, others, othersIn, meetable, bfs, fromMe, fromMeSafe, lobbyDist, occupied, stepToward,
-    canSearchRoom, lootRooms, dropRooms, frontierRooms, closedHere, lanterns, escaping, hasLight, need,
+    canSearchRoom, lootRooms, dropRooms, frontierRooms, closedHere, lanterns, escaping, hasLight, need, maxHealth, bots,
     possCards: me.hand.filter(c => c.type === 'possession').length,
     used: AP_PER_TURN - me.ap,
   };
@@ -215,8 +234,9 @@ function carrierOf(c) {
 const pick = (arr, rng) => arr[Math.floor(rng() * arr.length)];
 function openHere(c) { const doors = c.closedHere(); return doors.length ? { k: 'open', door: pick(doors, c.rng).id } : null; }
 function searchHere(c) { return c.canSearchRoom(c.here) ? { k: 'search' } : null; }
-function heal(c, below) {
-  if (c.me.health > below) return null;
+function heal(c, how) {
+  const at = c.bots.heal === 'fixed' ? HEAL_AT_FIXED[how] : c.maxHealth - HURT[how];
+  if (c.me.health > at) return null;
   if (c.here?.job === 'infirmary') return { k: 'job' };
   const b = c.has('bandage');
   return b ? { k: 'card', type: 'bandage', card: b.id } : null;
@@ -269,7 +289,7 @@ function barricadeNear(c) {
 // --- the decisions -------------------------------------------------------------------------------
 const PLANS = {
   rusher(c) {
-    const out = [heal(c, 1)];
+    const out = [heal(c, 'badly')];
     if (c.escaping) return [...out, ...goExit(c)];
     if (c.me.possessed) {
       out.push(searchHere(c), hunt(c, q => c.cleanTarget(q), 1));
@@ -291,7 +311,7 @@ const PLANS = {
   },
   slow(c) {
     if (c.used >= 2) return [{ k: 'end' }];
-    const out = [heal(c, 1)];
+    const out = [heal(c, 'badly')];
     out.push(searchHere(c), unlockNear(c));
     if (c.escaping) return [...out, ...goExit(c)];
     if (c.me.possessed) out.push(hunt(c, q => c.cleanTarget(q), 1));
@@ -305,9 +325,9 @@ const PLANS = {
     const out = [];
     if (c.escaping) {
       const e = escapeNow(c); if (e) return [e];
-      return [heal(c, 2), ...goExit(c, c.fromMeSafe)];
+      return [heal(c, 'any'), ...goExit(c, c.fromMeSafe)];
     }
-    out.push(heal(c, 2));
+    out.push(heal(c, 'any'));
     if (c.me.ap === 1) out.push(barricadeNear(c));
     out.push(searchHere(c), unlockNear(c), mirror(c));
     if (c.me.possessed) {
@@ -321,7 +341,7 @@ const PLANS = {
     return out;
   },
   aggressive(c) {
-    const out = [heal(c, 1)];
+    const out = [heal(c, 'badly')];
     if (c.escaping) return [...out, ...goExit(c)];
     const target = c.me.possessed ? (q => c.cleanTarget(q)) : (() => true);
     const first = c.me.possessed ? null : (q => c.suspect(q));
@@ -335,7 +355,7 @@ const PLANS = {
     return out;
   },
   killer(c) {
-    const out = [heal(c, 1)];
+    const out = [heal(c, 'badly')];
     if (c.escaping) return [...out, ...goExit(c)];
     const prey = c.me.possessed ? (q => c.cleanTarget(q)) : (() => true);
     if (c.weapons.length) out.push(hunt(c, prey, 99, (id, d) => d * 10 + Math.min(...c.meetable(id, prey).map(q => q.health)), true));
@@ -345,7 +365,7 @@ const PLANS = {
     return out;
   },
   team(c) {
-    const out = [heal(c, 1)];
+    const out = [heal(c, 'badly')];
     if (c.escaping) return [...out, ...goExit(c)];
     if (c.me.possessed) {
       out.push(searchHere(c));
@@ -382,7 +402,14 @@ export function decideAction(full, i, mem, rng) {
   const c = ctx(full, i, mem, rng);
   const e = escapeNow(c);
   if (e) return [e];
-  const list = PLANS[c.persona](c).filter(Boolean);
+  let list = PLANS[c.persona](c).filter(Boolean);
+  // Simulator-only option (full.bots.noLanternLeak): a possessed guest with no Possession card and no weapon,
+  // whose cards are all Lanterns, does not walk in on a clean guest — the trade could only hand the clean side
+  // a Lantern. Off by default (the usual bots keep hunting, so a run without the option is unchanged).
+  if (c.bots.noLanternLeak && c.me.possessed && c.possCards === 0 && !c.weapons.length
+      && c.me.hand.length && c.me.hand.every(x => x.type === 'lantern')) {
+    list = list.filter(a => a.k !== 'move' || !c.meetable(a.to, q => !q.possessed).length);
+  }
   // Drop steps into a room I would only be walking out of again, and duplicates.
   const seen = new Set(); const plan = [];
   for (const a of list) {

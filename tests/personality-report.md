@@ -388,3 +388,42 @@ Notes:
 - Test C as measured: a guest converted in round R cannot pass possession during round R. About 40% of conversions
   happen after that guest's own round-R turn, so for them the limit never covers one of their turns. A stricter
   version ("not until after their next own turn") was not measured.
+
+## 12. Owner's idea (7 October 2026): 4 health, 2 Possession cards, "1 chance" per possessed guest
+
+Simulator only; no game rule changed. Every row keeps the approved starting Lantern. 6,000 matches per row, same seeds
+(margin about ±1 point). Bots heal relative to full health (at 3 health they play exactly as before). Three
+independent reviewers checked the variants (semantics traces, an independent recount that matched every number, and
+bot fairness).
+
+Two readings of "who gets possessed has 1 chance to possess someone else":
+- **Reading 1** = today's card rule: a possessed guest keeps the one card they received (one chance) and their victim
+  then holds it, so the chain continues.
+- **Reading 2** = one generation: the first possessed guest's victims each get his card (one chance); when one of
+  them possesses someone, the card is used up, so the chain stops there.
+
+| Variant | Clean wins 6p | 5p | 4p | 6p: hotel wins by all possessed/dead · dawn | 6p median rounds · turns (long) |
+|---|---|---|---|---|---|
+| Current rules | 22.4% | 17.2% | 12.9% | 60% · 17% | 5 · 28 (47) |
+| 4 health only | 22.9% | 17.8% | 13.0% | 56% · 21% | 5 · 30 (48) |
+| 2 Possession cards only | 28.8% | 20.6% | 14.4% | 47% · 25% | 6 · 32 (48) |
+| One generation only | 28.1% | 19.6% | 13.3% | 42% · 30% | 6 · 33 (48) |
+| 2 cards + one generation | 38.1% | 24.7% | 14.9% | 21% · 41% | 8 · 38 (48) |
+| **Owner, reading 1** (4 health + 2 cards) | **30.0%** | 21.7% | 14.8% | 41% · 29% | 6 · 35 (48) |
+| **Owner, reading 2** (4 health + 2 cards + one generation) | **40.9%** | 26.8% | 15.5% | 12% · 47% | 8 · 42 (48) |
+| Owner, reading 1 + dawn after round 10 | 32.6% | 25.4% | 18.8% | 48% · 19% | 6 · 35 (60) |
+| Owner, reading 2 + dawn after round 10 | **46.2%** | 32.4% | 19.9% | 17% · 36% | 8 · 44 (60) |
+
+Notes:
+- 4 health barely moves the win rate (+0.5 pt); it cuts deaths by 35–50% (6p: 0.63 → 0.32–0.41 per match, depending on how
+  eagerly players heal).
+- Under reading 2 most hotel wins come at dawn (47% at 6p): the possession spread is contained and the clock decides.
+  That is why dawn after round 10 now helps (+5 pt), unlike before.
+- Caveat: a bot playing "Safe" as the first possessed guest almost never uses its cards (only targets guests who claim
+  no Lantern), which inflates every clean-win figure by about 8 points at 6p. With those matches left out:
+  current 13.4%, reading 1 22.7%, reading 2 33.2%, reading 2 + dawn 10 38.3%. Real players as the ghost will use their
+  cards, so the true figures likely sit between the two columns.
+- 4 and 5 players stay far from even under every variant; they need their own numbers.
+- Match length at 6p, reading 2: median 42 turns ≈ 25–35 min in hot-seat, 14–21 min online.
+
+Run: `node tools/balance/hotseat-sim.mjs --study --only proposals --pkeys hp4,supply2,oneGen,supply2+oneGen,owner1,owner2,owner1+dawn10,owner2+dawn10 --pplayers 6,5,4`

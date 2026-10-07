@@ -192,7 +192,10 @@ const hudText = await page.evaluate(() => document.getElementById('hud').innerTe
 check(!/POSSESS/i.test(hudText), 'the word "possessed" is nowhere on the public screen');
 check(!(await visible('#possess-tint')) && await page.evaluate(() => !document.getElementById('player-panel').classList.contains('possessed')),
   'no possessed tint or portrait on the shared screen — the tell lives on the private screens');
-check(/cards/.test(await page.evaluate(() => document.getElementById('players-strip').innerText)), 'the strip shows rooms, cards and health');
+{
+  const t = await page.evaluate(() => document.getElementById('players-strip').innerText);
+  check(!/\d\s*cards?\b/i.test(t) && /♥/.test(t), `the strip shows rooms and health but no card counts (card counts are private): "${t.replace(/\s+/g, ' ').slice(0, 80)}"`);
+}
 check(await visible('#hand-fan') && sameSet(await fanIds(), await game(() => window.__game.activePlayer().hand.map(c => c.id))), 'the turn shows their hand as a fan of cards');
 check(!(await page.$('#btn-search')), 'there is no Search button');
 check(!(await visible('#search-spot')), 'and no search icon in the lobby');
@@ -218,7 +221,7 @@ const evilIdx = st.poss[0];
     'but no possessed tint or portrait on the shared screen');
   await shot('hs-02b-possessed-action-phase');
   const strip = await page.evaluate(i => document.querySelectorAll('#players-strip .mini-where')[i].textContent, evilIdx);
-  check(strip.includes(`${ev.ord.length} cards`), `the strip shows the public count only ("${strip}")`);
+  check(!/\d\s*cards?\b/i.test(strip), `the strip shows no card count, not even the active guest's own ("${strip}")`);
   // The switch off (?possessedTell=off): nothing of it on the shared screen.
   await game(() => { window.__game.cfg.ui.hotseatPossessedOnMainScreen = false; window.__game.refresh(); });
   await page.waitForTimeout(150);
@@ -453,7 +456,7 @@ for (const emptySide of ['mover', 'other', 'possessed']) {
   await next();
   check(await game(() => window.__game.meetingOpen()) && /No trade/.test(await page.textContent('#encounter-title')), `${emptySide} empty: the table sees "No trade"`);
   const pub = await page.textContent('#encounter-body');
-  check(/one of them has no ordinary card/.test(pub) && !/Bandage|Lantern|Flashlight|Possess/i.test(pub), `${emptySide} empty: the public line names no card and no role`);
+  check(/no trade/.test(pub) && !/ordinary card|Bandage|Lantern|Flashlight|Possess/i.test(pub), `${emptySide} empty: the public line names no card, no role and nobody's hand`);
   check(await visible('#encounter-actions .btn.primary'), `${emptySide} empty: the public screen has a way on`);
   await tap('#encounter-actions .btn.primary');
   const after = await game(({ P, E }) => ({

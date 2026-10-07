@@ -946,3 +946,18 @@ Target: `docs/art-reference.jpg` (style, palette and finish; not its layout or i
   baseline now deals 1 Lantern each. Six players, mixed table: clean side wins ~23% (was ~22% when measured
   as the 'dealt1' proposal); `--pkeys dealt0` measures the old rule.
 
+
+## Owner-approved: card counts are private (and what hot-seat may show)
+- **Rule (docs/GAME_RULES.md > Possession):** the table never sees how many cards another guest holds. The top strip shows
+  only the room and health; not even the active guest's own count is on it, because the whole table sees the strip in
+  hot-seat. Why: a Possession card changing hands, or a Lantern block, changed the counts unevenly and gave possessions
+  away. A guest's own count (End turn's "Discard N first", the over-limit label, the card view footer, the search result)
+  shows only on that guest's own screens, during their own turn, never under a pass, meeting, notice or end screen
+  (`ownInfoOnMain()` in src/main.js; a CSS `:has()` guard hides it until the next frame).
+- **The skipped-trade line** no longer says "one of them had no ordinary card" in public: it says only that there was no
+  trade. Each guest still learns why in private.
+- **Owner's standing requirement for the online game:** hot-seat is only a testing tool, so it may show a possessed
+  guest's own information on the shared iPad (e.g. the POSSESSED sign appearing right after a trade on that guest's own
+  turn). In the online game, where each player has their own device, nothing may show or hint at a role, a possession or a
+  hand to any other player.
+- **Practice** deals the starting Lantern too (owner-approved): start with 1, find 2 more.

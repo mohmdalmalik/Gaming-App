@@ -591,10 +591,11 @@ async function checkInvariants(s) {
   if (!s.finished && /possess/i.test(publicText)) await violation('critical', 'public-possessed-word', `The shared screen mentions possession: "${publicText.match(/.{0,60}possess.{0,60}/i)?.[0]}"`, s);
   if (s.meeting.open && /Trade complete/.test(s.meeting.title) && /Lantern|Bandage|Knife|Flashlight|Revolver|Barricade|Lock Pick|Master Key|Hand Mirror|Espresso/.test(s.meeting.body)) await violation('critical', 'trade-result-public', `The public trade result names a card: "${s.meeting.body}"`, s);
   if (/searched/.test(s.toast) && /Lantern|Bandage|Knife|Flashlight|Revolver|Barricade|Lock Pick|Master Key|Hand Mirror|Espresso|find/.test(s.toast)) await violation('critical', 'search-toast-leak', `Search toast leaks the result: "${s.toast}"`, s);
-  // Strip: public card count and hearts.
-  if (s.inAction && !s.overlays.length && !s.walking) s.players.forEach((p, i) => {
+  // Strip: hearts and room only. Card counts are private (docs/GAME_RULES.md > Possession): a number of
+  // cards on the strip is a leak, at any moment.
+  s.players.forEach((p, i) => {
     const t = s.strip[i] || '';
-    if (p.alive && !p.escaped && !t.includes(`${countable(p)} cards`)) cur.pendingUx.push([`strip-count`, `Strip for ${p.name} says "${t}" but they hold ${countable(p)} ordinary cards`]);
+    if (/\d\s*cards?\b/i.test(t)) cur.pendingUx.push([`strip-count`, `Strip for ${p.name} shows a card count: "${t}" (card counts are private)`]);
   });
   // Who holds the device when a private screen is up.
   if (s.handoff.open && s.handoff.kind !== 'pass') {

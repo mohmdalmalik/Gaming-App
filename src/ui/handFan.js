@@ -16,8 +16,9 @@
 //
 // Over the hand limit: during a turn a guest keeps everything, even past 6 (approved rule), so a
 // small calm label sits just above the fan — "Cards 8/6 · discard 2 at end of turn", on one line. It
-// is the active guest's own count, shown only during their own action phase like the fan itself, and
-// Possession cards never count, so it gives no role away.
+// is the active guest's own count — card counts are private (docs/GAME_RULES.md > Possession), so it
+// shows only during their own action phase like the fan itself, never on a shared screen — and
+// Possession cards never count in it.
 //
 // Cheap on the iPad: the cards are rebuilt only when the hand changes; positions are CSS transforms.
 import { CARDS } from '../game/cards.js';

@@ -66,9 +66,11 @@ export function deal(deck, playerCount, rng) {
 }
 
 // --- Hand helpers ------------------------------------------------------------------------
-// Possession cards are the possessed side's hidden supply: they never count toward the hand limit,
-// can't be discarded and never show in the public card count, so the number of cards on screen
-// never gives away a role. Lanterns are ordinary cards and count like any other.
+// Possession cards are the possessed side's hidden supply: they never count toward the hand limit and
+// can't be discarded. A guest's card count is private (docs/GAME_RULES.md > Possession: the table never
+// sees other guests' counts, since a Possession card changing hands or a Lantern block changes them
+// unevenly); the guest's own count, shown only to them, leaves the Possession cards out, so it reads
+// the same whatever their role. Lanterns are ordinary cards and count like any other.
 export const isCountable = card => card.type !== 'possession';
 export const hasEscapeLanterns = hand =>
   hand.filter(c => c.type === 'lantern').length >= rules.lanternsToEscape;

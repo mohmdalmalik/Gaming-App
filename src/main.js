@@ -139,7 +139,7 @@ function followPoint() {
 }
 
 // --- Interface -------------------------------------------------------------------------
-const hud = createHud(document, cfg, { possessedTellOnMain: () => possessedTellOnMain() });
+const hud = createHud(document, cfg, { possessedTellOnMain: () => possessedTellOnMain(), ownInfoOnMain: () => ownInfoOnMain() });
 const map = createMap(document, floor, cfg);
 const overlays = createOverlays(document);
 const hand = createHand(document, cfg, { onUseBandage, onUnlock, onBarricade, onEspresso, onHandMirror });
@@ -188,14 +188,21 @@ function actionPhaseClear() {
 // (it is re-checked every frame), and never before a converted guest has been told in private.
 function possessedTellOnMain() {
   if (!state.hotseat) return true;
-  return !!cfg.ui.hotseatPossessedOnMainScreen && running && inActionPhase && !state.finished
-    && !handoff.isOpen && !meeting.isOpen && !overlays.endOpen && !overlays.noticeOpen && !overlays.askOpen
-    && !activePlayer(state).roleChangePending;
+  return !!cfg.ui.hotseatPossessedOnMainScreen && ownInfoOnMain() && !activePlayer(state).roleChangePending;
+}
+// The active guest's own information on the main screen in hot-seat — their card count in End turn's
+// "Discard N first" (card counts are private, docs/GAME_RULES.md > Possession): only during their own
+// action phase, never on a pass, private, meeting, public notice or end screen (re-checked every frame).
+function ownInfoOnMain() {
+  if (!state.hotseat) return true;
+  return running && inActionPhase && !state.finished
+    && !handoff.isOpen && !meeting.isOpen && !overlays.endOpen && !overlays.noticeOpen && !overlays.askOpen;
 }
 function syncHandFan() {
   // A Possession card goes on the always-on fan in hot-seat only with that switch on (src/ui/handFan.js).
   fan.update(activePlayer(state), actionPhaseClear(), { withPossession: possessedTellOnMain() });
   hud.syncTell(state);
+  hud.syncEndTurn(state);
 }
 function syncSearchSpot() {
   searchSpot.update(activePlayer(state), actionPhaseClear() && !hand.isOpen && !pendingArrival);
@@ -481,12 +488,13 @@ function runTrade(A, B, { first, second }, onDone = afterMeeting) {
 // The trade is skipped: nothing changes hands. `holder` has the device now and reads their own
 // reason in private at once; the other guest's reason waits on their next private screen (the engine
 // puts it in their notes), unless they are the guest whose turn it is, who gets the device back and
-// reads it straight away. Then the table sees a neutral public line that names no hand and no card.
+// reads it straight away. Then the table sees a neutral public line that names no hand and no card,
+// and says nothing about how many cards either holds (card counts are private).
 function skippedTrade(A, B, holder, onDone) {
   const r = skipTrade(state, floor, A, B);
   const active = activePlayer(state);
   const finish = () => meeting.notice(r.ok
-    ? `${A.name} and ${B.name} cannot trade: one of them has no ordinary card to give. The meeting ends.`
+    ? `${A.name} and ${B.name} met, but there is no trade. The meeting ends.`
     : 'The trade could not be made. The meeting ends.', onDone, 'No trade');
   const read = (who, then) => handoff.privateNote(who, who.notes.splice(0, who.notes.length), then);
   read(holder, () => (holder === active ? finish()
@@ -1037,11 +1045,17 @@ function buildStartScreen() {
   const sub = document.getElementById('start-sub');
   const host = document.getElementById('mode-buttons');
   if (sub) {
-    // Two short lines rather than one that wraps with a word alone at the end (styles.css keeps the
-    // line break and balances each line).
+    // Short lines rather than one that wraps with a word alone at the end (styles.css keeps the line
+    // breaks and balances each line). Both say what every guest starts with (rules.lanternsDealtEach),
+    // worked out from the rules numbers; the hot-seat goal takes two lines so the card stays as wide
+    // as before on a 1024-wide iPad.
+    const dealt = rules.lanternsDealtEach || 0;
+    const lanterns = n => `${n} Lantern${n === 1 ? '' : 's'}`;
     sub.textContent = HOTSEAT
-      ? `Hot-seat · ${rules.playerCount} guests, one device · one is secretly possessed\nFind ${rules.lanternsToEscape} Lanterns and get one clean guest out before dawn (${rules.roundLimit} rounds)`
-      : `Practice · explore the hotel alone\nYou start with ${rules.lanternsDealtEach} Lantern${rules.lanternsDealtEach === 1 ? '' : 's'} — find ${rules.lanternsToEscape - rules.lanternsDealtEach} more and escape through the Fire Exit`;
+      ? `Hot-seat · ${rules.playerCount} guests, one device · one is secretly possessed\n${dealt
+        ? `Everyone starts with ${lanterns(dealt)} — gather ${rules.lanternsToEscape} on one clean guest\nand get them out before dawn (${rules.roundLimit} rounds)`
+        : `Find ${lanterns(rules.lanternsToEscape)} and get one clean guest out before dawn (${rules.roundLimit} rounds)`}`
+      : `Practice · explore the hotel alone\nYou start with ${lanterns(dealt)} — find ${rules.lanternsToEscape - dealt} more and escape through the Fire Exit`;
   }
   document.title = HOTSEAT ? `Hotel Escape — Hot-seat (${rules.playerCount})` : 'Hotel Escape — Practice';
   if (!host) return;

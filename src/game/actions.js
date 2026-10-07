@@ -303,8 +303,8 @@ export function tradeableCards(player) {
 // Whether P and Q can trade at all. GAME_RULES (Trade), owner-approved: "If either guest has no
 // ordinary card (Possession cards don't count), the trade is skipped and both are told why." So a
 // possessed guest holding only Possession cards is skipped exactly like an empty-handed clean guest:
-// whether a trade happens depends only on the public card counts, and never gives a role away.
-// `empty` lists who has no ordinary card.
+// whether a trade happens depends only on how many ordinary cards each holds, and never gives a role
+// away. `empty` lists who has no ordinary card.
 export function canTrade(P, Q) {
   const empty = [P, Q].filter(X => countableCount(X.hand) === 0).map(X => X.id);
   return empty.length ? { ok: false, reason: 'nothingToGive', empty } : { ok: true, empty: [] };
@@ -313,8 +313,9 @@ export function canTrade(P, Q) {
 // The skipped trade: nothing changes hands, the meeting ends. Each guest gets a PRIVATE note saying
 // why, worded the same whatever their role (a possessed guest with only Possession cards reads exactly
 // what an empty-handed clean guest reads). A guest with no ordinary card is told that about
-// themselves; a guest who has one is told the other has none (which the public count already shows).
-// The PUBLIC log names neither the empty hand nor any card.
+// themselves; a guest who has one is told the other has none (the rules say both are told why). The
+// PUBLIC log says only that there was no trade: no card, no role, nothing about anyone's hand (card
+// counts are private, docs/GAME_RULES.md > Possession).
 export function skipTrade(state, floor, P, Q) {
   if (state.finished) return { ok: false, reason: 'finished' };
   const gate = canTrade(P, Q);
@@ -326,7 +327,7 @@ export function skipTrade(state, floor, P, Q) {
       : `${Y.name} has no ordinary card to give, so there is no trade.`;
     X.notes.push(notes[X.id]);
   }
-  logPublic(state, `${P.name} and ${Q.name} met, but there was no trade: one of them had no ordinary card to give.`);
+  logPublic(state, `${P.name} and ${Q.name} met, but there was no trade.`);
   return { ok: true, skipped: true, empty: gate.empty, notes };
 }
 

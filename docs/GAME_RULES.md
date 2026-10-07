@@ -5,7 +5,7 @@ Guests are trapped on a hotel floor. Lanterns are the way out: a clean guest car
 
 ## Players
 4–6, tuned for 6. Hot-seat on one iPad for testing; the real game will be online, one device each.
-- Practice mode: one guest alone, in a random hotel like any other match, finds three Lanterns and reaches the exit. No meetings, no possessed guest, no deadline.
+- Practice mode: one guest alone, in a random hotel like any other match, starts with one Lantern like every guest, finds two more and reaches the exit. No meetings, no possessed guest, no deadline.
 
 ## Turn
 - 4 action points (AP), never carried over.

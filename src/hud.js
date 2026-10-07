@@ -3,7 +3,8 @@
 // buttons (with costs / reasons), a move-confirm bar and toasts. (The hand is src/ui/handFan.js;
 // searching is the icon over the room's search spot, src/ui/searchSpot.js.) Portraits are
 // illustrated placeholders (see ui/portrait.js) so real art can drop in later without changing
-// this logic. Possession is never revealed on the public strip.
+// this logic. Possession is never revealed on the public strip, and neither is how many cards anyone
+// holds (docs/GAME_RULES.md > Possession: card counts are private).
 import { activePlayer, nextPlayer, playersInRoom, canEscape, canTradeVoluntarily } from './game/state.js';
 import { canUseRoom } from './game/actions.js';
 import { rules } from './data/rules.js';
@@ -30,7 +31,10 @@ const ROOM_REASON = {
 // `possessedTellOnMain()`: whether the possessed guest's words-and-count reminder (POSSESSED label and
 // "Souls to trade") may show on the main screen right now. Outside hot-seat it always may; in hot-seat
 // only when cfg.ui.hotseatPossessedOnMainScreen is on, during that guest's own action phase (main.js).
-export function createHud(doc, cfg, { possessedTellOnMain = state => !state.hotseat } = {}) {
+// `ownInfoOnMain()`: whether the active guest's own card count (End turn's "Discard N first") may show
+// on the main screen right now. Outside hot-seat it always may; in hot-seat only during their own action
+// phase with no shared screen up (a meeting, a public notice, a hand-over, the end screen).
+export function createHud(doc, cfg, { possessedTellOnMain = state => !state.hotseat, ownInfoOnMain = state => !state.hotseat } = {}) {
   const el = {
     root: doc.getElementById('hud'),
     strip: doc.getElementById('players-strip'),
@@ -75,6 +79,7 @@ export function createHud(doc, cfg, { possessedTellOnMain = state => !state.hots
   let mini = null;            // the top-strip guest cells
   let portraitKey = '';       // so the panel portrait only rebuilds when it must
   let soulsKey = '';          // so the panel's souls counter only rebuilds when it must
+  let endLine = { own: '', shared: '' };   // End turn's second line: the guest's own words / the shared words
 
   // Top strip: one always-neutral portrait per guest, built once for the roster.
   function buildStrip(state) {
@@ -87,9 +92,12 @@ export function createHud(doc, cfg, { possessedTellOnMain = state => !state.hots
       const port = doc.createElement('div'); port.className = 'mini-portrait';
       port.appendChild(makePortrait(doc, p, { possessed: false })); // never reveal roles here
       const name = doc.createElement('div'); name.className = 'mini-name'; name.textContent = p.name;
-      // PUBLIC information only: where they are and how many cards they hold. A hidden role is
-      // never shown here, and neither is anyone's Offer.
-      // Two short lines: the room (its short name, full name on hover), then cards and health.
+      // PUBLIC information only: where they are and their health. A hidden role is never shown here,
+      // and neither is how many cards anyone holds — not even the active guest's own count, since the
+      // whole table sees this strip in hot-seat (approved rule, docs/GAME_RULES.md > Possession: a
+      // Possession card or a Lantern block changes counts unevenly). Your own count is in your own
+      // hand during your own turn.
+      // Two short lines: the room (its short name, full name on hover), then health.
       const where = doc.createElement('div'); where.className = 'mini-where';
       const room = doc.createElement('span'); room.className = 'mini-room';
       const stats = doc.createElement('span'); stats.className = 'mini-stats';
@@ -175,14 +183,18 @@ export function createHud(doc, cfg, { possessedTellOnMain = state => !state.hots
       el.restartPractice.hidden = !rules.practiceMode;
 
       // End turn (prominent; names the next guest).
-      if (state.finished) { el.endMain.textContent = 'Game over'; el.endSub.textContent = ''; el.endTurn.disabled = true; }
+      if (state.finished) { el.endMain.textContent = 'Game over'; endLine = { own: '', shared: '' }; el.endTurn.disabled = true; }
       else {
-        // Over the hand limit (allowed during the turn): ending it opens the discard screen first.
+        // Over the hand limit (allowed during the turn): ending it opens the discard screen first. That
+        // is the guest's own count, so it shows only while ownInfoOnMain allows (syncEndTurn); on a
+        // shared screen the button reads as it would for anyone.
         const over = countableCount(p.hand) - rules.handLimit;
+        const shared = next && next !== p ? `Next: ${next.name}` : `Refill to ${rules.actionPointsPerTurn}`;
         el.endMain.textContent = 'End turn ›';
-        el.endSub.textContent = over > 0 ? `Discard ${over} first` : next && next !== p ? `Next: ${next.name}` : `Refill to ${rules.actionPointsPerTurn}`;
+        endLine = { own: over > 0 ? `Discard ${over} first` : '', shared };
         el.endTurn.disabled = false;
       }
+      hud.syncEndTurn(state);
 
       // A room with a job: its button shows only while standing in one (Infirmary, Switchboard).
       // The Fire Exit uses the same button for Escape. It is enabled only for a guest it would let
@@ -228,11 +240,11 @@ export function createHud(doc, cfg, { possessedTellOnMain = state => !state.hots
           const place = floor.rooms.get(q.currentRoom);
           mini[i].room.textContent = out ? 'Escaped' : !q.alive ? 'Dead' : (place?.short || place?.name || '—');
           mini[i].room.title = out || !q.alive ? '' : (place?.name ?? '');
-          if (out || !q.alive) mini[i].stats.textContent = '';
-          else {
-            const h = doc.createElement('span'); h.className = 'mini-hearts'; h.textContent = hearts;
-            mini[i].stats.replaceChildren(doc.createTextNode(`${countableCount(q.hand)} cards`), h);
-          }
+          // Health only: no card count for anyone (see buildStrip).
+          const health = out || !q.alive ? '' : hearts;
+          if (mini[i].stats.textContent !== health) mini[i].stats.textContent = health;
+          if (health) mini[i].stats.setAttribute('aria-label', `Health ${q.health} of ${rules.maxHealth}`);
+          else mini[i].stats.removeAttribute('aria-label');
         }
       });
     },
@@ -258,6 +270,16 @@ export function createHud(doc, cfg, { possessedTellOnMain = state => !state.hots
         soulsKey = sk;
         el.souls.replaceChildren(...(on ? [soulsChip(doc, soulsHeld(p), { compact: true })] : []));
       }
+    },
+    // End turn's second line. "Discard N first" is the active guest's own card count: in hot-seat it
+    // shows only during their own action phase with no shared screen up (ownInfoOnMain); otherwise the
+    // line reads as it would for anyone ("Next: Clara"). Cheap (touches the page only on a change), so
+    // main.js runs it every frame: it must be gone the moment a meeting or hand-over screen is up.
+    syncEndTurn(state) {
+      const own = !!endLine.own && !!ownInfoOnMain(state);
+      const text = own ? endLine.own : endLine.shared;
+      if (el.endSub.textContent !== text) el.endSub.textContent = text;
+      el.endSub.classList.toggle('own', own);
     },
     hideTimer() { el.timer.hidden = true; el.timer.classList.remove('low'); },
     // `seconds`: how long it stays (default cfg.ui.toastDuration); a longer message asks for longer.

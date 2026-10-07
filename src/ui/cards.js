@@ -8,7 +8,8 @@ import { cardIcon } from './cardIcons.js';
 // Over the hand limit DURING a turn is allowed (approved rule: the limit is settled only when the turn
 // ends). This is the gentle reminder shown wherever the count is: '' when within the limit, otherwise
 // "Cards 8/6 · discard 2 at end of turn" (short, so it stays on one line above the fan on an iPad).
-// Possession cards never count (and never show here), so it reads the same whatever the guest's role.
+// It is the guest's own count, for their own screens only (card counts are private). Possession cards
+// never count (and never show here), so it reads the same whatever the guest's role.
 export function handLimitWarning(player) {
   const n = countableCount(player.hand);
   const over = n - rules.handLimit;

@@ -354,6 +354,10 @@ html, body {
    meeting, public notice (the Switchboard) or end screen is up (main.js possessedTellOnMain hides them too). */
 #app:has(#handoff-overlay:not([hidden]), #encounter-overlay:not([hidden]), #end-overlay:not([hidden]),
   #notice-overlay:not([hidden]), #ask-overlay:not([hidden])) :is(#panel-role, #panel-souls) { display: none !important; }
+/* The same for End turn's "Discard N first" (the guest's own card count; card counts are private): main.js
+   swaps it for the shared words ("Next: Clara") on those screens; this hides it until it has. */
+#app:has(#handoff-overlay:not([hidden]), #encounter-overlay:not([hidden]), #end-overlay:not([hidden]),
+  #notice-overlay:not([hidden]), #ask-overlay:not([hidden])) #end-sub.own { visibility: hidden; }
 
 /* ---- Bottom-right: camera controls (separate) + action buttons ---- */
 .hud-bottom-right { display: flex; flex-direction: column; align-items: flex-end; gap: 12px; }
@@ -702,12 +706,12 @@ html, body {
 .turn-timer.low .tt-fill { background: linear-gradient(90deg, #8c3a34, var(--crimson)); }
 .turn-timer.low .tt-seconds { color: #f0b4ae; }
 
-/* Public per-guest lines in the top strip: where they are (a short room name), then cards and health.
-   Never a role. Two single lines, readable at arm's length; a long name ends in an ellipsis. */
-.mini-where { display: flex; flex-direction: column; align-items: center; font-size: 11.5px; line-height: 1.25; color: var(--ivory-dim); text-align: center; width: calc(100% + 8px); max-width: 82px; }
+/* Public per-guest lines in the top strip: where they are (a short room name), then health. Never a
+   role, and never a card count (card counts are private). Readable at arm's length; a long name ends in
+   an ellipsis. The health line is only the hearts, so it sits close under the room. */
+.mini-where { display: flex; flex-direction: column; align-items: center; gap: 1px; font-size: 11.5px; line-height: 1.25; color: var(--ivory-dim); text-align: center; width: calc(100% + 8px); max-width: 82px; }
 .mini-where .mini-room, .mini-where .mini-stats { display: block; max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.mini-where .mini-stats { color: var(--muted); letter-spacing: -0.01em; }
-.mini-where .mini-hearts { margin-left: 4px; font-size: 10px; letter-spacing: -0.5px; color: #e88178; }
+.mini-where .mini-stats { font-size: 11px; line-height: 1; letter-spacing: 0.5px; color: #e88178; }
 .mini-where .mini-stats:empty { display: none; }
 .mini-player.escaped { opacity: 0.55; }
 .mini-player.escaped .mini-name { color: #9fe3b8; }

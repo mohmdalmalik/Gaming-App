@@ -1,7 +1,8 @@
 // Automatic playtester for HOT-SEAT mode (dev only, not part of the game).
 //
 // Plays full 4-6 guest matches through the real game in headless Chromium, the way people would:
-// tapping door rings and Confirm to open doors and move, the in-room search icon, cards in the hand
+// tapping a fogged room to open its door, a revealed room and Confirm to move, the in-room search
+// icon, cards in the hand
 // fan and the card view, Trade / Attack in meetings, private card picks, pass-the-device screens,
 // hand-limit discards at the end of a turn, room jobs and Escape. `window.__game` is used to READ
 // state (to check the rules and to let the bots choose sensibly); a hook is used to ACT only when a
@@ -174,7 +175,7 @@ function SNAP() {
     id: r.id, name: r.name, center: r.center, dark: r.dark, searchable: r.searchable, job: r.job, isExit: r.isExit, safe: r.safe,
     locked: s.lockedRooms.has(r.id), searched: s.searchedRooms.has(r.id), drops: (s.roomDrops.get(r.id) || []).length,
     doors: r.doorways.map(dw => ({ id: dw.id, to: dw.a === r.id ? dw.b : dw.a, center: dw.center, axis: dw.axis, barricaded: s.barricades.has(dw.id) })),
-    frontier: (r.frontier || []).map(f => ({ id: f.id, jammed: !!f.jammed, center: f.center, axis: f.axis })),
+    frontier: (r.frontier || []).map(f => ({ id: f.id, jammed: !!f.jammed, center: f.center, axis: f.axis, fog: `${f.cell[0]},${f.cell[1]}` })),
   }));
   const ss = g.searchSpot();
   const spotEl = byId('search-spot');
@@ -192,6 +193,7 @@ function SNAP() {
     t: performance.now(),
     names: s.players.map(p => p.name),
     round: s.round, turn: s.turn, active: s.activeIndex, finished: s.finished, won: s.won, dawn: s.dawn,
+    maxHealth: g.rules.maxHealth, supply: g.rules.possessionSupply,
     players, types, drops, draw: s.drawPile.length, discardN: s.discardPile.length,
     locks: [...s.encounterLocks],
     lanternPiles: {
@@ -407,7 +409,6 @@ async function tapVisiblePart(sel, what) {
   if (cur.touch) await page.touchscreen.tap(pt.x, pt.y); else await page.mouse.click(pt.x, pt.y);
   return true;
 }
-// Tap a spot on the floor (a door ring): must be on screen and not under the interface.
 // Wait until the camera has stopped gliding after the guest (a person taps what they see).
 async function settleCamera() {
   let last = null;
@@ -418,23 +419,18 @@ async function settleCamera() {
     await frames(2);
   }
 }
-async function tapGround(x, z, what) {
+// Tap a room ({ room: id }) or a fogged room ({ fog: 'i,j' }) as a person would: somewhere on it that
+// is on the screen and not under the interface (the game's own tapPointFor finds such a point; the tap
+// itself is a real one). If none is free, rotate the view, as a player would.
+async function tapWhere(where, what) {
   await settleCamera();
   for (let attempt = 0; attempt < 4; attempt++) {
-    const sp = await page.evaluate(([x, z]) => {
-      window.__ev.length = 0;
-      const p = window.__game.groundToScreen(x, z);
-      const onScreen = p.x >= 2 && p.y >= 2 && p.x < innerWidth - 2 && p.y < innerHeight - 2;
-      const hit = onScreen ? document.elementFromPoint(p.x, p.y) : null;
-      const blocker = hit && hit.tagName !== 'CANVAS' ? (hit.id ? `#${hit.id}` : `${hit.tagName.toLowerCase()}.${String(hit.className).split(' ')[0]}`) : null;
-      return { ...p, onScreen, blocker };
-    }, [x, z]);
-    if (sp.onScreen && !sp.blocker) {
+    const sp = await page.evaluate(w => { window.__ev.length = 0; return window.__game.tapPointFor(w); }, where);
+    if (sp) {
       if (cur.touch) await page.touchscreen.tap(sp.x, sp.y); else await page.mouse.click(sp.x, sp.y);
       return { ok: true, rotated: attempt };
     }
-    await ux(`ring-hidden-${sp.onScreen ? 'covered' : 'offscreen'}${sp.blocker ? '-' + slug(sp.blocker) : ''}`,
-      `The ring of ${what} is ${sp.onScreen ? `under ${sp.blocker}` : 'off screen'}; a player has to rotate the view to reach it`);
+    await ux(`target-hidden-${where.fog ? 'fog' : 'room'}`, `No free spot to tap on ${what}; a player has to rotate the view to reach it`);
     await tapSel('#btn-rotate-left', 'rotate view');
     await frames(12);
   }
@@ -488,12 +484,6 @@ function route(s, from, goal) {
   }
   return null;
 }
-const ringPoint = (room, center, axis, inset = 0.15 + 0.62) => {
-  const along = axis === 'x';
-  const sx = along ? 0 : Math.sign(room.center[0] - center[0]) || 1;
-  const sz = along ? Math.sign(room.center[1] - center[1]) || 1 : 0;
-  return [center[0] + sx * inset, center[1] + sz * inset];
-};
 
 // ---------------------------------------------------------------------------------------------
 // Invariants, checked after every step.
@@ -517,7 +507,7 @@ async function checkInvariants(s) {
   }
   // Health.
   for (const p of s.players) {
-    if (p.health < 0 || p.health > 3) await violation('high', 'health-range', `${p.name} health ${p.health}`, s);
+    if (p.health < 0 || p.health > s.maxHealth) await violation('high', 'health-range', `${p.name} health ${p.health} (max ${s.maxHealth})`, s);
     if (p.alive !== (p.health > 0)) await violation('high', 'health-alive-mismatch', `${p.name} alive=${p.alive} with health ${p.health}`, s);
     if (!p.alive && p.hand.length) await violation('medium', 'dead-holds-cards', `${p.name} is dead but holds ${p.hand.map(c => c.type).join(',')}`, s);
   }
@@ -545,9 +535,9 @@ async function checkInvariants(s) {
   if (cur.cardTotal == null) cur.cardTotal = ordinary;
   else if (ordinary !== cur.cardTotal && !limbo) await violation('critical', 'cards-not-conserved', `Ordinary cards total ${ordinary}, was ${cur.cardTotal} (deck ${s.draw}, discard ${s.discardN}, floor ${s.drops})`, s);
   const poss = s.players.reduce((n, p) => n + p.hand.filter(c => c.type === 'possession').length, 0);
-  if (poss > 3 || (cur.possTotal != null && poss > cur.possTotal)) await violation('critical', 'possession-count', `Possession cards in play went from ${cur.possTotal} to ${poss}`, s);
+  if (poss > s.supply || (cur.possTotal != null && poss > cur.possTotal)) await violation('critical', 'possession-count', `Possession cards in play went from ${cur.possTotal} to ${poss}`, s);
   cur.possTotal = poss;
-  // Possessed count never goes down; a possessed guest holding none of the 3 supply can still exist.
+  // Possessed count never goes down; a possessed guest holding none of the supply can still exist.
   const possessedNow = s.players.filter(p => p.possessed).length;
   if (cur.possessedCount != null && possessedNow < cur.possessedCount) await violation('critical', 'unpossessed', `A guest stopped being possessed (${cur.possessedCount} -> ${possessedNow})`, s);
   if (cur.possessedCount != null && possessedNow > cur.possessedCount) cur.stats.conversions += possessedNow - cur.possessedCount;
@@ -945,9 +935,9 @@ function smartOptions(s, me, room) {
   // Escape.
   if (room.isExit && !me.possessed && lanternsOf(me) >= 3 && ap >= 1) o.push({ key: 'escape', run: () => roomJob(s, 'Escape') });
   if (room.isExit && !me.possessed && lanternsOf(me) >= 3 && ap < 1) return [];    // wait for next turn in the exit
-  // Heal.
-  if (me.health <= 2 && room.job === 'infirmary' && ap >= 1) o.push({ key: 'infirmary', run: () => roomJob(s, 'Infirmary') });
-  if (me.health <= 1 && hasCard(me, 'bandage') && ap >= 1) o.push({ key: 'bandage', run: () => useCard(s, hasCard(me, 'bandage'), /^Use/) });
+  // Heal (relative to full health: one bar down for the Infirmary, two for a Bandage).
+  if (me.health <= s.maxHealth - 1 && room.job === 'infirmary' && ap >= 1) o.push({ key: 'infirmary', run: () => roomJob(s, 'Infirmary') });
+  if (me.health <= s.maxHealth - 2 && hasCard(me, 'bandage') && ap >= 1) o.push({ key: 'bandage', run: () => useCard(s, hasCard(me, 'bandage'), /^Use/) });
   // Espresso when running low with things still to do.
   if (hasCard(me, 'espresso') && ap <= 1 && rng() < 0.7) o.push({ key: 'espresso', run: () => useCard(s, hasCard(me, 'espresso'), /^Drink/, () => { cur.turnEspresso++; cur.stats.espresso++; }) });
   // Search where you stand.
@@ -969,7 +959,7 @@ function smartOptions(s, me, room) {
   // Voluntary trade in the Fire Exit.
   if (s.tradeBtn && rng() < 0.4) o.push({ key: 'voltrade', run: () => voluntaryTrade(s) });
   // Bandage when hurt and nothing better.
-  if (me.health <= 2 && hasCard(me, 'bandage') && ap >= 2 && rng() < 0.5) o.push({ key: 'bandage2', run: () => useCard(s, hasCard(me, 'bandage'), /^Use/) });
+  if (me.health <= s.maxHealth - 1 && hasCard(me, 'bandage') && ap >= 2 && rng() < 0.5) o.push({ key: 'bandage2', run: () => useCard(s, hasCard(me, 'bandage'), /^Use/) });
   if (ap < 1) return o;
   // Where to go.
   const exitKnown = s.exitRoom && roomById(s, s.exitRoom);
@@ -1018,6 +1008,16 @@ function randomOptions(s, me, room) {
   if (s.tradeBtn) add(1, 'voltrade', () => voluntaryTrade(s));
   add(0.3, 'floor', () => tapFloor(s));
   add(0.15, 'rotate', async () => { act('rotate view'); await tapSel(rng() < 0.5 ? '#btn-rotate-left' : '#btn-rotate-right', 'rotate'); await frames(4); });
+  add(0.12, 'look-around', async () => {
+    // zoom out over the hotel (as a pinch would), then come back with "centre on me"
+    act('zoom out to look round the hotel, then centre on me');
+    const vp = page.viewportSize();
+    await page.mouse.move(vp.width / 2, vp.height / 2);
+    for (let k = 0; k < 6; k++) { await page.mouse.wheel(0, 400); await frames(1); }
+    await tapSel('#btn-centre', 'centre on me');
+    await afterWait('!window.__game.rig.returning', 8000);
+    await frames(2);
+  });
   add(0.15, 'map', async () => { act('open map'); await tapSel('#btn-map', 'Map'); await frames(3); if (cur.sampleShots && !cur.layoutSeen.has('map')) { cur.layoutSeen.add('map'); await layoutCheck(s, 'map'); await shot('screen-map'); } await tapSel('#btn-map-close', 'close map'); await frames(2); });
   add(me.ap === 0 ? 3 : 0.5, 'end', async () => { await endTurn(s); });
   return o.sort((a, b) => b.w - a.w);
@@ -1030,24 +1030,22 @@ async function afterWait(pred, ms = 8000) {
 
 async function openDoor(s, f) {
   const me = s.players[s.active];
-  const room = roomById(s, me.room);
-  const [x, z] = ringPoint(room, f.center, f.axis);
   const nRooms = s.rooms.length;
-  act(`tap closed door ${f.id}${me.ap < 1 ? ' (no AP left)' : ''}`);
-  const t = await tapGround(x, z, `closed door ${f.id}`);
+  act(`tap the fogged room beyond ${f.id}${me.ap < 1 ? ' (no AP left)' : ''}`);
+  const t = await tapWhere({ fog: f.fog }, `the fogged room beyond ${f.id}`);
   await frames(1);
-  if (me.ap < 1 || f.jammed) return refusalCheck(s, t, f.jammed ? /jammed/ : /No action points/, `closed door with ${f.jammed ? 'a jam' : 'no AP'}`);
-  let c = await page.evaluate(() => ({ open: !document.getElementById('confirm-bar').hidden, text: document.getElementById('confirm-text').textContent, toast: document.getElementById('toast').hidden ? '' : document.getElementById('toast').textContent }));
-  if (t.ok && c.open && /Open this door/.test(c.text)) {
-    await tapSel('#btn-confirm-move', 'Open (confirm)');
-  } else {
-    if (t.ok) await ux(`door-tap-no-confirm`, `Tapping the ring of a closed door did not offer "Open" (confirm: ${c.open ? c.text : 'none'}; toast: "${c.toast}")`, s);
-    fallback(`__game.openDoor(${f.id})`, 'tap did not offer Open');
-    await page.evaluate(() => { document.getElementById('btn-confirm-cancel')?.click(); });
+  // A jammed door has no fog beyond it: tap where it would be.
+  if (me.ap < 1 || f.jammed) return refusalCheck(s, t, f.jammed ? /jammed/ : /No action points/, `fogged room with ${f.jammed ? 'a jam' : 'no AP'}`);
+  const c = await page.evaluate(() => ({ open: !document.getElementById('confirm-bar').hidden, text: document.getElementById('confirm-text').textContent, toast: document.getElementById('toast').hidden ? '' : document.getElementById('toast').textContent }));
+  if (c.open) { await violation('medium', 'fog-tap-asked', `Tapping a fogged room asked "${c.text}" (it should open at once)`, s); await tapSel('#btn-confirm-cancel', 'Cancel'); }
+  let after = await page.evaluate(SNAP);
+  if (after.rooms.length === nRooms && !after.rooms.find(r => r.id === me.room)?.frontier.find(ff => ff.id === f.id)?.jammed) {
+    if (t.ok) await ux('fog-tap-nothing', `Tapping the fogged room beyond ${f.id} did not open it (toast: "${c.toast}")`, s);
+    fallback(`__game.openDoor(${f.id})`, 'tap did not open the door');
     await page.evaluate(id => window.__game.openDoor(id), f.id);
+    await frames(2);
+    after = await page.evaluate(SNAP);
   }
-  await frames(2);
-  const after = await page.evaluate(SNAP);
   const me2 = after.players[after.active];
   if (after.rooms.length === nRooms + 1) {
     cur.stats.opens++;
@@ -1078,38 +1076,21 @@ async function refusalCheck(s, t, re, what) {
 
 async function moveThrough(s, door, to, why) {
   const me = s.players[s.active];
-  const room = roomById(s, me.room);
   const dest = roomById(s, to);
-  const [x, z] = ringPoint(room, door.center, door.axis);
   const others = s.players.filter(p => p.alive && !p.escaped && p.i !== me.i && p.room === to);
   const locks = await page.evaluate(() => [...window.__game.state.encounterLocks]);
   const unmet = others.filter(q => { const [a, b] = me.i < q.i ? [me.i, q.i] : [q.i, me.i]; return !locks.includes(`${to}:${a}-${b}`); });
   const expectMeeting = !dest.safe && unmet.length > 0;
-  act(`move ${me.room} → ${to} (${why})${expectMeeting ? ` [meeting expected with ${unmet.map(q => q.name).join(',')}]` : ''}`);
-  if (!cur.ringProbed && me.ap >= 1) {
-    // Probe once a match: tap the inner edge of the painted ring (0.28 m further into the room than
-    // its centre; the ring's outer radius is 0.33 m). A person tapping the ring there expects "Move".
-    cur.ringProbed = true;
-    const inner = ringPoint(room, door.center, door.axis, 0.77 + 0.28);
-    const pt = await tapGround(inner[0], inner[1], `inner edge of the ring to ${to}`);
-    await frames(1);
-    const r = await page.evaluate(() => ({ confirm: !document.getElementById('confirm-bar').hidden, walking: window.__game.activeMover().walking || window.__game.activeMover().path.length > 0 }));
-    cur.stats.ringProbe = r.confirm ? 'move offered' : r.walking ? 'walked instead' : 'nothing';
-    const zone = await page.evaluate(() => window.__game.doorTapAcross?.() ?? null);
-    if (pt.ok && !r.confirm) await ux('ring-inner-edge-miss', `Tapping the inner edge of a doorway's ring (still on the painted ring) ${r.walking ? 'walks the guest to that spot' : 'does nothing'} instead of offering "Move" (ring centre 0.77 m from the doorway, tap 1.05 m in, the game's tap zone ends at ${zone == null ? '?' : zone.toFixed(2)} m, ring radius 0.33 m)`, s);
-    if (r.confirm) await tapSel('#btn-confirm-cancel', 'Cancel');
-    await afterWait(`(() => { const m = window.__game.activeMover(); return !m.walking && m.path.length === 0; })()`, 6000);
-    await frames(2);
-  }
-  const t = await tapGround(x, z, `doorway to ${to}`);
+  act(`tap ${to} to move there from ${me.room} (${why})${expectMeeting ? ` [meeting expected with ${unmet.map(q => q.name).join(',')}]` : ''}`);
+  const t = await tapWhere({ room: to }, `the room ${to}`);
   await frames(1);
-  if (me.ap < 1 || door.barricaded || dest.locked) return refusalCheck(s, t, door.barricaded ? /barricaded/ : dest.locked ? /locked/ : /Not enough action points/, `doorway (${door.barricaded ? 'barricaded' : dest.locked ? 'locked' : 'no AP'})`);
+  if (me.ap < 1 || door.barricaded || dest.locked) return refusalCheck(s, t, door.barricaded ? /barricade/i : dest.locked ? /locked/ : /Not enough action points/, `room (${door.barricaded ? 'barricaded' : dest.locked ? 'locked' : 'no AP'})`);
   const c = await page.evaluate(() => ({ open: !document.getElementById('confirm-bar').hidden, text: document.getElementById('confirm-text').textContent, toast: document.getElementById('toast').hidden ? '' : document.getElementById('toast').textContent, ev: window.__ev.splice(0), busy: [window.__game.activeMover().walking, window.__game.meetingOpen(), window.__game.handoffOpen(), window.__game.cardViewOpen(), window.__game.isMapOpen()].join() }));
   if (t.ok && c.open && /^Move to/.test(c.text)) {
     if (!c.text.includes(dest.name)) await ux('move-confirm-name', `Confirm says "${c.text}" for a move into ${dest.name}`, s);
     await tapSel('#btn-confirm-move', 'Move (confirm)');
   } else {
-    if (t.ok) await ux(me.ap < 1 ? 'door-tap-no-ap' : 'door-tap-no-move', `Tapping the ring of an open doorway did not offer a move (AP ${me.ap}; confirm: ${c.open ? c.text : 'none'}; toast: "${c.toast}"; events ${c.ev.join(' ')}; busy ${c.busy})`, s);
+    if (t.ok) await ux(me.ap < 1 ? 'room-tap-no-ap' : 'room-tap-no-move', `Tapping the room ${to} did not offer a move (AP ${me.ap}; confirm: ${c.open ? c.text : 'none'}; toast: "${c.toast}"; events ${c.ev.join(' ')}; busy ${c.busy})`, s);
     await page.evaluate(() => { document.getElementById('btn-confirm-cancel')?.click(); });
     fallback(`__game.moveToRoom(${to})`, 'tap did not offer Move');
     const plan = await page.evaluate(to => { const p = window.__game.moveToRoom(to); return { ok: p.ok, reason: p.reason }; }, to);
@@ -1123,6 +1104,9 @@ async function moveThrough(s, door, to, why) {
   if (me2.room !== to) { await violation('high', 'move-wrong-room', `After moving ${me.room} → ${to} the guest is in ${me2.room}`, after); return true; }
   cur.stats.moves++;
   if (me2.ap !== me.ap - 1) await violation('high', 'move-cost', `Moving cost ${me.ap - me2.ap} AP (${me.ap} → ${me2.ap})`, after);
+  // Guests stand in the middle of their room (or round it, when others stand there).
+  const mv = after.movers[me.i];
+  if (Math.hypot(mv.x - dest.center[0], mv.z - dest.center[1]) > 2.1) await violation('medium', 'not-in-middle', `${me.name} stopped ${Math.hypot(mv.x - dest.center[0], mv.z - dest.center[1]).toFixed(2)} m from the middle of ${to}`, after);
   const meetingNow = after.meeting.open || (after.handoff.open && after.handoff.kind === 'pick');
   if (expectMeeting && !meetingNow) await violation('high', 'meeting-not-forced', `${me.name} walked into ${to} with ${unmet.map(q => q.name).join(', ')} (not met there this round) and no meeting started`, after);
   if (!expectMeeting && after.meeting.open) await violation('high', 'meeting-unexpected', `A meeting started in ${to} (${dest.safe ? 'a safe zone' : 'already met / nobody there'}): ${after.meeting.title}`, after);
@@ -1135,11 +1119,13 @@ async function doSearch(s, expectRefusal = false) {
   act(`tap search icon (${s.spot.mode}) in ${me.room}`);
   const before = me.ap;
   const ok = await tapVisiblePart('#search-spot', 'search icon');
-  // Walk to the furniture, then a private reveal (or a refusal toast).
-  const done = await afterWait(`(() => { const g = window.__game; return g.handoffOpen() || (!g.searchPending() && !g.activeMover().walking && g.activeMover().path.length === 0 && !document.getElementById('toast').hidden); })()`, 12000);
+  const at = s.movers[me.i];
+  // A private reveal (or a refusal toast): the guest searches from where they stand.
+  const done = await afterWait(`(() => { const g = window.__game; return g.handoffOpen() || !document.getElementById('toast').hidden; })()`, 12000);
   await frames(2);
   const after = await page.evaluate(SNAP);
   const me2 = after.players[after.active];
+  if (Math.hypot(after.movers[me.i].x - at.x, after.movers[me.i].z - at.z) > 0.05) await violation('medium', 'search-walked', `${me.name} moved to search (searching is done from where you stand)`, after);
   if (expectRefusal || s.spot.mode !== 'live') {
     if (me2.ap !== before) await violation('high', 'search-refused-cost', `A refused search (${s.spot.mode}) cost AP`, after);
     return false;
@@ -1221,7 +1207,7 @@ async function roomJob(s, expect) {
   }
   cur.stats.jobs[job.job] = (cur.stats.jobs[job.job] || 0) + 1;
   if (me2.ap !== me.ap - 1) await violation('high', `job-cost-${job.job}`, `${job.job} cost ${me.ap - me2.ap} AP`, a);
-  if (job.job === 'infirmary' && me2.health !== Math.min(3, me.health + 2)) await violation('high', 'infirmary-heal', `Infirmary: health ${me.health} → ${me2.health}`, a);
+  if (job.job === 'infirmary' && me2.health !== Math.min(s.maxHealth, me.health + 2)) await violation('high', 'infirmary-heal', `Infirmary: health ${me.health} → ${me2.health}`, a);
   if (job.job === 'switchboard') {
     const n = a.players.filter(p => p.alive && p.possessed).length;
     if (!a.notice.open) await violation('medium', 'switchboard-no-notice', 'Switchboard used but no public notice', a);
@@ -1239,18 +1225,17 @@ async function voluntaryTrade(s) {
   return true;
 }
 
+// Tap the guest's own room: nothing moves and nothing is spent (there is no walking about inside a room).
 async function tapFloor(s) {
   const me = s.players[s.active];
-  const room = roomById(s, me.room);
-  const x = room.center[0] + (rng() - 0.5) * 5, z = room.center[1] + (rng() - 0.5) * 5;
-  act('tap the floor (reposition)');
-  const t = await tapGround(x, z, 'the floor');
+  act('tap their own room');
+  const t = await tapWhere({ room: me.room }, 'their own room');
   if (!t.ok) return false;
-  await afterWait(`(() => { const m = window.__game.activeMover(); return !m.walking && m.path.length === 0; })()`, 6000);
-  await frames(2);
+  await frames(3);
   const a = await page.evaluate(SNAP);
-  if (a.players[a.active].ap !== me.ap && !a.meeting.open && !a.handoff.open) await violation('high', 'reposition-cost', `Repositioning inside ${me.room} changed AP ${me.ap} → ${a.players[a.active].ap}`, a);
-  if (a.confirm.open) { await tapSel('#btn-confirm-cancel', 'Cancel'); }
+  if (a.players[a.active].ap !== me.ap && !a.meeting.open && !a.handoff.open) await violation('high', 'own-room-cost', `Tapping their own room (${me.room}) changed AP ${me.ap} → ${a.players[a.active].ap}`, a);
+  if (a.walking || Math.hypot(a.movers[me.i].x - s.movers[me.i].x, a.movers[me.i].z - s.movers[me.i].z) > 0.05) await violation('medium', 'own-room-walk', `Tapping their own room moved ${me.name}`, a);
+  if (a.confirm.open) { await violation('medium', 'own-room-asked', `Tapping their own room asked "${a.confirm.text}"`, a); await tapSel('#btn-confirm-cancel', 'Cancel'); }
   return true;
 }
 
@@ -1451,7 +1436,7 @@ async function restartCheck() {
   const bad = [];
   if (s.end.open) bad.push('end screen still up');
   if (s.round !== 1 || s.turn !== 1) bad.push(`round ${s.round} turn ${s.turn}`);
-  if (s.players.some(p => !p.alive || p.health !== 3 || p.ap !== 4 || p.room !== s.rooms[0].id)) bad.push('guests not reset');
+  if (s.players.some(p => !p.alive || p.health !== s.maxHealth || p.ap !== 4 || p.room !== s.rooms[0].id)) bad.push('guests not reset');
   if (s.players.filter(p => p.possessed).length !== 1) bad.push(`${s.players.filter(p => p.possessed).length} possessed`);
   if (s.rooms.length !== 1) bad.push(`${s.rooms.length} rooms`);
   if (!(s.handoff.open && s.handoff.kind === 'pass' && /Secret roles/.test(s.handoff.kicker))) bad.push(`first screen is ${s.handoff.kind} "${s.handoff.kicker}"`);

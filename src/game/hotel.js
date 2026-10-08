@@ -345,6 +345,28 @@ export function stackDeck(floor, tileId) {
 // Closed doors that can still be opened.
 export const openDoors = floor => floor.frontier.filter(d => !d.jammed);
 
+// The tile cell [i, j] a ground point falls in (the lobby is cell 0, 0).
+export const cellOf = (floor, x, z) => [Math.floor(x / floor.tileSize + 0.5), Math.floor(z / floor.tileSize + 0.5)];
+
+// The fogged, unknown rooms (docs/GAME_RULES.md > Doors and exploring): every empty cell that at least
+// one closed door that can still be opened leads to — ONE entry per cell, however many doors lead
+// there. Map key 'i,j' -> { key, cell, center: [x, z], doors: [closed doors into it] }.
+export function fogCells(floor) {
+  const cells = new Map();
+  for (const d of floor.frontier) {
+    if (d.jammed) continue;
+    const k = key(d.cell[0], d.cell[1]);
+    if (floor.cells.has(k)) continue;           // (never: placing a room removes the doors into it)
+    let c = cells.get(k);
+    if (!c) {
+      c = { key: k, cell: [d.cell[0], d.cell[1]], center: [d.cell[0] * floor.tileSize, d.cell[1] * floor.tileSize], doors: [] };
+      cells.set(k, c);
+    }
+    c.doors.push(d);
+  }
+  return cells;
+}
+
 // Tests and debugging only: open closed doors until tile `tileId` is on the board — next to room
 // `nextTo` if given — putting it on top of the deck wherever it fits. Returns the rooms placed (the
 // caller reveals them, and locks the locked ones, as the game would).

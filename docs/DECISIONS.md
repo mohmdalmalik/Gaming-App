@@ -961,3 +961,103 @@ Target: `docs/art-reference.jpg` (style, palette and finish; not its layout or i
   turn). In the online game, where each player has their own device, nothing may show or hint at a role, a possession or a
   hand to any other player.
 - **Practice** deals the starting Lantern too (owner-approved): start with 1, find 2 more.
+
+
+## Owner-approved (7 Oct 2026): 4 health, 2 Possession cards, the chain
+- `rules.maxHealth` 3 → 4 and `rules.possessionSupply` 3 → 2 (src/data/rules.js). Everything reads them: the
+  engine, the health bars (four fit the panel at 1024 px), the strip's hearts, the souls count, the
+  balance simulator (≈31% clean wins, 6 players, mixed table).
+- The chain needs no engine change: a guest who is possessed already keeps the card that possessed them
+  (`resolveTrade`), a Lantern block discards both, a death takes the card out of the game. The private note
+  now says so ("…and you keep that card: one try to possess someone else in a trade").
+
+## Tap a room, not a door; no walking about inside a room (Oct 2026)
+- **Rule (docs/GAME_RULES.md > Turn, Doors and exploring):** a guest always stands in the middle of their
+  room; the player acts by tapping rooms and furniture. The free reposition, the walk to the search spot
+  and the gold door rings are gone.
+- **Fogged rooms** (`src/render/fog.js`). Every empty cell that a closed, unjammed door leads to gets ONE
+  fog room (`fogCells(floor)` in src/game/hotel.js — several doors can lead into one cell). It is a few
+  stacked see-through planes per cell in ONE `InstancedMesh` with a small `ShaderMaterial` (a 128² noise
+  texture made once, drifting slowly; per-instance shown/explorable/layer/seed attributes), so all the
+  fog is one draw call. Fog beyond the doors of the active guest's room is brighter, with a breathing gold
+  edge and an HTML "Explore · 1 AP" tag (pointer-events none); elsewhere it is dimmer. When a door opens
+  its fog fades out (`cfg.fog.fade`) as the room rises; a new match's fog is simply there.
+- **What a tap means** (`tapTargetAt` in main.js): a ray from the camera is tested against the ground,
+  every revealed room's walls at their CURRENT (cutaway) height and its furniture boxes — analytically,
+  no meshes — and the nearest hit wins: another room's wall or furniture means that room; the floor means
+  the room it lies in (`roomAt`), or the fog room of that cell. The walls of the guest's own room are
+  skipped (a tap there means what lies beyond), and its search-spot furniture means "search". So it works
+  at every turn of the view and with the cutaway, and a tap on a tall far wall never lands on the floor
+  hidden behind it. `__game.tapPointFor({ room } | { fog })` finds an on-canvas point for the tests.
+- **Fog → open at once** (1 AP, `openDoor`, no confirm — the owner's flow); a fog room not next to your
+  room: "Walk to the room next to it first." **Room → confirm → walk.** `roomRoute` (src/game/moves.js,
+  pure) finds the FEWEST-rooms route through passable doorways (BFS; it says why there is none:
+  locked / barricaded / no route); `planRoomMove` paths only through those rooms to the destination's
+  standing spot and charges as before (`canAffordRoute`, one move per room entered — the engine still
+  charges each crossing as it happens). Entering a room on the way that holds a guest not met there this
+  round stops the walk there for the meeting: `planRoomMove` itself (pure, reusable by a server) returns
+  `stop` (the first room on the route with a guest to meet — `encountersIn` in state.js; safe zones and
+  guests already met there this round never stop it; nor does practice), `meet`, and the cost only up to
+  the stop; the walk ends on that room's standing spot and the confirm says so up front.
+- **Standing spots** are data (`hotel.standingSpots`, src/data/hotel.js: the middle, a ring 1.4 m out
+  (four sides, then the diagonals at ≈2.2 m), then an outer ring at 2.85 m — all at least 1.4 m apart, so
+  six guests in one room never hide one another); `standingSlot` takes the first free one: not within
+  1 m of a guest or a body, and the whole figure clear of walls and furniture (`moves.standable`, the
+  same test tests/logic-check.mjs runs on every tile in every orientation). The lobby's start spots are
+  the first six. A walk ends exactly on its spot. The active guest's marker ring and arrow draw over
+  everything (no depth test), so they are always visible among other guests.
+- **Search in place**: the magnifier (or tapping its furniture) searches at once; the guest turns to face
+  it. `searchPending()` stays as a hook that always says false (old scripts).
+- **Taps while walking**: a tap on a ROOM is kept and offered (Move / Cancel) on arrival; a tap on fog or the
+  search spot is NOT kept (each spends an action at once, after the player has moved on): it says
+  "Wait until you arrive." When the turn clock runs out mid-walk, a guest still in the room the walk
+  started from finishes the step into the next room (that move charged as they cross, like any move) and
+  stands on its spot; one already in a room on the way stops on that room's spot (nothing more is
+  spent). Nobody ends a turn in a doorway or off a standing spot.
+- **A dead zone round the interface** (`inDeadZone` in main.js): a tap on the 3D view within 18 px of any
+  showing piece of interface — the top strip, room name and round, the panel, the WHOLE hand-fan box, the
+  buttons, End turn, the Move/Cancel bar, a toast, the search icon — does nothing. A finger that misses a
+  button by a few pixels must not open a door (which costs an action with no question).
+- **Your own door jammed**: tapping the fog behind it says "The door is jammed shut — there is no way
+  through here." even when another room's door into that fog is fine.
+- **After a door opens** the view eases (`rig.showRooms`, `cfg.camera.showMargin`) so the guest's room and
+  the new room are both in view, guest included; then each room next door the guest can walk into right
+  now carries a quiet "Go · 1 AP" tag (`src/ui/goTags.js`), lighter than the gold "Explore · 1 AP";
+  hidden while the Move/Cancel bar, a meeting or a private screen is up, and when zoomed far out (past
+  `tagsFrom`, where the guests' name tags take over).
+- **Doors**: no rings; closed doors of the active guest's room keep a soft threshold glow (dimmer than
+  before) linking each to its brighter fog. Padlocks, barricades and swinging leaves are unchanged.
+- `cfg.player.speed` 2.0 → 2.5 m/s (rooms only now; 8 m ≈ 3 s), placeholder stride frequency to match.
+
+## Camera: see the whole hotel (Oct 2026)
+- **Zoom out to fit** (`src/camera.js` `fitDistance`): the zoom-out limit is the distance at which every
+  revealed room — the convex hull of the rooms' corners, floor and wall tops — fits inside the part of the
+  screen the interface leaves free (`cfg.camera.fitMargin`), for the current turn of the view and screen
+  shape; never less than `maxDistance` (26). Perspective makes the near end look bigger, so for each
+  distance tried the aim slides (bisection) until the rooms sit evenly in that space; the result is cached
+  until the rooms, the turn or the aspect change (≈ a few ms once). Zooming OUT glides the view toward that
+  overview centre, so at the limit everything is in view; zooming in keeps the view where it is. The far
+  plane grows with the distance.
+- **One limit for every turn of the view**: the limit is the widest of the four turns, so rotating while
+  fully zoomed out never snaps the zoom; the view glides to that turn's overview centre instead.
+- **Free pan, no drift**: a drag (one finger now too — a tap is still anything under 10 px; the drag pans
+  from where the finger first touched, so the first 10 px are not lost) pans; the middle of the screen
+  (the aim, with its lookahead) may go anywhere within R = `panMargin` + 0.15 × (distance − 16) of a
+  revealed room (1.5 m at the standard zoom), or to the overview centre when zoomed well out — so a
+  revealed room is always on screen and the hotel can never be dragged away. Nothing pulls it back. `rig.recentre({ zoom })` eases back to the guest: on a new turn (instantly, standard
+  zoom), a confirmed move or an opened door (keeps the zoom), a meeting, and the ⌖ "centre on me" button
+  (`#btn-centre`, beside the rotate buttons, standard zoom).
+- **Far out, guests stay findable**: past `cfg.camera.tagsFrom` (34 m) each room with guests in it
+  carries ONE small HTML tag naming them in their colours ("Victor · Eleanor +4", the active guest
+  first and the tag in brass when they are in it; `src/ui/guestTags.js`) — no draw calls.
+- **One tag layer** (`src/ui/screenTags.js`) for every tag over the view (Explore, Go, guests): it sits
+  BELOW the interface (`#view` is its own stacking context under `#hud`), keeps each tag whole inside the
+  screen, and hides a tag for as long as it would overlap any showing interface or a more important tag
+  (the order they are placed in: the active guest's name when zoomed far out — they can always be
+  found — then Explore, Go, the other guests); a tag that would clash with another first tries one
+  tag-height higher, then lower. Cheap: positions are written only when they
+  change, a tag is measured only when its words change, the interface's boxes are re-read every 4th frame
+  and the view's size is cached until a resize.
+- **The path preview** leaves out the dots that would run under the Move/Cancel bar.
+- **Cost**: a 19-room hotel seen whole is ≈370 draw calls / 440k triangles in the test browser (baked
+  tiles are a handful of draws each, all the fog one); the lobby view is unchanged apart from the fog's one.

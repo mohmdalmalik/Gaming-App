@@ -1,6 +1,7 @@
 // The search icon: a brass magnifier badge floating just above the piece of furniture that holds the
 // room's search spot (the one flagged `search: true` in src/data/hotel.js). It is how a guest
-// searches — there is no Search button. Tapping it asks main.js to walk there and search.
+// searches — there is no Search button. Tapping it asks main.js to search: the guest searches from
+// where they stand, in the middle of the room (docs/GAME_RULES.md > Turn), and only turns to face it.
 //
 // It is one DOM button positioned over the canvas: crisp at any size and easy to tap. Each frame
 // only its transform is written (and only when it moved); its look changes only when its state does.
@@ -14,21 +15,20 @@
 //
 // Where it sits: on the furniture — the badge's foot rests on the piece's room-facing edge, at its top
 // (or at chest height on a tall piece). It never covers the interface: the top bar, the player panel,
-// the hand, the rotate / Map / End turn / room buttons, the Move-Open-Cancel bar, a toast, the path
-// tag or a doorway ring. If its spot is taken (or the furniture is off the screen), it moves to the
+// the hand, the rotate / centre / Map / End turn / room buttons, the Move-Cancel bar, a toast, the
+// path tag or an "Explore" tag over a fogged room. If its spot is taken (or the furniture is off the screen), it moves to the
 // nearest clear place — kept whole on screen, caption included — and a small brass arrow on the badge
 // points at the furniture. If there is no clear place at all, it hides until there is.
 import * as THREE from 'three';
 import { canSearch, searchLeft } from '../game/actions.js';
 import { searchSpotOf } from '../game/hotel.js';
-import { config } from '../config.js';
 import { xraySpot } from '../render/xray.js';
 
 const TALL = 1.1;             // on a piece taller than this the icon sits on its front, at this height
 const LIFT = 0.06;            // metres above that point
 // Parts of the interface the icon must stay clear of (whichever are showing).
 const HUD = ['.hud-top-left', '.hud-top-center', '.hud-top-right', '#player-panel', '.hud-bottom-right',
-  '#btn-room', '#btn-trade', '#btn-end-turn', '#confirm-bar', '#toast', '.path-label', '#hand-fan .fan-card'];
+  '#btn-room', '#btn-trade', '#btn-end-turn', '#confirm-bar', '#toast', '.path-label', '.fog-label', '#hand-fan .fan-card'];
 const MAGNIFIER = `<svg viewBox="0 0 48 48" aria-hidden="true" class="ss-glass">
   <circle cx="20" cy="20" r="11.5" fill="rgba(255,248,230,0.35)" stroke="currentColor" stroke-width="4.2"/>
   <path d="M14.5 16.5a7 7 0 0 1 5-4.2" fill="none" stroke="#fffaf0" stroke-width="2.4" stroke-linecap="round" opacity="0.9"/>
@@ -73,8 +73,8 @@ export function createSearchSpot(doc, { camera, container, floor, state, onTap }
   };
   window.addEventListener('resize', measure);
 
-  // The interface on screen right now, plus the doorway rings of the guest's room.
-  function collect(room) {
+  // The interface on screen right now.
+  function collect() {
     blocked = [];
     const cr = container.getBoundingClientRect();
     for (const sel of HUD) {
@@ -83,21 +83,6 @@ export function createSearchSpot(doc, { camera, container, floor, state, onTap }
         const r = e.getBoundingClientRect();
         if (r.width && r.height) blocked.push({ l: r.left - cr.left - 6, r: r.right - cr.left + 6, t: r.top - cr.top - 6, b: r.bottom - cr.top + 6 });
       }
-    }
-    const t = config.walls.thickness, inset = t + 0.62;
-    for (const d of [...(room.doorways || []), ...(room.frontier || [])]) {
-      const along = d.axis === 'x';
-      const sx = along ? 0 : Math.sign(room.center[0] - d.center[0]) || 1;
-      const sz = along ? Math.sign(room.center[1] - d.center[1]) || 1 : 0;
-      const x = d.center[0] + sx * inset, z = d.center[1] + sz * inset;
-      let l = Infinity, rr = -Infinity, tt = Infinity, bb = -Infinity;
-      for (const [dx, dz] of [[-0.6, 0], [0.6, 0], [0, -0.6], [0, 0.6]]) {
-        v.set(x + dx, 0, z + dz).project(camera);
-        if (v.z > 1) continue;
-        const px = (v.x + 1) / 2 * width, py = (1 - v.y) / 2 * height;
-        l = Math.min(l, px); rr = Math.max(rr, px); tt = Math.min(tt, py); bb = Math.max(bb, py);
-      }
-      if (l < rr) blocked.push({ l, r: rr, t: tt, b: bb });
     }
   }
   const free = (x, y) => {
@@ -168,7 +153,7 @@ export function createSearchSpot(doc, { camera, container, floor, state, onTap }
       const px = behind ? width / 2 : (v.x + 1) / 2 * width, py = behind ? height : (1 - v.y) / 2 * height;
       const wantX = Math.round(px), wantY = Math.round(py - 34);
       const moved = Math.abs(wantX - ax) > 1 || Math.abs(wantY - ay) > 1;
-      if (frame++ % 4 === 0) collect(room);
+      if (frame++ % 4 === 0) collect();
       else if (!moved) return;
       ax = wantX; ay = wantY;
       const at = place(wantX, wantY);

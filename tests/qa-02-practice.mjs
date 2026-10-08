@@ -27,7 +27,7 @@ const decide = () => game(() => {
   if (key && lockedNext) return { a: 'unlock', id: key.id, room: lockedNext };
   if (searchable(room) && g.searchSpot().mode === 'live') return { a: 'search' };
   const openable = room.frontier.filter(d => !d.jammed);
-  if (openable.length && !(lan >= 3 && f.roomList.some(r => r.isExit))) { const b = g.doorways.views.get(openable[0].id)?.blink?.position; return { a: 'open', id: openable[0].id, center: b ? [b.x, b.z] : openable[0].center }; }
+  if (openable.length && !(lan >= 3 && f.roomList.some(r => r.isExit))) return { a: 'open', id: openable[0].id, where: { fog: `${openable[0].cell[0]},${openable[0].cell[1]}` } };
   // BFS to a goal room
   const exitKnown = f.roomList.some(r => r.isExit);
   const goal = r => (lan >= 3 && exitKnown ? r.isExit : (searchable(r) || r.frontier.some(d => !d.jammed)));
@@ -44,8 +44,7 @@ const decide = () => game(() => {
   if (!hit && lan >= 3) return { a: 'stuck', why: 'no path to exit / exit not found', rooms: f.roomList.length };
   if (!hit) return { a: 'stuck', why: `nothing left to explore with ${lan} lanterns`, rooms: f.roomList.length, locked: [...s.lockedRooms], deck: s.drawPile.length };
   let step = hit; while (prev.get(step) !== room.id) step = prev.get(step);
-  const door = room.doorways.find(d => d.a === step || d.b === step);
-  const bl = g.doorways.views.get(door.id)?.blink?.position; return { a: 'move', to: step, center: bl && g.doorways.views.get(door.id).blink.visible ? [bl.x, bl.z] : door.center };
+  return { a: 'move', to: step, where: { room: step } };
 });
 
 async function handlePrompts(seed) {
@@ -66,11 +65,11 @@ async function handlePrompts(seed) {
   note(seed, 'prompt loop did not clear after 12 steps');
 }
 
-// Tap a ground point through the real canvas; returns false if a HUD element sits on top of it.
-async function tapGround(x, z) {
-  const pt = await game(([x, z]) => window.__game.groundToScreen(x, z), [x, z]);
-  const top = await page.evaluate(({ x, y }) => { const el = document.elementFromPoint(x, y); if (!el) return 'none'; if (el.tagName === 'CANVAS') return 'canvas'; const c = el.closest('[id]'); return (el.tagName + '.' + (typeof el.className === 'string' ? el.className : '') + ' in #' + (c ? c.id : '?')); }, pt);
-  if (top !== 'canvas') return { ok: false, top, pt };
+// Tap a room ({ room }) or a fogged room ({ fog }) through the real canvas, somewhere on it that is not
+// under the interface; returns { ok: false } if there is no such spot.
+async function tapWhere(where) {
+  const pt = await game(w => window.__game.tapPointFor(w), where);
+  if (!pt) return { ok: false, top: 'no free spot', pt: { x: NaN, y: NaN } };
   if (h.vp === 'desk') await page.mouse.click(pt.x, pt.y); else await page.touchscreen.tap(pt.x, pt.y);
   await page.waitForTimeout(90);
   return { ok: true, pt };
@@ -113,15 +112,17 @@ for (let m = 0; m < COUNT; m++) {
     }
     if (d.a === 'open' || d.a === 'move') {
       await h.snapCam();
-      const r = await tapGround(d.center[0], d.center[1]);
+      const r = await tapWhere(d.where);
       let viaUI = false;
-      if (r.ok && await h.visible('#confirm-bar')) {
+      if (r.ok && d.a === 'open') {
+        viaUI = true;   // a fogged room opens at once, no question
+      } else if (r.ok && await h.visible('#confirm-bar')) {
         const onTop = await page.evaluate(() => { const b = document.getElementById('btn-confirm-move').getBoundingClientRect(); const el = document.elementFromPoint(b.left + b.width / 2, b.top + b.height / 2); return el && el.closest('#search-spot') ? 'search-spot' : null; });
         if (onTop) { note(seed, 'SEARCH ICON COVERS the Move/Open confirm button'); if (!global.__coverShot) { global.__coverShot = 1; await h.shot(`p-${seed}-icon-over-confirm`); } }
         await page.$eval('#btn-confirm-move', b => b.click()); await page.waitForTimeout(80); viaUI = true;
       } else {
         covered++;
-        if (covered <= 3) note(seed, `door ring for ${d.a} not tappable (covered by "${r.top}" at ${Math.round(r.pt.x)},${Math.round(r.pt.y)}); used hook`);
+        if (covered <= 3) note(seed, `room for ${d.a} not tappable (${r.top}); used hook`);
         if (d.a === 'open') await game(id => window.__game.openDoor(id), d.id);
         else await game(to => window.__game.moveToRoom(to), d.to);
       }

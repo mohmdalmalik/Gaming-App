@@ -77,7 +77,8 @@ export function helpers(page) {
     setHand: (index, cards) => page.evaluate(({ index, cards }) => { const g = window.__game; g.state.players[index].hand = cards; g.refresh(); }, { index, cards }),
     async searchHere() {
       await page.click('#search-spot');
-      await page.waitForFunction(() => !window.__game.searchPending() && !window.__game.activeMover().walking && window.__game.activeMover().path.length === 0, null, { timeout: 40000, polling: 50 }).catch(() => {});
+      // (the guest searches from where they stand: wait for the reveal or a refusal)
+      await page.waitForFunction(() => window.__game.handoffOpen() || !document.getElementById('toast').hidden, null, { timeout: 40000, polling: 50 }).catch(() => {});
       await page.waitForTimeout(100);
     },
     async intoTurn() {

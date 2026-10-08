@@ -20,8 +20,9 @@ list). Two ways to play the same rules, chosen on the start screen:
   explore, find 2 more by searching (dark rooms need a Flashlight, two rooms are locked), and escape
   through the Fire Exit.
 - **Hot-seat — `?mode=hotseat&players=6`.** Four to six people passing **one device**: one hidden
-  Possessor with three Possession cards, private role screens, forced meetings with Trade or
-  Attack, trades chosen in private on the passed device, health and weapons, Lanterns that block
+  Possessor with two Possession cards (a guest they possess keeps the card and gets one try with it),
+  private role screens, forced meetings with Trade or Attack, trades chosen in private on the passed
+  device, 4 health and weapons, Lanterns that block
   possession (and are used up doing it), three Lanterns to escape, private search results, a
   45-second turn clock, and a dawn deadline: if nobody has escaped when round 8 ends, the hotel
   wins. A testing tool for the real online game.
@@ -66,15 +67,26 @@ readout at the top left (below the room name), for measuring speed on the iPad.
 - **The hotel** — a new random hotel every match. You start in the lobby with 3 or 4 closed doors;
   rooms are tiles from a shuffled room deck, placed as doors are opened. The Fire Exit is one of the
   last five tiles.
-- **Open a door** (1 AP) — tap a closed door's ring, then **Open**. The room behind it appears (it is
-  empty, so nothing happens there yet); you stay where you are.
-- **Move** (1 AP) — tap the ring of an open doorway, then **Move**. Tapping empty floor in your room
-  repositions for free. A locked room says so; a Master Key or Lock Pick (tap it in your hand) opens
+- **Your guest stands in the middle of their room** — there is no walking about inside a room; you
+  act by tapping rooms and furniture.
+- **Open a door** (1 AP) — beyond every closed door lies a fogged, unknown room; the ones next to your
+  room glow, with an "Explore · 1 AP" tag. Tap one and its door opens at once (no question): the room
+  behind it appears (it is empty, so nothing happens there yet); you stay where you are, and the view
+  eases so both rooms are in view. Rooms next door you can walk into now carry a quiet "Go · 1 AP" tag.
+  A fogged room further off says "Walk to the room next to it first."
+- **Move** (1 AP per room) — tap any revealed room (anywhere on it): a dotted path, an outline round it
+  and a "Move · N AP" tag show the walk, and **Move** confirms it. The guest walks there by the fewest
+  rooms and stands in its middle (round it when others are there). Walking into a room with a guest you
+  have not met there this round stops the walk there for the meeting. Tapping your own room does
+  nothing. A room tapped while walking is offered when you arrive (a fogged room or the search icon
+  tapped while walking says "Wait until you arrive."). A tap just beside a button, the panel or the
+  hand does nothing (an 18 px margin), so a missed button never opens a door. A locked room says so; a Master Key or Lock Pick (tap it in your hand) opens
   its one door from next door, until the end of your turn — then it locks again (the map shows 🔓 while
   it is open). A guest inside can always walk out; the door stays locked behind them.
 - **Search** (1 AP) — there is no Search button: a room that can still be searched shows a pulsing
-  brass magnifier over its search spot (the drawer, the shelves, the trolley…). Tap it and the guest
-  walks up to that furniture and searches; the card(s) found are shown large, then go into the hand.
+  brass magnifier over its search spot (the drawer, the shelves, the trolley…). Tap it (or the
+  furniture itself) and the guest searches it from where they stand, turning to face it; the card(s)
+  found are shown large, then go into the hand.
   It takes anything lying in the room (a dead guest's cards); otherwise draws one card, once per room
   (two in a Linen Store) — once searched, the icon is gone. Dark rooms need a Flashlight in hand (the
   icon is dimmed with a flashlight mark and says so when tapped); with no actions left it is dimmed
@@ -113,8 +125,12 @@ readout at the top left (below the room name), for measuring speed on the iPad.
 - **Landscape only** — in portrait (or a window under ~900 px wide) a card asks you to turn the iPad
   sideways; the turn clock waits meanwhile.
 
-Controls (camera): pinch / wheel to zoom, two-finger or right-drag to pan, ↺ ↻ to rotate (90° a
-step; the view stays corner-on), the map button (bottom-right) for the 2D map.
+Controls (camera): pinch / wheel to zoom — out as far as it takes to see every revealed room at once
+(the limit grows with the hotel; zoomed far out each room with guests carries one name tag) — and drag (one finger,
+two, or the mouse) to pan anywhere over the revealed hotel. The view stays where you leave it; it comes
+back to the active guest when their turn starts, when they move or open a door, when a meeting starts,
+or with the ⌖ **centre on me** button beside ↺ ↻ (rotate 90° a step; the view stays corner-on). The map
+button (bottom-right) opens the 2D map.
 
 ## Run locally
 
@@ -143,18 +159,23 @@ src/
     cards.js            deck build, seeded shuffle, deal, hand helpers
     state.js            players, turns, locked rooms, barricades, meetings, escape and win checks
     actions.js          search, the deck and discard pile, cards played, trade, attack, death
-    moves.js            plan a walk from a tap
-  render/             Three.js visuals: greybox rooms, doorway cues, characters, cutaway, mood,
+    moves.js            plan a walk to a tapped room (fewest-rooms route, 1 AP per room entered)
+  render/             Three.js visuals: greybox rooms, doors, characters, cutaway, mood,
                       searched-room ticks; bakedRoom.js loads the baked rooms; xray.js fades
                       whatever stands between the camera and the active guest / search spot;
-                      pathPreview.js draws the dotted path + cost tag for a chosen door
-  camera.js input.js player.js discovery.js   camera rig, gestures, movement, tap→plan glue
+                      fog.js the fogged rooms beyond closed doors (+ "Explore · 1 AP" tags);
+                      pathPreview.js the dotted path, outline + cost tag of a move to confirm
+  camera.js input.js player.js discovery.js   camera rig (zoom to fit the hotel, free pan, centre on
+                                               me), gestures, movement, room→walk glue
   hud.js  map.js  overlays.js   HUD + action bar (room job / Escape, Trade, End turn), 2D map, overlays
   ui/
     cards.js                          card tiles, cards shown large, the order a hand is shown in
     handFan.js                        the hand held as a fan of face-up cards (bottom centre)
     hand.js                           the card view: one card large, with Bandage / key / Barricade / … actions
     searchSpot.js                     the search icon over the room's flagged search furniture
+    screenTags.js                     the one layer for tags over the 3D view: under the interface, never over it
+    guestTags.js                      one name tag per room with guests, when zoomed far out
+    goTags.js                         the quiet "Go · 1 AP" tags on rooms next door
     handoff.js                        pass-the-device + every private screen (role, turn, card pick,
                                       result, the found-card reveal)
     souls.js                          the possessed guest's own "Souls to trade: N" count (their private screens,
@@ -217,11 +238,11 @@ Which mode runs is decided by the address: `applyMode()` at the bottom of `src/d
 
 ```
 python3 -m http.server 8123 --bind 127.0.0.1 &
-node tests/rules-check.mjs        # the rules engine against docs/GAME_RULES.md (313 assertions)
+node tests/rules-check.mjs        # the rules engine against docs/GAME_RULES.md (359 assertions)
 node tests/logic-check.mjs        # floor, map topology, grid, pathfinding
 node tests/browser-practice.mjs   # practice mode in a real browser [--screens]
 node tests/browser-hotseat.mjs    # hot-seat in a real browser: roles, private trades, attacks, escape [--screens]
-node tests/browser-lobby.mjs      # the baked starting room, door cues, path preview, camera, draw calls
+node tests/browser-lobby.mjs      # the baked starting room, fog rooms, tap to open / move, camera (big hotel), draw calls
 node tests/autoplay.mjs --url http://127.0.0.1:8123/ --matches 10   # bots play whole hot-seat matches through the real UI (tests/autoplay-report.md)
 node tools/balance/hotseat-sim.mjs 400 6   # 400 six-player matches under the rules as they stand (--before: same bots on the rules before Part 2; --compare: Lantern variants; --cautious)
 node tools/balance/hotseat-sim.mjs --study  # six player personalities (tools/balance/personalities.mjs) + rule proposals, in memory only (tests/personality-report.md)

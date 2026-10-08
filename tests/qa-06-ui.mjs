@@ -16,12 +16,9 @@ await h.load('seed=31337', { pr: 1 });
 await h.begin();
 await page.waitForTimeout(800);
 log('1. lobby', JSON.stringify(await st()));
-// lobby doors: are their rings reachable?
-const doors = await game(() => window.__game.closedDoors().map(d => ({ id: d.id, side: d.side, s: window.__game.groundToScreen(d.center[0], d.center[1]) })));
-for (const d of doors) {
-  const top = await page.evaluate(({ x, y }) => { const el = document.elementFromPoint(x, y); return !el ? 'offscreen' : el.tagName === 'CANVAS' ? 'canvas' : (el.closest('[id]')?.id || el.className); }, d.s);
-  log(`  lobby door ${d.side} ring at ${Math.round(d.s.x)},${Math.round(d.s.y)} -> ${top}`);
-}
+// lobby doors: can the fogged room beyond each be tapped?
+const doors = await game(() => window.__game.closedDoors().map(d => ({ id: d.id, side: d.side, s: window.__game.tapPointFor({ fog: d.fog }) })));
+for (const d of doors) log(`  lobby door ${d.side}: fogged room tappable at ${d.s ? `${Math.round(d.s.x)},${Math.round(d.s.y)}` : 'nowhere'}`);
 await S('01-lobby');
 await audit('lobby');
 
@@ -111,11 +108,10 @@ if (lockedId) {
   const nb = await game(id => [...window.__game.floor.rooms.get(id).neighbours][0], lockedId);
   await h.put(nb, 4); await h.setHand(0, [C('mk', 'masterKey'), C('lp', 'lockPick')]); await h.snapCam(); await page.waitForTimeout(600);
   await S('08-locked-next-door');
-  // tap on the locked doorway ring
-  const dc = await game(({ nb, id }) => { const g = window.__game; const d = g.floor.rooms.get(nb).doorways.find(d => d.a === id || d.b === id); const c = g.roomCenter(nb); const k = 0.7 / Math.hypot(c[0] - d.center[0], c[1] - d.center[1]); return { door: g.groundToScreen(d.center[0], d.center[1]), inside: g.groundToScreen(d.center[0] + (c[0] - d.center[0]) * k, d.center[1] + (c[1] - d.center[1]) * k) }; }, { nb, id: lockedId });
-  const topAt = p => page.evaluate(({ x, y }) => { const el = document.elementFromPoint(x, y); return !el ? 'offscreen' : el.tagName === 'CANVAS' ? 'canvas' : (el.closest('[id]')?.id || el.className); }, p);
-  log('8a. locked door centre', JSON.stringify(dc.door), await topAt(dc.door), 'inside point', JSON.stringify(dc.inside), await topAt(dc.inside));
-  await page.touchscreen.tap(dc.inside.x, dc.inside.y); await page.waitForTimeout(250);
+  // tap the locked room itself
+  const dc = await game(id => window.__game.tapPointFor({ room: id }), lockedId);
+  log('8a. locked room tappable at', JSON.stringify(dc));
+  if (dc) { await page.touchscreen.tap(dc.x, dc.y); await page.waitForTimeout(250); }
   log('8b. tap locked door toast:', await toast(), 'cardview?', await game(() => window.__game.cardViewOpen()));
   if (await game(() => window.__game.cardViewOpen())) await h.tap('#btn-hand-close');
   await S('08-locked-tap');
@@ -207,7 +203,7 @@ const cn = await game(() => { const g = window.__game; g.revealTile('corridorN')
 await h.put('corridorN', 4); await h.snapCam(); await page.waitForTimeout(400);
 s0 = await st();
 await page.dblclick('#search-spot').catch(e => log('dbl search err', e.message.split('\n')[0]));
-await page.waitForFunction(() => !window.__game.searchPending() && !window.__game.activeMover().walking, null, { timeout: 30000 }).catch(() => {});
+await page.waitForFunction(() => window.__game.handoffOpen() || !document.getElementById('toast').hidden, null, { timeout: 30000 }).catch(() => {});
 await page.waitForTimeout(400);
 s1 = await st();
 log('16b. double tap search: ap', s0.ap, '->', s1.ap, 'handoff', await h.kind());
@@ -215,8 +211,8 @@ if (await h.handoffOpen()) await h.tap('#btn-handoff-next');
 // confirm-move double tap
 await h.put('hall', 4); await h.snapCam(); await page.waitForTimeout(300);
 await game(() => { window.__game.state.barricades?.clear?.(); window.__game.refresh(); });
-const dN = await game(id => { const g = window.__game, d = g.floor.rooms.get('hall').doorways.find(d => d.a === id || d.b === id); const b = g.doorways.views.get(d.id)?.blink?.position; return b ? g.groundToScreen(b.x, b.z) : g.groundToScreen(d.center[0], d.center[1]); }, walkTo);
-await page.touchscreen.tap(dN.x, dN.y); await page.waitForTimeout(200);
+const dN = await game(id => window.__game.tapPointFor({ room: id }), walkTo);
+if (dN) { await page.touchscreen.tap(dN.x, dN.y); await page.waitForTimeout(200); }
 log('16c. confirm bar', await h.visible('#confirm-bar'), await page.textContent('#confirm-text'));
 await S('16-confirm-bar');
 s0 = await st();

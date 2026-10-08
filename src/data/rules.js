@@ -41,11 +41,14 @@ export const rules = {
   roundLimit: 8,
 
   // --- Health --------------------------------------------------------------------------------
-  maxHealth: 3,
+  maxHealth: 4,             // APPROVED (7 Oct 2026): 4 health bars (was 3)
   bandageHeal: 1,
 
   // --- Possession ----------------------------------------------------------------------------
-  possessionSupply: 3,      // the Possessed guest starts with this many Possession cards
+  possessionSupply: 2,      // APPROVED (7 Oct 2026): the Possessed guest starts with 2 Possession cards (was 3).
+                            // The chain (docs/GAME_RULES.md > Possession) needs no number: a guest who is
+                            // possessed keeps the card that possessed them (one try with it); a Lantern block
+                            // discards both cards; a guest who dies takes theirs out of the game
 
   // --- Lanterns and escape ------------------------------------------------------------------
   // A clean guest holding this many Lanterns, standing in the Fire Exit, may escape (escapeCost). Every

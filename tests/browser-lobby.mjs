@@ -2,9 +2,10 @@
 // Run (from the repo root, with a static server on 8123):  node tests/browser-lobby.mjs [--url …] [--screens]
 //
 // Checks that the baked lobby model loads and lines up with the game's data, that the cutaway
-// still folds its walls, the doorway cues (threshold glow, light spill, ring), the dotted path and
-// cost tag on a chosen door, the lower default camera and ?camera=classic, the ?stats=1 readout,
-// and records draw calls / triangles for the lobby.
+// still folds its walls, the closed doors with a fogged room beyond each (tap the fog: the door opens),
+// the dotted path, outline and cost tag of a move to a tapped room, the camera (corner-on, zooming out
+// over a big hotel, panning to its far side, "centre on me"), ?camera=classic, the ?stats=1 readout, and
+// records draw calls / triangles for the lobby and for a big hotel seen whole.
 import { chromium } from 'playwright-core';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -139,43 +140,45 @@ check(c.northDown && c.southUp, 'turned round, the north wall folds and the sout
 await game(() => window.__game.rotate(2));
 await turned();
 
-console.log('\n4. doors and their cues');
+console.log('\n4. closed doors, and the fogged rooms beyond them');
 const cues = await game(() => {
   const g = window.__game, vs = [...g.doorways.views.values()].filter(v => v.doorway.room === 'hall');
   return {
     n: vs.length,
-    rings: vs.filter(v => v.blink.visible).length,
-    ringsInside: vs.every(v => Math.abs(v.blink.position.x) < 4 && Math.abs(v.blink.position.z) < 4),
+    noRings: [...g.doorways.views.values()].every(v => !('blink' in v)),
     glows: vs.filter(v => v.glow.visible).length,
     leaves: vs.filter(v => v.leaf && v.leaf.parent).length,
     noPosts: vs.every(v => !('marker' in v) && !('spill' in v)),
+    fog: g.fogCells(), doors: vs.map(v => v.doorway.id),
+    fogDraws: g.fog.mesh.count, fogMeshes: g.view.scene.children.filter(o => o.name === 'fog').length,
   };
 });
 check(cues.n === m.doors, `the lobby's ${cues.n} doorways are closed doors`);
 check(cues.leaves === cues.n, 'each has a door leaf standing in it');
-check(cues.rings === cues.n && cues.ringsInside, 'and a ring on the lobby side: it can be opened');
-check(cues.glows === cues.n, 'a soft glow at each threshold');
+check(cues.noRings, 'no rings on the floor to tap: doors are not what you tap any more');
+check(cues.glows === cues.n, 'a soft glow at the threshold of each door you can open');
 check(cues.noPosts, 'no glowing yellow door blocks');
+check(cues.fog.length === cues.n && cues.doors.every(d => cues.fog.some(f => f.doors.includes(d))) && cues.fog.every(f => f.explorable && f.shown > 0.9),
+  `beyond each door lies a fogged, unknown room (${cues.fog.length}), bright: it can be explored from here`);
+check(cues.fogMeshes === 1 && cues.fogDraws === cues.n * 3, `all the fog is one mesh, one draw call (${cues.fogDraws} see-through layers)`);
+{
+  const tags = await game(() => window.__game.fogLabels());
+  check(tags.length === cues.n && tags.every(t => t.text === 'Explore · 1 AP'), `each fogged room carries an "Explore · 1 AP" tag (${tags.length})`);
+}
 // The hand is a fan of cards along the bottom and searching is an icon over the room's search spot:
-// neither may sit on a door's ring, and the lobby (nothing to search) has neither icon nor button.
+// at every size and every turn of the view, each fogged room can still be tapped somewhere, and a tap
+// there means that fogged room.
 for (const [w, h] of [[1180, 820], [1024, 768], [1366, 1024], [1440, 900]]) {
   await page.setViewportSize({ width: w, height: h });
   await frames(4);
-  const covered = [];
+  const missing = [];
   for (const steps of [0, 1, 2, 3]) {
     if (steps) { await game(() => window.__game.rotate(1)); await turned(); }
-    const free = await game(() => {
-      const g = window.__game;
-      return [...g.doorways.views.values()].filter(v => v.doorway.room === 'hall').map(v => {
-        const p = g.groundToScreen(v.blink.position.x, v.blink.position.z);
-        const el = document.elementFromPoint(p.x, p.y);
-        return p.y > innerHeight || (el && el.tagName === 'CANVAS');
-      });
-    });
-    if (free.length !== cues.n || !free.every(Boolean)) covered.push(steps * 90);
+    const miss = await game(() => window.__game.fogCells().filter(f => f.explorable && !window.__game.tapPointFor({ fog: f.key })).map(f => f.key));
+    if (miss.length) missing.push(`${steps * 90}°: ${miss.join(' ')}`);
   }
   await game(() => window.__game.rotate(1)); await turned();
-  check(!covered.length, `${w}×${h}: at every camera turn the hand fan leaves each door ring free to tap${covered.length ? ` (covered at ${covered.join(', ')}°)` : ''}`);
+  check(!missing.length, `${w}×${h}: at every camera turn each fogged room has a spot free to tap${missing.length ? ` (missing ${missing.join('; ')})` : ''}`);
 }
 await page.setViewportSize({ width: 1180, height: 820 });
 await frames(4);
@@ -183,39 +186,76 @@ check(await game(() => window.__game.fanIds().length) === 4, 'the hand shows as 
 check(!(await page.$('#btn-search')) && await game(() => window.__game.searchSpot().mode === null) && await page.evaluate(() => document.getElementById('search-spot').hidden),
   'no Search button, and no search icon in the lobby: there is nothing to search there');
 
-console.log('\n5. choosing a door: open it, then walk through');
-// where a door's ring is on screen right now
-const ringAt = id => game(i => { const g = window.__game, v = g.doorways.views.get(i); return g.groundToScreen(v.blink.position.x, v.blink.position.z); }, id);
-const closedId = await game(() => window.__game.closedDoors()[0].id);
-await tapDoor(await ringAt(closedId));
+console.log('\n5. tap a fogged room: its door opens; tap the room: walk there');
+// A real tap (headless software rendering can stall long enough that press and release land more than
+// the game's tap window apart — then it is rightly not a tap — so try up to three times).
+async function tapWhere(where, done) {
+  for (let i = 0; i < 3; i++) {
+    const p = await game(w => window.__game.tapPointFor(w), where);
+    if (!p) return false;
+    await page.mouse.click(p.x, p.y);
+    await page.waitForTimeout(250);
+    if (await done()) return true;
+  }
+  return false;
+}
+const fog0 = cues.fog[0];
+const rooms0 = await game(() => window.__game.hotelRooms().length);
+const tapped = await tapWhere({ fog: fog0.key }, () => game(n => window.__game.hotelRooms().length > n, rooms0));
 await frames(4);
-let pv = await game(() => ({ confirm: !document.getElementById('confirm-bar').hidden, text: document.getElementById('confirm-text').textContent, on: window.__game.pathPreview.visible, dots: window.__game.pathPreview.dotCount, label: window.__game.pathPreview.labelText }));
-check(pv.confirm && /Open this door/.test(pv.text), 'tapping the ring of a closed door offers to open it');
-check(pv.label === 'Open · 1 AP' && pv.dots === 0, `the tag says what it costs ("${pv.label}"), with no path: you stay put`);
-await page.click('#btn-confirm-cancel');
-await frames(3);
-check(await game(() => !window.__game.pathPreview.visible && document.querySelector('.path-label').hidden), 'cancelling clears the tag');
-await tapDoor(await ringAt(closedId));
-await page.click('#btn-confirm-move');
-await frames(6);
-const opened = await game(() => ({ rooms: window.__game.hotelRooms(), ap: window.__game.activePlayer().actionPoints, room: window.__game.activePlayer().currentRoom }));
-check(opened.rooms.length === 2 && opened.ap === 3 && opened.room === 'hall', `the door opens for 1 action point, ${opened.rooms[1]} is revealed, and you stay in the lobby`);
+const opened = await game(() => ({ rooms: window.__game.hotelRooms(), ap: window.__game.activePlayer().actionPoints, room: window.__game.activePlayer().currentRoom,
+  bar: !document.getElementById('confirm-bar').hidden, toast: document.getElementById('toast').textContent }));
+check(tapped && opened.rooms.length === 2 && opened.ap === 3 && opened.room === 'hall' && !opened.bar,
+  `tapping a fogged room opens its door at once, no question asked: 1 action point, ${opened.rooms[1]} is revealed, and you stay in the lobby`);
+check(/^The door opens/.test(opened.toast.trim()), `the game says what is there ("${opened.toast.trim()}")`);
 const doorwayId = `hall->${opened.rooms[1]}`;
 await page.waitForTimeout(800); await frames(10);
 check(await game(i => { const v = window.__game.doorways.views.get(i); return v.kind === 'open' && Math.abs(v.leaf.rotation.y) > 1; }, doorwayId), 'its door swings open and stays open');
-await tapDoor(await ringAt(doorwayId));
+check(!(await game(k => window.__game.fogCells().some(f => f.key === k), fog0.key)), 'its fog has cleared: the real room stands there');
+const dest = opened.rooms[1];
+await tapWhere({ room: dest }, () => page.evaluate(() => !document.getElementById('confirm-bar').hidden));
 await frames(4);
-pv = await game(() => ({ confirm: !document.getElementById('confirm-bar').hidden, on: window.__game.pathPreview.visible, dots: window.__game.pathPreview.dotCount, label: window.__game.pathPreview.labelText }));
-check(pv.confirm && pv.on && pv.dots >= 4, `now tapping it offers the move, with a dotted path (${pv.dots} dots)`);
-check(pv.label === 'Move · 1 AP', `and the tag says what it costs ("${pv.label}")`);
+let pv = await game(() => ({ confirm: !document.getElementById('confirm-bar').hidden, text: document.getElementById('confirm-text').textContent, on: window.__game.pathPreview.visible,
+  dots: window.__game.pathPreview.dotCount, label: window.__game.pathPreview.labelText, outline: window.__game.pathPreview.outlined }));
+const destName = await game(id => window.__game.floor.rooms.get(id).name, dest);
+check(pv.confirm && pv.text === `Move to ${destName}?`, `tapping the revealed room (anywhere on it) asks first: "${pv.text}"`);
+check(pv.on && pv.dots >= 4, `with a dotted path (${pv.dots} dots)`);
+check(pv.label === 'Move · 1 AP', `and a tag saying what it costs ("${pv.label}")`);
+const dc = await game(id => window.__game.roomCenter(id), dest);
+check(!!pv.outline && Math.hypot(pv.outline[0] - dc[0], pv.outline[1] - dc[1]) < 0.01, 'and an outline round the room you are about to walk to');
 const tag = await page.evaluate(() => { const r = document.querySelector('.path-label').getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top, w: r.width, vw: innerWidth, vh: innerHeight }; });
 check(tag.w > 40 && tag.x > 0 && tag.x < tag.vw && tag.y > 0 && tag.y < tag.vh, 'the tag is on screen');
+// The dots never run under the Move/Cancel bar: with the view dragged so the middle of the path lies
+// under the bar, the dots there are left out (and come back when the view moves off it).
+{
+  const pts0 = await game(() => window.__game.pathPreview.dotPoints());
+  const mid = pts0[Math.floor(pts0.length / 2)];
+  const bar = await page.evaluate(() => { const b = document.getElementById('confirm-bar').getBoundingClientRect(); return { l: b.left, r: b.right, t: b.top, b: b.bottom }; });
+  const g0 = await game(([x, y]) => window.__game.screenToGround(x, y), [(bar.l + bar.r) / 2, (bar.t + bar.b) / 2]);
+  await game(([dx, dz]) => window.__game.rig.panByWorld(dx, dz), [mid.x - g0[0], mid.z - g0[1]]);
+  await frames(4);
+  const pts1 = await game(() => window.__game.pathPreview.dotPoints());
+  const at = await game(([x, z]) => window.__game.groundToScreen(x, z), [mid.x, mid.z]);
+  const inBar = pts1.filter(q => q.sx > bar.l && q.sx < bar.r && q.sy > bar.t && q.sy < bar.b).length;
+  const crossed = at.x > bar.l && at.x < bar.r && at.y > bar.t - 10 && at.y < bar.b + 10;
+  check(crossed && pts1.length < pts0.length && inBar === 0, `the path's dots never run under the Move/Cancel bar (dragged under it: ${pts0.length} → ${pts1.length} dots, ${inBar} under the bar)`);
+  await game(() => window.__game.centreOnMe());
+  await page.waitForFunction(() => !window.__game.rig.returning, null, { timeout: 30000 });
+  await frames(4);
+  check((await game(() => window.__game.pathPreview.dotCount)) === pts0.length, 'and they come back when the view moves off it');
+}
+await page.click('#btn-confirm-cancel');
+await frames(3);
+check(await game(() => !window.__game.pathPreview.visible && document.querySelector('.path-label').hidden && !window.__game.pathPreview.outlined), 'Cancel clears the preview');
+await tapWhere({ room: dest }, () => page.evaluate(() => !document.getElementById('confirm-bar').hidden));
 await shot('lobby-02-path');
 await page.click('#btn-confirm-move');
 await frames(3);
 check(await game(() => !window.__game.pathPreview.visible), 'confirming clears the preview as the guest sets off');
 await page.waitForFunction(() => !window.__game.activeMover().walking && window.__game.activeMover().path.length === 0, null, { timeout: 40000 });
-check(await game(() => window.__game.activePlayer().currentRoom) === opened.rooms[1], 'the guest walked through into the new room');
+const arrived = await game(() => { const g = window.__game, m = g.activeMover(), p = g.activePlayer(), c = g.roomCenter(p.currentRoom); return { room: p.currentRoom, ap: p.actionPoints, off: Math.hypot(m.x - c[0], m.z - c[1]) }; });
+check(arrived.room === dest && arrived.ap === 2, 'the guest walked through into the new room, for 1 action point');
+check(arrived.off < 0.05, `and stands in its middle (${arrived.off.toFixed(2)} m off)`);
 
 console.log('\n6. camera');
 // the view's own direction: its angle below the horizon, and how far it is turned off the room's axes
@@ -235,6 +275,170 @@ check(l2.turn < 1 && Math.abs(l2.pitch - 42) < 1.5, `?camera=square gives the pr
 await load('camera=classic');
 const l3 = await look();
 check(l3.turn < 1 && Math.abs(l3.pitch - 56) < 1.5, `?camera=classic keeps the old higher angle (${l3.pitch.toFixed(1)}°)`);
+
+console.log('\n6b. looking round a big hotel');
+{
+  await load(`seed=${process.env.LOBBY_SEED || 7}`);
+  for (const t of ['lounge', 'ballroom', 'grandCorridor', 'dining', 'library', 'kitchen', 'corridorE', 'corridorW', 'corridorN', 'corridorS', 'infirmary1', 'infirmary2', 'linenStore1', 'switchboard', 'cornerCorridor', 'storage', 'stairs', 'serviceCorridor']) {
+    await game(id => window.__game.revealTile(id), t);
+  }
+  await dressed(); await frames(6);
+  const cam = () => game(() => { const g = window.__game, m = g.activeMover(); return { d: g.rig.distance, max: g.rig.maxDistance, centre: g.rig.centre, returning: g.rig.returning, guest: [m.x, m.z] }; });
+  const c0 = await cam();
+  // Zoom out with the mouse wheel until it stops.
+  for (let k = 0; k < 40; k++) { await page.mouse.move(590, 420); await page.mouse.wheel(0, 400); await frames(1); }
+  await frames(8);
+  const c1 = await cam();
+  const view = await game(() => {
+    const g = window.__game, cam = g.view.camera, V = cam.position.constructor;
+    const top = document.querySelector('.hud-top-left').getBoundingClientRect().bottom;
+    let off = 0, n = 0, hidden = 0;
+    for (const r of g.floor.roomList) {
+      for (const [x, z] of [[r.min[0], r.min[1]], [r.max[0], r.min[1]], [r.min[0], r.max[1]], [r.max[0], r.max[1]]]) {
+        const v = new V(x, 0, z).project(cam); n++;
+        if (Math.abs(v.x) > 1 || Math.abs(v.y) > 1) off++;
+      }
+      const c = new V(r.center[0], 0, r.center[1]).project(cam);
+      const sx = (c.x + 1) / 2 * innerWidth, sy = (1 - c.y) / 2 * innerHeight;
+      const el = document.elementFromPoint(sx, sy);
+      if (!el || el.tagName !== 'CANVAS') hidden++;
+    }
+    const i = g.view.renderer.info;
+    return { off, n, hidden, rooms: g.floor.roomList.length, calls: i.render.calls, tris: i.render.triangles, top };
+  });
+  check(c1.max > 26 && Math.abs(c1.d - c1.max) < 0.01, `pinch/wheel zooms out until the whole hotel fits (${c1.d.toFixed(1)} m out; the old limit was 26)`);
+  check(view.off === 0 && view.hidden === 0, `all ${view.rooms} revealed rooms are in view at once, none under the interface (${view.off}/${view.n} corners off screen)`);
+  check(view.calls <= 600, `a big hotel seen whole stays within the draw-call budget (${view.calls} draw calls, ${view.tris} triangles)`);
+  console.log(`       big hotel (${view.rooms} rooms) seen whole: ${view.calls} draw calls, ${view.tris} triangles`);
+  await frames(2);
+  const tags = await game(() => window.__game.tags('guest:'));
+  check(tags.length === 1 && /Victor/.test(tags[0].text), `zoomed far out, the guest carries a name tag so they can be found ("${tags[0]?.text}")`);
+  await shot('lobby-03-overview');
+  // One zoom-out limit for all four turns of the view: turning it while zoomed right out never jolts
+  // the zoom, and the whole hotel stays in view.
+  {
+    const ds = [];
+    for (let k = 0; k < 4; k++) {
+      await game(() => window.__game.rotate(1)); await turned();
+      await page.waitForFunction(() => !window.__game.rig.returning, null, { timeout: 30000 });
+      const r = await game(() => {
+        const g = window.__game, cam = g.view.camera, V = cam.position.constructor;
+        let off = 0;
+        for (const q of g.floor.roomList) for (const [x, z] of [[q.min[0], q.min[1]], [q.max[0], q.min[1]], [q.min[0], q.max[1]], [q.max[0], q.max[1]]]) {
+          const v = new V(x, 0, z).project(cam); if (Math.abs(v.x) > 1 || Math.abs(v.y) > 1) off++;
+        }
+        return { d: g.rig.distance, max: g.rig.maxDistance, off };
+      });
+      ds.push(r);
+    }
+    check(ds.every(r => Math.abs(r.d - ds[0].d) < 0.01 && Math.abs(r.max - ds[0].max) < 0.01) && ds.every(r => r.off === 0),
+      `turning the view while zoomed right out keeps the same zoom and the whole hotel in view (${ds.map(r => `${r.d.toFixed(1)} m, ${r.off} off`).join(' / ')})`);
+  }
+  // Pan with a one-finger drag to the room furthest from the guest, a little zoomed in.
+  for (let k = 0; k < 4; k++) { await page.mouse.wheel(0, -300); await frames(1); }
+  const far = await game(() => { const g = window.__game, m = g.activeMover(); return [...g.floor.roomList].sort((a, b) => Math.hypot(b.center[0] - m.x, b.center[1] - m.z) - Math.hypot(a.center[0] - m.x, a.center[1] - m.z))[0]; });
+  const cdp = await page.context().newCDPSession(page);
+  for (let k = 0; k < 12; k++) {
+    const p = await game(([x, z]) => window.__game.groundToScreen(x, z), far.center);
+    const fx = Math.max(80, Math.min(1100, p.x)), fy = Math.max(170, Math.min(620, p.y));
+    if (Math.hypot(fx - 590, fy - 400) < 20) break;
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: fx, y: fy }] });
+    for (let st = 1; st <= 8; st++) await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: fx + (590 - fx) * st / 8, y: fy + (400 - fy) * st / 8 }] });
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+    await frames(2);
+  }
+  const p1 = await game(([x, z]) => window.__game.groundToScreen(x, z), far.center);
+  const c2 = await cam();
+  check(Math.hypot(p1.x - 590, p1.y - 400) < 120, `a one-finger drag pans the view to the far side of the hotel (${far.id} is now mid-screen)`);
+  await page.waitForTimeout(3000); await frames(10);
+  const c3 = await cam();
+  check(Math.hypot(c3.centre[0] - c2.centre[0], c3.centre[1] - c2.centre[1]) < 0.01 && !c3.returning, 'and it stays there: no drifting back to the guest');
+  await shot('lobby-04-far-side');
+  // A one-finger drag moves the floor with the finger from where it first touched: the first few pixels
+  // (before a touch counts as a drag) are not lost.
+  {
+    const [x0, y0] = [520, 380];
+    const g0 = await game(([x, y]) => window.__game.screenToGround(x, y), [x0, y0]);
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: x0, y: y0 }] });
+    for (const [dx, dy] of [[3, 1], [7, 3], [13, 6], [30, 14], [45, 22], [60, 30]]) await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: x0 + dx, y: y0 + dy }] });
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+    await frames(3); await page.waitForTimeout(600); await frames(3);
+    const s1 = await game(([x, z]) => window.__game.groundToScreen(x, z), g0);
+    const miss = Math.hypot(s1.x - (x0 + 60), s1.y - (y0 + 30));
+    check(miss < 4, `a one-finger drag keeps the floor under the finger from the first touch (${miss.toFixed(1)} px off after a 67 px drag)`);
+  }
+  // However hard the view is dragged — fully zoomed in, at the standard zoom, zoomed out — the middle of
+  // the screen stays over a revealed room (within a small margin), so the hotel never leaves the screen.
+  {
+    const res = [];
+    for (const d of [8, 16, 40]) {
+      await game(d => { const g = window.__game; g.rig.zoomBy(g.rig.distance / d); }, d);
+      for (const [dx, dz] of [[60, 0], [-60, 0], [0, 60], [0, -60], [50, 50], [-50, -50], [50, -50], [-50, 50]]) {
+        for (let k = 0; k < 6; k++) await game(([dx, dz]) => window.__game.rig.panByWorld(dx / 6, dz / 6), [dx, dz]);
+        await frames(2);
+        res.push(await game(() => {
+          const g = window.__game, [ax, az] = g.rig.aim, dist = g.rig.distance, R = 1.5 + 0.15 * Math.max(0, dist - 16) + 0.05;
+          const near = g.floor.roomList.some(q => ax >= q.min[0] - R && ax <= q.max[0] + R && az >= q.min[1] - R && az <= q.max[1] + R);
+          // and a revealed room is really on the screen: its nearest point to the middle projects inside it
+          const cam = g.view.camera, V = cam.position.constructor;
+          const seen = g.floor.roomList.some(q => {
+            const x = Math.min(Math.max(ax, q.min[0] + 0.5), q.max[0] - 0.5), z = Math.min(Math.max(az, q.min[1] + 0.5), q.max[1] - 0.5);
+            const v = new V(x, 0, z).project(cam); return Math.abs(v.x) < 0.95 && Math.abs(v.y) < 0.95;
+          });
+          return { d: Math.round(dist), near, seen };
+        }));
+      }
+    }
+    const bad = res.filter(r => !r.near || !r.seen);
+    check(!bad.length, `dragged as far as it goes in 8 directions at 3 zooms, the middle of the screen stays over the revealed hotel and a room stays in view (${res.length - bad.length}/${res.length})`);
+  }
+  await page.click('#btn-centre');
+  await page.waitForFunction(() => !window.__game.rig.returning, null, { timeout: 30000 });
+  const c4 = await cam();
+  check(Math.hypot(c4.centre[0] - c4.guest[0], c4.centre[1] - c4.guest[1]) < 0.05 && Math.abs(c4.d - c0.d) < 0.01, 'the "centre on me" button brings the view back to the guest, at the standard zoom');
+  const btn = await page.evaluate(() => { const r = document.getElementById('btn-centre').getBoundingClientRect(), a = document.getElementById('btn-rotate-right').getBoundingClientRect(); return { w: r.width, h: r.height, beside: Math.abs(r.top - a.top) < 2 && r.left > a.right }; });
+  check(btn.w >= 48 && btn.h >= 48 && btn.beside, `it sits beside the rotate buttons, a ${Math.round(btn.w)}×${Math.round(btn.h)} px touch target`);
+  // Opening a door, moving and a new turn also bring the view back.
+  const spot = await game(() => {
+    const g = window.__game, d = g.floor.frontier.find(x => !x.jammed && !g.state.lockedRooms.has(x.room));
+    if (!d) return null;
+    const p = g.activePlayer(), c = g.roomCenter(d.room);
+    p.currentRoom = d.room; p.actionPoints = 4; g.movers[p.index].reset(c[0], c[1]);
+    g.discovery.refresh(); g.refresh(); g.rig.setFocus(c[0], c[1], true);
+    return { door: d.id, room: d.room, next: [...g.floor.rooms.get(d.room).neighbours].find(n => !g.state.lockedRooms.has(n)) };
+  });
+  check(!!spot, 'found a room with a closed door');
+  if (spot) {
+    await game(() => window.__game.rig.panByWorld(-12, -12));
+    await frames(3);
+    await game(d => window.__game.openDoor(d), spot.door);
+    await page.waitForFunction(() => !window.__game.rig.returning, null, { timeout: 30000 });
+    // The view eases so the guest's room AND the room just revealed are both on screen, guest included.
+    const c5 = await game(({ room }) => {
+      const g = window.__game, cam = g.view.camera, V = cam.position.constructor, W = innerWidth, H = innerHeight;
+      const on = (x, z, y = 0) => { const v = new V(x, y, z).project(cam); return { x: (v.x + 1) / 2 * W, y: (1 - v.y) / 2 * H, in: Math.abs(v.x) <= 1 && Math.abs(v.y) <= 1 }; };
+      const fresh = g.floor.roomList.at(-1);   // the room revealed last
+      const corners = q => [[q.min[0], q.min[1]], [q.max[0], q.min[1]], [q.min[0], q.max[1]], [q.max[0], q.max[1]]];
+      const mine = g.floor.rooms.get(room), m = g.activeMover();
+      return { mine: corners(mine).every(([x, z]) => on(x, z).in), fresh: corners(fresh).every(([x, z]) => on(x, z).in),
+        guest: on(m.x, m.z, 1).in, d: g.rig.distance, freshId: fresh.id };
+    }, spot);
+    check(c5.mine && c5.fresh && c5.guest, `opening a door eases the view so the guest's room and the new room (${c5.freshId}) are both on screen, guest included (${c5.d.toFixed(1)} m)`);
+    await game(() => window.__game.rig.panByWorld(12, -8));
+    await frames(3);
+    await game(n => window.__game.moveToRoom(n), spot.next);
+    await page.waitForFunction(() => !window.__game.activeMover().walking && window.__game.activeMover().path.length === 0 && !window.__game.rig.returning, null, { timeout: 40000 });
+    await frames(30);
+    const c7 = await cam();
+    check(Math.hypot(c7.centre[0] - c7.guest[0], c7.centre[1] - c7.guest[1]) < 0.3, 'and so does a move (the view follows the guest there)');
+  }
+  await game(() => { window.__game.rig.panByWorld(10, -10); window.__game.rig.zoomBy(0.5); });
+  await frames(3);
+  await game(() => window.__game.endTurn());
+  await page.waitForFunction(() => !window.__game.rig.returning, null, { timeout: 30000 });
+  const c6 = await cam();
+  check(Math.hypot(c6.centre[0] - c6.guest[0], c6.centre[1] - c6.guest[1]) < 0.05 && Math.abs(c6.d - c0.d) < 0.01, 'and so does a new turn');
+}
 
 console.log('\n7. performance readout and budget');
 await load('stats=1');

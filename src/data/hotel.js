@@ -71,6 +71,17 @@ export const hotel = {
   lobbyDoorways: [3, 4],
   // The Fire Exit is shuffled into the last this-many tiles of the room deck.
   exitInLast: 5,
+  // Where guests stand in a room (docs/GAME_RULES.md > Turn: a guest stands in the middle of their room,
+  // never walking around in it): metres from the room's centre, in order of preference. A guest walking
+  // in takes the first free spot (its whole footprint clear of walls and furniture, not on or beside
+  // another guest, not on a body), so the first to arrive stands in the very middle. The next four stand
+  // 1.4 m out along the room's axes — in the corner-on view that is to the side of the middle, never in
+  // front of it, so nobody hides the guest in the middle — then the diagonals further out (2.2 m: a
+  // figure there, right in front of the middle, is still clear of the middle guest's feet), then the
+  // outer ring.
+  standingSpots: [[0, 0], [1.4, 0], [-1.4, 0], [0, 1.4], [0, -1.4],
+    [1.55, 1.55], [-1.55, -1.55], [-1.55, 1.55], [1.55, -1.55],
+    [2.85, 0], [-2.85, 0], [0, 2.85], [0, -2.85]],
 
   // The start tile: the dressed lobby (src/data/dressing.js), kept exactly as it was.
   lobby: {
@@ -82,8 +93,9 @@ export const hotel = {
     noTrade: true,          // ...and no trades either (the Fire Exit, also safe, still allows voluntary trades)
     // Warm, cosy landing: index 0 is the ceiling fill, the rest sit by the lamps (dressing.js).
     mood: { color: '#ffe0b0', intensity: 1.55, ambient: 1.05, lights: [[0, 0], [3.4, 2.3], [-3.3, 3.2], [0, -3.2]] },
-    // Where the guests stand at the start (relative to the lobby centre): six spots.
-    startPositions: [[0, 0], [-1.6, -1.2], [1.6, -1.2], [-1.6, 1.4], [1.6, 1.4], [0, 2.2]],
+    // Where the guests stand at the start (relative to the lobby centre): six spots round the middle —
+    // the first six standing spots (standingSpots above).
+    startPositions: [[0, 0], [1.4, 0], [-1.4, 0], [0, 1.4], [0, -1.4], [1.55, 1.55]],
     // Collision footprints of the lobby's furniture (the baked model sits on exactly these).
     furniture: [
       { kind: 'lift', pos: [-2.6, -3.72], size: [1.8, 2.1, 0.36] },
@@ -158,7 +170,7 @@ export const hotel = {
     { id: 'stairs', name: 'Service Stairs', doors: STRAIGHT, searchPoint: 'the stairwell bench', dark: true, mood: DARK,
       furniture: [searchSpot(at('slatBench', -3.45, -1.9, 0.62, 0.95, 1.8)), at('plant', -1.8, -3.5, 0.6, 1.3, 0.6),
         at('stairs', 2.45, -3.0, 2.8, 1.6, 1.7), at('binTrolley', 3.5, -1.4, 0.7, 1.0, 1.4)] },
-    // Room with a job: 1 AP to restore 2 health (maximum 3).
+    // Room with a job: 1 AP to restore 2 health (never above the maximum, rules.maxHealth: 4).
     { id: 'infirmary2', name: 'Infirmary', doors: STRAIGHT, job: 'infirmary', searchPoint: 'the medicine cabinet', mood: CLINIC,
       furniture: [at('infirmaryBed', -2.9, -2.75, 1.05, 1.0, 2.1), at('nightstand', -2.0, -3.5, 0.6, 1.1, 0.6), at('plant', -1.2, -3.5, 0.55, 1.2, 0.55),
         at('towelChest', -3.5, 2.5, 0.6, 0.8, 0.9), searchSpot(at('medicineCabinet', 2.0, -3.55, 1.4, 1.9, 0.55)),
@@ -178,7 +190,7 @@ export const hotel = {
         at('console', 2.2, -3.6, 1.5, 0.82, 0.45), at('tuftedBench', 3.45, 2.4, 0.65, 0.47, 1.4)] },
     { id: 'cornerCorridor', name: 'Corner Corridor', short: 'Corner Corr.', doors: CORNER, searchPoint: 'the window seat', mood: CORRIDOR,
       furniture: [searchSpot(at('windowSeat', -3.1, -2.8, 1.3, 0.82, 1.3)), at('plant', -3.45, 3.35, 0.55, 1.2, 0.55), at('console', 1.6, -3.6, 1.5, 0.82, 0.45)] },
-    // Room with a job: 1 AP to restore 2 health (maximum 3).
+    // Room with a job: 1 AP to restore 2 health (never above the maximum, rules.maxHealth: 4).
     { id: 'infirmary1', name: 'Infirmary', doors: CORNER, job: 'infirmary', searchPoint: 'the medicine cabinet', mood: CLINIC,
       furniture: [at('infirmaryBed', -2.9, -2.75, 1.05, 1.0, 2.1), at('nightstand', -2.0, -3.5, 0.6, 1.1, 0.6), at('plant', -1.2, -3.5, 0.55, 1.2, 0.55),
         searchSpot(at('medicineCabinet', 0.9, -3.55, 1.4, 1.9, 0.55)), at('stool', 1.9, -2.5, 0.55, 0.6, 0.55),

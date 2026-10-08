@@ -70,7 +70,9 @@ export function createCharacterView(playerDef, cfg, scene) {
   // once it has loaded, since modelHeight is only its nominal height).
   let headY = useModel ? (outfit.modelHeight || 1.8) : shoulderY + b.neck + b.headRadius * 2;
   const markerY = headY + c.markerHeight;
-  const marker = new THREE.Mesh(markerGeo, new THREE.MeshBasicMaterial({ color: new THREE.Color(playerDef.color), toneMapped: false }));
+  // (drawn over everything: even in a crowded room the active guest's marker is never hidden)
+  const marker = new THREE.Mesh(markerGeo, new THREE.MeshBasicMaterial({ color: new THREE.Color(playerDef.color), toneMapped: false, depthTest: false }));
+  marker.renderOrder = 12;
   marker.position.y = markerY;
   marker.visible = false;
   group.add(marker);
@@ -255,6 +257,9 @@ export function createCharacterView(playerDef, cfg, scene) {
       active = v && !dead;
       marker.visible = active;
       ringMat.opacity = active ? c.ringActiveOpacity : c.ringInactiveOpacity;
+      // The active guest's ring shows through anyone standing in front of them (crowded rooms).
+      ringMat.depthTest = !active;
+      ring.renderOrder = active ? 11 : 1;
       ring.scale.set(c.ringRadius * (active ? 1.15 : 1), 1, c.ringRadius * (active ? 1.15 : 1));
     },
     setDead(v) {

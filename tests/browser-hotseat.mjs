@@ -79,6 +79,7 @@ const give = (index, cards) => page.evaluate(({ index, cards }) => {
 // Leaving a page while its furniture is still downloading cancels those downloads, and the game
 // rightly warns that a model could not load. So before every navigation, let the current page
 // finish dressing its rooms. (A genuinely missing model still fails the console check.)
+const frames = n => page.evaluate(n => new Promise(r => { let k = 0; const f = () => (++k >= n ? r() : requestAnimationFrame(f)); requestAnimationFrame(f); }), n);
 const dressed = () => page.waitForFunction(() => !window.__game || window.__game.dressingDone(), null, { timeout: 90000, polling: 200 });
 async function load(query) {
   if (page.url().startsWith('http')) await dressed();
@@ -106,11 +107,11 @@ async function throughRoles() {
     if (await game(() => window.__game.handoffOpen())) await next(); else return;
   }
 }
-// Searching is the magnifier over the room's search spot (#search-spot): tap it, the guest walks up to
-// the furniture and searches. Resolves once the walk and the search are done.
+// Searching is the magnifier over the room's search spot (#search-spot): tap it and the guest searches
+// from where they stand (they do not walk to it). Resolves once the reveal (or a refusal) is up.
 async function searchHere() {
   await page.click('#search-spot');
-  await page.waitForFunction(() => !window.__game.searchPending() && !window.__game.activeMover().walking && window.__game.activeMover().path.length === 0, null, { timeout: 40000, polling: 50 });
+  await page.waitForFunction(() => window.__game.handoffOpen() || !document.getElementById('toast').hidden, null, { timeout: 40000, polling: 50 });
   await page.waitForTimeout(80);
 }
 const fanIds = () => game(() => window.__game.fanIds());
@@ -158,9 +159,9 @@ const st = await game(() => ({
   timer: window.__game.rules.turnTimerEnabled,
 }));
 check(st.mode === 'hotseat' && st.n === 6, 'six guests, hot-seat');
-check(st.poss.length === 1 && st.supply[st.poss[0]] === 3 && st.supply.filter(x => x > 0).length === 1, 'exactly one possessed guest, holding 3 Possession cards');
+check(st.poss.length === 1 && st.supply[st.poss[0]] === 2 && st.supply.filter(x => x > 0).length === 1, 'exactly one possessed guest, holding 2 Possession cards');
 check(st.lanterns && st.others && st.four, 'every guest starts with exactly 1 Lantern + 3 other cards');
-check(st.supply[st.poss[0]] === 3, 'the possessed guest too — with the 3 Possession cards on top of those 4');
+check(st.supply[st.poss[0]] === 2, 'the possessed guest too — with the 2 Possession cards on top of those 4');
 check(st.pileLanterns === 8 && st.pile === 24, `the other 8 Lanterns wait in the ${st.pile}-card deck (48 less six hands of 4)`);
 check(st.locked.length === 0, 'nothing is locked until a locked room is revealed');
 check(st.east && st.rooms.includes('corridorW'), 'the random hotel has grown the rooms these checks use');
@@ -179,7 +180,7 @@ await throughRoles();
 check(await game(() => window.__game.state.players.every(p => p.roleSeen)), 'all six acknowledged');
 check(await kind() === 'turn', "the first guest's private turn screen follows");
 check(await visible('#handoff-hand') && await visible('#handoff-role'), 'it shows their role and their hand');
-check((await page.textContent('#handoff-kicker')).includes('health 3 of 3'), 'and their health');
+check((await page.textContent('#handoff-kicker')).includes('health 4 of 4'), 'and their health (4 of 4)');
 check(await fanGone(), 'the hand fan waits until their turn starts');
 await shot('hs-02-private-turn');
 await next();
@@ -203,7 +204,7 @@ check(!(await visible('#search-spot')), 'and no search icon in the lobby');
 const evilIdx = st.poss[0];
 {
   // Their own action phase: as the approved rules say (GAME_RULES.md > Possession), the main screen
-  // shows their reminder — a POSSESSED label, "Souls to trade: 3" and the Possession cards as one ×3
+  // shows their reminder — a POSSESSED label, "Souls to trade: 2" and the Possession cards as one ×2
   // card in the fan — but no possessed portrait or tint, and the strip still counts ordinary cards only.
   await game(i => { window.__game.state.activeIndex = i; window.__game.refresh(); }, evilIdx);
   await page.waitForTimeout(150);
@@ -211,12 +212,12 @@ const evilIdx = st.poss[0];
     first: p.hand.find(c => c.type === 'possession')?.id, n: p.hand.length }; }, evilIdx);
   const fan = await fanIds();
   check(await game(() => window.__game.cfg.ui.hotseatPossessedOnMainScreen === true), 'the main-screen reminder is on by default (approved rule)');
-  check(fan.length === ev.ord.length + 1 && ev.ord.every(id => fan.includes(id)) && ev.n === ev.ord.length + 3
-    && (await page.textContent('#hand-fan .fan-badge.souls'))?.replace(/\s+/g, ' ').trim() === '×3 souls',
-    `the possessed guest's fan shows their ${ev.ord.length} ordinary cards and the 3 Possession cards as one ×3 card`);
+  check(fan.length === ev.ord.length + 1 && ev.ord.every(id => fan.includes(id)) && ev.n === ev.ord.length + 2
+    && (await page.textContent('#hand-fan .fan-badge.souls'))?.replace(/\s+/g, ' ').trim() === '×2 souls',
+    `the possessed guest's fan shows their ${ev.ord.length} ordinary cards and the 2 Possession cards as one ×2 card`);
   check(await visible('#panel-role') && /POSSESSED/i.test(await page.textContent('#panel-role'))
-    && await visible('#panel-souls') && /Souls to trade:\s*3/.test(await page.textContent('#panel-souls')),
-    'their panel shows POSSESSED and "Souls to trade: 3" during their own action phase');
+    && await visible('#panel-souls') && /Souls to trade:\s*2/.test(await page.textContent('#panel-souls')),
+    'their panel shows POSSESSED and "Souls to trade: 2" during their own action phase');
   check(!(await visible('#possess-tint')) && await page.evaluate(() => !document.getElementById('player-panel').classList.contains('possessed')),
     'but no possessed tint or portrait on the shared screen');
   await shot('hs-02b-possessed-action-phase');
@@ -239,11 +240,11 @@ await game(() => window.__game.handoff.privateTurn(window.__game.state, window._
 check(/POSSESSED/.test(await page.textContent('#handoff-role')) && await page.evaluate(() => document.querySelector('#handoff-role').classList.contains('evil')),
   'the possessed guest sees POSSESSED on their own private screen');
 check(await page.evaluate(() => { const t = [...document.querySelectorAll('#handoff-hand .card-tile')].filter(t => t.classList.contains('evil'));
-  return t.length === 1 && t[0].querySelector('.face-badge.souls')?.textContent === '×3'; }),
-  'with their three Possession cards (one tile marked ×3)');
-check(/Souls to trade:\s*3/.test(await page.textContent('#handoff-role .souls-chip')) && !!(await page.$('#handoff-role .role-portrait'))
+  return t.length === 1 && t[0].querySelector('.face-badge.souls')?.textContent === '×2'; }),
+  'with their two Possession cards (one tile marked ×2)');
+check(/Souls to trade:\s*2/.test(await page.textContent('#handoff-role .souls-chip')) && !!(await page.$('#handoff-role .role-portrait'))
   && await page.evaluate(() => document.getElementById('handoff-card').classList.contains('possessed')),
-  'their private screen shows their possessed portrait and "Souls to trade: 3"');
+  'their private screen shows their possessed portrait and "Souls to trade: 2"');
 await shot('hs-03-possessed-private');
 await next();
 // Outside their action phase (the private screen put away, the turn not started) the shared main
@@ -253,9 +254,9 @@ check(!(await game(() => window.__game.inActionPhase())) && !(await visible('#pa
   'outside their own action phase the shared main screen carries no POSSESSED label, souls count or Possession card');
 // The card view (private) carries the same tell; the next pass screen carries none of it.
 await game(() => window.__game.openHand());
-check((await page.textContent('#hand-big .face-badge.souls')) === '×3' && /^Souls to trade:\s*3$/.test((await page.textContent('#hand-detail .souls-line')).trim())
+check((await page.textContent('#hand-big .face-badge.souls')) === '×2' && /^Souls to trade:\s*2$/.test((await page.textContent('#hand-detail .souls-line')).trim())
   && /1 of \d/.test(await page.textContent('#hand-pos')),
-  'their card view shows the Possession cards as one ×3 stack and "Souls to trade: 3"');
+  'their card view shows the Possession cards as one ×2 stack and "Souls to trade: 2"');
 {
   // The Possession card's words are said once: one count line and one description, no repeats.
   const v = await page.evaluate(() => ({ detail: document.getElementById('hand-detail').innerText, banner: document.getElementById('hand-banner').innerText,
@@ -270,8 +271,8 @@ check((await page.textContent('#hand-big .face-badge.souls')) === '×3' && /^Sou
   const y0 = await arrowAt();
   await page.click('#btn-hand-next');
   const y1 = await arrowAt();
-  check(/Souls to trade:\s*3/.test(await page.textContent('#hand-banner .souls-chip')) && /In a trade, give a Possession card/.test(await page.textContent('#hand-banner')),
-    'on their other cards the banner keeps the reminder and "Souls to trade: 3"');
+  check(/Souls to trade:\s*2/.test(await page.textContent('#hand-banner .souls-chip')) && /In a trade, give a Possession card/.test(await page.textContent('#hand-banner')),
+    'on their other cards the banner keeps the reminder and "Souls to trade: 2"');
   check((await page.evaluate(() => document.querySelector('#hand-overlay .cv-panel').innerText.match(/souls to trade/gi) || [])).length === 1,
     'and says the count once (the footer leaves it out)');
   await page.click('#btn-hand-prev');
@@ -282,8 +283,8 @@ check((await page.textContent('#hand-big .face-badge.souls')) === '×3' && /^Sou
 check(await page.evaluate(() => !document.getElementById('hand-overlay').classList.contains('possessed') && !document.querySelector('#hand-banner .banner-portrait')),
   'in hot-seat the card view has no possessed portrait and no violet wash (seen across the table)');
 await game(i => { const p = window.__game.state.players[i]; p.hand.splice(p.hand.findIndex(c => c.type === 'possession'), 1); window.__game.refresh(); }, evilIdx);
-check((await page.textContent('#hand-big .face-badge.souls')) === '×2' && /Souls to trade:\s*2/.test(await page.textContent('#hand-detail .souls-line')),
-  'and the count follows the hand at once (one given away: ×2)');
+check((await page.textContent('#hand-big .face-badge.souls')) === '×1' && /Souls to trade:\s*1/.test(await page.textContent('#hand-detail .souls-line')),
+  'and the count follows the hand at once (one given away: ×1)');
 await page.click('#btn-hand-close');
 check(await page.evaluate(() => { const b = document.getElementById('hand-banner'); return b.innerHTML === '' && b.className === 'banner'; }),
   'closing the card view leaves nothing of the banner behind');
@@ -325,10 +326,10 @@ console.log('\n3b. the possessed guest\'s real turn: their reminder on the main 
       const panelSouls = (await visible('#panel-souls')) ? (await page.textContent('#panel-souls')).replace(/\s+/g, ' ').trim() : '';
       const badge = ((await page.textContent('#hand-fan .fan-badge.souls', { timeout: 3000 }).catch(() => '')) || '').replace(/\s+/g, ' ').trim();
       const fan = await game(() => [...document.querySelectorAll('#hand-fan .fan-card')].map(e => e.dataset.type));
-      check(/^possessed$/i.test(panelRole) && /Souls to trade:\s*3/.test(panelSouls),
-        `the possessed guest's own action phase: POSSESSED and "Souls to trade: 3" in their panel ("${panelRole}" / "${panelSouls}")`);
-      check(badge === '×3 souls' && fan.filter(x => x === 'possession').length === 1 && fan.length === ord + 1,
-        `their fan shows their ${ord} ordinary cards and the Possession cards as one ×3 card ("${badge}")`);
+      check(/^possessed$/i.test(panelRole) && /Souls to trade:\s*2/.test(panelSouls),
+        `the possessed guest's own action phase: POSSESSED and "Souls to trade: 2" in their panel ("${panelRole}" / "${panelSouls}")`);
+      check(badge === '×2 souls' && fan.filter(x => x === 'possession').length === 1 && fan.length === ord + 1,
+        `their fan shows their ${ord} ordinary cards and the Possession cards as one ×2 card ("${badge}")`);
       check(!(await visible('#possess-tint')) && await page.evaluate(() => !document.getElementById('player-panel').classList.contains('possessed')),
         'but no possessed portrait and no violet tint on the shared screen');
       await shot('hs-03b-possessed-own-turn');
@@ -370,7 +371,7 @@ await game(({ P, E }) => {
   const s = window.__game.state;
   s.players.forEach((p, i) => { p.possessed = i === E; p.notes = []; p.knows = new Set(); });
   s.players[P].hand = [{ id: 'p1', type: 'bandage' }, { id: 'p2', type: 'knife' }];
-  s.players[E].hand = [{ id: 'e1', type: 'lantern' }, { id: 'x1', type: 'possession' }, { id: 'x2', type: 'possession' }, { id: 'x3', type: 'possession' }];
+  s.players[E].hand = [{ id: 'e1', type: 'lantern' }, { id: 'x1', type: 'possession' }, { id: 'x2', type: 'possession' }];
   s.activeIndex = P; window.__game.refresh();
 }, { P, E });
 await walkInto(P, E);
@@ -409,7 +410,7 @@ await game(({ P, E }) => {
   const s = window.__game.state;
   s.players.forEach((p, i) => { p.possessed = i === E; p.notes = []; p.knows = new Set(); });
   s.players[P].hand = [{ id: 'p1', type: 'lantern' }];
-  s.players[E].hand = [{ id: 'e1', type: 'bandage' }, { id: 'x1', type: 'possession' }, { id: 'x2', type: 'possession' }, { id: 'x3', type: 'possession' }];
+  s.players[E].hand = [{ id: 'e1', type: 'bandage' }, { id: 'x1', type: 'possession' }, { id: 'x2', type: 'possession' }];
   s.activeIndex = P; window.__game.refresh();
 }, { P, E });
 await walkInto(P, E);
@@ -429,7 +430,7 @@ const blk = await game(({ P, E }) => {
 }, { P, E });
 check(!blk.poss && blk.knows, 'the defender is not possessed and knows who tried');
 check(blk.lanternGone, 'the blocking Lantern is used up — nobody holds it, it is on the discard pile');
-check(blk.destroyed && blk.left === 2, 'the Possession card is destroyed; two remain');
+check(blk.destroyed && blk.left === 1, 'the Possession card is destroyed; one remains');
 
 console.log('\n5b. an empty hand: the trade is skipped, and both are told why');
 // 'possessed': the other guest is possessed and holds only Possession cards — skipped too, and it must
@@ -490,8 +491,8 @@ for (const [w, h] of [[1024, 768], [1180, 820], [1440, 900]]) {
     const eight = ['lantern', 'lantern', 'bandage', 'knife', 'masterKey', 'handMirror', 'espresso', 'barricade'];
     s.players.forEach((p, i) => { p.possessed = i === E; p.notes = []; p.knows = new Set(); });
     s.players[P].hand = eight.map((t, i) => ({ id: `p${i}`, type: t }));
-    // the possessed guest: 8 cards and three Possession cards — 11 to choose from
-    s.players[E].hand = [...eight.map((t, i) => ({ id: `e${i}`, type: t })), ...[1, 2, 3].map(i => ({ id: `x${i}`, type: 'possession' }))];
+    // the possessed guest: 8 cards and two Possession cards — 10 to choose from
+    s.players[E].hand = [...eight.map((t, i) => ({ id: `e${i}`, type: t })), ...[1, 2].map(i => ({ id: `x${i}`, type: 'possession' }))];
     s.activeIndex = P; window.__game.refresh();
   }, { P, E });
   await walkInto(P, E);
@@ -510,7 +511,7 @@ for (const [w, h] of [[1024, 768], [1180, 820], [1440, 900]]) {
   await page.click('#offer-cards .card-tile[data-card-id="p0"]'); await page.waitForTimeout(80);
   await next();
   const theirs = await reach();
-  check(theirs.length === 11 && theirs.every(c => c.ok), `${w}×${h}: all 11 of a possessed guest's (8 + 3 Possession) too (${theirs.filter(c => c.ok).length}/11)`);
+  check(theirs.length === 10 && theirs.every(c => c.ok), `${w}×${h}: all 10 of a possessed guest's (8 + 2 Possession) too (${theirs.filter(c => c.ok).length}/10)`);
   await page.click('#offer-cards .card-tile[data-card-id="e2"]'); await page.waitForTimeout(80);
 }
 await page.setViewportSize({ width: 1180, height: 820 });
@@ -819,19 +820,19 @@ console.log('\n10a. the hand limit is settled at the end of the turn (the clock,
   await game(() => {
     const g = window.__game, p = g.activePlayer();
     p.hand = [...['lantern', 'lantern', 'knife', 'knife', 'bandage', 'bandage', 'espresso', 'barricade'].map((t, i) => ({ id: `pv${i}`, type: t })),
-      ...['x1', 'x2', 'x3'].map(id => ({ id, type: 'possession' }))];
+      ...['x1', 'x2'].map(id => ({ id, type: 'possession' }))];
     g.refresh();
   });
   await tap('#btn-end-turn');
   const e = await page.evaluate(() => ({ open: !document.getElementById('discard-overlay').hidden, ids: [...document.querySelectorAll('#discard-cards .card-tile')].map(t => t.dataset.cardId),
     sub: document.getElementById('discard-sub').textContent, page: document.getElementById('discard-overlay').innerText }));
   check(e.open && e.ids.length === 8 && !e.ids.some(id => /^x/.test(id)) && !/Possess|soul/i.test(e.page),
-    'End turn with 8 ordinary cards + 3 Possession cards: the discard screen offers only the 8, and says nothing of possession');
+    'End turn with 8 ordinary cards + 2 Possession cards: the discard screen offers only the 8, and says nothing of possession');
   check(/You hold 8 cards/.test(e.sub), 'the count ignores Possession cards');
   for (const id of ['pv4', 'pv5']) { await page.click(`#discard-cards .card-tile[data-card-id="${id}"]`); await page.waitForTimeout(80); await tap('#btn-discard-done'); }
   await tap('#btn-discard-done');
-  check(await game(i => window.__game.state.players[i].hand.filter(c => c.type === 'possession').length === 3
-    && window.__game.state.players[i].hand.length === 9 && window.__game.state.activeIndex === (i + 1) % 6, v), 'the 3 Possession cards are kept; the turn passes');
+  check(await game(i => window.__game.state.players[i].hand.filter(c => c.type === 'possession').length === 2
+    && window.__game.state.players[i].hand.length === 8 && window.__game.state.activeIndex === (i + 1) % 6, v), 'the 2 Possession cards are kept; the turn passes');
   // Nothing of that hand waits in hidden markup during the next guest's pass screen: not the kept
   // cards on the discard screen, not the old fan, not the card view.
   await page.waitForTimeout(150);
@@ -871,7 +872,7 @@ console.log('\n10b. the Infirmary');
   await tap('#btn-begin'); await throughRoles(); await intoTurn();
   check(!(await roomBtn()).shown, 'in the lobby there is no room button');
   check(await game(() => window.__game.revealTile('infirmary1')) && await game(() => window.__game.floor.rooms.get('infirmary1').job) === 'infirmary', 'an Infirmary is revealed');
-  await game(() => { window.__game.state.lockedRooms.clear(); window.__game.activePlayer().health = 1; });
+  await game(() => { window.__game.state.lockedRooms.clear(); window.__game.activePlayer().health = 2; });
   await put('infirmary1', 4);
   let b = await roomBtn();
   check(b.shown && !b.disabled && b.main === 'Infirmary' && /Heal 2 · 1 action/.test(b.sub), `standing in it shows its button ("${b.main} — ${b.sub}")`);
@@ -879,16 +880,16 @@ console.log('\n10b. the Infirmary');
   await tap('#btn-room');
   const r = await game(() => ({ h: window.__game.activePlayer().health, ap: window.__game.activePlayer().actionPoints,
     bars: document.querySelectorAll('#health .bar.full').length, log: window.__game.publicLog() }));
-  check(r.h === 3 && r.bars === 3, 'tapping it at 1 health restores 2: health 3 of 3, and the health bars show it');
+  check(r.h === 4 && r.bars === 4, 'tapping it at 2 health restores 2: health 4 of 4, and the health bars show it');
   check(r.ap === 3, '1 action spent');
   check(r.log.length === logBefore + 1 && /treated in the Infirmary/.test(r.log.at(-1)), `the public log records the visit ("${r.log.at(-1)}")`);
   b = await roomBtn();
   check(b.shown && b.disabled && b.sub === 'Full health', `the button then says full health ("${b.sub}")`);
   await shot('hs-10-infirmary');
-  // Never above the maximum: at 2 health it restores only 1.
-  await game(() => { window.__game.activePlayer().health = 2; window.__game.refresh(); });
+  // Never above the maximum: at 3 health it restores only 1.
+  await game(() => { window.__game.activePlayer().health = 3; window.__game.refresh(); });
   await tap('#btn-room');
-  check(await game(() => window.__game.activePlayer().health) === 3 && await game(() => window.__game.activePlayer().actionPoints) === 2, 'at 2 health it tops up to 3, never above');
+  check(await game(() => window.__game.activePlayer().health) === 4 && await game(() => window.__game.activePlayer().actionPoints) === 2, 'at 3 health it tops up to 4, never above');
   // No actions left: the button says so and stays shut.
   await game(() => { const p = window.__game.activePlayer(); p.health = 1; p.actionPoints = 0; window.__game.refresh(); });
   b = await roomBtn();
@@ -979,7 +980,7 @@ console.log('\n10d. the Hand Mirror');
     const s = window.__game.state;
     s.players.forEach((p, i) => { p.possessed = i === E; p.notes = []; p.knows = new Set(); });
     s.players[P].hand = [{ id: 'hm1', type: 'handMirror' }, { id: 'hm2', type: 'handMirror' }, { id: 'pb', type: 'bandage' }];
-    s.players[E].hand = [{ id: 'e1', type: 'lantern' }, { id: 'e2', type: 'knife' }, { id: 'x1', type: 'possession' }, { id: 'x2', type: 'possession' }, { id: 'x3', type: 'possession' }];
+    s.players[E].hand = [{ id: 'e1', type: 'lantern' }, { id: 'e2', type: 'knife' }, { id: 'x1', type: 'possession' }, { id: 'x2', type: 'possession' }];
     s.activeIndex = P; window.__game.refresh();
   }, { P, E });
   const who = await names();
@@ -1000,8 +1001,8 @@ console.log('\n10d. the Hand Mirror');
   check((await page.textContent('#handoff-title')).trim() === `${who[E]}'s hand`, `titled "${(await page.textContent('#handoff-title')).trim()}"`);
   check((await page.textContent('#handoff-kicker')).includes(`${who[P]} only`), 'for the mirror user only');
   const tiles = await page.evaluate(() => [...document.querySelectorAll('#handoff-hand .card-tile')].map(t => ({ id: t.dataset.cardId, evil: t.classList.contains('evil') })));
-  check(tiles.length === 5 && ['e1', 'e2', 'x1', 'x2', 'x3'].every(id => tiles.some(t => t.id === id)), `it shows every card they hold (${tiles.length})`);
-  check(tiles.filter(t => t.evil).length === 3 && tiles[0].evil, 'Possession cards included, shown first');
+  check(tiles.length === 4 && ['e1', 'e2', 'x1', 'x2'].every(id => tiles.some(t => t.id === id)), `it shows every card they hold (${tiles.length})`);
+  check(tiles.filter(t => t.evil).length === 2 && tiles[0].evil, 'Possession cards included, shown first');
   check(/POSSESSED/.test(await page.textContent('#handoff-notes')) && (await page.textContent('#handoff-notes')).includes(who[E]), 'and it says plainly that they are possessed');
   check((await page.textContent('#btn-handoff-next')).trim() === 'Done', 'the button says Done');
   check(!(await game(() => window.__game.publicLog().slice(-1)[0] || '')).match(/Lantern|Knife|Possession|possess/i), 'the public log says nothing of what it showed');
@@ -1013,7 +1014,7 @@ console.log('\n10d. the Hand Mirror');
   }, { P, E });
   check(st2.gone && st2.discarded, 'the Hand Mirror is used up (on the discard pile)');
   check(st2.ap === 3, '1 action spent');
-  check(st2.knows && st2.eHand === 5, 'the user now knows; the other guest keeps every card');
+  check(st2.knows && st2.eHand === 4, 'the user now knows; the other guest keeps every card');
   await next();
   check(!(await game(() => window.__game.handoffOpen())) && await game(() => window.__game.inActionPhase()), 'Done returns to the turn');
   const toast = (await page.textContent('#toast')).trim();
@@ -1110,14 +1111,26 @@ console.log('\n10f. a locked door: open until the end of the opener\'s turn, the
   // The next guest cannot follow in.
   await put(info.nb, 4);
   check(await game(l => window.__game.moveToRoom(l).ok, L) === false, 'the next guest cannot follow in');
-  check(await game(d => !window.__game.doorways.views.get(d).blink.visible, info.door), 'and the door has no ring for them');
+  {
+    const t = await game(l => window.__game.tapPointFor({ room: l }), L);
+    if (t) { await page.touchscreen.tap(t.x, t.y); await page.waitForTimeout(200); }
+    check(!!t && /locked/i.test(await page.textContent('#toast')) && await page.evaluate(() => document.getElementById('confirm-bar').hidden),
+      `tapping the locked room tells them it is locked ("${(await page.textContent('#toast')).trim().slice(0, 60)}")`);
+  }
   await shot('hs-14-locked-again');
   await game(() => { const g = window.__game, p = g.activePlayer(), c = g.roomCenter('hall'); p.currentRoom = 'hall'; g.movers[p.index].reset(c[0], c[1]); g.discovery.refresh(); g.refresh(); });
   // Round the table to the guest inside: they can walk out, and the door stays locked behind them.
   for (let i = 1; i < 6; i++) { await tap('#btn-end-turn'); await intoTurn(); }
   check(await game(() => window.__game.state.activeIndex) === 0 && await game(() => window.__game.activePlayer().currentRoom) === L, 'back to the guest inside the locked room');
-  check(await game(d => { const v = window.__game.doorways.views.get(d); return v.locked && !v.shut && v.blink.visible; }, info.door),
-    'for them the padlocked door stands open, with a ring: it is the way out');
+  check(await game(d => { const v = window.__game.doorways.views.get(d); return v.locked && !v.shut; }, info.door),
+    'for them the padlocked door stands open: it is the way out');
+  {
+    const t = await game(n => window.__game.tapPointFor({ room: n }), info.nb);
+    if (t) { await page.touchscreen.tap(t.x, t.y); await page.waitForTimeout(200); }
+    const cb = await page.evaluate(() => ({ open: !document.getElementById('confirm-bar').hidden, text: document.getElementById('confirm-text').textContent }));
+    check(!!t && cb.open && /^Move to /.test(cb.text), `tapping the room outside offers the way out ("${cb.text}")`);
+    if (cb.open) await tap('#btn-confirm-cancel');
+  }
   const out = await game(n => window.__game.moveToRoom(n).ok, info.nb);
   await settle();
   check(out && await game(() => window.__game.activePlayer().currentRoom) === info.nb, 'the guest inside walks out');
@@ -1175,6 +1188,144 @@ console.log('\n10g. a key or pick is never wasted without a word');
   await intoTurn();
   const after = await sign();
   check(after.locked && !after.opened && after.mark && after.mat === before.mat, 'at the end of the turn it locks again, and the closed padlock is back');
+}
+
+console.log('\n10h. the clock runs out mid-walk: the guest still ends on a standing spot');
+{
+  await load('mode=hotseat&players=6&seed=4242');
+  await tap('#btn-begin'); await throughRoles(); await intoTurn();
+  const me = await game(() => window.__game.state.activeIndex);
+  await game(() => { window.__game.cfg.player.speed = 1.0; });
+  const plan = await game(() => { const p = window.__game.moveToRoom('corridorE'); return { ok: p.ok, cost: p.cost }; });
+  await page.waitForTimeout(150);
+  const mid = await game(() => ({ room: window.__game.activePlayer().currentRoom, walking: window.__game.activeMover().walking || window.__game.activeMover().path.length > 0 }));
+  await game(() => window.__game.forceTimeUp());
+  await game(() => { window.__game.cfg.player.speed = 16; });
+  await page.waitForFunction(i => window.__game.state.activeIndex !== i, me, { timeout: 30000 }).catch(() => {});
+  const r = await game(i => {
+    const g = window.__game, p = g.state.players[i], m = g.movers[i], q = g.floor.rooms.get(p.currentRoom);
+    const off = Math.min(...g.hotel.standingSpots.map(([x, z]) => Math.hypot(m.x - q.center[0] - x, m.z - q.center[1] - z)));
+    return { room: p.currentRoom, ap: p.actionPoints, off, walking: m.walking || m.path.length > 0, active: g.state.activeIndex };
+  }, me);
+  check(plan.ok && mid.room === 'hall' && mid.walking, '(a guest sets off for the East Corridor and the clock runs out before they reach its door)');
+  check(r.active !== me && r.room === 'corridorE' && !r.walking && r.off < 0.05, `the turn ends with the guest standing on a spot in the room they were walking into (${r.room}, ${r.off.toFixed(2)} m off a spot)`);
+  check(r.ap === 3, `that room's move was charged as they crossed into it, like any move (${r.ap} AP left)`);
+  // Already in a room on the way when the clock runs out: they stop on that room's spot (no more spent).
+  await intoTurn();
+  const me2 = await game(() => window.__game.state.activeIndex);
+  await game(() => window.__game.revealTile('lounge', 'corridorE'));
+  const far = await game(() => { const g = window.__game, hall = g.floor.rooms.get('hall');
+    return [...g.floor.rooms.get('corridorE').neighbours].find(n => n !== 'hall' && !hall.neighbours.has(n) && !g.state.lockedRooms.has(n)) ?? null; });
+  await place(me, 'hall');                // (out of the way: nobody to meet on this walk)
+  await place(me2, 'hall', 4);
+  await game(() => { window.__game.cfg.player.speed = 1.0; });
+  const plan2 = far && await game(f => { const p = window.__game.moveToRoom(f); return { ok: p.ok, cost: p.cost, rooms: p.rooms }; }, far);
+  const inCorr = plan2?.ok && await page.waitForFunction(() => window.__game.activePlayer().currentRoom === 'corridorE', null, { timeout: 60000, polling: 30 }).then(() => true, () => false);
+  const mid2 = await game(() => window.__game.activeMover().walking || window.__game.activeMover().path.length > 0);
+  await game(() => window.__game.forceTimeUp());
+  await game(() => { window.__game.cfg.player.speed = 16; });
+  await page.waitForFunction(i => window.__game.state.activeIndex !== i, me2, { timeout: 30000 }).catch(() => {});
+  const r2 = await game(i => {
+    const g = window.__game, p = g.state.players[i], m = g.movers[i], q = g.floor.rooms.get(p.currentRoom);
+    const off = Math.min(...g.hotel.standingSpots.map(([x, z]) => Math.hypot(m.x - q.center[0] - x, m.z - q.center[1] - z)));
+    return { room: p.currentRoom, ap: p.actionPoints, off, walking: m.walking || m.path.length > 0, active: g.state.activeIndex };
+  }, me2);
+  check(!!far && plan2?.ok && plan2.cost === 2 && inCorr && mid2 && r2.active !== me2 && r2.room === 'corridorE' && !r2.walking && r2.off < 0.05 && r2.ap === 3,
+    `on a two-room walk, out of time just inside the first room: they stop on its spot, nothing more spent (${r2.room}, ${r2.off.toFixed(2)} m off a spot, ${r2.ap} AP left)`);
+}
+
+console.log('\n10i. six guests in the lobby, and the tags over the view');
+{
+  await page.setViewportSize({ width: 1024, height: 768 });
+  await load('mode=hotseat&players=6&seed=4242&timer=off');
+  await tap('#btn-begin'); await throughRoles(); await intoTurn();
+  await page.waitForTimeout(400); await frames(6);
+  const crowd = await game(() => {
+    const g = window.__game, cam = g.view.camera, V = cam.position.constructor;
+    const ms = g.movers;
+    let near = Infinity;
+    for (let i = 0; i < ms.length; i++) for (let j = i + 1; j < ms.length; j++) near = Math.min(near, Math.hypot(ms[i].x - ms[j].x, ms[i].z - ms[j].z));
+    // The active guest's chest must not lie inside the screen box of any guest standing nearer the camera.
+    const a = g.state.activeIndex, scr = (x, y, z) => { const v = new V(x, y, z).project(cam); return [(v.x + 1) / 2 * innerWidth, (1 - v.y) / 2 * innerHeight, v.z]; };
+    const chest = scr(ms[a].x, 1.1, ms[a].z), head = scr(ms[a].x, 1.6, ms[a].z);
+    const hidden = ms.map((m, i) => {
+      if (i === a) return null;
+      const f = scr(m.x, 0, m.z), h = scr(m.x, 1.75, m.z), w = Math.abs(scr(m.x + 0.3, 0.9, m.z)[0] - scr(m.x - 0.3, 0.9, m.z)[0]) / 2 + 6;
+      if (f[2] > chest[2]) return null;   // (behind the active guest)
+      const box = { l: Math.min(f[0], h[0]) - w, r: Math.max(f[0], h[0]) + w, t: h[1], b: f[1] };
+      return [chest, head].some(([x, y]) => x > box.l && x < box.r && y > box.t && y < box.b) ? g.state.players[i].name : null;
+    }).filter(Boolean);
+    return { near, hidden, all: g.state.players.every(p => p.currentRoom === 'hall') };
+  });
+  check(crowd.all && crowd.near >= 1.35, `six guests in the lobby stand at least 1.4 m apart (nearest pair ${crowd.near.toFixed(2)} m)`);
+  check(!crowd.hidden.length, `nobody stands in front of the active guest${crowd.hidden.length ? ` (hidden by ${crowd.hidden.join(', ')})` : ''}`);
+  await shot('hs-30-six-in-lobby-1024');
+  // No tag over the interface, at every turn of the view: the guest strip, the room name and round, the
+  // panel, the hand and the buttons.
+  const overHud = () => page.evaluate(() => {
+    const sels = ['.hud-top-left', '.hud-top-center', '.hud-top-right', '#player-panel', '#hand-fan .fan-card', '.hud-bottom-right', '#confirm-bar', '#toast'];
+    const ui = sels.flatMap(s => [...document.querySelectorAll(s)]).filter(e => e.offsetParent && getComputedStyle(e).visibility !== 'hidden').map(e => e.getBoundingClientRect());
+    const tags = [...document.querySelectorAll('.tag-layer > *')].filter(e => !e.hidden).map(e => ({ t: e.textContent, r: e.getBoundingClientRect() }));
+    const hit = (a, b) => a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
+    return { n: tags.length, bad: tags.filter(x => ui.some(u => hit(x.r, u)) || x.r.left < 0 || x.r.top < 0 || x.r.right > innerWidth || x.r.bottom > innerHeight).map(x => x.t) };
+  });
+  const turns = [];
+  for (let k = 0; k < 4; k++) {
+    if (k) { await game(() => window.__game.rotate(1)); await page.waitForFunction(() => window.__game.rig.debug.yawT >= 1, null, { timeout: 30000 }); await frames(8); }
+    turns.push(await overHud());
+  }
+  await game(() => window.__game.rotate(1)); await page.waitForFunction(() => window.__game.rig.debug.yawT >= 1, null, { timeout: 30000 }); await frames(8);
+  check(turns.every(t => !t.bad.length) && turns.some(t => t.n >= 2), `1024×768: the Explore tags never cover the guest strip or any of the interface, at every turn (${turns.map(t => `${t.n} tags${t.bad.length ? `, over the interface: ${t.bad.join('|')}` : ''}`).join('; ')})`);
+  // With the Move/Cancel bar up, nothing covers it.
+  const room = await game(() => window.__game.hotelRooms().find(id => id !== 'hall' && window.__game.floor.rooms.get(id).neighbours.has('hall') && !window.__game.state.lockedRooms.has(id)));
+  const pt = await game(r => window.__game.tapPointFor({ room: r }), room);
+  if (pt) { await page.touchscreen.tap(pt.x, pt.y); await page.waitForTimeout(250); await frames(6); }
+  const cb = await overHud();
+  check(!!pt && await visible('#confirm-bar') && !cb.bad.length && !(await game(() => window.__game.tags('go:'))).length, `with the Move/Cancel bar up no tag covers it, and the Go tags step aside (${cb.n} tags)`);
+  await shot('hs-31-confirm-1024');
+  if (await visible('#confirm-bar')) await tap('#btn-confirm-cancel');
+  // Zoomed far out over a bigger hotel: ONE name tag for the six in the lobby, the active guest first.
+  for (const t of ['lounge', 'ballroom', 'grandCorridor', 'dining', 'library', 'kitchen', 'corridorN', 'corridorS', 'infirmary1', 'switchboard']) await game(id => window.__game.revealTile(id), t);
+  await dressed();
+  for (let k = 0; k < 40; k++) { await page.mouse.move(512, 380); await page.mouse.wheel(0, 400); await frames(1); }
+  await frames(8);
+  const gt = await game(() => window.__game.tags('guest:'));
+  const zo = await overHud();
+  check(gt.length === 1 && gt[0].key === 'guest:hall' && /^Victor·[A-Za-z]+\+4$/.test(gt[0].text.replace(/\s+/g, '')), `zoomed far out the six in the lobby share one tag, the active guest first ("${gt.map(t => t.text).join(' | ')}")`);
+  check(!zo.bad.length, `and no tag covers the interface or leaves the screen (${zo.n} tags${zo.bad.length ? `; bad: ${zo.bad.join('|')}` : ''})`);
+  check(!(await game(() => window.__game.tags('go:'))).length, 'zoomed far out the "Go · 1 AP" tags step aside for the names');
+  await shot('hs-32-zoomed-out-tags-1024');
+  await page.setViewportSize({ width: 1180, height: 820 });
+}
+
+console.log('\n10j. a walk through a room with a guest in it stops there for the meeting');
+{
+  await load('mode=hotseat&players=6&seed=4242&timer=off');
+  await tap('#btn-begin'); await throughRoles(); await intoTurn();
+  const me = await game(() => window.__game.state.activeIndex), other = (me + 1) % 6;
+  await game(() => window.__game.revealTile('lounge', 'corridorE'));
+  const far = await game(() => { const g = window.__game, hall = g.floor.rooms.get('hall');
+    return [...g.floor.rooms.get('corridorE').neighbours].find(n => n !== 'hall' && !hall.neighbours.has(n) && !g.state.lockedRooms.has(n)) ?? null; });
+  await place(other, 'corridorE');
+  await place(me, 'hall', 4);
+  await game(() => { const g = window.__game, c = g.roomCenter('hall'); g.rig.setFocus(c[0], c[1], true); g.rig.recentre({ immediate: true }); g.rig.zoomBy(0.62); });
+  await frames(6);
+  const pt = far && await game(r => window.__game.tapPointFor({ room: r }), far);
+  if (pt) { await page.touchscreen.tap(pt.x, pt.y); await page.waitForTimeout(250); await frames(4); }
+  const names = await game(({ other, far }) => ({ who: window.__game.state.players[other].name, corridor: window.__game.floor.rooms.get('corridorE').name, far: far && window.__game.floor.rooms.get(far).name }), { other, far });
+  const cb = await page.evaluate(() => ({ open: !document.getElementById('confirm-bar').hidden, text: document.getElementById('confirm-text').textContent, label: window.__game.pathPreview.labelText }));
+  check(!!pt && cb.open && cb.text.includes(`You will stop in the ${names.corridor} to meet ${names.who}.`) && /1 AP/.test(cb.label),
+    `tapping the ${names.far} beyond a guest says so before the walk: "${cb.text}" (${cb.label})`);
+  if (cb.open) {
+    await tap('#btn-confirm-move');
+    await settle();
+    await page.waitForFunction(() => window.__game.meetingOpen(), null, { timeout: 15000 }).catch(() => {});
+    const r = await game(me => { const g = window.__game, p = g.state.players[me], m = g.movers[me], q = g.floor.rooms.get(p.currentRoom);
+      const off = Math.min(...g.hotel.standingSpots.map(([x, z]) => Math.hypot(m.x - q.center[0] - x, m.z - q.center[1] - z)));
+      return { room: p.currentRoom, ap: p.actionPoints, meeting: g.meetingOpen(), off }; }, me);
+    check(r.room === 'corridorE' && r.ap === 3 && r.meeting && r.off < 0.05, `the walk stops in the ${names.corridor} on a standing spot, 1 AP spent, and the meeting starts (${r.room}, ${r.ap} AP, meeting ${r.meeting})`);
+    await shot('hs-33-stopped-for-a-meeting');
+  }
 }
 
 console.log('\n11. practice is untouched');

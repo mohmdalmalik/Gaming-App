@@ -336,7 +336,8 @@ export function skipTrade(state, floor, P, Q) {
 // side gets to see, and `notes` carries the two private consequences (a block, a conversion).
 //
 //   An ordinary trade: a Lantern changes hands like any other card.
-//   Receive a Possession card without giving a Lantern -> possessed; you keep the card.
+//   Receive a Possession card without giving a Lantern -> possessed; you keep the card (the chain,
+//     docs/GAME_RULES.md > Possession: one try with it; if that works, your victim keeps it in turn).
 //   Receive a Possession card while giving a Lantern  -> the attempt fails and the Lantern is used
 //     up: the Lantern and the Possession card are both discarded, and you learn who tried.
 //     (rules.lanternBlock 'attacker' is a comparison variant for the simulator only: the Lantern
@@ -381,7 +382,7 @@ export function resolveTrade(state, floor, P, Q, cardIdP, cardIdQ) {
       if (!R.possessed) {
         convertToPossessed(state, R, G.id);
         events.possessed.push({ newly: R.id, by: G.id });
-        note(R.id, `You received a Possession card from ${G.name}. You are now POSSESSED.`);
+        note(R.id, `You received a Possession card from ${G.name}. You are now POSSESSED — and you keep that card: one try to possess someone else in a trade.`);
         note(G.id, `${R.name} is now possessed.`);
       } else {
         note(R.id, `${G.name} handed you a Possession card. You already belong to the hotel.`);

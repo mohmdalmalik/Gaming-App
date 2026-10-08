@@ -7,12 +7,12 @@ import { config as cfg } from './config.js';
 import { rules, applyMode } from './data/rules.js';
 import { hotel } from './data/hotel.js';
 import { roster } from './data/characters.js';
-import { createHotel, stackDeck, growTo, searchSpotOf } from './game/hotel.js';
+import { createHotel, stackDeck, growTo, searchSpotOf, roomAt, cellOf, fogCells } from './game/hotel.js';
 import { buildGrid } from './game/grid.js';
 import {
   createState, resetState, endTurn, activePlayer, nextPlayer, checkWin, canEscape,
-  usableDoorways, openableDoors, pendingEncounters, lockEncounter, playersInRoom, isLocked,
-  isBarricaded, canTradeVoluntarily, lockedAgainst,
+  openableDoors, pendingEncounters, lockEncounter, playersInRoom, isLocked,
+  isBarricaded, canTradeVoluntarily, doorBetween,
 } from './game/state.js';
 import {
   search, canSearch, escape, useBandage, useUnlock, useBarricade, resolveTrade, resolveAttack,
@@ -28,6 +28,8 @@ import { createMood } from './render/mood.js';
 import { createCharacterView } from './render/characterView.js';
 import { createSearchMarks } from './render/searchMarks.js';
 import { createPathPreview } from './render/pathPreview.js';
+import { createFog } from './render/fog.js';
+import { easeOutCubic } from './render/materials.js';
 import { createCameraRig } from './camera.js';
 import { createInput } from './input.js';
 import { createPlayer } from './player.js';
@@ -43,6 +45,10 @@ import { createHandoff } from './ui/handoff.js';
 import { createMeeting } from './ui/meeting.js';
 import { roundLabel, finalRoundNote, isFinal } from './ui/roundLabel.js';
 import { createPerfStats } from './ui/perfStats.js';
+import { createGuestTags } from './ui/guestTags.js';
+import { createGoTags } from './ui/goTags.js';
+import { createScreenTags, interfaceRects } from './ui/screenTags.js';
+import { standable } from './game/moves.js';
 import { usePracticeWording } from './ui/cards.js';
 
 // --- World (pure data + rules) ---------------------------------------------------------
@@ -118,14 +124,20 @@ const doorways = createDoorwayViews(floor, cfg, view.scene, {
 });
 const characters = cast.map(def => createCharacterView(def, cfg, view.scene));
 const searchMarks = createSearchMarks(floor, view.scene);
-const pathPreview = createPathPreview(view.scene, view.camera, view.renderer.domElement, container);
+const confirmBarEl = document.getElementById('confirm-bar');
+const pathPreview = createPathPreview(view.scene, view.camera, view.renderer.domElement, container,
+  () => (confirmBarEl.hidden ? null : confirmBarEl.getBoundingClientRect()));
+const fog = createFog(view.scene, view.camera, cfg);        // the fogged rooms beyond closed doors
+const screenTags = createScreenTags(document, container, view.camera);   // the tags over the view, under the HUD
+const guestTags = createGuestTags(cfg);                     // names, zoomed far out (one tag per room)
+const goTags = createGoTags();                              // "Go · 1 AP" over the rooms next door
 const perfStats = createPerfStats(document, view.renderer, params.get('stats') === '1');
 const mood = createMood(roomViews, view.hemi, cfg, view.scene);
 const rig = createCameraRig(view.camera, cfg);
 // What the camera follows: the active guest while they walk; once they stand still, at most
-// FOLLOW_SLACK m (at the default zoom; more when zoomed in) from the centre of their room. A guest
-// searching in a far corner would otherwise push the room's near door rings under the hand, and the
-// whole room is in view at the default zoom anyway.
+// FOLLOW_SLACK m (at the default zoom; more when zoomed in) from the centre of their room. (Guests
+// stand in the middle of their room — off it only when others stand there too — and the whole room
+// is in view at the default zoom anyway.)
 const FOLLOW_SLACK = 1.2;
 function followPoint() {
   const m = activeMover();
@@ -153,8 +165,9 @@ const meeting = createMeeting(document, cfg);
 
 let running = false;
 let pendingArrival = null;   // enterRoom result waiting for the walk to finish
-let selectedMove = null;     // a door move awaiting confirmation
-let pendingSearch = null;    // { room, face: [x, z] }: walking to the search spot, then searching
+let selectedMove = null;     // a move to a room awaiting confirmation
+let activeWalk = null;       // the confirmed walk under way (its plan), until the guest arrives
+let walkCutShort = false;    // the clock ran out during this walk: it was cut short at the next room
 
 const uiBusy = () => map.isOpen || hand.isOpen || discard.isOpen
   || overlays.endOpen || overlays.noticeOpen || overlays.askOpen || handoff.isOpen || meeting.isOpen;
@@ -163,6 +176,8 @@ const discovery = createDiscovery({
   floor, grid, state, movers, cfg,
   on: {
     roomEntered(result) {
+      // (a walk through several rooms already ends in the first room where a meeting is forced:
+      // planRoomMove in src/game/moves.js)
       pendingArrival = result;
       syncViews(true);
       hud.update(state, floor);
@@ -217,6 +232,8 @@ function syncViews(animate) {
     trackDressing(dressRoom(v, floor, cfg).then(done => { if (done) view.compile(); }));
   }
   doorways.sync();
+  // The camera may zoom out until every revealed room is in view, and pan over all of them.
+  rig.setRooms(floor.roomList.map(r => [r.min[0], r.min[1], r.max[0], r.max[1]]));
   searchMarks.update(state);
   characters.forEach((cv, i) => {
     cv.group.visible = !state.escaped?.has(state.players[i].id);
@@ -225,10 +242,11 @@ function syncViews(animate) {
   });
 }
 
-// Ring the doors the active guest may use this turn: to open, or to walk through.
+// A soft glow at the closed doors of the active guest's room they can open this turn (the fog beyond
+// each one is brighter too: src/render/fog.js).
 function refreshUsable() {
   const p = activePlayer(state);
-  const usable = new Set(state.finished ? [] : [...usableDoorways(state, floor, p), ...openableDoors(state, floor, p)].map(d => d.id));
+  const usable = new Set(state.finished ? [] : openableDoors(state, floor, p).map(d => d.id));
   for (const dv of doorways.views.values()) dv.setUsable(usable.has(dv.doorway.id), p.currentRoom);
 }
 
@@ -267,10 +285,11 @@ function beginTurn() {
   if (state.finished) { showEnd(); return; }
   inActionPhase = false;
   stopTimer();
-  hand.close(); map.close(); hud.hideConfirm(); selectedMove = null; pendingSearch = null;
+  hand.close(); map.close(); hud.hideConfirm(); selectedMove = null; activeWalk = null; walkCutShort = false;
   const p = activePlayer(state);
   movers[p.index]?.halt();
   rig.setFocus(...followPoint(), true);
+  rig.recentre({ immediate: true });     // each turn starts on the guest whose turn it is, at the standard zoom
   mood.snap(p.currentRoom);
   syncViews(false);
   refresh();
@@ -312,11 +331,35 @@ function tickTimer(dt) {
   if (!rules.turnTimerEnabled || !inActionPhase || state.finished || timerLeft <= 0) return;
   if (timerPaused()) return;
   timerLeft -= dt;
-  // A guest who has just stepped into a room finishes arriving first (a forced meeting there pauses the
-  // clock); the turn then ends at once. Ending it mid-arrival would leave that arrival for the next guest.
-  if (timerLeft <= 0 && pendingArrival) timerLeft = 0.001;
+  // A guest still walking when the clock runs out always ends on a standing spot: the walk is cut short
+  // at the next room (or, if they have just stepped into a room, at its middle), and they finish arriving
+  // first (a forced meeting there pauses the clock); the turn then ends at once. Ending it mid-walk would
+  // leave the guest off their spot, or that arrival for the next guest.
+  if (timerLeft <= 0 && (pendingArrival || activeMover().walking || activeMover().path.length)) {
+    cutWalkShort();
+    timerLeft = 0.001;
+  }
   hud.showTimer(timerLeft, rules.turnTimerSeconds);
   if (timerLeft <= 0) onTimeUp();
+}
+
+// The clock ran out mid-walk: a guest still in the room the walk started from walks on to the standing
+// spot of the next room (that room's move is charged as they cross into it, like any move); once they
+// have stepped into a room on the way, they stop on that room's standing spot.
+function cutWalkShort() {
+  if (walkCutShort) return;
+  walkCutShort = true;
+  const m = activeMover();
+  if (!m.walking && !m.path.length) return;           // (only arriving: that finishes by itself)
+  const player = activePlayer(state);
+  // (still in the room the walk started from: the step under way, into the next room, is finished;
+  // already in a room on the way: they stop in it — nothing more is spent once the time is up)
+  const route = activeWalk?.rooms || [];
+  const next = !pendingArrival && route.length > 1 && route[0] === player.currentRoom ? route[1] : player.currentRoom;
+  const plan = next !== player.currentRoom ? discovery.planToRoom(next, standAtFor(player.index)) : null;
+  if (plan?.ok) { activeWalk = plan; discovery.go(plan); return; }
+  const here = discovery.planToRoom(player.currentRoom, standAtFor(player.index));
+  if (here.ok) { activeWalk = here; discovery.go(here); } else m.halt();
 }
 
 function onTimeUp() {
@@ -339,7 +382,7 @@ const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
 function passTurn() {
   // Never past the hand limit: anything that ends a turn goes through the discard screen first.
   if (!state.finished && overHandLimit(activePlayer(state)) > 0) { endTurnNow(); return; }
-  hud.hideConfirm(); selectedMove = null; pendingSearch = null;
+  hud.hideConfirm(); selectedMove = null; activeWalk = null; walkCutShort = false;
   hand.close();
   stopTimer();
   const sealedBefore = [...(state.barricades?.keys() ?? [])];
@@ -358,6 +401,7 @@ function passTurn() {
   if (checkWin(state, floor)) { refresh(); showEnd(); return; }
   if (HOTSEAT) { lockNews = relocked; beginTurn(); return; }
   rig.setFocus(...followPoint());
+  rig.recentre();
   mood.snap(activePlayer(state).currentRoom);
   refresh();
   hud.toast(`Turn ${state.turn} — ${rules.actionPointsPerTurn} action points.${relocked ? ` ${relocked}` : ''}`, relocked ? 5 : undefined);
@@ -370,7 +414,7 @@ function passTurn() {
 // private moment. Nothing else is left open behind it.
 function endTurnNow() {
   if (overHandLimit(activePlayer(state)) > 0) {
-    hand.close(); map.close(); hud.hideConfirm(); selectedMove = null; pendingSearch = null;
+    hand.close(); map.close(); hud.hideConfirm(); selectedMove = null;
     if (activeMover().walking) activeMover().halt();
     stopTimer();
     discard.open(activePlayer(state), passTurn, { hotseat: HOTSEAT });
@@ -397,6 +441,7 @@ function onArrive() {
   const player = activePlayer(state);
   const room = floor.rooms.get(player.currentRoom);
   pendingArrival = null;
+  activeWalk = null;
   if (room?.isExit) {
     // The same words for everyone, so the shared screen gives nothing away about who is carrying
     // what or who is possessed.
@@ -414,7 +459,8 @@ function startMeeting(P, candidates) {
   // The meeting panel is public: close anything private first (a hand sheet opened mid-walk would
   // otherwise stay readable underneath it).
   hand.close(); map.close();
-  hud.hideConfirm(); selectedMove = null; pendingSearch = null;
+  hud.hideConfirm(); selectedMove = null;
+  rig.recentre();      // the meeting is where the guest is
   const met = Q => {
     lockEncounter(state, P.currentRoom, P.index, Q.index);
     const canAttack = weaponsIn(P.hand).length > 0 && P.actionPoints >= rules.actionCost.attack;
@@ -575,49 +621,22 @@ function onSearch() {
   }, then);
 }
 
-// The search icon was tapped: walk to stand in front of the search spot (free, inside the room), then
-// search — the same search as always, for 1 action. A refusal is explained where the tap was.
+// The search icon (or its furniture) was tapped: search it from where the guest stands — they do not
+// walk to it (docs/GAME_RULES.md > Turn), they only turn to face it. The same search as always, for 1
+// action. A refusal is explained where the tap was.
 function onSearchSpot() {
-  if (!running || state.finished || uiBusy() || pendingArrival) return;
+  if (!running || state.finished || uiBusy() || pendingArrival || activeMover().walking) return;
   if (HOTSEAT && !inActionPhase) return;
   const player = activePlayer(state);
   const gate = canSearch(state, floor, player);
   if (!gate.ok) { hud.toast(SEARCH_FAIL[gate.reason] || 'Cannot search now.'); return; }
   hud.hideConfirm(); selectedMove = null;
   const spot = searchSpotOf(floor.rooms.get(player.currentRoom));
-  const stand = spot && standInFront(spot, player);
-  if (stand) {
-    const plan = discovery.plan(stand[0], stand[1]);
-    const m = activeMover();
-    if (plan.ok && plan.cost === 0 && Math.hypot(m.x - stand[0], m.z - stand[1]) > 0.25) {
-      pendingSearch = { room: player.currentRoom, face: spot.center };
-      discovery.go(plan);
-      return;
-    }
-  }
-  if (activeMover().walking) activeMover().halt();
-  pendingSearch = null;
   if (spot) faceTowards(spot.center);
   onSearch();
 }
 
-// Where to stand to search a piece of furniture: just off the side of its footprint that faces into
-// the room, on free floor of the same room (the side nearest the room's centre that can be stood on).
-function standInFront(f, player) {
-  const room = floor.rooms.get(player.currentRoom);
-  const gap = cfg.player.clearance + 0.3;
-  const [cx, cz] = f.center;
-  const spots = [[cx, f.min[1] - gap], [cx, f.max[1] + gap], [f.min[0] - gap, cz], [f.max[0] + gap, cz]];
-  const others = movers.filter((m, i) => i !== player.index && state.players[i].alive);
-  const ok = ([x, z]) => {
-    const c = grid.cellAt(x, z);
-    return c >= 0 && grid.walkable[c] && grid.roomIdOf(c) === room.id && !others.some(m => Math.hypot(m.x - x, m.z - z) < 0.6) && !onABody(x, z);
-  };
-  const d = ([x, z]) => Math.hypot(x - room.center[0], z - room.center[1]);
-  return spots.filter(ok).sort((a, b) => d(a) - d(b))[0] || null;
-}
-
-// Turn the active guest to look at a point (after walking up to the search spot).
+// Turn the active guest to look at a point (the furniture they search).
 function faceTowards([x, z]) {
   const m = activeMover();
   if (Math.hypot(x - m.x, z - m.z) > 0.05) m.heading = Math.atan2(x - m.x, z - m.z);
@@ -770,8 +789,9 @@ function restart() {
   doorways.reset();
   rebuildGrid();
   movers.forEach((m, i) => m.reset(startSpot(i)[0], startSpot(i)[1]));
-  pendingArrival = null; selectedMove = null; pendingSearch = null; queuedTap = null;
+  pendingArrival = null; selectedMove = null; activeWalk = null; walkCutShort = false; queuedTap = null;
   fan.reset();
+  fog.reset();
   discovery.refresh();
   syncViews(false);
   rig.setFocus(...followPoint(), true);
@@ -791,6 +811,7 @@ const ground = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
 const ndc = new THREE.Vector2();
 const hitA = new THREE.Vector3();
 const hitB = new THREE.Vector3();
+const tapBox = new THREE.Box3();
 
 function screenToGround(x, y, out = hitA) {
   const rect = view.renderer.domElement.getBoundingClientRect();
@@ -805,67 +826,148 @@ function groundToScreen(x, z) {
   return { x: rect.left + ((v.x + 1) / 2) * rect.width, y: rect.top + ((1 - v.y) / 2) * rect.height };
 }
 
-// How far from a doorway's centre line a tap still counts as a tap on that door. The gold ring is
-// drawn t + 0.62 m into the room with an outer radius of 0.33 m (src/render/roomView.js placeRing /
-// ringGeo), so it reaches t + 0.95 m; the zone covers the whole ring plus a finger's slack. (It was
-// t + 0.7, so a tap on the room-facing half of the ring walked the guest there instead.)
-const DOOR_TAP_ACROSS = () => cfg.walls.thickness + 0.62 + 0.33 + 0.12;
-
-// The usable doorway (if any) near a ground point, and the room it leads to.
-function usableDoorwayNear(px, pz, player) {
-  let best = null, bestD = Infinity;
-  for (const d of usableDoorways(state, floor, player)) {
-    const along = d.axis === 'x';
-    const halfAlong = d.width / 2 + 0.6, halfAcross = DOOR_TAP_ACROSS();
-    const da = along ? Math.abs(px - d.center[0]) : Math.abs(pz - d.center[1]);
-    const dc = along ? Math.abs(pz - d.center[1]) : Math.abs(px - d.center[0]);
-    if (da <= halfAlong && dc <= halfAcross) {
-      const dist = da + dc;
-      if (dist < bestD) { bestD = dist; best = d; }
-    }
+// --- Tapping the hotel ---------------------------------------------------------------------
+// The guest never walks around inside a room (docs/GAME_RULES.md > Turn): the player acts by tapping
+// ROOMS. What a tap points at is what is under the finger, as the player sees it: the nearest standing
+// wall or piece of furniture (that room) or else the floor (the room it lies in), or the fogged,
+// unknown room beyond a closed door. Walls count at the height they are shown (the cutaway lowers
+// some), so a tap on another room's tall far wall means that room, not the floor hidden behind it —
+// at any turn of the view. The walls of the guest's OWN room are the exception: a tap there means
+// what lies beyond (the room or fog behind that wall), since the room they stand in is not a place
+// to go. The piece of furniture that holds the search spot of their own room is the other exception:
+// tapping it searches it (docs/GAME_RULES.md > Turn: tap a room's furniture to search it), the same as
+// tapping the magnifier over it.
+//   { kind: 'room', id }        a revealed room
+//   { kind: 'search' }          the search spot's furniture in the guest's own room
+//   { kind: 'fog', key, doors } a fogged room: the closed doors that lead into it
+//   { kind: 'jammed', door }    the empty space behind a jammed door
+function tapTargetAt(x, y) {
+  const rect = view.renderer.domElement.getBoundingClientRect();
+  ndc.set(((x - rect.left) / rect.width) * 2 - 1, -((y - rect.top) / rect.height) * 2 + 1);
+  raycaster.setFromCamera(ndc, view.camera);
+  const ray = raycaster.ray;
+  const g = ray.intersectPlane(ground, hitA);
+  let best = g ? ray.origin.distanceTo(g) : Infinity, hitRoom = null, hitPiece = null;
+  const tryBox = (minX, minZ, maxX, maxZ, h, roomId, piece = null) => {
+    if (h < 0.05) return;
+    tapBox.min.set(minX, 0, minZ); tapBox.max.set(maxX, h, maxZ);
+    const p = ray.intersectBox(tapBox, hitB);
+    if (!p) return;
+    const d = ray.origin.distanceTo(p);
+    if (d < best - 1e-4) { best = d; hitRoom = roomId; hitPiece = piece; }
+  };
+  const here = activePlayer(state).currentRoom;
+  for (const rv of roomViews.values()) {
+    if (!rv.group.visible) continue;
+    const k = easeOutCubic(rv.revealT), id = rv.room.id;
+    if (id !== here) for (const w of rv.walls) tryBox(w.wall.min[0], w.wall.min[1], w.wall.max[0], w.wall.max[1], Math.max(cfg.cutaway.stubHeight, w.height) * k, id);
+    for (const f of rv.room.furniture) tryBox(f.min[0], f.min[1], f.max[0], f.max[1], f.size[1] * k, id, f);
   }
-  if (!best) return null;
-  return { door: best, dest: best.a === player.currentRoom ? best.b : best.a };
+  if (hitRoom === here && hitPiece?.search) return { kind: 'search' };
+  if (hitRoom) return { kind: 'room', id: hitRoom };
+  if (!g) return null;
+  const id = roomAt(floor, g.x, g.z);
+  if (id) return { kind: 'room', id };
+  const [i, j] = cellOf(floor, g.x, g.z);
+  const fogged = fogCells(floor).get(`${i},${j}`);
+  if (fogged) return { kind: 'fog', key: fogged.key, doors: fogged.doors };
+  const jam = floor.frontier.find(d => d.jammed && d.cell[0] === i && d.cell[1] === j);
+  return jam ? { kind: 'jammed', door: jam } : null;
 }
 
-// A closed door of the current room near a ground point (to open it, or to explain why not).
-function closedDoorNear(px, pz, player) {
-  for (const d of (floor.rooms.get(player.currentRoom)?.frontier || [])) {
-    const along = d.axis === 'x';
-    const da = along ? Math.abs(px - d.center[0]) : Math.abs(pz - d.center[1]);
-    const dc = along ? Math.abs(pz - d.center[1]) : Math.abs(px - d.center[0]);
-    if (da <= d.width / 2 + 0.6 && dc <= DOOR_TAP_ACROSS()) return d;
+// Tap a fogged room: if one of the doors into it is a door of the active guest's room, it opens at
+// once (1 AP, no question asked: the guest stays where they are). Tap a revealed room: the guest is
+// offered the walk there (Move · N AP), to be confirmed. Tap their own room: nothing to do there but
+// search (the magnifier) or use its job — a short hint says so.
+function tapTarget(t, { queued = false } = {}) {
+  const player = activePlayer(state);
+  if (t.kind === 'search') { if (!queued) onSearchSpot(); return; }
+  if (t.kind === 'fog') {
+    // (your own door into it is jammed — even if another room's door into it is not: say so)
+    const mine = floor.rooms.get(player.currentRoom)?.frontier.find(d => `${d.cell[0]},${d.cell[1]}` === t.key);
+    if (mine?.jammed) { hud.toast(DOOR_FAIL.jammed); return; }
+    const door = t.doors.find(d => d.room === player.currentRoom);
+    if (!door) { hud.toast('Walk to the room next to it first.'); return; }
+    hud.hideConfirm(); selectedMove = null;
+    onOpenDoor(door.id);
+    return;
   }
-  return null;
+  if (t.kind === 'jammed') {
+    if (t.door.room === player.currentRoom) hud.toast(DOOR_FAIL.jammed);
+    return;
+  }
+  if (t.kind !== 'room') return;
+  if (t.id === player.currentRoom) {
+    hud.hideConfirm(); selectedMove = null;
+    if (!queued) hud.toast(`You are in the ${floor.rooms.get(t.id)?.name ?? 'room'}. Tap another room to go there.`);
+    return;
+  }
+  offerMove(t.id);
 }
 
-// Any doorway of the current room near a ground point, usable or not (for explaining a refusal).
-function doorwayNear(px, pz, player) {
-  for (const d of (floor.rooms.get(player.currentRoom)?.doorways || [])) {
-    const along = d.axis === 'x';
-    const da = along ? Math.abs(px - d.center[0]) : Math.abs(pz - d.center[1]);
-    const dc = along ? Math.abs(pz - d.center[1]) : Math.abs(px - d.center[0]);
-    if (da <= d.width / 2 + 0.6 && dc <= DOOR_TAP_ACROSS()) return d;
+// Why a walk to `dest` cannot be made (plan.reason from the rules: moves.planRoomMove).
+function moveRefusal(plan, dest, player) {
+  const next = doorBetween(floor, player.currentRoom, dest.id);
+  if (plan.reason === 'locked') {
+    return next ? 'That door is locked. A Master Key or Lock Pick used here opens it for the rest of your turn.'
+      : `The ${dest.name} is locked. A Master Key or Lock Pick, used from the room next to it, opens its door.`;
   }
-  return null;
+  if (plan.reason === 'barricaded') return next && isBarricaded(state, next.id) ? 'That doorway is barricaded.' : `A barricade is in the way to the ${dest.name}.`;
+  if (plan.reason === 'notEnoughActionPoints') {
+    return player.actionPoints <= 0 ? 'Not enough action points — none left this turn.'
+      : `Not enough action points: the ${dest.name} is ${plan.cost} rooms away (${plan.cost} AP).`;
+  }
+  return `There is no way through to the ${dest.name} right now.`;
 }
 
-// A free standing spot in a discovered room: the centre, or a nearby ring position not on
-// another player or on a body lying on the floor.
+// Offer the walk to room `destId`: the fewest-rooms route there (1 AP per room entered) to a free
+// standing spot in its middle, shown as a dotted path, an outline round the room the walk ends in and a
+// cost tag, with the Move / Cancel bar. If a meeting is forced in a room on the way, the walk ends there
+// (the rules plan it so: planRoomMove) and the bar says so.
+function offerMove(destId) {
+  const player = activePlayer(state);
+  const dest = floor.rooms.get(destId);
+  if (!dest) return;
+  const plan = discovery.planToRoom(destId, standAtFor(player.index));
+  if (!plan.ok) {
+    hud.hideConfirm(); selectedMove = null;
+    if (plan.reason !== 'finished' && plan.reason !== 'dead') hud.toast(moveRefusal(plan, dest, player), 4);
+    return;
+  }
+  const end = plan.waypoints[plan.waypoints.length - 1];
+  plan.preview = { label: `Move · ${plan.cost} AP`, anchor: end, room: floor.rooms.get(plan.dest) };
+  selectedMove = plan;
+  const who = plan.meet.map(id => state.players.find(q => q.id === id)?.name).filter(Boolean);
+  const note = plan.stop ? ` You will stop in the ${floor.rooms.get(plan.stop).name} to meet ${andList(who)}.` : '';
+  hud.showConfirm(`Move to ${dest.name}?${note}`, `Move · ${plan.cost} AP`);
+}
+
+// Set off on a confirmed walk. The view comes back to the guest so the walk can be followed.
+function startWalk(plan) {
+  activeWalk = plan;
+  walkCutShort = false;
+  rig.recentre({ zoom: false });
+  discovery.go(plan);
+}
+
+// A free standing spot in a revealed room: the first of the room's standing spots (src/data/hotel.js
+// standingSpots — the middle first, then round it, wide enough apart that guests sharing a room never
+// hide one another) where a figure can stand (moves.standable: its footprint clear of walls and
+// furniture), not on or beside another guest and not on a body lying there.
 function standingSlot(roomId, forIndex) {
   const room = floor.rooms.get(roomId);
   const [cx, cz] = room.center;
-  const others = movers.filter((m, i) => i !== forIndex && state.players[i].alive);
-  const occupied = (x, z) => others.some(m => Math.hypot(m.x - x, m.z - z) < 0.7) || onABody(x, z);
-  const walkable = (x, z) => { const c = grid.cellAt(x, z); return c >= 0 && grid.walkable[c]; };
-  const ring = [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [-1, 1], [1, -1], [-1, -1],
-    [2, 0], [-2, 0], [0, 2], [0, -2], [2, 1], [-2, 1], [2, -1], [-2, -1], [1, 2], [-1, 2], [1, -2], [-1, -2]];
-  for (const [ox, oz] of ring) {
-    const x = cx + ox * 0.95, z = cz + oz * 0.95;
-    if (walkable(x, z) && !occupied(x, z)) return { x, z };
+  const others = movers.filter((m, i) => i !== forIndex && state.players[i].alive && !state.escaped?.has(state.players[i].id));
+  const occupied = (x, z) => others.some(m => Math.hypot(m.x - x, m.z - z) < 1.0) || onABody(x, z);
+  for (const [ox, oz] of hotel.standingSpots) {
+    const x = cx + ox, z = cz + oz;
+    if (standable(grid, roomId, x, z) && !occupied(x, z)) return { x, z };
   }
   return { x: cx, z: cz };
 }
+
+// The standing spot for guest `index` in any room (what planRoomMove asks for).
+const standAtFor = index => roomId => { const s = standingSlot(roomId, index); return [s.x, s.z]; };
 
 // Bodies on the floor. A guest who dies falls on their back: feet where they stood, head about a
 // body length behind them (src/render/characterView.js setDead turns the figure about its feet, and
@@ -900,12 +1002,6 @@ function layBodyClear(index) {
   if (best != null) m.heading = best;
 }
 
-// Where to walk when moving through `door` into `dest`: the standing slot there (its centre, or a
-// free spot beside others). Every room you can walk into has already been revealed.
-function moveTargetInto(dest, door, forIndex) {
-  return standingSlot(dest, forIndex);
-}
-
 // Open a closed door of the active guest's room (1 AP): the room behind it is revealed and the
 // guest stays put. The new room is empty, so nothing else happens.
 const DOOR_FAIL = {
@@ -922,18 +1018,33 @@ function onOpenDoor(doorId) {
   discovery.refresh();
   syncViews(true);
   refresh();
+  // Ease the view so the guest's room and the room just revealed are both in view (it may lie behind
+  // the room's far wall or under the interface otherwise).
+  const rect = q => [q.min[0], q.min[1], q.max[0], q.max[1]];
+  rig.showRooms([rect(floor.rooms.get(player.currentRoom)), rect(r.room)]);
   hud.toast(r.room.isExit ? `The door opens onto the ${r.room.name}!`
     : `The door opens: ${r.room.name}${r.locked ? ' — locked' : ''}${r.room.dark ? ' — dark' : ''}.`);
 }
 
-// A tap on a door ring while the guest is still walking (or just arriving) is kept and answered
-// as soon as they stand still, instead of being dropped: a player often taps the next door as the
-// guest reaches the room. Only door taps are kept (the answer is only the Move/Open question), only
-// in the same turn, and anything that opens meanwhile (a meeting, a card) drops it.
-let queuedTap = null;   // { x, z, turn }: a ground point
-function doorTapAt(px, pz) {
-  const player = activePlayer(state);
-  return closedDoorNear(px, pz, player) || usableDoorwayNear(px, pz, player) || doorwayNear(px, pz, player);
+// A tap on a ROOM made while the guest is still walking (or just arriving) is kept and answered as soon
+// as they stand still — it only asks (Move / Cancel), so nothing is spent unasked: a player often taps
+// the next room as the guest reaches this one. Only in the same turn, and anything that opens meanwhile
+// (a meeting, a card) drops it. A tap on a fogged room or the search spot is NOT kept (each would spend
+// an action at once, after the player has moved on): "Wait until you arrive."
+let queuedTap = null;   // { target, turn }
+
+// Taps that land just beside the interface are ignored: a finger that misses a button by a few pixels
+// must not open a door (which costs an action at once, with no question). The dead zone is every part
+// of the interface that is showing — the guest strip, the room name and round, the panel, the WHOLE box
+// of the hand fan (between and above its tilted cards too), the buttons, End turn, the Move/Cancel bar,
+// a toast, the search icon — grown by DEAD_ZONE px.
+const DEAD_ZONE = 18;
+const TAP_GUARD = ['.hud-top-left', '.hud-top-center', '.hud-top-right', '#player-panel', '#hand-fan', '#hand-fan .fan-card',
+  '#hand-fan .fan-limit', '.hud-bottom-right', '#btn-end-turn', '#confirm-bar', '#toast', '#search-spot', '.path-label'];
+function inDeadZone(x, y) {
+  const cr = container.getBoundingClientRect();
+  const px = x - cr.left, py = y - cr.top;
+  return interfaceRects(document, container, TAP_GUARD, DEAD_ZONE).some(q => px >= q.l && px <= q.r && py >= q.t && py <= q.b);
 }
 function replayQueuedTap() {
   if (!queuedTap || activeMover().walking || activeMover().path.length || pendingArrival) return;
@@ -941,21 +1052,23 @@ function replayQueuedTap() {
   queuedTap = null;
   if (uiBusy() || state.finished || q.turn !== state.turn) return;
   if (HOTSEAT && !inActionPhase) return;
-  if (doorTapAt(q.x, q.z)) tapGroundPoint(q);
+  tapTarget(q.target, { queued: true });
 }
 
 createInput(view.renderer.domElement, {
   onTap(x, y) {
     if (!running || state.finished || uiBusy()) return;
-    const p = screenToGround(x, y);
-    if (!p) return;
-    if (activeMover().walking || pendingArrival) {
-      queuedTap = { x: p.x, z: p.z, turn: state.turn };
+    if (HOTSEAT && !inActionPhase) return;
+    if (inDeadZone(x, y)) return;
+    const t = tapTargetAt(x, y);
+    if (!t) return;
+    if (activeMover().walking || activeMover().path.length || pendingArrival) {
+      if (t.kind === 'room') queuedTap = { target: t, turn: state.turn };
+      else if (t.kind === 'fog' || t.kind === 'search') { queuedTap = null; hud.toast('Wait until you arrive.'); }
       return;
     }
     queuedTap = null;
-    pendingSearch = null;
-    tapGroundPoint(p);
+    tapTarget(t);
   },
   onPinch(factor) { if (running) rig.zoomBy(factor); },
   onDrag(fromX, fromY, toX, toY) {
@@ -968,50 +1081,11 @@ createInput(view.renderer.domElement, {
   onGestureEnd() { rig.release(); },
 });
 
-// A tap on the floor at ground point p (x, z): a door of this room, or a free step inside it.
-function tapGroundPoint(p) {
-  const player = activePlayer(state);
-  // 0. A closed door of this room → offer to open it (you stay where you are).
-  const closed = closedDoorNear(p.x, p.z, player);
-  if (closed) {
-    if (closed.jammed) { hud.toast(DOOR_FAIL.jammed); return; }
-    if (player.actionPoints < rules.actionCost.open) { hud.toast(DOOR_FAIL.ap); return; }
-    const m = activeMover();
-    selectedMove = { kind: 'open', door: closed, waypoints: [[m.x, m.z]], preview: { label: `Open · ${rules.actionCost.open} AP`, anchor: closed.center } };
-    hud.showConfirm('Open this door?', `Open · ${rules.actionCost.open} AP`);
-    return;
-  }
-  // 1. A usable door → offer to move there.
-  const near = usableDoorwayNear(p.x, p.z, player);
-  if (near) {
-    const slot = moveTargetInto(near.dest, near.door, player.index);
-    const plan = discovery.plan(slot.x, slot.z);
-    if (plan.ok) {
-      // the dotted path + cost tag over the door, shown while the move awaits confirmation
-      plan.preview = { label: `Move · ${plan.cost} AP`, anchor: near.door.center };
-      selectedMove = plan;
-      hud.showConfirm(`Move to ${floor.rooms.get(near.dest).name}?`, `Move · ${plan.cost} AP`);
-    } else {
-      hud.toast('Cannot reach that room.');
-    }
-    return;
-  }
-  // 1b. A door that is there but cannot be used: say why.
-  const blocked = doorwayNear(p.x, p.z, player);
-  if (blocked) {
-    hud.toast(isBarricaded(state, blocked.id) ? 'That doorway is barricaded.'
-      : lockedAgainst(state, blocked, player.currentRoom) ? 'That door is locked. A Master Key or Lock Pick used here opens it for the rest of your turn.'
-        : 'Not enough action points to go through.');
-    return;
-  }
-  // 2. Otherwise, a free reposition inside the current room.
-  const plan = discovery.plan(p.x, p.z);
-  if (plan.ok && plan.cost === 0) discovery.go(plan);
-  else if (plan.ok) hud.toast('Tap a glowing doorway to change rooms.');
-}
-
 hud.on('rotateLeft', () => rig.rotateLeft());
 hud.on('rotateRight', () => rig.rotateRight());
+// "Centre on me": back to the active guest, at the standard zoom.
+function onCentre() { if (running) rig.recentre(); }
+hud.on('centre', onCentre);
 hud.on('endTurn', doEndTurn);
 hud.on('roomJob', onRoom);
 hud.on('trade', onTrade);
@@ -1022,8 +1096,7 @@ hud.onConfirm(
     if (!selectedMove) return;
     const chosen = selectedMove;
     selectedMove = null; hud.hideConfirm();
-    if (chosen.kind === 'open') onOpenDoor(chosen.door.id);
-    else discovery.go(chosen);
+    startWalk(chosen);
   },
   () => { selectedMove = null; hud.hideConfirm(); },
 );
@@ -1104,32 +1177,40 @@ view.renderer.setAnimationLoop(now => {
     activeMover().update(dt);
     discovery.update();
     if (pendingArrival && !activeMover().walking && activeMover().path.length === 0) onArrive();
-    // Walked up to the search spot: face it and search.
-    if (pendingSearch && !activeMover().walking && activeMover().path.length === 0) {
-      const ps = pendingSearch;
-      pendingSearch = null;
-      if (activePlayer(state).currentRoom === ps.room) { faceTowards(ps.face); onSearch(); }
-    }
     replayQueuedTap();
   }
   rig.setFocus(...followPoint());
   rig.update(dt);
   for (const rv of roomViews.values()) rv.update(dt);
-  doorways.update(time, dt, roomViews, activeMover());
+  doorways.update(time, dt, roomViews);
   pathPreview.update(selectedMove && hud.confirmOpen && !activeMover().walking ? selectedMove : null, time);
+  fog.update(floor, activePlayer(state), { time, dt });
   mood.update(activePlayer(state).currentRoom, dt, time, activeMover());
   updateCutaway(roomViews, rig, state, cfg, dt);
   characters.forEach((cv, i) => cv.update(movers[i], dt));
   view.render();
   syncHandFan();
   syncSearchSpot();     // after the render, so it reads this frame's camera
+  // The tags over the view, most important first (a later tag that would clash is left out): when zoomed
+  // far out, the active guest's name (so they can always be found); Explore over the fogged rooms next
+  // door; Go over the rooms next door (not when zoomed far out: the names take over); then the other
+  // guests' names.
+  const still = !activeMover().walking && !activeMover().path.length && !pendingArrival;
+  const tagsOk = actionPhaseClear() && !hand.isOpen && still;
+  const namesOk = running && !handoff.isOpen && !overlays.endOpen && !map.isOpen;
+  screenTags.begin();
+  guestTags.update(screenTags, state, movers, rig.distance, namesOk, 'active');
+  if (tagsOk) fog.tags(screenTags, activePlayer(state).actionPoints);
+  goTags.update(screenTags, state, floor, activePlayer(state), tagsOk && !hud.confirmOpen && rig.distance <= cfg.camera.tagsFrom);
+  guestTags.update(screenTags, state, movers, rig.distance, namesOk, 'others');
+  screenTags.end();
   if (++frames === 2) overlays.setReady();
 });
 document.addEventListener('visibilitychange', () => { last = performance.now(); });
 
 // --- Debug / test hooks ------------------------------------------------------------------
 window.__game = {
-  cfg, rules, floor, grid, state, movers, rig, roomViews, doorways, characters, discovery, view, pathPreview,
+  cfg, rules, hotel, floor, grid, state, movers, rig, roomViews, doorways, characters, discovery, view, pathPreview, fog, screenTags,
   begin, restart, endTurn: doEndTurn,
   refresh,
   activePlayer: () => activePlayer(state),
@@ -1141,7 +1222,7 @@ window.__game = {
   // The search icon and the hand fan (tests).
   tapSearchSpot: () => onSearchSpot(),
   searchSpot: () => ({ mode: searchSpot.mode, point: searchSpot.point, spot: searchSpot.spot && { center: searchSpot.spot.center, height: searchSpot.spot.size[1], kind: searchSpot.spot.kind } }),
-  searchPending: () => !!pendingSearch,
+  searchPending: () => false,      // (searching no longer walks anywhere first; kept for older scripts)
   fanIds: () => (fan.visible ? fan.ids : []),
   cardViewOpen: () => hand.isOpen,
   cardViewId: () => hand.cardId,
@@ -1182,12 +1263,39 @@ window.__game = {
   isRunning: () => running,
   isFinished: () => state.finished,
   groundToScreen,
-  doorTapAcross: () => DOOR_TAP_ACROSS(),   // how far into the room a door tap reaches (tests)
   queuedTap: () => !!queuedTap,
+  // Tapping rooms (tests): what a tap at a screen point means, the fogged rooms, their tags, and the
+  // screen point of a room's or fog room's middle.
+  tapTargetAt: (x, y) => { const t = tapTargetAt(x, y); return t && { kind: t.kind, id: t.id ?? null, key: t.key ?? null, doors: t.doors?.map(d => d.id) ?? null }; },
+  fogCells: () => fog.cells(),
+  // a screen point where a tap means room `id` (or fog room `fog`: its 'i,j' key) and lands on the
+  // canvas, clear of the interface and its dead zone — the point nearest the middle of it — or null
+  tapPointFor: ({ room = null, fog: fogKey = null } = {}) => {
+    const r = room ? floor.rooms.get(room) : null;
+    const c = r ? r.center : fogKey ? fogKey.split(',').map(n => +n * floor.tileSize) : null;
+    if (!c) return null;
+    const pts = [];
+    for (let a = -3; a <= 3; a += 0.75) for (let b = -3; b <= 3; b += 0.75) pts.push([c[0] + a, c[1] + b]);
+    pts.sort((p, q) => Math.hypot(p[0] - c[0], p[1] - c[1]) - Math.hypot(q[0] - c[0], q[1] - c[1]));
+    for (const [x, z] of pts) {
+      const sp = groundToScreen(x, z);
+      if (sp.x < 4 || sp.y < 4 || sp.x > innerWidth - 4 || sp.y > innerHeight - 4) continue;
+      const el = document.elementFromPoint(sp.x, sp.y);
+      if (!el || el.tagName !== 'CANVAS' || inDeadZone(sp.x, sp.y)) continue;
+      const t = tapTargetAt(sp.x, sp.y);
+      if (t && (room ? t.kind === 'room' && t.id === room : t.kind === 'fog' && t.key === fogKey)) return sp;
+    }
+    return null;
+  },
+  fogLabels: () => screenTags.list('fog:').map(t => ({ key: t.key.slice(4), text: t.text, x: (t.l + t.r) / 2, y: (t.t + t.b) / 2 })),
+  centreOnMe: () => onCentre(),
+  inDeadZone: (x, y) => inDeadZone(x, y),
+  walkPlan: () => activeWalk && { rooms: [...activeWalk.rooms], dest: activeWalk.dest, stop: activeWalk.stop, cost: activeWalk.cost },
+  tags: prefix => screenTags.list(prefix),
   screenToGround: (x, y) => { const p = screenToGround(x, y, new THREE.Vector3()); return p ? [p.x, p.z] : null; },
   roomCenter: id => floor.rooms.get(id)?.center ?? null,
   // the random hotel: closed doors of the active guest's room, open one, stack the deck (tests)
-  closedDoors: () => (floor.rooms.get(activePlayer(state).currentRoom)?.frontier || []).map(d => ({ id: d.id, side: d.side, jammed: d.jammed, center: d.center })),
+  closedDoors: () => (floor.rooms.get(activePlayer(state).currentRoom)?.frontier || []).map(d => ({ id: d.id, side: d.side, jammed: d.jammed, center: d.center, fog: `${d.cell[0]},${d.cell[1]}` })),
   openDoor: id => onOpenDoor(id),
   stackDeck: id => stackDeck(floor, id),
   // Tests: put a particular room on the board (next to room `nextTo` if given), as if its door
@@ -1209,14 +1317,13 @@ window.__game = {
   setPixelRatio: cap => view.setPixelRatio(cap),
 };
 
-// Move the active player into an adjacent room by id (walks through the shared door).
-// Returns the plan; the walk and any encounter resolve over subsequent frames.
+// Move the active player into a room by id, as a confirmed tap on it would (tests): the
+// fewest-rooms route to a free spot in its middle. Returns the plan; the walk and any meeting resolve
+// over the next frames.
 function moveToRoom(destId) {
   const player = activePlayer(state);
-  const door = (floor.rooms.get(player.currentRoom)?.doorways || []).find(d => d.a === destId || d.b === destId);
-  if (!door) return { ok: false, reason: 'noDoor' };
-  const slot = moveTargetInto(destId, door, player.index);
-  const plan = discovery.plan(slot.x, slot.z);
-  if (plan.ok) discovery.go(plan);
+  if (!floor.rooms.has(destId) || destId === player.currentRoom) return { ok: false, reason: 'noRoom' };
+  const plan = discovery.planToRoom(destId, standAtFor(player.index));
+  if (plan.ok) startWalk(plan);
   return plan;
 }

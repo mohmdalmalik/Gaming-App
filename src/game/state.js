@@ -322,10 +322,15 @@ export function canTradeVoluntarily(state, floor, player) {
 // Guests `player` must meet, having just entered their room: everyone else alive in the room
 // they have not already met there this round. The lobby (a safe zone) never forces a meeting.
 export function pendingEncounters(state, floor, player) {
+  return encountersIn(state, floor, player, player.currentRoom);
+}
+// The same for a room `player` would walk INTO (a room on a route): entering it forces a meeting with
+// these guests, so a walk through several rooms stops there (docs/GAME_RULES.md > Meetings).
+export function encountersIn(state, floor, player, roomId) {
   if (state.practice) return [];
-  if (floor.rooms.get(player.currentRoom)?.safe) return [];
-  return playersInRoom(state, player.currentRoom, player.id)
-    .filter(q => !hasEncounterLock(state, player.currentRoom, player.index, q.index));
+  if (floor.rooms.get(roomId)?.safe) return [];
+  return playersInRoom(state, roomId, player.id)
+    .filter(q => !hasEncounterLock(state, roomId, player.index, q.index));
 }
 
 // A guest has been converted. Told privately, on their own screen, never announced.

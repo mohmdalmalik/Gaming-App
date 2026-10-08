@@ -66,6 +66,7 @@ export function createHud(doc, cfg, { possessedTellOnMain = state => !state.hots
     endSub: doc.getElementById('end-sub'),
     rotateLeft: doc.getElementById('btn-rotate-left'),
     rotateRight: doc.getElementById('btn-rotate-right'),
+    centre: doc.getElementById('btn-centre'),
     map: doc.getElementById('btn-map'),
     tint: doc.getElementById('possess-tint'),
     toast: doc.getElementById('toast'),

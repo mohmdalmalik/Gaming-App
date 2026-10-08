@@ -48,7 +48,7 @@ html, body {
 }
 
 #app { position: fixed; inset: 0; }
-#view { position: absolute; inset: 0; }
+#view { position: absolute; inset: 0; z-index: 0; }   /* its own stacking context: everything in it stays under the HUD */
 #view canvas { display: block; width: 100%; height: 100%; touch-action: none; }
 /* ?stats=1 performance readout (for measuring on the device). */
 .perf-stats {   /* top left, below the room name and the guest strip */
@@ -69,6 +69,37 @@ html, body {
   transform: translateX(-50%) rotate(45deg); background: rgba(14, 16, 22, 0.9);
   border-right: 1.5px solid var(--brass); border-bottom: 1.5px solid var(--brass);
 }
+/* Tags over the view (src/ui/screenTags.js): one layer under the interface, never in the way of a
+   tap. Each tag is placed by its top-left corner; the script keeps it inside the screen and hides it
+   while it would cover the interface. */
+.tag-layer { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+.tag-layer > * { position: absolute; left: 0; top: 0; white-space: nowrap; }
+/* Over a fogged room the active guest can explore now (src/render/fog.js). */
+.fog-label {
+  padding: 5px 11px; border-radius: 999px;
+  background: rgba(14, 16, 22, 0.82); border: 1.5px solid var(--brass);
+  color: var(--ivory); font: 600 14px/1.2 var(--sans); letter-spacing: 0.02em;
+  box-shadow: 0 3px 12px rgba(0, 0, 0, 0.45), 0 0 14px rgba(255, 204, 102, 0.22);
+}
+.fog-label.dim { border-color: var(--line); color: var(--ivory-dim); box-shadow: 0 3px 12px rgba(0, 0, 0, 0.45); }
+/* Over a revealed room next door the active guest can walk into (src/ui/goTags.js): quieter than Explore. */
+.go-label {
+  padding: 3px 9px; border-radius: 999px;
+  background: rgba(14, 16, 22, 0.6); border: 1px solid rgba(239, 231, 214, 0.28);
+  color: rgba(239, 231, 214, 0.86); font: 600 12.5px/1.2 var(--sans); letter-spacing: 0.02em;
+}
+/* One name tag per room with guests in it, only when the view is zoomed far out (src/ui/guestTags.js). */
+.guest-tag {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 2px 8px 2px 6px; border-radius: 999px;
+  background: rgba(14, 16, 22, 0.82); border: 1px solid var(--line);
+  color: var(--ivory); font: 600 12.5px/1.25 var(--sans);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+}
+.guest-tag .gt-dot { width: 9px; height: 9px; border-radius: 50%; flex: none; }
+.guest-tag .gt-sep { color: var(--ivory-dim); padding: 0 1px; }
+.guest-tag .gt-more { color: var(--ivory-dim); padding-left: 3px; }
+.guest-tag.active { border: 1.5px solid var(--brass-bright); background: rgba(40, 32, 14, 0.9); }
 
 /* A reusable brass-framed surface: a hairline brass border with a dark inner reveal. */
 .framed {
@@ -374,6 +405,7 @@ html, body {
 }
 .ctl:active { transform: scale(0.96); }
 .ctl.round { width: 50px; border-radius: 50%; }
+.ctl.centre svg { display: block; width: 24px; height: 24px; }
 .ctl.map { font-size: 15px; font-weight: 600; font-family: var(--serif); letter-spacing: 0.02em; }
 .ctl.map .ico { font-size: 18px; }
 

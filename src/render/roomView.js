@@ -299,10 +299,12 @@ const BAR_SIGN_OUT = 0.45;   // and how far it hangs out from the doorway, on th
 const INTO = { north: [0, 1], south: [0, -1], east: [-1, 0], west: [1, 0] };   // into the room from its wall
 
 // Doors and doorways. A CLOSED door (one that leads to a room not yet revealed) is a walnut door
-// leaf standing in the opening, with a soft warm glow on the floor in front of it. Opening it
-// swings the leaf into the new room, and from then on it is an open doorway. A gold ring (a slow
-// pulse; the tests know it as `blink`) sits on the active guest's side of every door they can use
-// this turn — to open, or to walk through. A jammed door keeps its leaf, and no cue.
+// leaf standing in the opening, with the fogged, unknown room beyond it (src/render/fog.js). Opening
+// it swings the leaf into the new room, and from then on it is an open doorway. Doors are not what
+// you tap — you tap the fogged room to open its door, and a revealed room to walk there — so there
+// are no rings on the floor any more; only the closed doors of the active guest's own room keep a
+// soft warm glow at their threshold, linking each one to the brighter fog beyond it. A jammed door
+// keeps its leaf, and no glow.
 // `isLocked(roomId)`: whether that room's door is locked right now. `standingIn()`: the room the active
 // guest stands in — a locked door opens for a guest INSIDE the locked room (the way out is always open;
 // the padlock stays on it, since it is still locked against anyone going in). `openedNow(roomId)`: that
@@ -315,11 +317,7 @@ export function createDoorwayViews(floor, cfg, scene, { isLocked = () => false, 
   const t = cfg.walls.thickness, H = cfg.walls.height;
   const warm = new THREE.Color(cfg.palette.frontier);
   const radial = gradientTexture();
-  const glowMat = new THREE.MeshBasicMaterial({ map: radial, color: warm, transparent: true, opacity: 0.5, depthWrite: false, toneMapped: false, blending: THREE.AdditiveBlending });
-  const haloMat = glowMat.clone();
-  const ringMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(cfg.palette.usable), transparent: true, opacity: 0.95, depthWrite: false, toneMapped: false });
-  const ringGeo = new THREE.RingGeometry(0.27, 0.33, 40);
-  ringGeo.rotateX(-Math.PI / 2);
+  const glowMat = new THREE.MeshBasicMaterial({ map: radial, color: warm, transparent: true, opacity: 0.35, depthWrite: false, toneMapped: false, blending: THREE.AdditiveBlending });
   const stripMat = lambert(cfg.palette.doorStrip);
   // Door leaves are unlit, a fixed dark walnut like the lobby's baked panelling: a lamp beside a
   // door would otherwise blow a lit leaf out to bright orange.
@@ -412,55 +410,36 @@ export function createDoorwayViews(floor, cfg, scene, { isLocked = () => false, 
     if (low && hits(-1) >= low) setHinge(pivot, 1);
   }
 
-  // `inside`: the side of a closed door (the room it belongs to); its glow then stays on that side,
-  // since nothing has been revealed beyond it yet. An open doorway's glow reaches into both rooms.
-  function makeCues(d, inside) {
+  // The soft warm glow on the floor at a closed door's threshold, on the side of the room it belongs
+  // to (nothing has been revealed beyond it yet).
+  function makeGlow(d, inside) {
     const along = d.axis === 'x';
     const glow = new THREE.Mesh(unitPlane, glowMat);
-    const deep = inside ? 1.2 : 1.9, [ix, iz] = inside ? INTO[inside] : [0, 0];
+    const deep = 1.2, [ix, iz] = INTO[inside];
     glow.scale.set(along ? d.width + 0.9 : deep, 1, along ? deep : d.width + 0.9);
     glow.position.set(d.center[0] + ix * (t / 2 + deep / 2), 0.035, d.center[1] + iz * (t / 2 + deep / 2));
     glow.renderOrder = 2;
     glow.visible = false;
     scene.add(glow);
-    const blink = new THREE.Group();
-    const ring = new THREE.Mesh(ringGeo, ringMat);
-    ring.position.y = 0.03;
-    const halo = new THREE.Mesh(unitPlane, haloMat);
-    halo.scale.set(1.1, 1, 1.1);
-    halo.position.y = 0.028;
-    blink.add(halo, ring);
-    blink.renderOrder = 3;
-    blink.visible = false;
-    scene.add(blink);
-    return { glow, blink };
+    return glow;
   }
 
-  function placeRing(blink, d, fromRoom) {
-    const room = fromRoom && floor.rooms.get(fromRoom);
-    if (!room) return;
-    const along = d.axis === 'x', inset = t + 0.62;
-    const sx = along ? 0 : Math.sign(room.center[0] - d.center[0]) || 1;
-    const sz = along ? Math.sign(room.center[1] - d.center[1]) || 1 : 0;
-    blink.position.set(d.center[0] + sx * inset, 0, d.center[1] + sz * inset);
-  }
-
-  // A closed door.
+  // A closed door. `usable`: it is a door of the active guest's room they can open now (its glow shows).
   function addFrontier(d) {
     const room = floor.rooms.get(d.room);
     const leaf = makeLeaf(d, room);
-    const { glow, blink } = makeCues(d, d.side);
+    const glow = makeGlow(d, d.side);
     let usable = false;
     const view = {
-      kind: 'closed', doorway: d, leaf, glow, blink,
+      kind: 'closed', doorway: d, leaf, glow,
+      get usable() { return usable && !d.jammed; },
       sync() {
         leaf.userData.leaf.material = d.jammed ? leafJammedMat : leafMat;
-        glow.visible = !d.jammed;
-        blink.visible = usable && !d.jammed;
+        glow.visible = usable && !d.jammed;
       },
       setState() { this.sync(); },
-      setUsable(v, fromRoom) { usable = v; placeRing(blink, d, fromRoom || d.room); this.sync(); },
-      dispose() { scene.remove(leaf, glow, blink); },
+      setUsable(v) { usable = v; this.sync(); },
+      dispose() { scene.remove(leaf, glow); },
     };
     view.sync();
     return view;
@@ -474,7 +453,6 @@ export function createDoorwayViews(floor, cfg, scene, { isLocked = () => false, 
     strip.scale.set(along ? d.width : t * 2, 1, along ? t * 2 : d.width);
     strip.position.set(d.center[0], 0.02, d.center[1]);
     scene.add(strip);
-    const { glow, blink } = makeCues(d);
     // A doorway into a LOCKED room keeps a door in it — the locked kind, shut — until the door is
     // opened with a key or a pick; then it swings open like any other, and it swings shut again, padlock
     // and all, when it locks again at the end of that turn. It also stands open (still padlocked) while
@@ -493,7 +471,7 @@ export function createDoorwayViews(floor, cfg, scene, { isLocked = () => false, 
     mark.visible = false;
     scene.add(mark);
     const view = {
-      kind: 'open', doorway: d, strip, leaf, glow, blink, warn, mark, locked: null, shut: null, openedNow: false,
+      kind: 'open', doorway: d, strip, leaf, warn, mark, locked: null, shut: null, openedNow: false,
       bar: null, barricaded: false,
       sync() {
         // A barricade: boards across the doorway while it is sealed (both ways, for every guest).
@@ -534,8 +512,9 @@ export function createDoorwayViews(floor, cfg, scene, { isLocked = () => false, 
         }
       },
       setState() { this.sync(); },
-      setUsable(v, fromRoom) { blink.visible = v; glow.visible = v; placeRing(blink, d, fromRoom); },
-      dispose() { scene.remove(strip, glow, blink, warn, mark); if (leaf) scene.remove(leaf); this.bar?.dispose(); },
+      // (an open doorway is not tapped: the room beyond it is)
+      setUsable() {},
+      dispose() { scene.remove(strip, warn, mark); if (leaf) scene.remove(leaf); this.bar?.dispose(); },
     };
     view.sync();
     return view;
@@ -575,7 +554,7 @@ export function createDoorwayViews(floor, cfg, scene, { isLocked = () => false, 
       const live = new Set([...floor.frontier.map(d => d.id), ...floor.doorways.map(d => d.id)]);
       for (const [id, v] of views) {
         if (live.has(id)) continue;
-        if (v.kind === 'closed') { leaves.set(at(v.doorway), v.leaf); scene.remove(v.glow, v.blink); }
+        if (v.kind === 'closed') { leaves.set(at(v.doorway), v.leaf); scene.remove(v.glow); }
         else v.dispose();
         views.delete(id);
       }
@@ -589,18 +568,11 @@ export function createDoorwayViews(floor, cfg, scene, { isLocked = () => false, 
       for (const v of views.values()) v.dispose();
       views.clear();
     },
-    // Pulse the rings, swing opening doors, and keep leaves no taller than a lowered wall.
-    // `walker` (the active guest's mover): while they walk, the rings right around them are hidden,
-    // so the doorway they are crossing does not show a second ring over their own.
-    update(time, dt, roomViews, walker = null) {
-      const p = 0.5 + 0.5 * Math.sin(time * 2.6);
-      ringMat.opacity = 0.6 + 0.4 * p;
-      haloMat.opacity = 0.25 + 0.3 * p;
-      glowMat.opacity = 0.4 + 0.12 * p;
+    // Breathe the threshold glows, swing opening doors, and keep leaves no taller than a lowered wall.
+    update(time, dt, roomViews) {
+      const p = 0.5 + 0.5 * Math.sin(time * 2.4);
+      glowMat.opacity = 0.28 + 0.1 * p;
       for (const v of views.values()) {
-        const b = v.blink;
-        const near = !!walker?.walking && Math.hypot(b.position.x - walker.x, b.position.z - walker.z) < 1.3;
-        if (b.children[0].visible === near) for (const ch of b.children) ch.visible = !near;
         if (v.bar?.on) {
           // The boards stand as tall as the taller of the doorway's two walls, and at least waist
           // high where both are cut down, so a sealed doorway still reads in the cutaway.

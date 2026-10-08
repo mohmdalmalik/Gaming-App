@@ -7,13 +7,10 @@ await h.begin();
 await game(() => { for (const t of ['lounge', 'ballroom', 'grandCorridor', 'switchboard', 'dining', 'library', 'kitchen', 'serviceCorridor', 'storage', 'corridorE', 'corridorW', 'corridorN', 'corridorS', 'stairs', 'infirmary2', 'backCorridor', 'cloakroom', 'cornerCorridor', 'infirmary1', 'linenStore1', 'linenStore2', 'suite416', 'housekeeping', 'exit']) window.__game.revealTile(t); for (const r of [...window.__game.state.lockedRooms]) window.__game.state.lockedRooms.delete(r); window.__game.doorways.sync(); });
 for (const id of ['storage', 'serviceCorridor', 'corridorN', 'stairs']) {
   await h.put(id, 4); await h.snapCam(); await page.waitForTimeout(800);
-  // tap the first usable/closed door ring that is on screen
-  const rings = await game(() => { const g = window.__game; const out = []; for (const v of g.doorways.views.values()) if (v.blink.visible) { const p = g.groundToScreen(v.blink.position.x, v.blink.position.z); out.push(p); } return out; });
+  // tap the first neighbouring room that can be tapped (a move: the confirm bar comes up)
+  const spots = await game(() => { const g = window.__game, r = g.floor.rooms.get(g.activePlayer().currentRoom); return [...r.neighbours].map(id => g.tapPointFor({ room: id })).filter(Boolean); });
   let opened = false;
-  for (const p of rings) {
-    if (p.x < 10 || p.y < 10 || p.x > 1170 || p.y > 810) continue;
-    const top = await page.evaluate(({ x, y }) => document.elementFromPoint(x, y)?.tagName, p);
-    if (top !== 'CANVAS') continue;
+  for (const p of spots) {
     await page.touchscreen.tap(p.x, p.y); await page.waitForTimeout(300);
     if (await h.visible('#confirm-bar')) { opened = true; break; }
   }

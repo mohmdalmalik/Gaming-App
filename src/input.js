@@ -1,7 +1,9 @@
 // Touch + mouse input for the 3D view. Emits high-level gestures:
 //   onTap(x, y)                   one finger / left click, without dragging
 //   onPinch(factor)               two fingers apart (>1) or together (<1); also trackpad pinch
-//   onDrag(fromX, fromY, toX, toY) two-finger drag or right/middle mouse drag (screen px)
+//   onDrag(fromX, fromY, toX, toY) a drag — one finger or two, or any mouse button — pans the view
+//                                 (screen px). A one-finger drag starts once the finger has moved more
+//                                 than a tap may (tapMaxMove), so a tap is never taken for a drag.
 //   onWheel(deltaY)               mouse wheel (pixels, normalised)
 //   onGestureEnd()                all fingers / buttons released
 // Uses Pointer Events, which cover touch and mouse on iPad Safari and desktop browsers.
@@ -54,8 +56,11 @@ export function createInput(element, handlers, opts = {}) {
       if (pinch.dist > 0 && now.dist > 0) handlers.onPinch?.(now.dist / pinch.dist);
       handlers.onDrag?.(pinch.mx, pinch.my, now.mx, now.my);
       pinch = now;
-    } else if (pointers.size === 1 && p.type === 'mouse' && (e.buttons & 6)) {
-      handlers.onDrag?.(fromX, fromY, p.x, p.y); // right / middle mouse drag pans
+    } else if (pointers.size === 1 && !becameMulti && (p.type !== 'mouse' || (e.buttons & 7))) {
+      // One finger (or a held mouse button) dragging the hotel: pan, once it has moved further than a tap
+      // — from where it first touched, so the hotel stays under the finger from the start.
+      if (!p.dragging && Math.hypot(p.x - p.sx, p.y - p.sy) > tapMaxMove) { p.dragging = true; handlers.onDrag?.(p.sx, p.sy, p.x, p.y); }
+      else if (p.dragging) handlers.onDrag?.(fromX, fromY, p.x, p.y);
     }
   }
 

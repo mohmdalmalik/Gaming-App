@@ -1,9 +1,9 @@
-// Ties taps, pathfinding, action points and room discovery together for the active
-// player. Talks to the renderer only through the callbacks in `on`, so the rules stay
-// reusable.
+// Ties pathfinding, action points and room discovery together for the active player (main.js
+// turns a tap on a room into a planned walk here). Talks to the renderer only through the callbacks
+// in `on`, so the rules stay reusable.
 import { roomAt } from './game/hotel.js';
 import { enterRoom, activePlayer } from './game/state.js';
-import { buildAllowed, planMove } from './game/moves.js';
+import { buildAllowed, planMove, planRoomMove } from './game/moves.js';
 
 // `movers` are the movement objects (src/player.js), one per entry in state.players.
 export function createDiscovery({ floor, grid, state, movers, cfg, on = {} }) {
@@ -19,6 +19,14 @@ export function createDiscovery({ floor, grid, state, movers, cfg, on = {} }) {
       const player = activePlayer(state);
       const mover = movers[player.index];
       return planMove(state, floor, grid, cfg, player, [mover.x, mover.z], [wx, wz], allowed);
+    },
+    // Work out a walk into room `roomId` for the active player without committing it: the fewest-rooms
+    // route, one move per room entered, ending early in a room where a meeting is forced (planRoomMove).
+    // `standAt(roomId)` gives the standing spot [x, z] in the room the walk ends in.
+    planToRoom(roomId, standAt) {
+      const player = activePlayer(state);
+      const mover = movers[player.index];
+      return planRoomMove(state, floor, grid, cfg, player, [mover.x, mover.z], roomId, standAt, allowed);
     },
     // Commit a plan (start walking).
     go(plan) {

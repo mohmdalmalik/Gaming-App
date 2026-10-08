@@ -9,13 +9,14 @@ Guests are trapped on a hotel floor. Lanterns are the way out: a clean guest car
 
 ## Turn
 - 4 action points (AP), never carried over.
-- Open a closed door of your room: 1 AP (see Doors and exploring). Move into an adjacent room through an open doorway: 1 AP. Escape from the Fire Exit: 1 AP. Search: 1 AP. Use a card: 1 AP (Espresso: free). Use a room's job (Infirmary, Switchboard): 1 AP. Repositioning inside a room: free.
+- Open a closed door of your room: 1 AP (see Doors and exploring). Move into an adjacent room through an open doorway: 1 AP. Escape from the Fire Exit: 1 AP. Search: 1 AP. Use a card: 1 AP (Espresso: free). Use a room's job (Infirmary, Switchboard): 1 AP.
+- Your guest always stands in the middle of the room they are in; there is no walking around inside a room. You act by tapping: tap a room to open or enter it, tap a room's furniture to search it (you don't walk to it).
 - 45-second timer for the active player's actions. It pauses during meetings and pass-the-device screens. When it runs out, the turn ends. ?timer=off disables it.
 - A round = every living guest takes one turn.
 - Dawn deadline: the match lasts at most 8 rounds. The round is shown as "Round 3 of 8", and the final round before dawn is clearly marked.
 
 ## Health
-- 3 health bars. Bandage restores 1 (max 3). The Infirmary restores 2 (max 3).
+- 4 health bars. Bandage restores 1 (max 4). The Infirmary restores 2 (max 4).
 - At 0 health a guest dies and is out of the game. Everything they carried drops in that room, except Possession cards, which leave the game.
 
 ## Meetings
@@ -38,7 +39,8 @@ Guests are trapped on a hotel floor. Lanterns are the way out: a clean guest car
 - Revolver: −2 health, 2 shots, then discarded.
 
 ## Possession
-- One guest is secretly Possessed at setup and starts with 3 Possession cards.
+- One guest is secretly Possessed at setup and starts with 2 Possession cards: two chances to possess someone.
+- The chain: a guest who is possessed takes the Possession card that possessed them and gets one try with it; if that works, their victim takes it in turn, and so on. A chain stops when a Lantern blocks it (both cards are thrown away) or when the guest holding the card dies (it leaves the game).
 - Possessed guests see a private tell (portrait + screen tint). In hot-seat it shows on that guest's private screens and, during their own turn, on the main screen too: a POSSESSED label, how many Possession cards they still hold ("souls to trade") and their Possession cards in the hand. It disappears before the iPad is passed on.
 - Possession cards never count toward the hand limit and can't be discarded.
 - How many cards a guest holds is private: the table never shows other guests' card counts (only a Hand Mirror reveals a hand). Your own count is shown only to you.
@@ -63,7 +65,7 @@ Guests are trapped on a hotel floor. Lanterns are the way out: a clean guest car
 - *Placeholder, awaiting approval:* if no remaining tile can fit behind a door, the door is jammed: it stays shut for the rest of the match, and trying it costs nothing.
 
 ## Doors and exploring
-- Unexplored doorways are closed doors. Opening one costs 1 AP and reveals the room behind it, but you stay where you are. Entering is a normal move (1 AP). You are never forced to enter.
+- Unexplored doorways are closed doors, with a fogged, unknown room shown beyond each one. Tapping a fogged room opens its door: 1 AP; the room behind is revealed, but you stay where you are. Tapping a revealed room asks you to confirm the move; your guest then walks there (1 AP per room) and stands in its middle. You are never forced to enter.
 - Opened doors stay open. (A locked door is different: see Rooms.)
 - A newly revealed room is empty, so opening a door never triggers a meeting.
 
@@ -78,7 +80,7 @@ Guests are trapped on a hotel floor. Lanterns are the way out: a clean guest car
 
 ### Rooms with jobs
 - Linen Store ×2: the first search here draws 2 cards instead of 1.
-- Infirmary ×2: 1 AP to restore 2 health (maximum 3).
+- Infirmary ×2: 1 AP to restore 2 health (maximum 4).
 - Switchboard ×1: 1 AP, once per player per turn. Everyone learns how many guests are currently possessed, but not who.
 
 ## Searching
@@ -87,7 +89,7 @@ Guests are trapped on a hotel floor. Lanterns are the way out: a clean guest car
 - When the deck runs out, shuffle the discard pile into a new deck.
 
 ## Cards and deck (6 players)
-- Possession ×3 (the possessed guest's supply, not in the deck).
+- Possession ×2 (the possessed guest's supply, not in the deck).
 - Draw deck (48): Lantern ×14, Bandage ×7, Flashlight ×5, Knife ×4, Barricade ×4, Lock Pick ×4, Hand Mirror ×3, Espresso ×3, Revolver ×2, Master Key ×2.
 - Lantern: give it in a trade to block a possession attempt; three of them let a clean guest escape.
 - Hand Mirror: 1 AP. Choose a guest in your room; they show you their whole hand in private. Used up.

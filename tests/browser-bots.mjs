@@ -97,8 +97,9 @@ async function answerScreens() {
 
 // ------------------------------------------------------------------------------------------------
 console.log('\n1. main menu');
-await page.goto(`${baseUrl}?seed=31337&botpace=0.15`, { waitUntil: 'domcontentloaded' });
+await page.goto(`${baseUrl}?seed=31337&botpace=0.15`, { waitUntil: 'load' });
 await page.evaluate(() => { try { localStorage.clear(); } catch { /* fine */ } });
+await waitFor(() => window.__game && !document.getElementById('btn-menu-bots').disabled, null, 60000);
 await page.goto(`${baseUrl}?seed=31337&botpace=0.15`, { waitUntil: 'domcontentloaded' });
 await waitFor(() => window.__game && !document.getElementById('btn-menu-bots').disabled, null, 60000);
 check(await visible('#menu-main'), 'the page opens on the main menu');
@@ -348,6 +349,7 @@ console.log(`\n7. whole matches (${MATCHES}) with a stand-in player`);
 for (let m = 0; m < MATCHES; m++) {
   const role = ['random', 'clean', 'possessed'][m % 3];
   const bots = [5, 4, 3][m % 3];
+  await dressed().catch(() => {});
   await page.goto(`${baseUrl}?mode=bots&bots=${bots}&role=${role}&botpace=0.1&intro=off&seed=${9000 + m}`, { waitUntil: 'domcontentloaded' });
   await waitFor(() => window.__game && !document.getElementById('btn-begin').disabled, null, 60000);
   await quick();
@@ -394,7 +396,8 @@ for (let m = 0; m < MATCHES; m++) {
 
 // ------------------------------------------------------------------------------------------------
 await dressed().catch(() => {});
-const bad = messages.filter(m => !/favicon/.test(m));
+// (A download cut off because the test itself moved to another page is not the game's fault.)
+const bad = messages.filter(m => !/favicon/.test(m) && !/net::ERR_ABORTED/.test(m));
 check(!bad.length, `no console errors or warnings${bad.length ? `:\n    ${bad.slice(0, 12).join('\n    ')}` : ''}`);
 await browser.close();
 console.log(failures.length ? `\n${failures.length} BOTS BROWSER CHECK(S) FAILED` : '\nALL BOTS BROWSER CHECKS PASSED');

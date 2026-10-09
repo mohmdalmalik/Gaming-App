@@ -376,19 +376,11 @@ html, body {
 .search-spot.dark .ss-caption, .search-spot.ap .ss-caption, .search-spot.empty .ss-caption { color: var(--ivory-dim); border-color: var(--line-soft); }
 .search-spot:active .ss-badge { transform: scale(0.94); }
 
-/* The fan and the search icon belong to the active guest's own action phase: the moment a hand-over,
-   private, public or end screen is up they are gone (the script hides them too). */
+/* The fan and the search icon step aside the moment a private, public or end screen is up (the script
+   hides them too). */
 #app:has(#handoff-overlay:not([hidden]), #encounter-overlay:not([hidden]), #end-overlay:not([hidden]),
   #notice-overlay:not([hidden]), #map-overlay:not([hidden]), #discard-overlay:not([hidden]),
   #start-overlay:not([hidden]), #ask-overlay:not([hidden])) :is(#hand-fan, #search-spot) { display: none !important; }
-/* The possessed guest's POSSESSED label and souls count in the panel go the same moment a hand-over,
-   meeting, public notice (the Switchboard) or end screen is up (main.js possessedTellOnMain hides them too). */
-#app:has(#handoff-overlay:not([hidden]), #encounter-overlay:not([hidden]), #end-overlay:not([hidden]),
-  #notice-overlay:not([hidden]), #ask-overlay:not([hidden])) :is(#panel-role, #panel-souls) { display: none !important; }
-/* The same for End turn's "Discard N first" (the guest's own card count; card counts are private): main.js
-   swaps it for the shared words ("Next: Clara") on those screens; this hides it until it has. */
-#app:has(#handoff-overlay:not([hidden]), #encounter-overlay:not([hidden]), #end-overlay:not([hidden]),
-  #notice-overlay:not([hidden]), #ask-overlay:not([hidden])) #end-sub.own { visibility: hidden; }
 
 /* ---- Bottom-right: camera controls (separate) + action buttons ---- */
 .hud-bottom-right { display: flex; flex-direction: column; align-items: flex-end; gap: 12px; }
@@ -833,12 +825,6 @@ html, body {
 .offer-summary { margin-top: 12px; font-size: 14px; color: var(--ivory-dim); font-family: var(--serif); }
 .offer-summary.locked { color: var(--brass); }
 
-/* --- Start screen: choose practice or a hot-seat table ---------------------------------------- */
-.mode-switch { margin-top: 22px; padding-top: 18px; border-top: 1px solid var(--line-soft); }
-.mode-label { display: block; font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); margin-bottom: 10px; }
-.mode-buttons { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
-.btn.mode { text-decoration: none; min-height: 46px; display: inline-flex; align-items: center; font-family: var(--serif); }
-
 /* The end-of-turn discard prompt: the whole hand must fit on an iPad at once. Six cards in a
    single row overflowed the box and clipped the outer cards out of reach, so the rows wrap and
    the tiles are compact; the found card shrinks once the player is choosing what to drop. */
@@ -935,3 +921,155 @@ html, body {
 .panel-role[hidden], .panel-souls[hidden] { display: none; }
 .panel-souls { display: flex; margin: -2px 0 -4px; }
 .fan-card .fan-badge.souls { color: #fff; background: #7a2bd0; border: 1px solid #d7b3ff; box-shadow: 0 0 8px rgba(180,107,255,0.7); }
+
+
+/* ==========================================================================================
+   Main menu (src/ui/menu.js) over the lobby (src/menu/lobbyScene.js), the lift fade, and the
+   match's own pieces: the feed, the Menu button, the end-of-match roles.
+   ========================================================================================== */
+/* The lobby behind the menu, soft and a little dim; the blur eases away as the lift sequence starts. */
+#view canvas { transition: filter 1.4s ease, transform 1.4s ease; }
+#view.blurred canvas { filter: blur(3.5px) saturate(0.92) brightness(0.82); transform: scale(1.03); }
+
+.menu { position: fixed; inset: 0; z-index: 40; }
+.menu-shade {
+  position: absolute; inset: 0; pointer-events: none;
+  background:
+    linear-gradient(90deg, rgba(7, 8, 13, 0.9) 0%, rgba(7, 8, 13, 0.72) 30%, rgba(7, 8, 13, 0.18) 58%, rgba(7, 8, 13, 0) 75%),
+    radial-gradient(140% 120% at 70% 45%, rgba(0, 0, 0, 0) 55%, rgba(0, 0, 0, 0.55) 100%);
+  transition: opacity 0.9s ease;
+}
+.menu-panel {
+  position: absolute; top: 50%; left: calc(var(--safe-left) + max(28px, 6vw));
+  transform: translateY(-50%); width: min(430px, 44vw);
+  transition: opacity 0.6s ease, transform 0.6s ease;
+}
+.menu.leaving .menu-panel { opacity: 0; transform: translate(-24px, -50%); pointer-events: none; }
+.menu.leaving .menu-shade { opacity: 0; }
+.menu-screen { animation: menuIn 0.45s ease both; }
+@keyframes menuIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+.menu-kicker {
+  font-size: 12px; font-weight: 700; letter-spacing: 0.22em; text-transform: uppercase; color: var(--brass);
+  margin-bottom: 8px;
+}
+.menu-title {
+  margin: 0; font-family: var(--serif); font-weight: 700; font-size: clamp(46px, 6.4vw, 76px); line-height: 0.98;
+  letter-spacing: 0.01em; color: var(--brass-bright);
+  background: linear-gradient(180deg, #f6e2a8 0%, #e2bd67 55%, #a8812f 100%); -webkit-background-clip: text; background-clip: text;
+  -webkit-text-fill-color: transparent; text-shadow: none; filter: drop-shadow(0 3px 14px rgba(0, 0, 0, 0.55));
+}
+.menu-tag { margin: 12px 0 26px; font-family: var(--serif); font-style: italic; font-size: 18px; color: var(--ivory-dim); }
+.menu-h2 { margin: 0 0 18px; font-family: var(--serif); font-size: 32px; font-weight: 700; color: var(--ivory); }
+.menu-buttons { display: flex; flex-direction: column; gap: 12px; }
+.menu-btn {
+  appearance: none; display: flex; flex-direction: column; align-items: flex-start; justify-content: center; gap: 3px;
+  min-height: 64px; padding: 12px 22px; border-radius: 14px; cursor: pointer; text-align: left;
+  background: rgba(16, 18, 26, 0.78); border: 1px solid var(--line); color: var(--ivory);
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.5), 0 10px 28px rgba(0, 0, 0, 0.35);
+  -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
+  transition: transform 0.12s ease, border-color 0.2s ease, background 0.2s ease;
+  font: inherit;
+}
+.menu-btn:active { transform: scale(0.98); }
+.menu-btn:disabled { opacity: 0.5; cursor: default; }
+.menu-btn .mb-main { font-family: var(--serif); font-size: 22px; font-weight: 700; letter-spacing: 0.01em; }
+.menu-btn .mb-sub { font-size: 13px; color: var(--ivory-dim); }
+.menu-btn.primary { background: linear-gradient(180deg, #e9cb7c, #c69c47); border-color: var(--brass-bright); color: #1f1608; }
+.menu-btn.primary .mb-sub { color: #4a3712; }
+.menu-btn.small { min-height: 54px; padding: 10px 22px; align-items: center; font-family: var(--serif); font-size: 18px; font-weight: 700; }
+.menu-loading { margin-top: 16px; font-size: 13px; color: var(--muted); letter-spacing: 0.04em; }
+.menu-actions { display: flex; gap: 12px; margin-top: 22px; }
+.menu-actions .menu-btn { flex: 1; }
+.menu-field { margin-bottom: 18px; }
+.mf-label { font-size: 12px; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; color: var(--ivory-dim); margin-bottom: 8px; }
+.mf-note { margin-top: 8px; font-size: 14px; line-height: 1.45; color: var(--muted); min-height: 1.45em; text-wrap: pretty; }
+.seg { display: flex; gap: 6px; flex-wrap: wrap; }
+.seg-btn {
+  appearance: none; flex: 1 1 0; min-width: 0; min-height: 48px; padding: 8px 12px; border-radius: 11px; cursor: pointer;
+  background: rgba(16, 18, 26, 0.78); border: 1px solid var(--line-soft); color: var(--ivory-dim);
+  font-family: var(--serif); font-size: 16px; font-weight: 700; white-space: nowrap;
+}
+.seg-btn.on { background: rgba(201, 162, 78, 0.2); border-color: var(--brass); color: var(--brass-bright); box-shadow: inset 0 0 0 1px rgba(232, 202, 128, 0.25); }
+
+/* The table filling up (matchmaking). */
+.mm-seats { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 7px; }
+.mm-seat {
+  display: grid; grid-template-columns: 14px 1fr auto; align-items: center; gap: 12px;
+  min-height: 46px; padding: 8px 14px; border-radius: 11px;
+  background: rgba(16, 18, 26, 0.72); border: 1px solid var(--line-soft);
+}
+.mm-seat .mm-dot { width: 12px; height: 12px; border-radius: 50%; background: rgba(255, 255, 255, 0.12); }
+.mm-seat .mm-name { font-family: var(--serif); font-size: 18px; font-weight: 700; color: var(--ivory); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mm-seat .mm-guest { font-size: 13px; color: var(--muted); }
+.mm-seat.empty .mm-name { color: var(--muted); font-weight: 600; font-style: italic; animation: mmWait 1.6s ease-in-out infinite; }
+.mm-seat.joined { animation: mmJoin 0.4s ease both; }
+.mm-seat.joined .mm-dot { background: var(--player-color, var(--brass)); box-shadow: 0 0 10px var(--player-color, var(--brass)); }
+.mm-seat.you { border-color: var(--brass); }
+.mm-seat.you .mm-name { color: var(--brass-bright); }
+@keyframes mmWait { 50% { opacity: 0.45; } }
+@keyframes mmJoin { from { opacity: 0; transform: translateX(-10px); } to { opacity: 1; transform: none; } }
+
+/* Black between the lobby and the game. */
+.fade { position: fixed; inset: 0; z-index: 90; background: #000; opacity: 0; pointer-events: none; transition: opacity var(--fade-ms, 600ms) ease; }
+.fade.on { opacity: 1; pointer-events: auto; }
+
+/* Top right: Restart practice and the Menu button side by side. */
+.top-buttons { display: flex; gap: 8px; align-items: center; }
+.ctl.leave {
+  height: 44px; min-width: 0; padding: 0 13px; font-family: var(--serif); font-size: 13px;
+  font-weight: 600; letter-spacing: 0.02em; color: var(--muted); border-radius: 10px;
+}
+
+/* The feed: what the other guests just did. */
+.feed { display: flex; flex-direction: column; gap: 4px; max-width: min(340px, 33vw); pointer-events: none; }
+.feed-line {
+  font-size: 13px; line-height: 1.3; padding: 5px 10px; border-radius: 8px; color: var(--ivory-dim);
+  background: rgba(14, 16, 22, 0.8); border: 1px solid var(--line-soft);
+  animation: feedIn 0.35s ease both; transition: opacity 0.5s ease;
+}
+.feed-line.me { color: var(--ivory); border-color: var(--line); }
+.feed-line.gone { opacity: 0; }
+@keyframes feedIn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+
+/* The strip: the player's own guest, and "Playing" on a computer guest's turn. */
+.mini-player.me .mini-name { color: var(--brass-bright); }
+.mini-player.me .mini-flag { color: var(--brass); }
+.mini-player.active.me .mini-flag { color: var(--brass-bright); }
+/* On another guest's turn the End turn button says whose turn it is and waits. */
+.btn.end.waiting { opacity: 0.85; }
+.btn.end.waiting:disabled .btn-main { color: var(--ivory-dim); }
+.btn.end.waiting:disabled .btn-sub { color: var(--muted); font-weight: 600; }
+
+/* A guest making up their mind (meeting.waiting). */
+.result-line.waiting { display: flex; align-items: center; gap: 10px; justify-content: center; }
+.think-dots { display: inline-flex; gap: 4px; }
+.think-dots i { width: 7px; height: 7px; border-radius: 50%; background: var(--brass); animation: think 1.1s ease-in-out infinite; }
+.think-dots i:nth-child(2) { animation-delay: 0.15s; }
+.think-dots i:nth-child(3) { animation-delay: 0.3s; }
+@keyframes think { 0%, 80%, 100% { opacity: 0.25; transform: translateY(0); } 40% { opacity: 1; transform: translateY(-3px); } }
+
+/* The end of a match: everyone's role, now that it is over. */
+.end-reveal { display: grid; gap: 6px; margin: 2px auto 22px; width: min(540px, 80vw); text-align: left; }
+.er-row {
+  display: grid; grid-template-columns: 12px minmax(0, 1fr) minmax(0, 1fr) auto 64px; gap: 10px; align-items: center;
+  padding: 7px 12px; border-radius: 10px; background: rgba(255, 255, 255, 0.03); border: 1px solid var(--line-soft);
+}
+.er-row.you { border-color: var(--brass); }
+.er-dot { width: 11px; height: 11px; border-radius: 50%; background: var(--player-color, var(--brass)); }
+.er-name { font-family: var(--serif); font-size: 17px; font-weight: 700; color: var(--ivory); }
+.er-who { font-size: 13px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.er-row.you .er-who { color: var(--brass-bright); font-weight: 700; }
+.er-role { font-size: 12px; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; }
+.er-role.evil { color: var(--evil); }
+.er-role.good { color: #9fe3b8; }
+.er-status { font-size: 12px; color: var(--muted); text-align: right; }
+.er-row.dead .er-name { text-decoration: line-through; opacity: 0.7; }
+.er-row.escaped .er-status { color: #9fe3b8; font-weight: 700; }
+#end-overlay.won #end-title { color: var(--brass-bright); }
+#end-overlay.lost #end-title { color: #eaa898; }
+@media (max-height: 700px) {
+  .menu-tag { margin-bottom: 18px; }
+  .menu-btn { min-height: 56px; padding: 9px 18px; }
+  .end-reveal { gap: 4px; margin-bottom: 14px; }
+  .er-row { padding: 5px 10px; }
+}

@@ -7,12 +7,9 @@
 // action buttons, so it can never cover either; its empty space lets taps through to the floor.
 // Cards shrink and overlap more as the hand grows (six cards plus a few found ones still fit).
 //
-// Privacy (hot-seat): main.js shows the fan only during the active guest's own action phase, and CSS
-// hides it whenever a hand-over, private or public screen is up. The Possession cards go on it — as
-// ONE card with a ×N badge — only when main.js passes `withPossession`: during the possessed guest's
-// own action phase, as the owner-approved rules say (docs/GAME_RULES.md > Possession;
-// cfg.ui.hotseatPossessedOnMainScreen, on by default). Before the pass screen it is false again, and
-// once the turn has moved on the hidden fan drops the previous guest's cards from the page.
+// The fan is the player's own hand (only they look at this screen): main.js shows it on every guest's
+// turn, and CSS hides it whenever a private or public screen is up. The Possession cards go on it — as
+// ONE card with a ×N badge — when main.js passes `withPossession`.
 //
 // Over the hand limit: during a turn a guest keeps everything, even past 6 (approved rule), so a
 // small calm label sits just above the fan — "Cards 8/6 · discard 2 at end of turn", on one line. It

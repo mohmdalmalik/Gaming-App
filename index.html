@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="theme-color" content="#141318">
-<title>Hotel Escape — Practice</title>
+<title>Hotel Escape</title>
 <link rel="stylesheet" href="./styles.css">
 <script type="importmap">
 {
@@ -28,6 +28,8 @@
       <div class="hud-top-left">
         <div id="room-name" class="place">—</div>
         <div id="safe-badge" class="safe-badge" hidden><span class="shield">&#x1F6E1;&#xFE0E;</span>Safe zone</div>
+        <!-- A match: what the other guests just did, in public words (src/ui/feed.js). -->
+        <div id="feed" class="feed" aria-live="polite" hidden></div>
       </div>
       <!-- Top-centre: the guests, with clear current-turn and next-player indicators. -->
       <div class="hud-top-center">
@@ -39,7 +41,11 @@
           <div class="tt-track"><div id="tt-fill" class="tt-fill"></div></div>
           <span id="tt-seconds" class="tt-seconds">45s</span>
         </div>
-        <button id="btn-restart-practice" class="ctl restart" type="button">&#x21BB; Restart practice</button>
+        <div class="top-buttons">
+          <button id="btn-restart-practice" class="ctl restart" type="button">&#x21BB; Restart practice</button>
+          <!-- Back to the main menu (asks first). -->
+          <button id="btn-leave" class="ctl leave" type="button" aria-label="Main menu">&#x2302;&#xFE0E; Menu</button>
+        </div>
       </div>
 
       <!-- Bottom bar: ONE flex/grid container so the player panel, the hand opener and the buttons
@@ -160,7 +166,8 @@
       </div>
     </div>
 
-    <!-- Hot-seat: the pass-the-device flow. The ONLY place private information appears. -->
+    <!-- Private screens for the player (src/ui/handoff.js): their secret role, the card they give in a
+         trade and what they received, what a search found, another guest's hand through a Hand Mirror. -->
     <div id="handoff-overlay" class="overlay center handoff" hidden>
       <div id="handoff-card" class="card handoff-card">
         <div id="handoff-kicker" class="handoff-kicker"></div>
@@ -182,17 +189,75 @@
       </div>
     </div>
 
-    <!-- Overlays -->
-    <div id="start-overlay" class="overlay center">
+    <!-- The main menu over the lobby (src/ui/menu.js; the lobby itself is src/menu/lobbyScene.js). -->
+    <div id="menu" class="menu" hidden>
+      <div class="menu-shade"></div>
+      <div class="menu-panel">
+        <section id="menu-main" class="menu-screen">
+          <div class="menu-kicker">A hidden-role game for 4&#8211;6 guests</div>
+          <h1 class="menu-title">Hotel Escape</h1>
+          <p class="menu-tag">Someone in this hotel is already possessed.</p>
+          <div class="menu-buttons">
+            <button id="btn-menu-bots" class="menu-btn primary" type="button" disabled><span class="mb-main">Play with bots</span><span class="mb-sub">Join a table of 4&#8211;6 guests</span></button>
+            <button id="btn-menu-practice" class="menu-btn" type="button" disabled><span class="mb-main">Practice alone</span><span class="mb-sub">Explore the hotel and find the way out</span></button>
+            <button id="btn-menu-settings" class="menu-btn" type="button"><span class="mb-main">Settings</span></button>
+          </div>
+          <div id="menu-loading" class="menu-loading">Opening the hotel&#8230;</div>
+        </section>
+
+        <section id="menu-bots" class="menu-screen" hidden>
+          <div class="menu-kicker">Play with bots</div>
+          <h2 class="menu-h2">Your table</h2>
+          <div class="menu-field">
+            <div class="mf-label">Other guests</div>
+            <div id="opt-bots" class="seg" role="radiogroup" aria-label="How many other guests"></div>
+            <div id="opt-bots-note" class="mf-note"></div>
+          </div>
+          <div class="menu-field">
+            <div class="mf-label">Your role</div>
+            <div id="opt-role" class="seg" role="radiogroup" aria-label="Your role"></div>
+            <div id="opt-role-note" class="mf-note"></div>
+          </div>
+          <div class="menu-actions">
+            <button id="btn-bots-back" class="menu-btn small" type="button">&#x2039; Back</button>
+            <button id="btn-bots-find" class="menu-btn primary small" type="button">Find a table</button>
+          </div>
+        </section>
+
+        <section id="menu-matchmaking" class="menu-screen" hidden>
+          <div id="mm-kicker" class="menu-kicker">Finding guests</div>
+          <h2 id="mm-title" class="menu-h2">Waiting for guests&#8230;</h2>
+          <ol id="mm-seats" class="mm-seats"></ol>
+          <div id="mm-note" class="mf-note"></div>
+          <div class="menu-actions">
+            <button id="btn-mm-cancel" class="menu-btn small" type="button">Cancel</button>
+          </div>
+        </section>
+
+        <section id="menu-settings" class="menu-screen" hidden>
+          <div class="menu-kicker">Settings</div>
+          <h2 class="menu-h2">On this device</h2>
+          <div class="menu-field"><div class="mf-label">Bot speed</div><div id="set-botSpeed" class="seg" role="radiogroup" aria-label="Bot speed"></div></div>
+          <div class="menu-field"><div class="mf-label">Other guests&#8217; turns</div><div id="set-follow" class="seg" role="radiogroup" aria-label="The view on other guests' turns"></div></div>
+          <div class="menu-field"><div class="mf-label">Graphics</div><div id="set-graphics" class="seg" role="radiogroup" aria-label="Graphics"></div></div>
+          <div class="menu-field"><div class="mf-label">Menu background</div><div id="set-menuMotion" class="seg" role="radiogroup" aria-label="Menu background"></div></div>
+          <div class="menu-actions">
+            <button id="btn-settings-done" class="menu-btn primary small" type="button">Done</button>
+          </div>
+        </section>
+      </div>
+    </div>
+
+    <!-- Black between the lobby and the game (the lift doors close, the screen fades, the game opens). -->
+    <div id="fade" class="fade" hidden></div>
+
+    <!-- A direct link (?mode=practice, ?mode=bots — the tests use them): straight to a "Tap to begin"
+         card, skipping the menu. -->
+    <div id="start-overlay" class="overlay center" hidden>
       <div class="card">
         <h1>Hotel Escape</h1>
-        <p id="start-sub" class="muted">Practice &#183; explore the hotel alone
-You start with 1 Lantern &#8212; find 2 more and escape through the Fire Exit</p>
+        <p id="start-sub" class="muted">Practice &#183; explore the hotel alone</p>
         <button id="btn-begin" class="btn primary big" type="button" disabled>Loading&#8230;</button>
-        <div class="mode-switch">
-          <span class="mode-label">Or start a different game:</span>
-          <div id="mode-buttons" class="mode-buttons"></div>
-        </div>
       </div>
     </div>
 
@@ -223,8 +288,10 @@ You start with 1 Lantern &#8212; find 2 more and escape through the Fire Exit</p
       <div class="card">
         <h1 id="end-title">Game over</h1>
         <p id="end-summary" class="muted"></p>
+        <div id="end-reveal" class="end-reveal" hidden></div>
         <div class="end-actions">
           <button id="btn-keep-exploring" class="btn big" type="button" hidden>Keep exploring</button>
+          <button id="btn-end-menu" class="btn big" type="button">Main menu</button>
           <button id="btn-restart" class="btn primary big" type="button">Restart practice</button>
         </div>
       </div>
@@ -259,6 +326,7 @@ You start with 1 Lantern &#8212; find 2 more and escape through the Fire Exit</p
       document.getElementById('error-message').textContent = 'Still loading the 3D engine — check the internet connection and reload the page.';
       document.getElementById('error-overlay').hidden = false;
       document.getElementById('start-overlay').hidden = true;
+      document.getElementById('menu').hidden = true;
     }, 20000);
     import('./src/main.js').catch((err) => {
       console.error(err);
@@ -266,6 +334,7 @@ You start with 1 Lantern &#8212; find 2 more and escape through the Fire Exit</p
       document.getElementById('error-message').textContent = 'The 3D engine could not be loaded. Check the internet connection and reload. (' + (err && err.message ? err.message : err) + ')';
       box.hidden = false;
       document.getElementById('start-overlay').hidden = true;
+      document.getElementById('menu').hidden = true;
     });
   </script>
 </body>

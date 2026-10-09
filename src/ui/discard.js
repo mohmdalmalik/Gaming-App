@@ -49,9 +49,9 @@ export function createDiscard(doc, cfg, { onDiscard }) {
 
   const api = {
     get isOpen() { return !overlay.hidden; },
-    open(player, onComplete, { hotseat = false } = {}) {
+    open(player, onComplete) {
       ctx = { player, onComplete }; picked = null;
-      if (kicker) { kicker.hidden = !hotseat; kicker.textContent = hotseat ? `Private — ${player.name} only` : ''; }
+      if (kicker) { kicker.hidden = true; kicker.textContent = ''; }
       overlay.hidden = false;
       render();
     },

@@ -5,16 +5,18 @@
 // remove or change a rule or a number here without the owner's explicit approval of a
 // before/after list (see CLAUDE.md, "Rules changes").
 //
-// Two ways to play the same ruleset, chosen at startup by applyMode() at the bottom:
+// Two ways to play the same ruleset, chosen by applyMode() at the bottom before each match:
 //   'practice'  — one guest alone: find three Lanterns and escape. No meetings, no
 //                 hidden role, no timer. Everything else (dark rooms, locked rooms, cards) applies.
-//   'hotseat'   — 4-6 guests passing ONE device. A testing tool for the real online game; the
-//                 rules are designed for one device each, not around the shared iPad.
-// There is no server and no networking anywhere in this project.
+//   'match'     — 4-6 guests, one of them secretly possessed: the real game. Today the player shares
+//                 the table with computer guests (bots, src/bots/); later, with people online, one device
+//                 each. ('hotseat', the old pass-one-iPad testing mode, is accepted as another name for it:
+//                 the balance simulator still asks for it.)
+// There is no server and no networking anywhere in this project yet.
 
 export const rules = {
   // --- Mode --------------------------------------------------------------------------------
-  gameMode: 'practice',     // 'practice' | 'hotseat' — set by applyMode()
+  gameMode: 'practice',     // 'practice' | 'match' — set by applyMode()
   playerCount: 1,
   practiceMode: true,
   onlineMode: false,        // no server, no networking
@@ -33,11 +35,11 @@ export const rules = {
   playCardCost: 1,          // Bandage, Master Key, Lock Pick, Barricade, Hand Mirror
   espressoCost: 0,          // Espresso is free to use
   attackCost: 1,
-  turnTimerEnabled: false,  // practice: off. Hot-seat: on. ?timer=off disables it anywhere.
+  turnTimerEnabled: false,  // practice: off. A match: on. ?timer=off disables it anywhere.
   turnTimerSeconds: 45,     // counts the active player's actions only; pauses in meetings and
-                            // on every pass-the-device screen
+                            // while a guest reads a private screen
   // Dawn deadline: if no clean guest has escaped when this round ends, dawn breaks and the hotel
-  // wins. Hot-seat only — practice has no deadline.
+  // wins. Matches only — practice has no deadline.
   roundLimit: 8,
 
   // --- Health --------------------------------------------------------------------------------
@@ -149,8 +151,8 @@ derive();
 // mutates the shared `rules` object on purpose: every module reads values off it at call time,
 // so a number still lives in exactly one place.
 export function applyMode(mode, playerCount = 1) {
-  if (mode === 'hotseat') {
-    rules.gameMode = 'hotseat';
+  if (mode === 'match' || mode === 'hotseat') {
+    rules.gameMode = 'match';
     rules.playerCount = Math.max(4, Math.min(6, Math.round(playerCount) || 6));
     rules.practiceMode = false;
     rules.turnTimerEnabled = true;

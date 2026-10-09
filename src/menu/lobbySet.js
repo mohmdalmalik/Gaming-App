@@ -275,7 +275,7 @@ export function buildLobbySet(L) {
       // (wound counter-clockwise from the front: +Z normal)
       S.add(g, i % 2 ? C.brassDark : C.brass, lift.x, cy, wallZ + 0.02);
     }
-    S.add(new THREE.CylinderGeometry(r + 0.06, r + 0.06, 0.05, 24, 1, false, -Math.PI / 2, Math.PI), C.brass, lift.x, cy, wallZ + 0.01, -Math.PI / 2, 0, 0);
+    S.add(new THREE.RingGeometry(r, r + 0.07, 24, 1, 0, Math.PI), C.brass, lift.x, cy, wallZ + 0.025);   // brass rim round the fan
   }
   // reveal (jambs and head) — the doors slide into the wall behind these
   S.box(0.03, LH, 0.42, lx0 - 0.015, LH / 2, wallZ - 0.21, C.brassDark);
@@ -298,16 +298,16 @@ export function buildLobbySet(L) {
   S.box(0.12, 0.26, 0.03, lx1 + 0.42, 1.1, wallZ + 0.015, C.brass);
   const callGlow = glows.add({ type: 'bill', pos: [lx1 + 0.42, 1.14, wallZ + 0.06], size: [0.12, 0.12], color: '#ffb35a', intensity: 0.6 });
   // floor dial above the fan: plate + needle (moving)
-  const dialY = LH + 0.98;
+  const dialY = PT + 0.3;   // on the plaster just above the brass frieze
   const DS = 1.35;   // dial scale
   const dialG = new THREE.PlaneGeometry(0.72 * DS, 0.45 * DS);
   const dial = new THREE.Mesh(dialG, dialMat);
-  dial.position.set(lift.x, dialY + 0.12, wallZ + 0.03);
+  dial.position.set(lift.x, dialY + 0.12, wallZ + 0.06);
   dial.name = 'lift-dial';
   group.add(dial);
   const needleG = new THREE.BoxGeometry(0.022, 0.21 * DS, 0.01); needleG.translate(0, 0.1 * DS, 0);
   const needle = new THREE.Mesh(needleG, new THREE.MeshBasicMaterial({ color: '#1a0f08' }));
-  needle.position.set(lift.x, dialY + 0.12 - 0.225 + 0.018 * 450 / 160 + 0.0, wallZ + 0.045);
+  needle.position.set(lift.x, 0, wallZ + 0.075);
   // the dial texture's pivot is 18 px above its bottom edge (texture 160 px tall = 0.45 m)
   needle.position.y = dialY + 0.12 - 0.225 * DS + (18 / 160) * 0.45 * DS;
   needle.name = 'lift-needle';
@@ -397,7 +397,7 @@ export function buildLobbySet(L) {
     const k = rc.keys;
     const kg = new THREE.PlaneGeometry(k.x1 - k.x0, k.y1 - k.y0);
     const keys = new THREE.Mesh(kg, keysMat);
-    keys.position.set((k.x0 + k.x1) / 2, (k.y0 + k.y1) / 2, wallZ + 0.035);
+    keys.position.set((k.x0 + k.x1) / 2, (k.y0 + k.y1) / 2, wallZ + 0.05);   // (in front of its frame)
     keys.name = 'key-board';
     group.add(keys);
     disposables.push(kg);

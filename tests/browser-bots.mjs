@@ -60,8 +60,17 @@ async function noLeak(where) {
 // the walking speed is raised and the picture made smaller.
 const quick = () => game(() => { window.__game.cfg.player.speed = 30; window.__game.setPixelRatio(0.5); });
 // The player's turn has started (no private screen up), or the match is over.
+// (Screens put in front of the player meanwhile — a trade, a note waiting at the start of their turn —
+// are answered as they come.)
 async function untilMyTurn(timeout = 400000) {
-  await waitFor(() => { const g = window.__game; return g.isFinished() || (g.myTurn() && g.inActionPhase() && !g.handoffOpen() && !g.meetingOpen()); }, null, timeout);
+  const end = Date.now() + timeout;
+  while (Date.now() < end) {
+    if (await game(() => { const g = window.__game; return g.isFinished() || (g.myTurn() && g.inActionPhase() && !g.handoffOpen() && !g.meetingOpen()); })) return;
+    await answerScreens();
+    await page.waitForTimeout(300);
+  }
+  const why = await game(() => { const g = window.__game, a = g.state.activeIndex, m = g.movers[a]; return JSON.stringify({ turn: g.state.turn, active: a, me: g.humanSeat(), handoff: g.handoffKind(), meeting: g.meetingOpen(), live: g.meetingLive(), walking: m.walking, path: m.path.length, notice: g.noticeOpen(), ask: g.askOpen(), time: g.timeLeft(), log: g.publicLog().slice(-4) }); });
+  throw new Error(`untilMyTurn: the turn did not come back ${why}`);
 }
 // Answer whatever the bots put in front of the player: a card to give (the first one), a private note,
 // a yes/no (accept), an attack result, a notice, the "You are out" question (watch).

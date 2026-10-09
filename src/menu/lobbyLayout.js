@@ -147,7 +147,7 @@ export const lobbyLayout = {
     drift: { x: 0.35, y: 0.06, z: 0.2, period: 46 },
     // the push toward the lift during the boarding sequence
     enterPos: [2.45, 1.75, 0.75],
-    enterTarget: [3.2, 1.6, -5.6],
+    enterTarget: [3.2, 2.0, -5.6],
     enterFov: 34,
   },
 };

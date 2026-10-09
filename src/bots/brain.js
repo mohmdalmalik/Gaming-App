@@ -505,6 +505,10 @@ export class Mind {
     if (c.possessed) {
       const camp = this.campRoom(c);
       if (camp && camp !== me.room) go(camp, this.campValue(c), 'camp');
+    } else if (c.stuck && c.exitKnown && c.lanterns >= 1) {
+      // Little left to find: wait in the Fire Exit (safe), where Lanterns can be pooled in a trade.
+      if (me.room === v.exitRoom) add(0.45, { k: 'end' }, 'wait');
+      else go(v.exitRoom, 1.1 + 0.4 * c.lanterns, 'gather');
     }
     add(0.12, { k: 'end' }, 'end');
     return out;
@@ -552,9 +556,12 @@ export class Mind {
     }
     if (c.escaping) return 0;
     const pp = this.pPoss(c, s);
-    if (m.known.has(s)) return c.weapons.length ? 1.2 + 2.2 * t.aggression : 0;
-    if ((m.grudge.get(s) || 0) > 0 && c.weapons.length) return 1.6 * t.aggression;
-    if (pp > 0.6 && c.weapons.length && t.aggression > 0.55) return 1.4 * t.aggression;
+    const armed = c.weapons.length > 0;
+    if (m.known.has(s)) return armed ? 1.4 + 2.2 * t.aggression + (c.stuck ? 1 : 0) : 0;
+    if ((m.grudge.get(s) || 0) > 0 && armed) return 1.6 * t.aggression;
+    // Little left to find: a strong suspect may be sitting on Lanterns (a dead guest's cards drop).
+    if (c.stuck && armed && pp > 0.6) return 1.2 + 1.4 * t.aggression + 1.2 * c.urgency;
+    if (pp > 0.6 && armed && t.aggression > 0.55) return 1.4 * t.aggression;
     if (c.stuck && pp < 0.3) return 0.5 + 0.6 * t.boldness + 0.3 * Math.min(m.trust.get(s) || 0, 2);
     return t.boldness > 0.55 && pp < 0.35 ? 0.9 * (t.boldness - 0.4) : 0;
   }
@@ -610,6 +617,14 @@ export class Mind {
       }
       if (best && best.a > 0.45) return { score: 1.5 + 2 * best.a, action: { k: 'trade', with: best.q.seat }, goal: 'trade' };
     }
+    if (!c.possessed && c.stuck && c.lanterns >= 1) {
+      let best = null;
+      for (const q of there) {
+        const pp = this.pPoss(c, q.seat);
+        if (pp < 0.3 && (!best || pp < best.pp)) best = { pp, q };
+      }
+      if (best) return { score: 1.0 + (0.3 - best.pp) * 2, action: { k: 'trade', with: best.q.seat }, goal: 'pool' };
+    }
     return null;
   }
 
@@ -653,7 +668,7 @@ export class Mind {
   campValue(c) {
     const t = this.t;
     if (c.urgency < 0.45) return 0;
-    const w = c.possCards > 0 || (c.weapons.length && t.aggression > 0.45) ? 1 : 0.4;
+    const w = c.possCards > 0 || (c.weapons.length && t.aggression > 0.45) ? 1 : 0.6;
     return (0.8 + 2.8 * (c.urgency - 0.3)) * (0.5 + 0.7 * t.skill) * w;
   }
   campOption(c) {
@@ -715,7 +730,7 @@ export class Mind {
         p = seen != null && seen === (m.tradeCount.get(target) || 0) ? 0.85 : 0.35 + 0.55 * t.aggression;
         if (c.lanterns === 0) p = Math.max(p, 0.8);
       } else if ((m.grudge.get(target) || 0) > 0) p = 0.25 + 0.6 * t.aggression;
-      else if (pp > 0.55) p = (pp - 0.35) * (0.4 + 1.2 * t.aggression);
+      else if (pp > 0.55) p = (pp - (c.stuck ? 0.25 : 0.35)) * ((c.stuck ? 0.8 : 0.4) + 1.2 * t.aggression);
       else if (c.escaping && pp > 0.25) p = (pp - 0.15) * (0.5 + t.aggression);
       else p = 0.01 * t.aggression;
     }
@@ -820,7 +835,7 @@ export class Mind {
     let p;
     if (c.possessed) p = this.isAlly(proposer) ? 0.9 : m.knowsMe.has(proposer) ? 0.1 : 0.75;
     else if (m.known.has(proposer)) p = c.lanterns && t.caution > 0.5 ? 0.3 : 0.05;
-    else p = clamp(0.8 - 1.4 * this.pPoss(c, proposer) + 0.1 * (m.trust.get(proposer) || 0) - 0.3 * t.caution, 0.05, 0.9);
+    else p = clamp(0.8 - 1.4 * this.pPoss(c, proposer) + 0.1 * (m.trust.get(proposer) || 0) - 0.3 * t.caution + (c.stuck ? 0.15 : 0), 0.05, 0.92);
     const yes = this.rng() < p;
     this.record({ k: 'accept', with: proposer, yes, possessed: c.possessed });
     return yes;

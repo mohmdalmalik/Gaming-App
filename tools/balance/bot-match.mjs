@@ -40,14 +40,16 @@ export function playMatch(seed, players, { trace = false } = {}) {
   state.players.forEach((p, i) => { p.name = profiles[i].username; });
   const table = createBotTable(state, floor, profiles.map((profile, index) => ({ index, profile })), seed);
   const startPossessed = state.players.findIndex(p => p.possessed);
-  let turns = 0, actions = 0, waitMs = 0, refusals = 0, maxRefusalTurn = 0;
+  let turns = 0, actions = 0, waitMs = 0, refusals = 0, maxRefusalTurn = 0, jammed = 0;
   while (!state.finished && turns < 400) {
     const who = S.activePlayer(state);
     const s = playBotTurn(state, floor, table, { maxSteps: 40 });
     turns++;
     actions += s.actions.length;
-    refusals += s.refusals.length;
-    maxRefusalTurn = Math.max(maxRefusalTurn, s.refusals.length);
+    const real = s.refusals.filter(r => r.reason !== 'jammed');
+    jammed += s.refusals.length - real.length;
+    refusals += real.length;
+    maxRefusalTurn = Math.max(maxRefusalTurn, real.length);
     // Thinking pauses the interface would add for this turn (the bot's own pace).
     waitMs += table.thinkMs(who.index, 'turn');
     for (const a of s.actions) waitMs += table.thinkMs(who.index, a.k === 'move' ? 'move' : 'act');
@@ -59,7 +61,7 @@ export function playMatch(seed, players, { trace = false } = {}) {
         `${s.refusals.length ? '  REFUSED ' + s.refusals.map(r => r.action.k + ':' + r.reason).join(',') : ''}  hand[${who.hand.map(c => c.type).join(',')}]`);
     }
   }
-  return collect(state, table, profiles, { seed, players, turns, actions, waitMs, refusals, maxRefusalTurn, startPossessed });
+  return collect(state, table, profiles, { seed, players, turns, actions, waitMs, refusals, maxRefusalTurn, jammed, startPossessed });
 }
 
 function collect(state, table, profiles, base) {
@@ -166,6 +168,7 @@ export function summarise(list) {
     blockRate: bt ? bd / bt : 0, blocksDecidedPerMatch: bd / n,
     actionsPerTurn: actions / turns, waitPerTurnMs: wait / turns,
     refusals: list.reduce((a, m) => a + m.refusals, 0), maxRefusalTurn: Math.max(...list.map(m => m.maxRefusalTurn)),
+    jammed: list.reduce((a, m) => a + m.jammed, 0) / n,
     unfinished: list.filter(m => !m.finished).length,
     styles,
   };
@@ -189,6 +192,7 @@ function print(players, s) {
   line('Clean bots handing over a Lantern to block (of their trades)', `${pct(s.blockRate, 1)} (${s.blocksDecidedPerMatch.toFixed(2)} per match)`);
   line('Actions per bot turn; estimated thinking time per bot turn', `${s.actionsPerTurn.toFixed(2)}; ${(s.waitPerTurnMs / 1000).toFixed(1)} s`);
   line('Refused actions (all matches); most in one turn; unfinished', `${s.refusals}; ${s.maxRefusalTurn}; ${s.unfinished}`);
+  line('Doors tried that turned out jammed, per match (not a refusal)', s.jammed.toFixed(2));
   console.log('  Per style (seats): side won / converted / died / escaped');
   for (const [k, o] of Object.entries(s.styles).sort()) {
     console.log(`    ${k.padEnd(20)} n=${String(o.n).padStart(5)}  won ${pct(o.won, o.n).padStart(6)}  converted ${pct(o.converted, o.n).padStart(6)}  died ${pct(o.died, o.n).padStart(6)}  escaped ${pct(o.escaped, o.n).padStart(6)}`);

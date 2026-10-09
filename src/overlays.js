@@ -8,6 +8,9 @@ export function createOverlays(doc) {
   const endSummary = doc.getElementById('end-summary');
   const restartBtn = doc.getElementById('btn-restart');
   const keepBtn = doc.getElementById('btn-keep-exploring');
+  const menuBtn = doc.getElementById('btn-end-menu');
+  const reveal = doc.getElementById('end-reveal');
+  const menuRoot = doc.getElementById('menu');
   const notice = doc.getElementById('notice-overlay');
   const noticeTitle = doc.getElementById('notice-title');
   const noticeBody = doc.getElementById('notice-body');
@@ -30,15 +33,34 @@ export function createOverlays(doc) {
     onBegin(fn) { beginBtn.addEventListener('click', e => { e.preventDefault(); fn(); }); },
     onRestart(fn) { restartBtn.addEventListener('click', e => { e.preventDefault(); fn(); }); },
     onKeepExploring(fn) { keepBtn.addEventListener('click', e => { e.preventDefault(); fn(); }); },
+    onMenu(fn) { menuBtn.addEventListener('click', e => { e.preventDefault(); fn(); }); },
     showStart() { start.hidden = false; },
     hideStart() { start.hidden = true; },
     // `opts.keepExploring` offers a way back into the hotel instead of only restarting —
-    // practice has no losing side, so finishing should never force a new game.
+    // practice has no losing side, so finishing should never force a new game. `opts.reveal` (a match):
+    // every guest with their role, now that it is over — { name, who, color, possessed, status, you }.
+    // `opts.won`: whether the player's side won (colours the title).
     showEnd(title, summary, opts = {}) {
       endTitle.textContent = title;
       endSummary.textContent = summary || '';
       keepBtn.hidden = !opts.keepExploring;
       restartBtn.textContent = opts.restartLabel || 'Restart practice';
+      end.classList.toggle('won', opts.won === true);
+      end.classList.toggle('lost', opts.won === false);
+      reveal.innerHTML = '';
+      reveal.hidden = !opts.reveal?.length;
+      for (const r of opts.reveal || []) {
+        const row = doc.createElement('div');
+        row.className = 'er-row' + (r.you ? ' you' : '') + (r.status ? ` ${r.status.toLowerCase()}` : '');
+        row.style.setProperty('--player-color', r.color);
+        const dot = doc.createElement('span'); dot.className = 'er-dot';
+        const name = doc.createElement('span'); name.className = 'er-name'; name.textContent = r.name;
+        const who = doc.createElement('span'); who.className = 'er-who'; who.textContent = r.who || '';
+        const role = doc.createElement('span'); role.className = `er-role ${r.possessed ? 'evil' : 'good'}`; role.textContent = r.possessed ? 'Possessed' : 'Clean';
+        const status = doc.createElement('span'); status.className = 'er-status'; status.textContent = r.status || '';
+        row.append(dot, name, who, role, status);
+        reveal.appendChild(row);
+      }
       end.hidden = false;
     },
     hideEnd() { end.hidden = true; },
@@ -60,7 +82,7 @@ export function createOverlays(doc) {
     },
     hideAsk() { ask.hidden = true; askNext = null; },
     get askOpen() { return !ask.hidden; },
-    showError(message) { errorMessage.textContent = message; error.hidden = false; start.hidden = true; },
+    showError(message) { errorMessage.textContent = message; error.hidden = false; start.hidden = true; if (menuRoot) menuRoot.hidden = true; },
   };
   noticeOk.addEventListener('click', e => {
     e.preventDefault();

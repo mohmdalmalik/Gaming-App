@@ -81,7 +81,10 @@ const give = (index, cards) => page.evaluate(({ index, cards }) => {
 const dressed = () => page.waitForFunction(() => !window.__game || window.__game.dressingDone(), null, { timeout: 90000, polling: 200 });
 async function load(query) {
   if (page.url().startsWith('http')) await dressed();
-  const u = baseUrl + (query ? (baseUrl.includes('?') ? '&' : '?') + query : '');
+  // (?mode=practice: the direct link to practice, past the main menu — the menu itself is tested in
+  // tests/browser-bots.mjs)
+  const q = ['mode=practice', query].filter(Boolean).join('&');
+  const u = baseUrl + (baseUrl.includes('?') ? '&' : '?') + q;
   await page.goto(u, { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__game && !document.getElementById('btn-begin').disabled, null, { timeout: 45000 });
   // Headless software rendering runs at a few frames a second; only the walking speed is raised.

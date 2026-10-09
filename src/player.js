@@ -16,6 +16,7 @@ export function createPlayer(cfg, start) {
     path: [],
     walking: false,
     destination: null,
+    speedScale: 1,     // a computer guest walks a little quicker than the player (Settings: Bot speed)
 
     setPath(points) {
       this.path = points.map(pt => [pt[0], pt[1]]);
@@ -28,7 +29,7 @@ export function createPlayer(cfg, start) {
     reset(x, z) { this.x = x; this.z = z; this.heading = 0; this.stop(); this.walking = false; },
 
     update(dt) {
-      let remaining = cfg.player.speed * dt;
+      let remaining = cfg.player.speed * (this.speedScale || 1) * dt;
       let moved = false;
       while (this.path.length && remaining > 0) {
         const [tx, tz] = this.path[0];

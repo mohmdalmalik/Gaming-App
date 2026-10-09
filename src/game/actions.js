@@ -5,7 +5,7 @@ import { rules } from '../data/rules.js';
 import { CARDS, takeCard, isWeapon, countableCount, shuffle } from './cards.js';
 import {
   checkWin, canEscape, logPublic, convertToPossessed, isLocked, unlockRoom, placeBarricade, isBarricaded,
-  adjacentLockedRooms, doorBetween,
+  adjacentLockedRooms, doorBetween, emitPublic, emitPrivate,
 } from './state.js';
 import { openFrontierDoor } from './hotel.js';
 
@@ -24,12 +24,14 @@ export function openDoor(state, floor, player, doorId) {
   const res = openFrontierDoor(floor, doorId, { isLocked: id => isLocked(state, id) });
   if (!res.ok) {
     logPublic(state, `${player.name} tried a door in ${floor.rooms.get(player.currentRoom)?.name}: it is jammed shut.`);
+    emitPublic(state, { type: 'open', seat: player.index, room: player.currentRoom, door: doorId, jammed: true });
     return res;
   }
   player.actionPoints -= rules.actionCost.open;
   state.discovered.add(res.room.id);
   if (res.room.locked && rules.lockedDoorsEnabled) state.lockedRooms.add(res.room.id);
   logPublic(state, `${player.name} opened a door: ${res.room.name}.`);
+  emitPublic(state, { type: 'open', seat: player.index, room: player.currentRoom, door: doorId, revealed: res.room.id });
   return { ok: true, room: res.room, doorway: res.doorway, connected: res.connected, locked: isLocked(state, res.room.id) };
 }
 
@@ -49,6 +51,7 @@ export function escape(state, floor, player) {
   state.escaped.add(player.id);
   state.won = 'humans'; state.finished = true;
   logPublic(state, `${player.name} escaped through the Fire Exit.`);
+  emitPublic(state, { type: 'escape', seat: player.index });
   return { ok: true, win: 'humans' };
 }
 
@@ -113,6 +116,7 @@ export function search(state, floor, player) {
   const base = { ok: true, room: room.id, searchPoint: room.searchPoint || null };
 
   logPublic(state, `${player.name} searched ${room.name}.`);
+  emitPublic(state, { type: 'search', seat: player.index, room: room.id });
   const drops = state.roomDrops.get(room.id);
   if (drops?.length) {
     state.roomDrops.delete(room.id);
@@ -200,6 +204,9 @@ export function useHandMirror(state, floor, player, cardId, targetId) {
   // The target showed their hand, so they know it was seen: told on their own next private screen.
   target.notes.push(`${player.name} looked at your whole hand with a Hand Mirror.`);
   logPublic(state, `${player.name} used a Hand Mirror on ${target.name}.`);
+  emitPublic(state, { type: 'mirror', by: player.index, target: target.index });
+  emitPrivate(state, player, { type: 'mirrorSaw', target: target.index, hand: shown.map(c => c.type) });
+  emitPrivate(state, target, { type: 'mirroredBy', by: player.index, hand: shown.map(c => c.type) });
   return { ok: true, target: target.id, hand: shown, unmasked };
 }
 
@@ -230,6 +237,7 @@ export function useUnlock(state, floor, player, cardId, roomId) {
   if (opened) unlockRoom(state, roomId, player, door.id);
   logPublic(state, opened ? `${player.name} unlocked the ${name} door: it is open until the end of their turn.`
     : `${player.name} failed to open the ${name} door.`);
+  emitPublic(state, { type: 'unlock', by: player.index, room: roomId, opened });
   return { ok: true, opened, room: roomId, doorway: door.id, card: card.type };
 }
 
@@ -245,6 +253,7 @@ export function useBarricade(state, floor, player, cardId, doorwayId) {
   takeCard(player.hand, cardId); toDiscard(state, card);
   placeBarricade(state, player, doorwayId);
   logPublic(state, `${player.name} barricaded a doorway of ${floor.rooms.get(player.currentRoom)?.name}.`);
+  emitPublic(state, { type: 'barricade', by: player.index, door: doorwayId });
   return { ok: true, doorway: doorwayId };
 }
 
@@ -276,6 +285,7 @@ export function useInfirmary(state, floor, player) {
   player.actionPoints -= rules.actionCost.infirmary;
   player.health = Math.min(rules.maxHealth, player.health + rules.infirmaryHeal);
   logPublic(state, `${player.name} was treated in the Infirmary.`);
+  emitPublic(state, { type: 'infirmary', seat: player.index });
   return { ok: true, health: player.health, healed: player.health - before };
 }
 
@@ -290,6 +300,7 @@ export function useSwitchboard(state, floor, player) {
   state.switchboardCalls.set(player.id, state.turn);
   const count = state.players.filter(q => q.alive && q.possessed).length;
   logPublic(state, `${player.name} rang the Switchboard: ${count} ${count === 1 ? 'guest is' : 'guests are'} possessed.`);
+  emitPublic(state, { type: 'switchboard', by: player.index, count });
   return { ok: true, count };
 }
 
@@ -328,6 +339,7 @@ export function skipTrade(state, floor, P, Q) {
     X.notes.push(notes[X.id]);
   }
   logPublic(state, `${P.name} and ${Q.name} met, but there was no trade.`);
+  emitPublic(state, { type: 'noTrade', a: P.index, b: Q.index });
   return { ok: true, skipped: true, empty: gate.empty, notes };
 }
 
@@ -359,6 +371,7 @@ export function resolveTrade(state, floor, P, Q, cardIdP, cardIdQ) {
     blocks: [], possessed: [], notes: {},
   };
   const note = (id, text) => { (events.notes[id] ||= []).push(text); };
+  const privately = [];      // [player, private event] — told after the trade's own 'traded' events
 
   // One direction of possession: giver G hands `pc`, receiver R handed `rc`.
   const passPossession = (G, R, pc, rc) => {
@@ -372,6 +385,7 @@ export function resolveTrade(state, floor, P, Q, cardIdP, cardIdQ) {
       events.lanternsBurned = toAttacker ? 0 : 1;
       R.knows.add(G.id);
       events.blocks.push({ blocker: R.id, revealed: G.id });
+      privately.push([R, { type: 'blockedThem', who: G.index }], [G, { type: 'blocked', by: R.index }]);
       note(R.id, toAttacker
         ? `Your Lantern burned away a Possession card. ${G.name} is POSSESSED — only you know.`
         : `Your Lantern burned away a Possession card and was used up. ${G.name} is POSSESSED — only you know.`);
@@ -382,6 +396,7 @@ export function resolveTrade(state, floor, P, Q, cardIdP, cardIdQ) {
       if (!R.possessed) {
         convertToPossessed(state, R, G.id);
         events.possessed.push({ newly: R.id, by: G.id });
+        privately.push([R, { type: 'possessed', by: G.index }], [G, { type: 'converted', who: R.index }]);
         note(R.id, `You received a Possession card from ${G.name}. You are now POSSESSED — and you keep that card: one try to possess someone else in a trade.`);
         note(G.id, `${R.name} is now possessed.`);
       } else {
@@ -399,6 +414,10 @@ export function resolveTrade(state, floor, P, Q, cardIdP, cardIdQ) {
     if (p) p.notes.push(...lines);
   }
   logPublic(state, `${P.name} and ${Q.name} traded.`);
+  emitPublic(state, { type: 'trade', a: P.index, b: Q.index });
+  emitPrivate(state, P, { type: 'traded', with: Q.index, gave: cP.type, got: events.received[P.id] });
+  emitPrivate(state, Q, { type: 'traded', with: P.index, gave: cQ.type, got: events.received[Q.id] });
+  for (const [who, ev] of privately) emitPrivate(state, who, ev);
   events.win = checkWin(state, floor);
   return events;
 }
@@ -440,6 +459,7 @@ export function resolveAttack(state, floor, attacker, target, weaponId) {
     events.dropped = dropEverything(state, target);
   }
   logPublic(state, `${attacker.name} attacked ${target.name} with a ${CARDS[weapon.type].name}${events.killed ? ' — fatally' : ''}.`);
+  emitPublic(state, { type: 'attack', by: attacker.index, target: target.index, weapon: weapon.type, damage, killed: events.killed, room: attacker.currentRoom });
   events.win = checkWin(state, floor);
   return events;
 }

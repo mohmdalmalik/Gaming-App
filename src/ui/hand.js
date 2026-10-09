@@ -1,9 +1,13 @@
 // The card view: one card of the active guest's hand shown large — its face, its name, what it does
 // and, when it has one, its action (Use, Open, Seal, Drink, whose hand to look at). Opened by tapping a
 // card in the hand fan (src/ui/handFan.js) or the "Private details" link; ‹ › step through the hand.
-// Private to whoever holds the device: it shows their Lanterns, their Possession cards and who they
+// Private to the player (only they look at this screen): it shows their Lanterns, their Possession cards and who they
 // have unmasked. Tap outside the panel, or Close, to put it away.
 import { activePlayer, adjacentLockedRooms, isBarricaded, playersInRoom, doorBetween, moveCostInto } from '../game/state.js';
+
+// The hand shown is the viewer's own (state.viewerIndex: the player). Its actions work only on their turn.
+const viewerOf = state => state.players[state.viewerIndex ?? state.activeIndex] || activePlayer(state);
+const ownTurn = (state, p) => !state.finished && state.players[state.activeIndex] === p;
 import { rules } from '../data/rules.js';
 import { CARDS, countableCount } from '../game/cards.js';
 import { bigCard, sortHand, cardDesc, handLimitWarning } from './cards.js';
@@ -28,8 +32,8 @@ export function createHand(doc, cfg, { onUseBandage, onUnlock, onBarricade, onEs
 
   function render() {
     const { state, floor } = ctx;
-    const p = activePlayer(state);
-    title.textContent = `${p.name}'s hand`;
+    const p = viewerOf(state);
+    title.textContent = state.players.length > 1 ? 'Your hand' : `${p.name}'s hand`;
     const souls = soulsHeld(p);
 
     // Possession cards first, then the rest grouped by type (Lanterns lead the catalogue). The
@@ -45,12 +49,9 @@ export function createHand(doc, cfg, { onUseBandage, onUnlock, onBarricade, onEs
 
     const showingSouls = card?.type === 'possession';
 
-    // The possessed guest's reminder: how many Possession cards ("souls") they can still trade. In
-    // hot-seat this view also opens from a fan card during the action phase, on the screen the whole
-    // table can see, so there it stays as quiet as the main screen's own reminder: the words and the
-    // count inside the panel, but no possessed portrait and no violet wash that could be spotted from
-    // across the table (the approved list in docs/GAME_RULES.md > Possession does not include them).
-    const tell = !!p.possessed && !state.hotseat;
+    // The possessed guest's reminder: how many Possession cards ("souls") they can still trade, with
+    // their possessed portrait and the violet wash (only they look at this screen).
+    const tell = !!p.possessed;
     overlay.classList.toggle('possessed', tell);
     banner.className = 'banner'; banner.innerHTML = '';   // nothing left behind for the next guest
     if (p.possessed) {
@@ -125,7 +126,10 @@ export function createHand(doc, cfg, { onUseBandage, onUnlock, onBarricade, onEs
     // (A Possession card has its own count line and description below instead of the catalogue words.)
     if (card.type !== 'possession') line(cardDesc(card.type), 'd-desc');
 
-    const noAp = p.actionPoints < rules.actionCost.useCard;
+    // Not their turn: the card can be read, not used.
+    const notMine = !ownTurn(state, p);
+    const noAp = notMine || p.actionPoints < rules.actionCost.useCard;
+    const apNote = notMine ? (p.alive ? 'You can use it on your own turn.' : 'You are out of the match.') : 'No actions left this turn.';
     if (card.type === 'lantern') {
       const held = p.hand.filter(c => c.type === 'lantern').length;
       line(`<b>Escape:</b> you hold ${held} of ${rules.lanternsToEscape}. A clean guest carrying ${rules.lanternsToEscape} Lanterns escapes from the fire exit with the Escape button (${rules.actionCost.escape} action).${p.possessed ? ' While you are possessed it will not open for you.' : ''}`);
@@ -145,14 +149,14 @@ export function createHand(doc, cfg, { onUseBandage, onUnlock, onBarricade, onEs
 
     if (card.type === 'bandage') {
       const full = p.health >= rules.maxHealth;
-      if (full || noAp) line(full ? 'Already at full health.' : 'No actions left this turn.', 'd-tag');
+      if (full || noAp) line(full ? 'Already at full health.' : apNote, 'd-tag');
       actionBtn(`Use · ${rules.actionCost.useCard} action`, full || noAp, () => onUseBandage(card.id));
       return;
     }
     if (meta.unlock) {
       const targets = adjacentLockedRooms(state, floor, p);
       if (!targets.length) { line('No locked door next to you to use it on.', 'd-tag'); return; }
-      if (noAp) line('No actions left this turn.', 'd-tag');
+      if (noAp) line(apNote, 'd-tag');
       for (const roomId of targets) {
         const name = floor.rooms.get(roomId)?.name ?? roomId;
         // A barricaded door stays shut to everyone until the door has locked again: the card would be wasted.
@@ -169,7 +173,7 @@ export function createHand(doc, cfg, { onUseBandage, onUnlock, onBarricade, onEs
     if (card.type === 'barricade') {
       const doors = (floor.rooms.get(p.currentRoom)?.doorways || []).filter(d => !isBarricaded(state, d.id));
       if (!doors.length) { line('Every doorway here is already sealed.', 'd-tag'); return; }
-      if (noAp) line('No actions left this turn.', 'd-tag');
+      if (noAp) line(apNote, 'd-tag');
       for (const d of doors) {
         const other = floor.rooms.get(d.otherRoom(p.currentRoom));
         actionBtn(`Seal the door to ${state.discovered.has(other.id) ? other.name : 'the unknown room'} · ${rules.actionCost.useCard} action`, noAp, () => onBarricade(card.id, d.id));
@@ -181,7 +185,7 @@ export function createHand(doc, cfg, { onUseBandage, onUnlock, onBarricade, onEs
       const others = playersInRoom(state, p.currentRoom, p.id);
       if (!others.length) { line(state.practice ? 'There is no one else here.' : 'No other guest in this room.', 'd-tag'); return; }
       // Short name buttons, so a full lobby (five other guests) fits without scrolling.
-      line(noAp ? 'No actions left this turn.' : `Whose hand? · ${rules.actionCost.useCard} action`, 'd-tag');
+      line(noAp ? apNote : `Whose hand? · ${rules.actionCost.useCard} action`, 'd-tag');
       const row = doc.createElement('div'); row.className = 'd-targets';
       for (const q of others) {
         const btn = doc.createElement('button');
@@ -195,9 +199,9 @@ export function createHand(doc, cfg, { onUseBandage, onUnlock, onBarricade, onEs
     }
     if (card.type === 'espresso') {
       const cost = rules.actionCost.espresso;
-      const short = p.actionPoints < cost;
+      const short = notMine || p.actionPoints < cost;
       line('The extra actions are gone when the turn ends, like any you have not used.', 'd-tag');
-      if (short) line('No actions left this turn.', 'd-tag');
+      if (short) line(apNote, 'd-tag');
       actionBtn(`Drink · ${cost ? `${cost} action` : 'free'}`, short, () => onEspresso(card.id));
     }
   }
@@ -214,7 +218,7 @@ export function createHand(doc, cfg, { onUseBandage, onUnlock, onBarricade, onEs
     // After anything that changes the hand. A card that has just been used up takes the view with it.
     refresh() {
       if (!open) return;
-      const p = activePlayer(ctx.state);
+      const p = viewerOf(ctx.state);
       const stillThere = p.hand.some(c => c.id === selectedId)
         || (selectedType === 'possession' && p.hand.some(c => c.type === 'possession'));
       if (selectedId && !stillThere) { api.close(); return; }

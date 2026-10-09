@@ -131,13 +131,6 @@ export const config = {
 
   ui: {
     toastDuration: 2.2,
-    // Hot-seat only: show the possessed guest's own reminder on the shared main screen during their
-    // action phase (a POSSESSED label and "Souls to trade: N" in the bottom-left panel, the Possession
-    // cards as one ×N card in the hand fan) — never the possessed portrait or the violet screen tint.
-    // It is hidden again before any pass screen. On, as the owner-approved rules say
-    // (docs/GAME_RULES.md > Possession); false keeps it on the private screens only.
-    // Try either without changing this file: ?possessedTell=private (off) or ?possessedTell=main (on).
-    hotseatPossessedOnMainScreen: true,
   },
 
   attackCost: 1,   // mirror of rules.actionCost.attack for the encounter modal

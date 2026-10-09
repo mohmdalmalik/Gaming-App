@@ -77,7 +77,8 @@ export function createMap(doc, floor, cfg) {
     // Rooms: wood-toned plates with a brass edge; the active room glows brass, searched rooms
     // carry a green tick, the exit reads in green. Labels sit in the upper part of the plate so
     // the position marker (drawn at the true position, often the room centre) never covers them.
-    const activeRoom = activePlayer(state).currentRoom;
+    // ("You are here": the viewer's room — the player's own, on every guest's turn.)
+    const activeRoom = (state.players[state.viewerIndex ?? state.activeIndex] || activePlayer(state)).currentRoom;
     for (const r of rooms) {
       const x = X(r.min[0]), z = Z(r.min[1]), w = r.size[0] * scale, h = r.size[1] * scale;
       const here = r.id === activeRoom, searched = state.searchedRooms.has(r.id);

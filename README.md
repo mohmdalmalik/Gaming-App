@@ -160,6 +160,13 @@ src/
     state.js            players, turns, locked rooms, barricades, meetings, escape and win checks
     actions.js          search, the deck and discard pile, cards played, trade, attack, death
     moves.js            plan a walk to a tapped room (fewest-rooms route, 1 AP per room entered)
+  bots/               the computer guests — pure, no rendering, run in the browser and in Node
+    view.js             botView: THE one place a bot's information is built (public board + its own
+                        hand, role and private events; never another guest's hand, count or role)
+    brain.js            one bot's mind: memory, suspicion and trust, trust-building, choices (TUNING knobs)
+    profiles.js         usernames and playing styles (mostly medium; some bold, some careful)
+    index.js            createBotTable: the API the interface calls (nextAction, tradeCard, thinkMs, …)
+    autoplay.js         plays bot turns straight through the rules (Node tools; finishing a match at once)
   render/             Three.js visuals: greybox rooms, doors, characters, cutaway, mood,
                       searched-room ticks; bakedRoom.js loads the baked rooms; xray.js fades
                       whatever stands between the camera and the active guest / search spot;
@@ -247,4 +254,7 @@ node tests/autoplay.mjs --url http://127.0.0.1:8123/ --matches 10   # bots play 
 node tools/balance/hotseat-sim.mjs 400 6   # 400 six-player matches under the rules as they stand (--before: same bots on the rules before Part 2; --compare: Lantern variants; --cautious)
 node tools/balance/hotseat-sim.mjs --study  # six player personalities (tools/balance/personalities.mjs) + rule proposals, in memory only (tests/personality-report.md)
 node tests/autoplay.mjs --url http://127.0.0.1:8123/ --persona-study --matches 30   # the same personalities through the real UI
+node tests/bots-check.mjs                  # the computer guests: information honesty, 450 seeded matches, determinism (~5 s)
+node tools/balance/bot-match.mjs --n 1000  # all-bot matches at 6, 5 and 4 players: who wins, trust-building, blocks, waits
+                                           # (--players 6, --trace one match, --tune blockBias=-0.2,... to try a bot knob)
 ```

@@ -771,7 +771,9 @@ function runBotAction(p, a) {
 
 function botOpenDoor(p, doorId) {
   const r = openDoor(state, floor, p, doorId);
-  if (!r.ok) { refresh(); return false; }
+  // A jammed door is a discovery, not a mistake: the bot learns it (its view drops that door) and nothing
+  // is spent, so it does not count as a refused action.
+  if (!r.ok) { refresh(); return r.reason === 'jammed'; }
   rebuildGrid();
   discovery.refresh();
   syncViews(true);

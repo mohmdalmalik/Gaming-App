@@ -9,10 +9,11 @@
 //   Every guest
 //     Utility choice: each step it scores what it could do now (escape, heal, search here, open a door
 //     here, use a room's job or a card, trade in the Fire Exit) and where it could walk (rooms to
-//     search, rooms with closed doors, the Fire Exit, an Infirmary, the Switchboard, people), minus
-//     the walk, and takes the best. Its traits (src/bots/profiles.js) weight the scores; a little
-//     noise scaled by its skill makes it imperfect but never absurd. Walking into a room with a guest
-//     it has not met there this round forces a meeting, so careful guests route round people.
+//     search, rooms with closed doors, the Fire Exit, an Infirmary, the Switchboard, people), the walk
+//     discounting a goal's worth by its distance, and takes the best. Its traits (src/bots/profiles.js)
+//     weight the scores; a little noise scaled by its skill makes it imperfect but never absurd, and it
+//     rarely walks straight back into a room it has just left. Walking into a room with a guest it has
+//     not met there this round forces a meeting, so careful guests route round people.
 //   A clean guest
 //     Collects Lanterns and heads for the Fire Exit with three (explores to find it). Reasons only from
 //     what it saw: who attacked whom, who traded just before the Switchboard count went up (and what
@@ -21,15 +22,19 @@
 //     hands over a Lantern to block when suspicion or caution is high (more readily with two or more
 //     Lanterns), otherwise a low-value card — or, now and then, a useful card back to a guest who was
 //     kind to it. Attacks only with a reason (a guest it knows is possessed, one who attacked it, a
-//     strong suspect when it is aggressive, someone in its way to the exit).
+//     strong suspect when it is aggressive or late in the match, someone in its way to the exit). With
+//     little left to find it waits in the Fire Exit and pools its single Lantern with a guest it is sure
+//     of (one escape wins it for every clean guest).
 //   A possessed guest
 //     Builds trust first: it often makes one or two friendly trades (a Bandage, Flashlight, Espresso,
 //     sometimes a Knife, rarely a Lantern) before trying a Possession card on the same guest; prefers
 //     targets who gave it something other than a Lantern before (they did not block it); grows
-//     impatient as dawn (round 8) nears and as its chances run out; never tries on a guest who knows
-//     it or on a possessed guest it knows of; keeps Lanterns away from the clean side; searches to
-//     look busy; late in the match some stand guard by the Fire Exit. It knows only the possessed
-//     guests it is linked to through conversions (and any it worked out), never the whole team.
+//     impatient as dawn (round 8) nears, once the Fire Exit is found, and as its chances run out; never
+//     tries on a guest who knows it or on a possessed guest it knows of; keeps Lanterns away from the
+//     clean side and searches hard (every Lantern it holds is one the clean side lacks); opens few
+//     doors; once the Fire Exit is found some stand guard in the room before it (anyone walking out
+//     has to pass) and may seal its doorway with a Barricade. It knows only the possessed guests it is
+//     linked to through conversions (and any it worked out), never the whole team.
 import { makeRng } from '../game/cards.js';
 
 const clamp = (x, lo, hi) => Math.max(lo, Math.min(hi, x));
@@ -51,15 +56,17 @@ const WEAPON_DAMAGE = { knife: 1, revolver: 2 };
 // Behaviour knobs (bot behaviour only — never a rule). The defaults are what the game uses; the measuring
 // tool (tools/balance/bot-match.mjs --tune key=value) can change them for one run to see their effect.
 export const TUNING = {
-  blockBias: 0,          // added to a clean guest's urge to hand over a Lantern to block
+  blockBias: -0.15,      // added to a clean guest's urge to hand over a Lantern to block
   poolChance: 0.4,       // base chance a clean guest pools its single Lantern with a guest it is sure of
   attemptBias: 0,        // added to a possessed guest's chance of trying a Possession card
   friendlyBias: 0,       // added to a possessed guest's chance of a friendly (trust-building) gift
   campWeight: 1,         // how much possessed guests like to stand guard by the Fire Exit late on
   avoidCap: 2.2,         // the most a forced meeting in a room adds to a walk's cost
-  exitUrgency: 0.55,     // a possessed guest's urgency once the Fire Exit is known (0 … 1)
-  hoard: 1,              // how keen a possessed guest is to search (every Lantern it holds is one the clean side lacks)
-  possExplore: 1,        // how keen a possessed guest is to open doors (the Fire Exit helps only the clean side)
+  exitUrgency: 0.7,      // a possessed guest's urgency once the Fire Exit is known (0 … 1)
+  hoard: 1.4,            // how keen a possessed guest is to search (every Lantern it holds is one the clean side lacks)
+  possExplore: 0.4,      // how keen a possessed guest is to open doors (the Fire Exit helps only the clean side)
+  cold: 0.5,             // how readily a possessed guest tries a Possession card on a guest it has built no trust with
+  followThrough: 0.6,    // how much more readily it tries once it has made a friendly trade with that guest
 };
 
 export function createMind(seat, profile, seed) { return new Mind(seat, profile, seed); }
@@ -80,7 +87,6 @@ export class Mind {
       tradeCount: new Map(),   // seat -> trades made
       searchCount: new Map(),  // seat -> searches made
       trades: [],              // { a, b, seq }
-      attacks: [],             // { by, target, killed, seq }
       readings: [],            // Switchboard: { seq, count, deaths }
       deaths: 0,
       // what this guest worked out or learned privately
@@ -97,7 +103,6 @@ export class Mind {
       friendly: new Map(),     // (as possessed) seat -> friendly gifts I gave them
       attempts: new Map(),     // seat -> Possession cards I gave them
       pendingAttempt: null,    // { with } a Possession card given; settled by 'converted' / 'blocked'
-      possessedSince: null,    // the round I was possessed (null: clean, or the first possessed)
       mirrored: new Set(),     // guests I have used a Hand Mirror on
     };
     this.turnState = null;
@@ -134,7 +139,6 @@ export class Mind {
       }
       case 'search': this.bump(m.searchCount, e.seat, 1); break;
       case 'attack': {
-        m.attacks.push({ by: e.by, target: e.target, killed: e.killed, seq: e.seq });
         if (e.killed) m.deaths++;
         if (e.by === me) break;
         if (e.target === me) { this.bump(m.grudge, e.by, 1); this.bump(m.susp, e.by, 0.4); break; }
@@ -169,7 +173,6 @@ export class Mind {
       case 'possessed':
         m.allies.add(e.by);
         for (const k of m.known) m.allies.add(k);
-        m.possessedSince = e.round;
         break;
       case 'converted': m.allies.add(e.who); m.pendingAttempt = null; break;
       case 'mirrorSaw': {
@@ -275,7 +278,9 @@ export class Mind {
     c.lockedWithLoot = view.rooms.some(r => r.locked && (!r.searched || r.drops));
     c.darkWithLoot = view.rooms.some(r => r.dark && !r.searched);
     // A clean guest short of Lanterns with little left to find by itself starts looking to other guests.
-    c.stuck = !c.possessed && !c.escaping && (this.prospects(c) <= 2 || c.urgency >= 0.67);
+    c.stuck = !c.possessed && !c.escaping && this.prospects(c) <= 2;
+    // ...and late in the match it turns on the guests it suspects most, or seeks those it trusts.
+    c.pressed = !c.possessed && !c.escaping && (c.stuck || c.urgency >= 0.67);
     return c;
   }
 
@@ -359,8 +364,8 @@ export class Mind {
     const opportunities = c.others.filter(p => !this.isAlly(p.seat) && !m.knowsMe.has(p.seat)).length;
     const scarce = clamp(1 - opportunities / Math.max(1, c.view.seats - 1), 0, 1);
     const u = Math.max(c.urgency, scarce * 0.8);
-    let x = 0.03 + 0.24 * (1 - t.patience);
-    if (f >= 1) x += 0.45 + (f >= 2 ? 0.12 : 0);
+    let x = (0.03 + 0.24 * (1 - t.patience)) * TUNING.cold;
+    if (f >= 1) x += TUNING.followThrough + (f >= 2 ? 0.12 : 0);
     x += 0.12 * Math.min(got.other, 2) + 0.08 * Math.min(got.useful, 2) - 0.25 * Math.min(got.lantern, 1);
     x += 0.62 * u;
     if (c.possCards >= 2) x += 0.06;
@@ -380,7 +385,7 @@ export class Mind {
   // --- choosing the next step of the turn ----------------------------------------------------------------
   startTurn(view) {
     if (this.turnState?.turn === view.turn) return;
-    this.turnState = { turn: view.turn, refused: new Set(), refusedRooms: new Set(), noSearch: false, proposed: new Set(), steps: 0, lastGoal: null };
+    this.turnState = { turn: view.turn, refused: new Set(), refusedRooms: new Set(), noSearch: false, proposed: new Set(), steps: 0, lastGoal: null, visited: new Set([view.me.room]) };
   }
 
   nextAction(view) {
@@ -389,6 +394,7 @@ export class Mind {
     const c = this.context(view);
     if (view.finished || !c.me.alive || view.activeSeat !== this.seat) return { k: 'end' };
     if (++ts.steps > 24) return { k: 'end' };
+    ts.visited.add(c.me.room);
     const ok = a => !ts.refused.has(actionKey(a));
     const ap = c.me.ap;
 
@@ -488,13 +494,16 @@ export class Mind {
 
     // --- somewhere else ----------------------------------------------------------------------------
     const dist = this.paths(c, id => this.avoidPenalty(c, id));
-    const stepCost = 0.55 + 0.15 * (1 - t.boldness);
+    // Further is less attractive, never worthless: a goal four rooms away is still worth walking toward.
+    const k = 0.3 + 0.15 * (1 - t.boldness);
     const go = (roomId, value, goal) => {
       if (roomId === me.room) return;
       const e = dist.get(roomId);
       if (!e || !e.first) return;
       const sticky = this.turnState.lastGoal === goal ? 0.35 : 0;
-      add(value - stepCost * e.d + sticky + this.noise(goal), { k: 'move', to: e.first }, goal);
+      // People rarely walk back into a room they have just left in the same turn.
+      const back = this.turnState.visited.has(e.first) ? 0.7 : 1;
+      add((value / (1 + k * e.d)) * back + sticky + this.noise(goal), { k: 'move', to: e.first }, goal);
     };
     if (c.escaping) {
       if (c.exitKnown) go(v.exitRoom, 100, 'exit');
@@ -515,7 +524,12 @@ export class Mind {
     // guests may go after a guest they know is possessed.
     for (const q of c.others) {
       const room = c.rooms.get(q.room);
-      if (!room || room.safe || q.room === me.room) continue;
+      if (!room || q.room === me.room) continue;
+      // (a safe room forces no meeting; only the Fire Exit allows a trade there, and only a possessed guest
+      // holding a Possession card goes in to offer one to a guest waiting there)
+      if (room.safe && !(room.isExit && !room.noTrade && c.possessed && c.possCards > 0)) continue;
+      // (already met there this round: walking in would start no meeting)
+      if (!room.safe && c.met.has(metKey(q.room, this.seat, q.seat))) continue;
       const val = this.meetValue(c, q);
       if (val > 0) {
         const e = dist.get(q.room);
@@ -528,7 +542,7 @@ export class Mind {
       if (camp && camp !== me.room) go(camp, this.campValue(c), 'camp');
     } else if (c.stuck && c.exitKnown && c.lanterns >= 1) {
       // Little left to find: wait in the Fire Exit (safe), where Lanterns can be pooled in a trade.
-      if (me.room === v.exitRoom) add(0.45, { k: 'end' }, 'wait');
+      if (me.room === v.exitRoom) add(1.3, { k: 'end' }, 'wait');
       else go(v.exitRoom, 1.1 + 0.4 * c.lanterns, 'gather');
     }
     add(0.12, { k: 'end' }, 'end');
@@ -579,12 +593,12 @@ export class Mind {
     if (c.escaping) return 0;
     const pp = this.pPoss(c, s);
     const armed = c.weapons.length > 0;
-    if (m.known.has(s)) return armed ? 1.4 + 2.2 * t.aggression + (c.stuck ? 1 : 0) : 0;
+    if (m.known.has(s)) return armed ? 1.4 + 2.2 * t.aggression + (c.pressed ? 1 : 0) : 0;
     if ((m.grudge.get(s) || 0) > 0 && armed) return 1.6 * t.aggression;
-    // Little left to find: a strong suspect may be sitting on Lanterns (a dead guest's cards drop).
-    if (c.stuck && armed && pp > 0.6) return 1.2 + 1.4 * t.aggression + 1.2 * c.urgency;
+    // Little left to find, or late: a strong suspect may be sitting on Lanterns (a dead guest's cards drop).
+    if (c.pressed && armed && pp > 0.6) return 1.2 + 1.4 * t.aggression + 1.2 * c.urgency;
     if (pp > 0.6 && armed && t.aggression > 0.55) return 1.4 * t.aggression;
-    if (c.stuck && pp < 0.3) return 0.5 + 0.6 * t.boldness + 0.3 * Math.min(m.trust.get(s) || 0, 2);
+    if (c.pressed && pp < 0.3) return 0.5 + 0.6 * t.boldness + 0.3 * Math.min(m.trust.get(s) || 0, 2);
     return t.boldness > 0.55 && pp < 0.35 ? 0.9 * (t.boldness - 0.4) : 0;
   }
 
@@ -719,8 +733,6 @@ export class Mind {
     if (action.k === 'trade') ts.proposed.add(action.with);
   }
 
-  // The interface carried out a voluntary trade proposal (accepted or not).
-  proposed(view, withSeat) { this.startTurn(view); this.turnState.proposed.add(withSeat); }
 
   // --- meetings --------------------------------------------------------------------------------------
   meetWhom(view, candidates) {
@@ -762,7 +774,7 @@ export class Mind {
         p = seen != null && seen === (m.tradeCount.get(target) || 0) ? 0.85 : 0.35 + 0.55 * t.aggression;
         if (c.lanterns === 0) p = Math.max(p, 0.8);
       } else if ((m.grudge.get(target) || 0) > 0) p = 0.25 + 0.6 * t.aggression;
-      else if (pp > 0.55) p = (pp - (c.stuck ? 0.25 : 0.35)) * ((c.stuck ? 0.8 : 0.4) + 1.2 * t.aggression);
+      else if (pp > 0.55) p = (pp - (c.pressed ? 0.25 : 0.35)) * ((c.pressed ? 0.8 : 0.4) + 1.2 * t.aggression);
       else if (c.escaping && pp > 0.25) p = (pp - 0.15) * (0.5 + t.aggression);
       else p = 0.01 * t.aggression;
     }
@@ -868,7 +880,7 @@ export class Mind {
     let p;
     if (c.possessed) p = this.isAlly(proposer) ? 0.9 : m.knowsMe.has(proposer) ? 0.1 : 0.75;
     else if (m.known.has(proposer)) p = c.lanterns && t.caution > 0.5 ? 0.3 : 0.05;
-    else p = clamp(0.8 - 1.4 * this.pPoss(c, proposer) + 0.1 * (m.trust.get(proposer) || 0) - 0.3 * t.caution + (c.stuck ? 0.15 : 0), 0.05, 0.92);
+    else p = clamp(0.8 - 1.4 * this.pPoss(c, proposer) + 0.1 * (m.trust.get(proposer) || 0) - 0.3 * t.caution + (c.pressed ? 0.15 : 0), 0.05, 0.92);
     const yes = this.rng() < p;
     this.record({ k: 'accept', with: proposer, yes, possessed: c.possessed });
     return yes;

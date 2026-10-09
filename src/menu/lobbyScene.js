@@ -18,7 +18,7 @@
 import * as THREE from 'three';
 import { lobbyLayout } from './lobbyLayout.js';
 import { buildLobbySet } from './lobbySet.js';
-import { createActor, preloadCast } from './lobbyCast.js';
+import { createActor, preloadCast, disposeCast } from './lobbyCast.js';
 import { disposeTextures } from './lobbyTextures.js';
 
 const D2R = Math.PI / 180;
@@ -70,6 +70,33 @@ export function createLobbyScene({ renderer, cfg, layout = lobbyLayout } = {}) {
   const set = buildLobbySet(L);
   scene.add(set.group);
 
+  // A soft vignette (darker corners) fixed to the camera: draws the eye to the middle and keeps the
+  // menu side calm. One small transparent quad, drawn last.
+  const vignette = (() => {
+    const c = document.createElement('canvas');
+    c.width = c.height = 128;
+    const g = c.getContext('2d');
+    const grd = g.createRadialGradient(64, 60, 20, 64, 64, 92);
+    grd.addColorStop(0, 'rgba(0,0,0,0)'); grd.addColorStop(0.55, 'rgba(0,0,0,0.12)'); grd.addColorStop(1, 'rgba(0,0,0,0.62)');
+    g.fillStyle = grd; g.fillRect(0, 0, 128, 128);
+    const tex = new THREE.CanvasTexture(c);
+    const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthTest: false, depthWrite: false, fog: false, toneMapped: false });
+    const geo = new THREE.PlaneGeometry(1, 1);
+    const m = new THREE.Mesh(geo, mat);
+    m.renderOrder = 100;
+    m.frustumCulled = false;
+    m.name = 'vignette';
+    camera.add(m);
+    return { mesh: m, dispose() { geo.dispose(); mat.dispose(); tex.dispose(); } };
+  })();
+  scene.add(camera);
+  function fitVignette() {
+    // a quad just in front of the near plane covering the whole view
+    const d = 0.2, hh = Math.tan((camera.fov * D2R) / 2) * d;
+    vignette.mesh.position.set(0, 0, -d);
+    vignette.mesh.scale.set(hh * 2 * camera.aspect * 1.02, hh * 2 * 1.02, 1);
+  }
+
   const shadows = makeShadows(48);
   scene.add(shadows.mesh);
   // furniture shadows (static)
@@ -87,9 +114,8 @@ export function createLobbyScene({ renderer, cfg, layout = lobbyLayout } = {}) {
 
   // ---- people ---------------------------------------------------------------------------------
   const actors = new Map();          // name -> Actor
-  const specs = new Map(L.cast.map(c => [c.name, c]));
   const strolls = new Map();         // name -> { route, i, pause }
-  let loaded = false;
+  let loaded = false, disposed = false;
 
   const seatOf = spec => {
     const [id, idx] = spec.seat;
@@ -120,6 +146,7 @@ export function createLobbyScene({ renderer, cfg, layout = lobbyLayout } = {}) {
       const models = [...new Set(L.cast.map(c => c.model))];
       await preloadCast(models);
       for (const spec of L.cast) {
+        if (disposed) return;
         try { actors.set(spec.name, await createActor(spec, scene)); }
         catch (e) { console.warn('lobby: could not create', spec.name, e && e.message); }
       }
@@ -127,8 +154,13 @@ export function createLobbyScene({ renderer, cfg, layout = lobbyLayout } = {}) {
       loaded = true;
       // settle the poses, then build the shaders up front so the first frame does not stall
       for (const a of actors.values()) a.update(0.016);
-      try { if (renderer) await (renderer.compileAsync ? renderer.compileAsync(scene, camera) : renderer.compile(scene, camera)); }
-      catch (e) { /* compiling ahead is only an optimisation */ }
+      // (compileAsync only helps, and only stays quiet, where the parallel-compile extension exists)
+      try {
+        if (renderer) {
+          if (renderer.compileAsync && renderer.extensions?.has?.('KHR_parallel_shader_compile')) await renderer.compileAsync(scene, camera);
+          else renderer.compile(scene, camera);
+        }
+      } catch (e) { /* compiling ahead is only an optimisation */ }
     } catch (e) {
       console.warn('lobby: the menu lobby loaded with errors:', e && e.message);
     }
@@ -179,27 +211,51 @@ export function createLobbyScene({ renderer, cfg, layout = lobbyLayout } = {}) {
   let seq = null;
   const lift = L.lift;
 
+  // Who looks where in the car: the manager steps in first (front right, by the controls), the
+  // guests follow and turn to face out. Timing: each guest reaches the doors at a set time, so the
+  // whole thing takes ~4.5-5.5 s whatever the distances (the walk cadence follows the ground speed,
+  // so a quicker walk is just longer, faster strides - never sliding feet).
+  const headingTo = (a, x, z) => Math.atan2(x - a.x, z - a.z);
+  const pathLength = (a, route) => {
+    let len = 0, px = a.x, pz = a.z;
+    for (const [x, z] of route) { len += Math.hypot(x - px, z - pz); px = x; pz = z; }
+    return len;
+  };
+
   function enter({ guests = 3 } = {}) {
     if (seq) return seq.promise;
     let resolve;
     const promise = new Promise(r => { resolve = r; });
-    const n = Math.max(0, Math.min(3, guests | 0));
+    const n = Math.max(0, Math.min(3, Math.round(+guests) || 0));
+    // who boards: the first `n` by `boards`; they leave their seats (and fill the car) by `boardDelay`
     const boarders = L.cast.filter(c => c.boards).sort((a, b) => a.boards - b.boards).slice(0, n)
+      .sort((a, b) => (a.boardDelay ?? 0) - (b.boardDelay ?? 0))
       .map(c => actors.get(c.name)).filter(Boolean);
     const slots = lift.slots[boarders.length] || [];
-    seq = { t: 0, promise, resolve, boarders, inside: 0, managerIn: false, closeAt: null, shutAt: null, done: false, ding: 0 };
+    seq = { t: 0, promise, resolve, boarders, closeAt: null, shutAt: null, done: false, ding: 0 };
+    // guest i reaches the doors at doorTimes[i] (s after Play)
+    const doorTimes = boarders.length === 1 ? [3.6] : boarders.length === 2 ? [3.5, 4.2] : [3.3, 3.9, 4.5];
+    boarders.forEach((a, i) => {
+      a.board = { delay: boarders.length === 3 ? (a.spec.boardDelay ?? 0.1 + i * 0.3) : 0.05 + i * 0.35, started: false, slot: slots[i], doorAt: doorTimes[i], via: lift.via?.[boarders.length]?.[i] };
+    });
+    // the manager heads straight for the lift and steps in first
     const manager = actors.get('manager');
     strolls.delete('manager');
-    // the guests: stand up one after another, walk round the furniture to the lift, turn to face out
-    boarders.forEach((a, i) => {
-      a.board = { delay: 0.15 + i * 0.3, started: false, slot: slots[i], inside: false };
-    });
-    // the manager goes to the side of the doors, ushers them in, then follows them
     if (manager) {
       manager.path = null; manager.turnTo = null; manager.onArrive = null;
-      const [dx, dz] = lift.doorSide;
-      const dist = Math.hypot(dx - manager.x, dz - manager.z);
-      manager.walkPath([[dx, dz]], { speed: THREE.MathUtils.clamp(dist / 2.6, 0.9, 1.7), face: 35 * D2R, onArrive: () => { seq && (seq.managerWaiting = true); } });
+      const [mx, mz] = lift.managerSlot;
+      const route = [[lift.front[0] + 0.25, lift.front[1] - 0.1], [mx, lift.front[1] - 1.05], [mx, mz]];
+      if (manager.z > lift.front[1] + 1.2 && Math.abs(manager.x - lift.front[0]) > 1.5) route.unshift([lift.front[0] + Math.sign(manager.x - lift.front[0]) * 1.1, lift.front[1] + 0.6]);
+      manager.walkPath(route, { speed: THREE.MathUtils.clamp(pathLength(manager, route) / 1.9, 1.0, 1.9), face: 0 });
+    }
+    // anyone strolling steps out of the camera's way and turns to watch
+    for (const [name] of strolls) {
+      const a = actors.get(name);
+      if (!a) continue;
+      strolls.delete(name);
+      const spot = a.x < 0.8 ? lift.watchLeft : lift.watchRight;
+      a.path = null; a.onArrive = null;
+      a.walkPath([spot], { speed: 1.0, face: Math.atan2(lift.x - spot[0], L.room.z0 - spot[1]) });
     }
     return promise;
   }
@@ -208,13 +264,13 @@ export function createLobbyScene({ renderer, cfg, layout = lobbyLayout } = {}) {
     const b = a.board;
     b.started = true;
     a.standUp();
-    const route = (L.boardingPaths[a.spec.name] || []).map(p => [...p]);
-    route.push([...lift.front], [b.slot[0], lift.front[1] - 0.95], [...b.slot]);
-    // speed: be inside by ~3.9 s whatever the distance (cadence follows the ground speed)
-    let len = 0, px = a.x, pz = a.z;
-    for (const [x, z] of route) { len += Math.hypot(x - px, z - pz); px = x; pz = z; }
-    const timeLeft = Math.max(1.6, 3.9 - seq.t - 0.6);
-    a.walkPath(route, { speed: THREE.MathUtils.clamp(len / timeLeft, 0.95, 1.65), face: 0, onArrive: () => { b.inside = true; } });
+    const toDoor = (L.boardingPaths[a.spec.name] || []).map(p => [...p]);
+    toDoor.push([lift.x + 0.1, lift.front[1] - 0.1], [lift.x + 0.05, L.room.z0 - 0.3]);
+    const inside = b.via ? [[...b.via], [...b.slot]] : [[...b.slot]];
+    // (standing up takes ~0.5 s and the walk eases in, hence the margin)
+    const timeLeft = Math.max(1.2, b.doorAt - seq.t - a.standTime() - 0.3);
+    const speed = THREE.MathUtils.clamp(pathLength(a, toDoor) / timeLeft, 0.95, 1.8);
+    a.walkPath([...toDoor, ...inside], { speed, face: 0, onArrive: () => { b.inside = true; } });
   }
 
   function updateSequence(dt) {
@@ -222,33 +278,27 @@ export function createLobbyScene({ renderer, cfg, layout = lobbyLayout } = {}) {
     s.t += dt;
     const manager = actors.get('manager');
     for (const a of s.boarders) if (!a.board.started && s.t >= a.board.delay) startBoarder(a);
-    // the manager follows the last guest in once every guest is past him
-    const allIn = s.boarders.every(a => a.board.inside || (a.path && a.z < lift.front[1] - 0.6));
-    if (manager && !s.managerIn && (allIn || s.t > 4.3) && s.t > 1.2) {
-      s.managerIn = true;
-      const [mx, mz] = lift.managerSlot;
-      manager.walkPath([[lift.front[0] - 0.1, lift.front[1]], [mx, lift.front[1] - 0.9], [mx, mz]], { speed: 1.35, face: 0, onArrive: () => { s.managerInside = true; } });
-    }
-    // doors: open straight away (with a ding), close once everyone is in the car
-    const everyoneIn = s.boarders.every(a => a.board.inside || a.z < -6.0) && (!manager || s.managerInside || manager.z < -5.95);
-    if (s.closeAt == null && ((everyoneIn && s.t > 2.0) || s.t > 6.2)) s.closeAt = s.t + 0.15;
-    let open = ease((s.t - 0.2) / 1.1);
-    if (s.closeAt != null) open *= 1 - ease((s.t - s.closeAt) / 1.05);
+    // doors: open straight away (with a ding); close once everybody is past them
+    const pastDoors = a => a.z < L.room.z0 - 0.45;
+    const everyoneIn = s.boarders.every(a => a.board.started && pastDoors(a)) && (!manager || pastDoors(manager));
+    if (s.closeAt == null && ((everyoneIn && s.t > 1.5) || s.t > 6.0)) s.closeAt = s.t + 0.1;
+    let open = ease((s.t - 0.15) / 1.0);
+    if (s.closeAt != null) open *= 1 - ease((s.t - s.closeAt) / 0.95);
     set.lift.setOpen(open);
     s.ding = Math.max(0, s.ding - dt * 1.2);
-    if (s.t > 0.2 && !s.dinged) { s.dinged = true; s.ding = 1; }
+    if (s.t > 0.15 && !s.dinged) { s.dinged = true; s.ding = 1; }
     set.lift.setDing(s.ding);
-    // shut: the needle starts to climb toward the fourth floor; the promise resolves
-    if (s.closeAt != null && s.t >= s.closeAt + 1.05) {
+    // shut: the dial's needle climbs toward the fourth floor; the promise resolves
+    if (s.closeAt != null && s.t >= s.closeAt + 0.95) {
       if (s.shutAt == null) s.shutAt = s.t;
-      const up = ease((s.t - s.shutAt - 0.2) / 3.2);
+      const up = ease((s.t - s.shutAt - 0.15) / 3.0);
       set.lift.setFloor(up * lift.destination);
       if (!s.done) { s.done = true; s.resolve(); }
     }
-    // the manager turns to face out at the door while ushering
-    if (manager && s.managerWaiting && !s.managerIn) {
-      const next = s.boarders.find(a => !a.board.inside);
-      if (next) lookAt(manager, next.x, next.z, 1.0);
+    // the manager, once in, watches the guests come in
+    if (manager && !manager.path && manager.turnTo == null) {
+      const next = s.boarders.find(a => !pastDoors(a));
+      if (next) lookAt(manager, next.x, next.z, 1.0); else manager.headYawTarget = 0;
     }
   }
 
@@ -260,6 +310,7 @@ export function createLobbyScene({ renderer, cfg, layout = lobbyLayout } = {}) {
       camera.position.set(...cameraOverride.pos);
       camera.lookAt(...cameraOverride.target);
       if (cameraOverride.fov && camera.fov !== cameraOverride.fov) { camera.fov = cameraOverride.fov; camera.updateProjectionMatrix(); }
+      fitVignette();
       return;
     }
     const d = C.drift;
@@ -276,6 +327,7 @@ export function createLobbyScene({ renderer, cfg, layout = lobbyLayout } = {}) {
     camera.lookAt(camTgt);
     const fov = THREE.MathUtils.lerp(baseFov, Math.min(baseFov, C.enterFov * baseFov / C.fov), push);
     if (Math.abs(camera.fov - fov) > 1e-3) { camera.fov = fov; camera.updateProjectionMatrix(); }
+    fitVignette();
   }
 
   function setSize(width, height) {
@@ -332,12 +384,15 @@ export function createLobbyScene({ renderer, cfg, layout = lobbyLayout } = {}) {
   }
 
   function dispose() {
+    disposed = true;
     if (seq && !seq.done) { seq.done = true; seq.resolve(); }
     for (const a of actors.values()) a.dispose();
     actors.clear();
     set.dispose();
     shadows.dispose();
+    vignette.dispose();
     disposeTextures();
+    disposeCast();
   }
 
   updateCamera(0);

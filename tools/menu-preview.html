@@ -118,6 +118,7 @@ window.__menu = {
   lobby, renderer, stats,
   // advance the animation by `seconds` in fixed steps and draw one frame (deterministic screenshots)
   step(seconds, dt) { step(seconds, dt); render(); return stats(); },
+  advance(seconds, dt) { step(seconds, dt); },
   enter(guests = 3) { let done = false; const p = lobby.enter({ guests }); p.then(() => { done = true; }); return { get done() { return done; } }; },
   get time() { return time; },
 };

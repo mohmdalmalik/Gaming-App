@@ -2,8 +2,7 @@
 // guest keeps everything they find or receive, even past 6; when they end the turn (the button, or the
 // clock running out) holding more than 6, they choose cards to discard until they hold 6, before
 // control passes on. Possession cards never count and are never offered here, so the screen looks the
-// same whatever the guest's role. In hot-seat it comes before the pass screen: the device is still in
-// the active guest's hands, and the kicker says so. Two steps, so nothing is thrown away by a
+// same whatever the guest's role. Two steps, so nothing is thrown away by a
 // stray tap: tap a card to pick it (tap it again, or another, to change your mind), then confirm with
 // the button, which names the card.
 import { rules } from '../data/rules.js';

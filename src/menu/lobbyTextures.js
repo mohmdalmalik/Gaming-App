@@ -282,6 +282,22 @@ export function washTexture() {
   }, { srgb: false });
 }
 
+// A shaft of light: soft along its length, brightest in the middle, fading at both ends.
+export function shaftTexture() {
+  return canvasTexture('shaft', 64, 128, (g, w, h) => {
+    const img = g.createImageData(w, h);
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+      const u = (x + 0.5) / w * 2 - 1, v = (y + 0.5) / h;
+      const across = Math.max(0, 1 - Math.abs(u)) ** 1.1;
+      const along = Math.sin(Math.PI * v) ** 0.8 * (0.55 + 0.45 * v);
+      const i = (y * w + x) * 4;
+      img.data[i] = img.data[i + 1] = img.data[i + 2] = 255;
+      img.data[i + 3] = across * along * 255;
+    }
+    g.putImageData(img, 0, 0);
+  }, { srgb: false });
+}
+
 // The spill of light from the open lift onto the floor: bright at the doors, fading outward.
 export function spillTexture() {
   return canvasTexture('spill', 64, 128, (g, w, h) => {

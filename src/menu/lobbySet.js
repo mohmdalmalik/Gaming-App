@@ -134,7 +134,10 @@ class Glows {
     _p.set(...it.pos);
     if (it.type === 'bill') { if (!camQ) _q.identity(); else _q.copy(camQ); }
     else if (it.type === 'floor') _q.setFromAxisAngle(AY, (it.yaw || 0) * D2R).multiply(FLAT);
-    else _q.setFromUnitVectors(new THREE.Vector3(0, 0, 1), new THREE.Vector3(...it.normal));
+    else {
+      _q.setFromUnitVectors(new THREE.Vector3(0, 0, 1), new THREE.Vector3(...it.normal));
+      if (it.roll) _q.multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), it.roll));
+    }
     _s.set(it.size[0], it.size[1], 1);
     _m.compose(_p, _q, _s);
     this.mesh.setMatrixAt(i, _m);
@@ -463,7 +466,13 @@ export function buildLobbySet(L) {
     S.block(0.24, 0.42, 2.5, xR - 0.12, 4.3, w.z, C.curtain);
     S.block(0.26, 0.05, 2.52, xR - 0.13, 4.3, w.z, C.brass);
     // cold moonlight on the floor
-    glows.add({ type: 'floor', pos: [xR - 1.4, 0.02, w.z], size: [2.6, 1.6], color: '#4d6fb0', intensity: 0.34, yaw: 0 });
+    glows.add({ type: 'floor', pos: [xR - 2.0, 0.02, w.z], size: [2.8, 1.5], color: '#4d6fb0', intensity: 0.45, yaw: 0 });
+  }
+
+  // --- cold moonlight falling in through the windows: soft slanted shafts (additive) ---
+  const shafts = new Glows(TX.shaftTexture());
+  for (const w of L.windows) {
+    shafts.add({ type: 'wall', pos: [xR - 1.25, 1.45, w.z], normal: [0, 0, 1], size: [1.9, 3.9], color: '#6b8ccc', intensity: 0.55, roll: -0.7 });
   }
 
   // --- painting (dark landscape in a gilt frame) ---
@@ -643,8 +652,9 @@ export function buildLobbySet(L) {
   for (const m of [solid, leaves, glowing, walls, rugs]) if (m) { group.add(m); disposables.push(m.geometry); }
   const glowMesh = glows.build();
   const washMesh = washes.build();
-  group.add(glowMesh, washMesh);
-  disposables.push(glowMesh.geometry, washMesh.geometry, glows.mat, washes.mat);
+  const shaftMesh = shafts.build();
+  group.add(glowMesh, washMesh, shaftMesh);
+  disposables.push(glowMesh.geometry, washMesh.geometry, shaftMesh.geometry, glows.mat, washes.mat, shafts.mat);
 
   // real lights
   const lights = {};

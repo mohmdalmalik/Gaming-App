@@ -1,7 +1,9 @@
-// The pass-the-device flow: the ONLY place private information is ever shown in hot-seat.
+// The player's private screens (only they look at this device; the other guests are bots today and
+// people on their own devices later). Nothing here ever shows another guest's role or hand, except a
+// hand the player looked at through a Hand Mirror.
 //
-//   PASS     — neutral. "Pass the device to Eleanor." Nothing private on screen.
-//   ROLE     — that guest alone: their secret role (once at the start, again if converted).
+//   PASS     — (the old hot-seat hand-over; kept for tools, unused in the game)
+//   ROLE     — the player's secret role (once at the start, again if converted).
 //   TURN     — their private start-of-turn screen: role, news, health, hand, Lanterns.
 //   PICK     — a private card choice (which card to give in a trade).
 //   CHOICE   — a private yes/no (accept a lobby trade?).
@@ -133,8 +135,8 @@ export function createHandoff(doc) {
     revealRole(player, opts, onContinue) {
       reset('role');
       el.kicker.textContent = opts?.changed ? 'Something has changed' : 'Your secret role';
-      el.title.textContent = opts?.changed ? `${player.name}, read this alone` : player.name;
-      el.sub.textContent = opts?.changed ? 'Do not show this to anyone.' : 'Only you may see this screen. Memorise it and pass the device on.';
+      el.title.textContent = opts?.changed ? 'You have been possessed' : player.name;
+      el.sub.textContent = opts?.changed ? 'Nobody else knows. From now on you play for the hotel.' : 'Only you know this. Nobody else at the table can see it.';
       renderRole(player);
       renderNotes(player);
       show('I understand', onContinue);
@@ -162,7 +164,7 @@ export function createHandoff(doc) {
     // this screen can never be a dead end.
     privatePick(player, { kicker, title, sub, cards, onPick, cancelLabel, onCancel }) {
       reset('pick');
-      el.kicker.textContent = kicker || `Private — ${player.name} only`;
+      el.kicker.textContent = kicker || 'Only you see this';
       el.title.textContent = title;
       el.sub.textContent = sub || '';
       el.pick.hidden = false;
@@ -181,7 +183,7 @@ export function createHandoff(doc) {
     // A private yes/no.
     privateChoice(player, { kicker, title, sub, options, onPick }) {
       reset('choice');
-      el.kicker.textContent = kicker || `Private — ${player.name} only`;
+      el.kicker.textContent = kicker || 'Only you see this';
       el.title.textContent = title;
       el.sub.textContent = sub || '';
       el.pick.hidden = false;
@@ -197,21 +199,21 @@ export function createHandoff(doc) {
       el.next.hidden = true; el.overlay.hidden = false;
     },
 
-    // A private consequence for the guest holding the device.
+    // A private consequence for the player.
     privateNote(player, lines, onContinue) {
       reset('note');
-      el.kicker.textContent = 'Private — hold the device close';
-      el.title.textContent = `For ${player.name} only`;
+      el.kicker.textContent = 'Only you see this';
+      el.title.textContent = 'For your eyes only';
       renderNotes(player, lines);
       show('I understand', onContinue);
     },
 
-    // Someone else's whole hand, shown to the guest holding the device only (the Hand Mirror).
+    // Someone else's whole hand, shown to the player only (the Hand Mirror).
     // Possession cards are included and shown first; `lines` says what that means. The guest's own
     // waiting notes are left for their next private screen.
     privateHand(player, { kicker, title, sub, cards, lines = [] }, onContinue) {
       reset('mirror');
-      el.kicker.textContent = kicker || `Private — ${player.name} only`;
+      el.kicker.textContent = kicker || 'Only you see this';
       el.title.textContent = title;
       el.sub.textContent = sub || '';
       if (lines.length) {
@@ -233,7 +235,7 @@ export function createHandoff(doc) {
     privateFound(player, { kicker, title, cards = [], lines = [], button, soft = false }, onContinue) {
       reset('found');
       if (soft) el.overlay.classList.add('soft');
-      el.kicker.textContent = kicker || 'Private — hold the device close';
+      el.kicker.textContent = kicker || 'Only you see this';
       el.title.textContent = title;
       if (cards.length) {
         el.found.hidden = false;

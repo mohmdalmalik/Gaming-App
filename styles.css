@@ -1036,7 +1036,7 @@ html, body {
 .mini-player.me .mini-flag { color: var(--brass); }
 .mini-player.active.me .mini-flag { color: var(--brass-bright); }
 /* On another guest's turn the End turn button says whose turn it is and waits. */
-.btn.end.waiting { opacity: 0.85; }
+.btn.primary.end.waiting { background: var(--panel); border-color: var(--line); opacity: 1; }
 .btn.end.waiting:disabled .btn-main { color: var(--ivory-dim); }
 .btn.end.waiting:disabled .btn-sub { color: var(--muted); font-weight: 600; }
 

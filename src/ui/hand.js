@@ -1,7 +1,7 @@
 // The card view: one card of the active guest's hand shown large — its face, its name, what it does
 // and, when it has one, its action (Use, Open, Seal, Drink, whose hand to look at). Opened by tapping a
 // card in the hand fan (src/ui/handFan.js) or the "Private details" link; ‹ › step through the hand.
-// Private to whoever holds the device: it shows their Lanterns, their Possession cards and who they
+// Private to the player (only they look at this screen): it shows their Lanterns, their Possession cards and who they
 // have unmasked. Tap outside the panel, or Close, to put it away.
 import { activePlayer, adjacentLockedRooms, isBarricaded, playersInRoom, doorBetween, moveCostInto } from '../game/state.js';
 

@@ -176,6 +176,12 @@ export function summarise(list) {
     early: (() => { const e = list.reduce((a, m) => ({ n: a.n + m.early.n, f: a.f + m.early.friendly, t: a.t + m.early.attempt }), { n: 0, f: 0, t: 0 }); return { friendly: e.n ? e.f / e.n : 0, attempt: e.n ? e.t / e.n : 0 }; })(),
     kills: kills.length / n, cleanOnCleanKills: kills.filter(k => !k.byPossessed && !k.victimPossessed).length / n,
     attacks: attacks.length / n,
+    attackSplit: {
+      cleanOnClean: attacks.filter(a => !a.byPossessed && !a.victimPossessed).length / n,
+      cleanOnPossessed: attacks.filter(a => !a.byPossessed && a.victimPossessed).length / n,
+      possessedOnClean: attacks.filter(a => a.byPossessed && !a.victimPossessed).length / n,
+      possessedOnPossessed: attacks.filter(a => a.byPossessed && a.victimPossessed).length / n,
+    },
     escapes: list.filter(m => m.how === 'escape').length / n,
     exitFound: list.filter(m => m.exitFound).length / n,
     blockRate: bt ? bd / bt : 0, blocksDecidedPerMatch: bd / n,
@@ -202,6 +208,8 @@ function print(players, s) {
   line('  … in rounds 1-3 only: friendly / attempt', `${pct(s.early.friendly, 1)} / ${pct(s.early.attempt, 1)}`);
   line('  … friendly first, later an attempt on the same guest', pct(s.friendlyThenAttemptRate, 1));
   line('Attacks / kills per match (clean-on-clean kills)', `${s.attacks.toFixed(2)} / ${s.kills.toFixed(2)} (${s.cleanOnCleanKills.toFixed(2)})`);
+  line('  … attacks clean→clean / clean→possessed / possessed→clean / possessed→possessed',
+    `${s.attackSplit.cleanOnClean.toFixed(2)} / ${s.attackSplit.cleanOnPossessed.toFixed(2)} / ${s.attackSplit.possessedOnClean.toFixed(2)} / ${s.attackSplit.possessedOnPossessed.toFixed(2)}`);
   line('Escapes', pct(s.escapes * s.n, s.n));
   line('Fire Exit found', pct(s.exitFound * s.n, s.n));
   line('Clean bots handing over a Lantern to block (of their trades)', `${pct(s.blockRate, 1)} (${s.blocksDecidedPerMatch.toFixed(2)} per match)`);

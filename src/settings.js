@@ -7,9 +7,9 @@ const KEY = 'hotelEscape.settings.v1';
 export const SETTING_CHOICES = {
   // How quickly the computer guests (bots) think and walk. They always play faster than a person.
   botSpeed: [
-    { value: 'relaxed', label: 'Relaxed', think: 1.35, walk: 1.15 },
-    { value: 'normal', label: 'Normal', think: 1, walk: 1.45 },
-    { value: 'fast', label: 'Fast', think: 0.5, walk: 2.1 },
+    { value: 'relaxed', label: 'Relaxed', think: 1.1, walk: 1.25 },
+    { value: 'normal', label: 'Normal', think: 0.75, walk: 1.7 },
+    { value: 'fast', label: 'Fast', think: 0.45, walk: 2.3 },
   ],
   // On the other guests' turns, the view follows whoever is playing, or stays on your own guest.
   follow: [

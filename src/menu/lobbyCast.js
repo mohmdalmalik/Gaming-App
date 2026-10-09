@@ -119,6 +119,12 @@ function dressedGeometry(tpl, mesh, dress) {
   return g;
 }
 
+// Free the shared, merged guest geometry (a later lobby simply loads the models again).
+export function disposeCast() {
+  for (const p of templates.values()) p.then(t => t && t.root.traverse(o => { if (o.isSkinnedMesh) o.geometry.dispose(); })).catch(() => {});
+  templates.clear();
+}
+
 export function preloadCast(ids) {
   return Promise.all(ids.map(id => loadTemplate(id).catch(e => { console.warn('lobby: could not load guest', id, e && e.message); return null; })));
 }
@@ -198,7 +204,7 @@ export class Actor {
     this.turnTo = null;          // heading to turn to while standing
     // sitting state
     this.seat = null;            // { x, z, y (seat surface), heading, depth }
-    this.sitW = 0; this.sitTarget = 0; this.sitSpeed = 1 / 0.6;
+    this.sitW = 0; this.sitTarget = 0; this.sitSpeed = 1 / 0.55;
     // gestures
     this.headYaw = 0; this.headYawTarget = 0;
     this.headPitch = 0;
@@ -235,6 +241,7 @@ export class Actor {
   }
 
   standUp() { this.sitTarget = 0; }
+  standTime() { return this.sitW / this.sitSpeed; }
   sitDown() { this.sitTarget = 1; }
 
   // Walk along world points [[x,z],…]; `onArrive` when done; `face` = heading to turn to on arrival.
@@ -254,6 +261,12 @@ export class Actor {
 
     // --- locomotion ---
     let dist = 0;
+    // rising from a seat with somewhere to go: start turning toward it in the last part of the rise
+    if (this.path && this.path.length && this.sitW > 0.001 && this.sitW < 0.4 && this.sitTarget === 0) {
+      const tgt = this.path[0];
+      const dh = wrapAngle(Math.atan2(tgt.x - this.x, tgt.z - this.z) - this.heading);
+      this.heading += dh * Math.min(1, dt * 3);
+    }
     if (this.path && this.path.length && this.sitW <= 0.001) {
       const tgt = this.path[0];
       const dx = tgt.x - this.x, dz = tgt.z - this.z;
@@ -268,7 +281,7 @@ export class Actor {
         const dh = wrapAngle(h - this.heading);
         this.heading += dh * Math.min(1, dt * 7);
         // walk forward, a little less when facing away from the target (turning on the spot)
-        const k = Math.max(0.15, Math.cos(dh));
+        const k = Math.max(0.3, Math.cos(dh));
         this.x += Math.sin(this.heading) * step * k;
         this.z += Math.cos(this.heading) * step * k;
         dist = step * k;

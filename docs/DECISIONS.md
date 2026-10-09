@@ -1061,3 +1061,53 @@ Target: `docs/art-reference.jpg` (style, palette and finish; not its layout or i
 - **The path preview** leaves out the dots that would run under the Move/Cancel bar.
 - **Cost**: a 19-room hotel seen whole is ≈370 draw calls / 440k triangles in the test browser (baked
   tiles are a handful of draws each, all the fog one); the lobby view is unchanged apart from the fog's one.
+
+## Computer guests (bots): honest information, human-like play (Oct 2026)
+- **Where**: `src/bots/` — pure modules (no DOM, no THREE, no Node APIs), so the same brains run in the
+  game and in the Node tools. The interface talks only to `createBotTable` (`src/bots/index.js`); all-bot
+  matches and "finish the match at once" go through `src/bots/autoplay.js`, which carries out every choice
+  through the rules engine exactly as the interface does (a move walks the fewest-rooms route and stops at
+  the first forced meeting; meetings, trades, attacks, the hand limit, end of turn).
+- **Information honesty**: a bot decides from `botView()` (`src/bots/view.js`) plus its own memory, and
+  nothing else. The view is the public board (rooms, doors, locks, barricades, who stands where, health,
+  alive/dead/escaped, who already met where this round, how many room tiles are left), the PUBLIC event
+  list, and the bot's own hand, role, action points and PRIVATE events. No names or ids (nothing that could
+  hint at which seat is a person); never another guest's hand, card count or role, the draw pile or the
+  room deck's order. `tests/bots-check.mjs` scrambles all of that hidden information and checks the view —
+  and every choice and conclusion — stays identical. A possessed bot knows only the possessed guests it is
+  linked to through conversions (who converted it, whom it converted) or worked out (a Possession card
+  received, the Switchboard count).
+- **Structured events (engine, no behaviour change)**: `state.events` (public, append-only, each with `seq`,
+  `round`, `turn`: turn, enter, open, search, trade, noTrade, attack, mirror, switchboard, unlock, barricade,
+  infirmary, escape, relock) and `player.inbox` (private: traded with what was given and got, blocked /
+  blockedThem, possessed / converted, mirrorSaw / mirroredBy). Emitted next to the existing log lines;
+  Bandage and Espresso use stay unannounced. Seats are `player.index`. A future server can use the same
+  lists. The balance simulator prints exactly the same numbers as before.
+- **Pick your role**: `state.setup.possessedIndex` forces the possessed seat. The random pick is still drawn
+  first, so the hotel, the deck and every later draw are the same as without forcing.
+- **Determinism**: every bot has its own seeded generator (decisions) and a second one (thinking pauses),
+  so the interface asking for pauses more or less often never changes a choice; bots never draw from the
+  engine's generator. Same seed → same match, event for event. Card ids (a global counter) never break ties.
+- **How a bot plays**: utility scoring — what it could do here and now, and where it could walk (worth
+  discounted by distance) — weighted by its profile's traits (boldness, caution, greed, aggression,
+  patience, trust, skill, pace; ~60% medium, ~20% bold, ~20% careful, online-style usernames). Clean bots
+  reason from public evidence (attacks, Switchboard counts against the trades in between, trades with a
+  known possessed guest) and private evidence (blocks, mirrors, kindness received); they block with a
+  Lantern when suspicion or caution is high, collect Lanterns and head for the Fire Exit, and late on turn
+  on strong suspects or pool a single Lantern with a guest they are sure of. Possessed bots build trust
+  first (a friendly trade, then the attempt on that guest), prefer guests who did not block them, feel the
+  clock once the Fire Exit is found, search hard and open few doors, and some stand guard in the room
+  before the Fire Exit. Behaviour knobs live in `TUNING` (`src/bots/brain.js`) — bot behaviour only, never a
+  rule — and `tools/balance/bot-match.mjs --tune` tries them.
+- **Pace**: `thinkMs` gives quicker-than-human pauses (about 0.35–1.4 s a step, 0.7–2 s for trades and
+  meetings, an occasional "hmm" up to 2.5 s, times the guest's pace 0.7–1.4); the interface multiplies by
+  the player's speed setting. Measured: about 3.6 actions and 5.7 s of thinking per bot turn.
+- **Measured balance (all-bot, 2,000 matches per size, current rules)**: clean side wins about 50% at 6
+  players, 42% at 5, 34% at 4 (possessed wins are mostly at dawn). The smaller tables favour the possessed
+  side for a structural reason the older simulators also showed: the same two Possession cards and the same
+  24-room hotel against only three clean guests, who find the Fire Exit later (90% of 4-player matches vs
+  98% at 6). Possessions spread over rounds 1–5 (about 5–7% in round 1); a possessed bot's first trade with
+  a guest in rounds 1–3 is friendly about 46% of the time and an attempt about 25%.
+- **Jammed doors**: a door that turns out jammed is refused by the engine ('jammed') but is a discovery, not
+  a mistake — each is tried once and then drops out of the view. Bots stop trying doors once no room tiles
+  are left (the count is public).

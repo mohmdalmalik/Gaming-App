@@ -22,13 +22,15 @@ export const lobbyLayout = {
     // where people stand inside the car, facing out (heading 0): back row first
     // where the boarding guests stand inside the car (by how many board), facing out
     slots: {
-      1: [[3.3, -6.9]],
-      2: [[2.9, -6.95], [3.55, -6.95]],
-      3: [[2.88, -6.95], [3.55, -6.98], [3.55, -6.38]],
+      1: [[3.1, -6.95]],
+      2: [[2.9, -7.0], [3.55, -7.0]],
+      3: [[2.9, -7.0], [3.55, -7.02], [2.95, -6.42]],
     },
-    managerSlot: [2.85, -6.35],
+    via: { 3: [null, [3.12, -6.55], null] },   // a detour inside the car (round the manager), by entry order
+    managerSlot: [3.62, -6.28],  // the manager stands front right, by the controls
     front: [3.2, -4.75],         // just outside the doors
-    doorSide: [2.15, -4.95],     // where the manager waits, ushering the guests in
+    watchLeft: [-2.2, 1.4],      // where a strolling guest steps aside to (out of the camera's way)
+    watchRight: [4.1, 2.5],
     floors: 6,                   // dial: L, 1 … 6
     destination: 4,              // the Fourth Floor Landing (the game's starting room)
   },
@@ -52,22 +54,22 @@ export const lobbyLayout = {
 
   // Furniture. Seats: `seat` = the cushion top; seated people are placed by their pelvis point.
   sofas: [
-    { id: 'sofa', x: 4.85, z: -1.95, heading: -30, seats: 2, kind: 'sofa' },
-    { id: 'armchairR', x: 2.8, z: -0.8, heading: 60, seats: 1, kind: 'armchair' },
+    { id: 'sofa', x: 4.35, z: -3.0, heading: 8, seats: 2, kind: 'sofa' },
+    { id: 'armchairR', x: 2.7, z: -2.1, heading: 66, seats: 1, kind: 'armchair' },
     { id: 'armchairL', x: -2.75, z: -1.55, heading: 40, seats: 1, kind: 'armchair', color: '#2c4a3c' },
   ],
   seatHeight: 0.25,
   tables: [
-    { x: 3.75, z: -0.95, r: 0.36, h: 0.3, tea: true },
+    { x: 3.6, z: -1.95, r: 0.3, h: 0.3, tea: true },
     { x: -2.15, z: -1.05, r: 0.3, h: 0.38 },
   ],
   rugs: [
-    { x: 4.15, z: -1.3, w: 4.3, d: 3.2, heading: -30 },
+    { x: 3.8, z: -2.45, w: 4.0, d: 3.0, heading: 8 },
     { x: -2.2, z: -0.8, w: 3.0, d: 2.5, heading: 22 },
     { x: 0.3, z: -2.45, w: 3.0, d: 1.25, heading: 0 },
   ],
   runner: { x: 1.75, z: 1.4, w: 1.5, d: 9.0, heading: -20 },
-  floorLamps: [{ x: 6.15, z: -2.85 }, { x: -3.55, z: -2.4 }],
+  floorLamps: [{ x: 5.6, z: -3.45 }, { x: -3.55, z: -2.4 }],
   palms: [{ x: 7.55, z: -4.75, s: 1.2 }, { x: -1.15, z: -4.95, s: 0.8 }, { x: 1.62, z: -4.95, s: 0.7 }, { x: 7.6, z: 3.6, s: 1.15 }, { x: -5.4, z: -2.9, s: 0.9 }],
   columns: [{ x: -2.9, z: 3.7 }, { x: 6.5, z: 3.6 }],
   chandeliers: [{ x: 1.55, z: -0.9, y: 4.4 }, { x: 5.3, z: -0.2, y: 4.45 }, { x: -1.6, z: 0.6, y: 4.4 }],
@@ -78,7 +80,7 @@ export const lobbyLayout = {
     { id: 'chandA', pos: [1.55, 4.0, -0.9], color: '#ffc98a', intensity: 15, distance: 16, decay: 1.6 },
     { id: 'chandB', pos: [5.3, 4.05, -0.2], color: '#ffc98a', intensity: 14, distance: 16, decay: 1.6 },
     { id: 'desk', pos: [1.1, 1.5, -3.7], color: '#ffb766', intensity: 3.2, distance: 6, decay: 1.6 },
-    { id: 'lampR', pos: [6.15, 1.45, -2.85], color: '#ffb766', intensity: 5, distance: 7, decay: 1.6 },
+    { id: 'lampR', pos: [5.6, 1.45, -3.45], color: '#ffb766', intensity: 5, distance: 7, decay: 1.6 },
     { id: 'lampL', pos: [-3.55, 1.45, -2.4], color: '#ffb766', intensity: 4, distance: 7, decay: 1.6 },
     { id: 'lift', pos: [3.2, 2.0, -5.9], color: '#ffd9a0', intensity: 0, distance: 8, decay: 1.4, open: 9 },
   ],
@@ -89,9 +91,9 @@ export const lobbyLayout = {
   cast: [
     // the guests who board the lift on Play (first `guests` of them, in this order)
     // (recline: how far the trunk leans back into the cushions; feetForward: shin angle, radians)
-    { name: 'victor', model: 'victor', seat: ['sofa', 0], boards: 1, splay: 0.16, recline: 0.24, feetForward: 0.4 },
-    { name: 'clara', model: 'clara', seat: ['sofa', 1], boards: 2, splay: 0.02, recline: 0.12, feetForward: 0.22 },
-    { name: 'henry', model: 'henry', seat: ['armchairR', 0], boards: 3, splay: 0.14, recline: 0.2, feetForward: 0.35 },
+    { name: 'victor', model: 'victor', seat: ['sofa', 0], boards: 1, boardDelay: 0.3, splay: 0.16, recline: 0.24, feetForward: 0.4 },
+    { name: 'clara', model: 'clara', seat: ['sofa', 1], boards: 2, boardDelay: 0.6, splay: 0.02, recline: 0.12, feetForward: 0.22 },
+    { name: 'henry', model: 'henry', seat: ['armchairR', 0], boards: 3, boardDelay: 0.05, splay: 0.14, recline: 0.2, feetForward: 0.35 },
     // seated in the left lounge
     { name: 'marcus', model: 'marcus', seat: ['armchairL', 0], splay: 0.2, recline: 0.28, feetForward: 0.45 },
     // at the desk, talking with the concierge
@@ -113,37 +115,37 @@ export const lobbyLayout = {
   // Idle walks (looping): [x, z, pause seconds, heading to face while paused (deg) or null, glance (deg)]
   strolls: {
     manager: [
-      [2.35, -3.15, 3.0, 150, -40],
-      [5.4, -3.55, 0.0, null, 0],
+      [2.05, -3.55, 3.0, 150, -40],
+      [5.3, -4.25, 0.0, null, 0],
       [7.05, -2.75, 4.0, 90, 0],      // at the window, looking out into the night
-      [5.6, -3.85, 0.0, null, 0],
-      [3.25, -4.2, 2.0, 200, 35],     // glancing over the lounge
+      [6.2, -2.3, 0.0, null, 0],
+      [5.0, -4.3, 0.0, null, 0],
+      [3.25, -4.35, 2.0, 200, 35],    // glancing over the lounge
     ],
     beatrice: [
-      [-1.9, 2.4, 0.0, null, 0],
-      [0.9, 1.7, 0.0, null, 0],
-      [1.95, 0.75, 3.5, 125, -20],    // stopping to look over at the guests on the sofa
-      [0.5, 2.3, 0.0, null, 0],
-      [-1.3, 3.3, 2.5, 200, 25],      // and back toward the reception
+      [5.7, 1.9, 3.0, 270, 0],        // off to the right (just out of frame on an iPad)
+      [1.2, 2.1, 0.0, null, 0],
+      [-2.3, 1.3, 3.5, 200, -25],     // by the left lounge, looking over at the reception
+      [-0.8, 3.1, 0.0, null, 0],
     ],
   },
 
   // Boarding: each guest walks from where they stood up to the lift, around the furniture.
   boardingPaths: {
-    victor: [[3.65, -2.25], [3.35, -3.6]],
-    clara: [[4.2, -1.45], [3.6, -2.4], [3.5, -3.7]],
-    henry: [[2.75, -1.7], [2.95, -3.5]],
+    victor: [[3.22, -2.75], [3.15, -4.3]],
+    clara: [[3.28, -2.72], [3.15, -4.3]],
+    henry: [[3.2, -2.7], [3.15, -4.3]],
   },
 
   camera: {
     fov: 36,                    // vertical, at 16:9; narrower screens widen it to keep the sides
     minHFov: 54,                // horizontal field of view never below this (4:3 iPads)
-    pos: [-1.6, 1.25, 7.9],
-    target: [1.5, 1.5, -3.2],
+    pos: [-1.6, 1.15, 7.9],
+    target: [1.5, 1.72, -3.2],
     drift: { x: 0.35, y: 0.06, z: 0.2, period: 46 },
     // the push toward the lift during the boarding sequence
-    enterPos: [1.55, 1.6, 1.4],
-    enterTarget: [3.2, 1.45, -5.6],
+    enterPos: [1.7, 1.75, 1.3],
+    enterTarget: [3.2, 1.4, -5.6],
     enterFov: 33,
   },
 };

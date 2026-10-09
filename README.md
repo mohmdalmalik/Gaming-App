@@ -161,8 +161,11 @@ src/
                       and the bots' turns, meetings both ways); window.__game debug hooks
   config.js           display / camera / feel tuning
   settings.js         the player's own settings (bot speed, view, graphics, menu background), kept on the device
-  menu/               the lobby behind the main menu (lobbyScene.js: reception, seated and strolling
-                      guests, the manager, the lift sequence), built from simple shapes + the guest models
+  menu/               the lobby behind the main menu: lobbyScene.js (the API: idle life, the lift
+                      sequence, the camera), lobbyLayout.js (every position, the cast, paths and camera as
+                      data), lobbySet.js (the room), lobbyCast.js (guests, staff, seated poses),
+                      lobbyTextures.js (canvas textures, no image files). Preview: tools/menu-preview.html
+                      (?menu=1 ?blur=1 ?enter=1&guests=3); check: node tests/menu-scene-shots.mjs
   data/
     rules.js          THE RULE NUMBERS — implements docs/GAME_RULES.md (owner-approved changes only)
     hotel.js          THE HOTEL: the lobby and the 24-tile room deck (doorways, dark, locked, furniture, moods)

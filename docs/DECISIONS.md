@@ -1149,3 +1149,12 @@ Target: `docs/art-reference.jpg` (style, palette and finish; not its layout or i
   lobby scene fails to load, the menu shows over the blurred hotel lobby instead.
 - **Direct links** for tests: `?mode=practice`, `?mode=bots&bots=N&role=R&seat=S`, `?intro=off`,
   `?botpace=0.1`. They skip the menu and show the old "Tap to begin" card.
+- **The lobby scene itself** (`src/menu/`): a night-time Art Deco lobby built from simple shapes and canvas
+  textures (no new image files), about 30 draw calls: each person (the six guests, two extras, the manager
+  and the concierge) is merged into ONE draw call with colours stored per vertex, so the staff and extras
+  are re-dressed copies of the guest models. The models have no sit clip, so seated poses are solved at
+  runtime over the breathing idle (feet planted, hands on the lap; standing up blends in 0.55 s). All
+  motion follows `dt` only (dt 0 freezes it: the "Still" menu background); the boarding is timed by when
+  each guest reaches the doors, and walk speed adapts so feet never slide. `enter({ guests })` resolves when
+  the doors shut (about 5.8 s for three guests). If the iPad struggles, the two background extras (about
+  60k triangles) are the first thing to cut.

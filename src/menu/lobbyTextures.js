@@ -143,6 +143,29 @@ export function rugTexture() {
   }, { aniso: 8 });
 }
 
+// A long runner: burgundy with gold borders along both sides and stepped chevrons (repeats along v).
+export function runnerTexture() {
+  return canvasTexture('runner', 256, 512, (g, w, h) => {
+    const r = rng(13);
+    g.fillStyle = '#56101a'; g.fillRect(0, 0, w, h);
+    for (let i = 0; i < 1500; i++) {
+      g.fillStyle = `rgba(${r() < 0.5 ? '20,0,4' : '140,40,50'},${r() * 0.12})`;
+      g.fillRect(r() * w, r() * h, 2, 2);
+    }
+    g.fillStyle = '#c59a4e'; g.fillRect(14, 0, 9, h); g.fillRect(w - 23, 0, 9, h);
+    g.fillRect(32, 0, 3, h); g.fillRect(w - 35, 0, 3, h);
+    g.fillStyle = '#3c0a10'; g.fillRect(38, 0, w - 76, h);
+    g.strokeStyle = '#c59a4e'; g.lineWidth = 5;
+    for (let k = 0; k < 4; k++) {
+      const y = k * h / 4 + 30;
+      g.beginPath(); g.moveTo(60, y + 60); g.lineTo(w / 2, y); g.lineTo(w - 60, y + 60); g.stroke();
+      g.beginPath(); g.moveTo(84, y + 70); g.lineTo(w / 2, y + 26); g.lineTo(w - 84, y + 70); g.stroke();
+      g.fillStyle = '#c59a4e';
+      g.beginPath(); g.moveTo(w / 2, y + 52); g.lineTo(w / 2 + 12, y + 64); g.lineTo(w / 2, y + 76); g.lineTo(w / 2 - 12, y + 64); g.closePath(); g.fill();
+    }
+  }, { repeat: true, aniso: 8 });
+}
+
 // The key wall behind reception: walnut pigeonholes, brass key tags, a few letters.
 export function keyBoardTexture() {
   return canvasTexture('keys', 512, 256, (g, w, h) => {

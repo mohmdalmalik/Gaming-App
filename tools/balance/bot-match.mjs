@@ -1,6 +1,6 @@
 // ALL-BOT MATCHES with the game's own computer guests (src/bots/) — dev tool, not part of the game.
 //
-//   node tools/balance/bot-match.mjs [--n 400] [--players 4,5,6] [--seed 1] [--trace] [--json out.json]
+//   node tools/balance/bot-match.mjs [--n 400] [--players 4,5,6] [--seed 1] [--trace] [--json out.json] [--tune k=v,...]
 //
 // Each match: a new random hotel, random bot profiles (src/bots/profiles.js), the possessed seat dealt at
 // random by the engine, every turn played through the pure rules engine by src/bots/autoplay.js, exactly
@@ -20,6 +20,7 @@ import { createHotel } from '../../src/game/hotel.js';
 import { makeRng } from '../../src/game/cards.js';
 import * as S from '../../src/game/state.js';
 import { createBotTable } from '../../src/bots/index.js';
+import { TUNING } from '../../src/bots/brain.js';
 import { rollProfiles } from '../../src/bots/profiles.js';
 import { playBotTurn } from '../../src/bots/autoplay.js';
 
@@ -31,6 +32,12 @@ const TRACE = process.argv.includes('--trace');
 const JSON_OUT = arg('json', null);
 
 const floor = createHotel(hotel, config);
+// --tune key=value[,key=value]: change a bot behaviour knob (src/bots/brain.js TUNING) for this run only.
+for (const kv of String(arg('tune', '')).split(',').filter(Boolean)) {
+  const [k, v] = kv.split('=');
+  if (!(k in TUNING)) throw new Error(`unknown knob ${k}; knobs: ${Object.keys(TUNING).join(', ')}`);
+  TUNING[k] = Number(v);
+}
 
 export function playMatch(seed, players, { trace = false } = {}) {
   applyMode('hotseat', players);
@@ -41,11 +48,14 @@ export function playMatch(seed, players, { trace = false } = {}) {
   const table = createBotTable(state, floor, profiles.map((profile, index) => ({ index, profile })), seed);
   const startPossessed = state.players.findIndex(p => p.possessed);
   let turns = 0, actions = 0, waitMs = 0, refusals = 0, maxRefusalTurn = 0, jammed = 0;
+  const kinds = {};
   while (!state.finished && turns < 400) {
     const who = S.activePlayer(state);
     const s = playBotTurn(state, floor, table, { maxSteps: 40 });
     turns++;
     actions += s.actions.length;
+    for (const a of s.actions) { const k = a.k === 'card' ? a.type : a.k; kinds[k] = (kinds[k] || 0) + 1; }
+    for (const m of s.meetings) { const k = 'meet:' + m.kind; kinds[k] = (kinds[k] || 0) + 1; }
     const real = s.refusals.filter(r => r.reason !== 'jammed');
     jammed += s.refusals.length - real.length;
     refusals += real.length;
@@ -61,7 +71,7 @@ export function playMatch(seed, players, { trace = false } = {}) {
         `${s.refusals.length ? '  REFUSED ' + s.refusals.map(r => r.action.k + ':' + r.reason).join(',') : ''}  hand[${who.hand.map(c => c.type).join(',')}]`);
     }
   }
-  return collect(state, table, profiles, { seed, players, turns, actions, waitMs, refusals, maxRefusalTurn, jammed, startPossessed });
+  return collect(state, table, profiles, { seed, players, turns, actions, waitMs, refusals, maxRefusalTurn, jammed, startPossessed, kinds });
 }
 
 function collect(state, table, profiles, base) {
@@ -82,6 +92,7 @@ function collect(state, table, profiles, base) {
   const attacks = state.events.filter(e => e.type === 'attack').map(e => ({ byPossessed: possessedAt(e.by, e.seq), victimPossessed: possessedAt(e.target, e.seq) }));
   // Trust building: a possessed bot's FIRST trade with each guest it was not knowingly allied to.
   let firstTrades = 0, firstFriendly = 0, friendlyThenAttempt = 0, firstAttempt = 0;
+  const early = { n: 0, friendly: 0, attempt: 0 };      // first trades in rounds 1-3
   const blockDecisions = { clean: 0, cleanTrades: 0 };
   for (const p of P) {
     const seen = new Map();
@@ -95,6 +106,7 @@ function collect(state, table, profiles, base) {
         firstTrades++;
         if (d.intent === 'friendly') firstFriendly++;
         if (d.intent === 'attempt') firstAttempt++;
+        if (d.round <= 3) { early.n++; if (d.intent === 'friendly') early.friendly++; if (d.intent === 'attempt') early.attempt++; }
       } else if (seen.get(d.with) === 'friendly' && d.intent === 'attempt') { friendlyThenAttempt++; seen.set(d.with, 'friendly+attempt'); }
     }
   }
@@ -112,7 +124,7 @@ function collect(state, table, profiles, base) {
     convRounds: conv.map(c => c.round),
     attempts, successes, blocks,
     kills, attacks,
-    firstTrades, firstFriendly, friendlyThenAttempt, firstAttempt,
+    firstTrades, firstFriendly, friendlyThenAttempt, firstAttempt, early,
     blockDecisions,
     exitFound: floor.exitRoom != null,
     seats,
@@ -161,6 +173,7 @@ export function summarise(list) {
     convByRound: [1, 2, 3, 4, 5, 6, 7, 8].map(r => byRound(r) / Math.max(1, convRounds.length)),
     attempts: mean(list.map(m => m.attempts)), successes: mean(list.map(m => m.successes)), blocks: mean(list.map(m => m.blocks)),
     firstFriendlyRate: ft ? ff / ft : 0, firstAttemptRate: ft ? fa / ft : 0, friendlyThenAttemptRate: ff ? fta / ff : 0,
+    early: (() => { const e = list.reduce((a, m) => ({ n: a.n + m.early.n, f: a.f + m.early.friendly, t: a.t + m.early.attempt }), { n: 0, f: 0, t: 0 }); return { friendly: e.n ? e.f / e.n : 0, attempt: e.n ? e.t / e.n : 0 }; })(),
     kills: kills.length / n, cleanOnCleanKills: kills.filter(k => !k.byPossessed && !k.victimPossessed).length / n,
     attacks: attacks.length / n,
     escapes: list.filter(m => m.how === 'escape').length / n,
@@ -170,6 +183,7 @@ export function summarise(list) {
     refusals: list.reduce((a, m) => a + m.refusals, 0), maxRefusalTurn: Math.max(...list.map(m => m.maxRefusalTurn)),
     jammed: list.reduce((a, m) => a + m.jammed, 0) / n,
     unfinished: list.filter(m => !m.finished).length,
+    kinds: (() => { const o = {}; for (const m of list) for (const [k, v] of Object.entries(m.kinds)) o[k] = (o[k] || 0) + v / n; return o; })(),
     styles,
   };
 }
@@ -185,6 +199,7 @@ function print(players, s) {
   line('Conversions by round 1..8', s.convByRound.map(x => (100 * x).toFixed(0) + '%').join(' '));
   line('Possession attempts / successes / blocks per match', `${s.attempts.toFixed(2)} / ${s.successes.toFixed(2)} / ${s.blocks.toFixed(2)}`);
   line("Possessed bot's first trade with a guest: friendly / attempt", `${pct(s.firstFriendlyRate, 1)} / ${pct(s.firstAttemptRate, 1)}`);
+  line('  … in rounds 1-3 only: friendly / attempt', `${pct(s.early.friendly, 1)} / ${pct(s.early.attempt, 1)}`);
   line('  … friendly first, later an attempt on the same guest', pct(s.friendlyThenAttemptRate, 1));
   line('Attacks / kills per match (clean-on-clean kills)', `${s.attacks.toFixed(2)} / ${s.kills.toFixed(2)} (${s.cleanOnCleanKills.toFixed(2)})`);
   line('Escapes', pct(s.escapes * s.n, s.n));
@@ -193,6 +208,7 @@ function print(players, s) {
   line('Actions per bot turn; estimated thinking time per bot turn', `${s.actionsPerTurn.toFixed(2)}; ${(s.waitPerTurnMs / 1000).toFixed(1)} s`);
   line('Refused actions (all matches); most in one turn; unfinished', `${s.refusals}; ${s.maxRefusalTurn}; ${s.unfinished}`);
   line('Doors tried that turned out jammed, per match (not a refusal)', s.jammed.toFixed(2));
+  line('Bot actions per match', Object.entries(s.kinds).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k} ${v.toFixed(1)}`).join(', '));
   console.log('  Per style (seats): side won / converted / died / escaped');
   for (const [k, o] of Object.entries(s.styles).sort()) {
     console.log(`    ${k.padEnd(20)} n=${String(o.n).padStart(5)}  won ${pct(o.won, o.n).padStart(6)}  converted ${pct(o.converted, o.n).padStart(6)}  died ${pct(o.died, o.n).padStart(6)}  escaped ${pct(o.escaped, o.n).padStart(6)}`);

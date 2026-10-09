@@ -225,8 +225,8 @@ export class Actor {
   // Where the feet stand for a seat: in front of the pelvis by F (depends on this body's legs).
   sitGeometry(seat) {
     const r = this.rest, s = this.spec.scale || 1;
-    const hipY = (seat.y + (seat.flesh ?? 0.07)) / s;                    // pelvis bone height on the cushion
-    const kneeLift = seat.feetForward ?? 0.18;                           // how far the shins lean forward (rad)
+    const hipY = (seat.y + (seat.flesh ?? 0.065)) / s;                    // pelvis bone height on the cushion
+    const kneeLift = this.spec.feetForward ?? seat.feetForward ?? 0.18;  // how far the shins lean forward (rad)
     const kneeY = r.ankleY + r.L2 * Math.cos(kneeLift);
     const ca = THREE.MathUtils.clamp((hipY - kneeY) / r.L1, -0.35, 1);
     const a = Math.acos(ca);
@@ -306,7 +306,7 @@ export class Actor {
     this.mixer.update(dt);
 
     // group transform
-    this.group.position.set(this.x, 0, this.z);
+    this.group.position.set(this.x, this.spec.y || 0, this.z);
     this.group.rotation.y = this.heading;
     this.group.updateMatrixWorld(true);
     this.group.getWorldQuaternion(this.bodyQ);

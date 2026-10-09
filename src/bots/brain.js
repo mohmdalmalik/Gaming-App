@@ -48,6 +48,20 @@ const actionKey = a => `${a.k}|${a.to ?? ''}|${a.door ?? ''}|${a.card ?? ''}|${a
 const USEFUL_GIFTS = ['bandage', 'espresso', 'flashlight', 'knife', 'masterKey', 'revolver'];
 const WEAPON_DAMAGE = { knife: 1, revolver: 2 };
 
+// Behaviour knobs (bot behaviour only — never a rule). The defaults are what the game uses; the measuring
+// tool (tools/balance/bot-match.mjs --tune key=value) can change them for one run to see their effect.
+export const TUNING = {
+  blockBias: 0,          // added to a clean guest's urge to hand over a Lantern to block
+  poolChance: 0.4,       // base chance a clean guest pools its single Lantern with a guest it is sure of
+  attemptBias: 0,        // added to a possessed guest's chance of trying a Possession card
+  friendlyBias: 0,       // added to a possessed guest's chance of a friendly (trust-building) gift
+  campWeight: 1,         // how much possessed guests like to stand guard by the Fire Exit late on
+  avoidCap: 2.2,         // the most a forced meeting in a room adds to a walk's cost
+  exitUrgency: 0.55,     // a possessed guest's urgency once the Fire Exit is known (0 … 1)
+  hoard: 1,              // how keen a possessed guest is to search (every Lantern it holds is one the clean side lacks)
+  possExplore: 1,        // how keen a possessed guest is to open doors (the Fire Exit helps only the clean side)
+};
+
 export function createMind(seat, profile, seed) { return new Mind(seat, profile, seed); }
 
 export class Mind {
@@ -255,6 +269,9 @@ export class Mind {
     };
     c.escaping = !c.possessed && c.lanterns >= view.lanternsToEscape;
     c.urgency = clamp((view.round - 1) / Math.max(1, view.roundLimit - 2), 0, 1);
+    // For the possessed side the clock really starts once the Fire Exit is found: a clean guest with three
+    // Lanterns can walk out any time after that.
+    if (c.exitKnown && me.possessed) c.urgency = Math.max(c.urgency, TUNING.exitUrgency);
     c.lockedWithLoot = view.rooms.some(r => r.locked && (!r.searched || r.drops));
     c.darkWithLoot = view.rooms.some(r => r.dark && !r.searched);
     // A clean guest short of Lanterns with little left to find by itself starts looking to other guests.
@@ -314,7 +331,10 @@ export class Mind {
     const plain = cards.filter(x => x.type !== 'lantern' && x.type !== 'possession');
     const pool = plain.length ? plain : cards.filter(x => x.type !== 'possession');
     const use = pool.length ? pool : cards;
-    return [...use].sort((a, b) => this.value(c, a.type) - this.value(c, b.type) || (a.id < b.id ? -1 : 1))[0] || null;
+    // (ties: by card name, then by place in hand — never by card id, which differs from match to match)
+    const at = x => c.me.hand.indexOf(x);
+    return [...use].sort((a, b) => this.value(c, a.type) - this.value(c, b.type)
+      || (a.type < b.type ? -1 : a.type > b.type ? 1 : 0) || at(a) - at(b))[0] || null;
   }
 
   noise(tag) {
@@ -345,7 +365,9 @@ export class Mind {
     x += 0.62 * u;
     if (c.possCards >= 2) x += 0.06;
     if (this.isCleared(s)) x += 0.05;           // certainly clean (the Switchboard): not wasted on an ally
-    return clamp(x, 0.02, 0.95);
+    // Standing guard by the Fire Exit: whoever walks in here may be carrying their Lanterns out.
+    if (c.exitKnown && c.me.room === this.campRoom(c)) x += 0.45 + 0.3 * t.skill;
+    return clamp(x + TUNING.attemptBias, 0.02, 0.95);
   }
 
   // How attractive meeting `s` is for a possessed guest holding a Possession card.
@@ -421,14 +443,13 @@ export class Mind {
       }
       return p;
     }
-    let p = 0.3 + 2.2 * t.caution - 1.6 * t.boldness;
-    if (c.escaping) p = 3 + 2 * t.caution;
-    else if (c.lanterns >= 2) p += 0.8 * t.caution;
-    for (const q of ms) {
-      const pp = this.pPoss(c, q.seat);
-      p += pp > 0.5 ? 1.5 : pp * 1.2;
-    }
-    return Math.max(0, p);
+    let p = 0.3 + 1.8 * t.caution - 1.4 * t.boldness;
+    if (c.lanterns >= 2) p += 0.6 * t.caution;
+    let worst = 0;
+    for (const q of ms) worst = Math.max(worst, this.pPoss(c, q.seat));
+    p += worst * 1.4;
+    if (c.escaping) return 2.5 + 1.5 * t.caution + worst;
+    return clamp(p, 0, TUNING.avoidCap);
   }
 
   options(c) {
@@ -438,7 +459,7 @@ export class Mind {
     const ap = me.ap;
     const healAt = v.maxHealth - (t.caution > 0.65 ? 1 : t.caution < 0.35 ? 3 : 2);
     const hurt = me.health <= healAt;
-    const greedW = 0.75 + 0.5 * t.greed;
+    const greedW = (0.75 + 0.5 * t.greed) * (c.possessed ? TUNING.hoard : 1);
 
     // --- here, now -------------------------------------------------------------------------------
     if (hurt && here?.job === 'infirmary' && me.health < v.maxHealth) add(9, { k: 'job' }, 'heal');
@@ -517,10 +538,11 @@ export class Mind {
   exploreValue(c) {
     const t = this.t;
     if (c.view.roomTilesLeft <= 0) return 0;            // every room is on the board: the closed doors are jammed
-    if (c.possessed) return c.exitKnown ? 0.3 : 0.55 * (1 - 0.5 * c.urgency) + 0.3 * t.boldness;
+    if (c.possessed) return (c.exitKnown ? 0.3 : 0.55 * (1 - 0.5 * c.urgency) + 0.3 * t.boldness) * TUNING.possExplore;
     if (c.escaping) return c.exitKnown ? 0.2 : 30;
     if (c.exitKnown) return 0.8 + 0.5 * t.greed;          // a new room still has its card draw
-    return (1.5 + 0.55 * Math.min(c.lanterns, 2)) * (0.8 + 0.45 * (1 - t.greed)) + 0.35 * c.urgency;
+    // No Fire Exit yet: without it nobody gets out, and that matters more every round.
+    return (1.5 + 0.55 * Math.min(c.lanterns, 2)) * (0.8 + 0.45 * (1 - t.greed)) + 3.5 * c.urgency * c.urgency;
   }
 
   // Whether this clean guest still has a way to find Lanterns by itself: rooms whose card draw is unused,
@@ -640,10 +662,7 @@ export class Mind {
       let s = 0;
       if (c.possessed) {
         // Seal the way into the Fire Exit when someone could be heading there.
-        if (room.isExit && c.urgency > 0.3) {
-          const near = c.others.filter(q => !this.isAlly(q.seat)).length;
-          if (near) s = 1.2 + 1.5 * c.urgency * t.skill;
-        }
+        if (room.isExit && (c.me.ap === 1 || ending)) s = (this.exitThreat(c) ? 1.6 : 0.6) + 1.2 * c.urgency * t.skill;
       } else {
         const there = c.othersIn(d.to);
         if (!there.length || room.safe) continue;
@@ -667,9 +686,22 @@ export class Mind {
   }
   campValue(c) {
     const t = this.t;
-    if (c.urgency < 0.45) return 0;
-    const w = c.possCards > 0 || (c.weapons.length && t.aggression > 0.45) ? 1 : 0.6;
-    return (0.8 + 2.8 * (c.urgency - 0.3)) * (0.5 + 0.7 * t.skill) * w;
+    if (!c.exitKnown) return 0;
+    const w = c.possCards > 0 || (c.weapons.length && t.aggression > 0.45) ? 1 : 0.7;
+    const threat = this.exitThreat(c) ? 0.8 : 0;
+    return (0.9 + 2.2 * c.urgency + threat) * (0.55 + 0.6 * t.skill) * w * TUNING.campWeight;
+  }
+  // Is a guest not known to be on the possessed side within a couple of rooms of the Fire Exit?
+  exitThreat(c) {
+    if (!c.exitKnown) return false;
+    const near = new Set([c.view.exitRoom]);
+    let ring = [c.view.exitRoom];
+    for (let k = 0; k < 2; k++) {
+      const next = [];
+      for (const id of ring) for (const d of c.rooms.get(id)?.doors || []) if (!near.has(d.to)) { near.add(d.to); next.push(d.to); }
+      ring = next;
+    }
+    return c.others.some(q => near.has(q.room) && !this.isAlly(q.seat));
   }
   campOption(c) {
     const room = this.campRoom(c);
@@ -769,6 +801,7 @@ export class Mind {
       const f = m.friendly.get(other) || 0;
       let pf = c.possCards > 0 ? (0.5 + 0.4 * t.patience) * (1 - 0.5 * c.urgency) : 0.22;
       if (f >= 2) pf *= 0.35;
+      pf = clamp(pf + TUNING.friendlyBias, 0, 0.95);
       if (this.rng() < pf) {
         const gift = this.giftCard(c, plain);
         if (gift) return pick(gift, 'friendly');
@@ -782,7 +815,7 @@ export class Mind {
     const trust = m.trust.get(other) || 0;
     // Pooling: one escape wins it for every clean guest. Holding a single Lantern with little left to find,
     // hand it to a guest it is fairly sure of — so Lanterns gather on guests who already hold more.
-    if (lantern && c.lanterns === 1 && c.stuck && (pp < 0.12 || (trust >= 1 && pp < 0.22)) && this.rng() < 0.4 + 0.4 * t.trust) {
+    if (lantern && c.lanterns === 1 && c.stuck && (pp < 0.12 || (trust >= 1 && pp < 0.22)) && this.rng() < TUNING.poolChance + 0.4 * t.trust) {
       return pick(lantern, 'pool');
     }
     if (trust >= 0.5 && pp < 0.3 && this.rng() < 0.3 + 0.4 * t.trust) {
@@ -802,7 +835,7 @@ export class Mind {
     }
     const pp = this.pPoss(c, s);
     const trust = Math.min(m.trust.get(s) || 0, 2.5);
-    let x = -0.42 + 2.05 * pp + 0.62 * t.caution - 0.16 * trust * (0.5 + t.trust)
+    let x = -0.42 + TUNING.blockBias + 2.05 * pp + 0.62 * t.caution - 0.16 * trust * (0.5 + t.trust)
       + (c.lanterns >= 2 ? 0.14 : 0) + (c.lanterns >= 3 ? 0.3 : 0);
     x += (this.rng() - 0.5) * 0.3 * (1 - t.skill);
     return this.rng() < clamp(x, 0.03, 0.97);

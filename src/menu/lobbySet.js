@@ -16,7 +16,7 @@ const D2R = Math.PI / 180;
 const C = {
   walnut: '#4a2a17', walnutDark: '#2c180d', walnutMid: '#5b3520', ebony: '#17100c',
   brass: '#c29243', brassDark: '#8a6328', marbleBlack: '#1c1513', cream: '#e6d6b4',
-  plaster: '#6a4c36', plasterDark: '#3b2a1e', ceiling: '#1c140f',
+  plaster: '#4a3324', plasterDark: '#2e2016', ceiling: '#150f0b',
   velvet: '#7d1a24', velvetDark: '#561019', leaf: '#3f6b40', leafDark: '#2b4a2e',
   planter: '#1a1412', glow: '#ffe2ae', glowWarm: '#ffcc80', curtain: '#5a0f18',
 };
@@ -166,11 +166,12 @@ export function buildLobbySet(L) {
   const floorMat = new THREE.MeshLambertMaterial({ map: floorTex });
   const wallMat = new THREE.MeshLambertMaterial({ map: TX.walnutPanel() });
   const rugMat = new THREE.MeshLambertMaterial({ map: TX.rugTexture() });
+  const runnerMat = new THREE.MeshLambertMaterial({ map: TX.runnerTexture() });
   const keysMat = new THREE.MeshLambertMaterial({ map: TX.keyBoardTexture() });
   const winMat = new THREE.MeshBasicMaterial({ map: TX.windowTexture() });
   const doorMat = new THREE.MeshLambertMaterial({ map: TX.liftDoorTexture() });
   const dialMat = new THREE.MeshLambertMaterial({ map: TX.dialTexture(), transparent: true, alphaTest: 0.05, emissive: new THREE.Color('#3a2a14') });
-  disposables.push(lam, lamDouble, glowMat, floorMat, wallMat, rugMat, keysMat, winMat, doorMat, dialMat);
+  disposables.push(lam, lamDouble, glowMat, floorMat, wallMat, rugMat, runnerMat, keysMat, winMat, doorMat, dialMat);
 
   const S = new Batch();          // solid Lambert, vertex colours
   const LV = new Batch();         // double-sided (leaves)
@@ -233,7 +234,7 @@ export function buildLobbySet(L) {
     S.block(0.6, 0.06, 0.2, x, H - 0.75, wallZ + 0.1, C.brass);
     S.block(0.06, PT - 0.6, 0.02, x, 0.3, wallZ + 0.17, C.brassDark);
   }
-  for (const zp of [-4.3, -0.45, 3.85, 8.2]) {
+  for (const zp of L.rightPilasters) {
     S.block(0.16, H - 0.45, 0.56, xR - 0.08, 0, zp, C.walnutDark);
     S.block(0.2, 0.06, 0.6, xR - 0.1, PT - 0.05, zp, C.brass);
     S.block(0.2, 0.06, 0.6, xR - 0.1, H - 0.75, zp, C.brass);
@@ -248,7 +249,9 @@ export function buildLobbySet(L) {
     washes.add({ type: 'wall', pos: [x + nx * 0.18, y + 0.15, z + nz * 0.18], normal: [nx, 0, nz], size: [1.0, 2.6], color: '#ff9a40', intensity: 0.42 });
   };
   for (const [x, y] of L.sconces) sconce(x, y, wallZ + 0.16, 0, 1);
-  for (const zp of [-0.45, 3.85]) sconce(xR - 0.16, 2.3, zp, -1, 0);
+  const flickerGlow = glows.items.length - (L.sconces.length - (L.flickerSconce ?? 0)) * 1;   // the halo of that sconce
+  const flickerWash = washes.items.length - (L.sconces.length - (L.flickerSconce ?? 0));
+  for (const zp of L.rightSconces) sconce(xR - 0.16, 2.3, zp, -1, 0);
 
   // --- the lift: brass surround, Art Deco fan, floor dial, the car inside, sliding doors ---
   const LH = lift.height, LD = lift.depth;
@@ -292,23 +295,26 @@ export function buildLobbySet(L) {
   S.box(0.12, 0.26, 0.03, lx1 + 0.42, 1.1, wallZ + 0.015, C.brass);
   const callGlow = glows.add({ type: 'bill', pos: [lx1 + 0.42, 1.14, wallZ + 0.06], size: [0.12, 0.12], color: '#ffb35a', intensity: 0.6 });
   // floor dial above the fan: plate + needle (moving)
-  const dialY = LH + 0.88;
-  const dialG = new THREE.PlaneGeometry(0.72, 0.45);
+  const dialY = LH + 0.98;
+  const DS = 1.35;   // dial scale
+  const dialG = new THREE.PlaneGeometry(0.72 * DS, 0.45 * DS);
   const dial = new THREE.Mesh(dialG, dialMat);
   dial.position.set(lift.x, dialY + 0.12, wallZ + 0.03);
   dial.name = 'lift-dial';
   group.add(dial);
-  const needleG = new THREE.BoxGeometry(0.018, 0.21, 0.01); needleG.translate(0, 0.1, 0);
+  const needleG = new THREE.BoxGeometry(0.022, 0.21 * DS, 0.01); needleG.translate(0, 0.1 * DS, 0);
   const needle = new THREE.Mesh(needleG, new THREE.MeshBasicMaterial({ color: '#1a0f08' }));
   needle.position.set(lift.x, dialY + 0.12 - 0.225 + 0.018 * 450 / 160 + 0.0, wallZ + 0.045);
   // the dial texture's pivot is 18 px above its bottom edge (texture 160 px tall = 0.45 m)
-  needle.position.y = dialY + 0.12 - 0.225 + (18 / 160) * 0.45;
+  needle.position.y = dialY + 0.12 - 0.225 * DS + (18 / 160) * 0.45 * DS;
   needle.name = 'lift-needle';
   group.add(needle);
   disposables.push(dialG, needleG, needle.material);
-  const dingGlow = glows.add({ type: 'bill', pos: [lift.x, dialY + 0.52, wallZ + 0.08], size: [0.32, 0.32], color: '#ffcf7a', intensity: 0.15 });
-  S.box(0.1, 0.07, 0.04, lift.x, dialY + 0.52, wallZ + 0.03, C.brass);
-  G.add(new THREE.SphereGeometry(0.035, 8, 6), '#ffe2a0', lift.x, dialY + 0.52, wallZ + 0.06);
+  const dingGlow = glows.add({ type: 'bill', pos: [lift.x, dialY + 0.5, wallZ + 0.08], size: [0.4, 0.4], color: '#ffcf7a', intensity: 0.15 });
+  S.box(0.12, 0.08, 0.04, lift.x, dialY + 0.5, wallZ + 0.03, C.brass);
+  G.add(new THREE.SphereGeometry(0.04, 8, 6), '#ffe2a0', lift.x, dialY + 0.5, wallZ + 0.06);
+  // a thin line of light between the shut doors: the car is lit and waiting
+  const seamGlow = washes.add({ type: 'wall', pos: [lift.x, LH / 2, wallZ - 0.2], normal: [0, 0, 1], size: [0.14, LH * 1.05], color: '#ffd08a', intensity: 0.8 });
   // doors: two brass leaves at the back of the reveal
   const doorG = new THREE.BoxGeometry(lift.width / 2 + 0.01, LH, 0.04);
   const doorL = new THREE.Mesh(doorG, doorMat), doorR = new THREE.Mesh(doorG, doorMat);
@@ -492,23 +498,26 @@ export function buildLobbySet(L) {
     // base, seat cushion(s), back, arms (local: facing +Z; pelvis line z = 0)
     S.block(width - 0.06, 0.07, 0.6, 0, 0.0, -0.12, C.ebony);
     for (const lxx of [-(width / 2 - 0.08), width / 2 - 0.08]) for (const lzz of [0.12, -0.36]) S.block(0.05, 0.05, 0.05, lxx, 0, lzz, C.brass);
-    S.block(width - 0.06, 0.12, 0.62, 0, 0.06, -0.12, dark);
+    // (shallow seats: the guests' stylised thighs are short, and their knees must clear the edge)
+    S.block(width - 0.06, 0.08, 0.5, 0, 0.05, -0.15, dark);
     for (let i = 0; i < n; i++) {
       const cx = (i - (n - 1) / 2) * sw;
-      S.add(new RoundedBoxGeometry(sw - 0.03, sh - 0.16, 0.5, 2, 0.05), velvet, cx, 0.16 + (sh - 0.16) / 2, -0.07);
-      S.add(new RoundedBoxGeometry(sw - 0.05, 0.42, 0.16, 2, 0.06), velvet, cx, sh + 0.2, -0.3, -0.12, 0, 0);
+      S.add(new RoundedBoxGeometry(sw - 0.03, sh - 0.1, 0.36, 2, 0.05), velvet, cx, 0.1 + (sh - 0.1) / 2, -0.06);
+      S.add(new RoundedBoxGeometry(sw - 0.05, 0.62, 0.15, 2, 0.06), velvet, cx, sh + 0.3, -0.27, -0.12, 0, 0);
       seatPoints[`${so.id}:${i}`] = { local: [cx, 0] };
     }
-    S.add(new RoundedBoxGeometry(width, 0.62, 0.2, 2, 0.06), dark, 0, 0.36, -0.43, -0.08, 0, 0);
+    S.add(new RoundedBoxGeometry(width, 0.9, 0.2, 2, 0.06), dark, 0, 0.48, -0.4, -0.08, 0, 0);
+    S.block(width - 0.1, 0.03, 0.2, 0, 0.92, -0.44, C.brassDark);
     for (const sx of [-1, 1]) {
-      S.add(new RoundedBoxGeometry(0.2, 0.46, 0.66, 2, 0.06), velvet, sx * (width / 2 - 0.1), 0.25, -0.1);
-      S.block(0.2, 0.025, 0.6, sx * (width / 2 - 0.1), 0.48, -0.08, C.brassDark);
+      S.add(new RoundedBoxGeometry(0.2, 0.46, 0.56, 2, 0.06), velvet, sx * (width / 2 - 0.1), 0.25, -0.12);
+      S.add(new RoundedBoxGeometry(0.16, 0.42, 0.28, 2, 0.05), dark, sx * (width / 2 - 0.09), 0.68, -0.3);
+      S.block(0.2, 0.025, 0.5, sx * (width / 2 - 0.1), 0.48, -0.1, C.brassDark);
     }
     S.pop();
     for (let i = 0; i < n; i++) {
       const sp = seatPoints[`${so.id}:${i}`];
       const h = so.heading * D2R;
-      const lx2 = sp.local[0], lz2 = 0;
+      const lx2 = sp.local[0], lz2 = sp.local[1];
       sp.x = so.x + lx2 * Math.cos(h) + lz2 * Math.sin(h);
       sp.z = so.z - lx2 * Math.sin(h) + lz2 * Math.cos(h);
       sp.y = sh; sp.heading = h;
@@ -547,6 +556,19 @@ export function buildLobbySet(L) {
   const rugG = new THREE.PlaneGeometry(1, 1); rugG.rotateX(-Math.PI / 2);
   for (const r of L.rugs) RG.add(rugG, '#ffffff', r.x, 0.01, r.z, 0, r.heading * D2R, 0, r.w, 1, r.d);
   rugG.dispose();
+  // the runner leading to the lift (its pattern repeats along its length)
+  if (L.runner) {
+    const r = L.runner;
+    const g = new THREE.PlaneGeometry(r.w, r.d); g.rotateX(-Math.PI / 2);
+    const uv = g.attributes.uv;
+    for (let i = 0; i < uv.count; i++) uv.setY(i, uv.getY(i) * (r.d / r.w) / 2);
+    const m = new THREE.Mesh(g, runnerMat);
+    m.position.set(r.x, 0.008, r.z);
+    m.rotation.y = r.heading * D2R;
+    m.name = 'runner';
+    group.add(m);
+    disposables.push(g);
+  }
 
   // --- potted palms ---
   const palm = (p) => {
@@ -568,7 +590,7 @@ export function buildLobbySet(L) {
   for (const ch of L.chandeliers) {
     S.add(new THREE.CylinderGeometry(0.018, 0.018, H - ch.y, 6), C.brass, ch.x, (H + ch.y) / 2 + 0.3, ch.z);
     S.add(new THREE.CylinderGeometry(0.22, 0.22, 0.06, 16), C.brass, ch.x, H - 0.05, ch.z);
-    const tiers = [[0.62, 0.28], [0.48, 0.26], [0.32, 0.24]];
+    const tiers = [[0.54, 0.25], [0.42, 0.23], [0.28, 0.21]];
     let y = ch.y;
     for (const [r, h] of tiers) {
       G.add(new THREE.CylinderGeometry(r, r * 0.92, h, 20, 1, true), '#ffe7bf', ch.x, y, ch.z);
@@ -648,6 +670,7 @@ export function buildLobbySet(L) {
       lights.lift.intensity = lights.lift.userData.open * lit;
       spillMat.color.setRGB(1, 0.85, 0.62).multiplyScalar(0.55 * lit);
       glows.set(liftReflect, 0.35 * lit);
+      washes.set(seamGlow, 0.8 * (1 - Math.min(1, k * 8)));
     },
     // the needle: 0 = L … floors
     setFloor(f) { needle.rotation.z = Math.PI / 2 - (f / lift.floors) * Math.PI; },
@@ -665,6 +688,11 @@ export function buildLobbySet(L) {
     // per frame: billboards face the camera, lamps breathe a little
     update(time, camera) {
       glows.faceCamera(camera.quaternion);
+      // the sconce by the dark archway falters now and then (a faint unease in a warm room)
+      const ph = time % 11.3;
+      const fl = ph > 9.6 && ph < 10.5 ? 0.35 + 0.65 * (Math.sin(ph * 61) > 0.1 ? 1 : 0.2) : 1;
+      glows.set(flickerGlow, 0.9 * fl);
+      washes.set(flickerWash, 0.42 * fl);
       const f = 1 + Math.sin(time * 1.7) * 0.015 + Math.sin(time * 4.3) * 0.01;
       lights.chandA.intensity = lights.chandA.userData.base * f;
       lights.chandB.intensity = lights.chandB.userData.base * (2 - f);

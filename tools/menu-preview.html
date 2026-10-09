@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>Hotel Escape — menu lobby preview</title>
+<!-- Everything (modules and assets) resolves from the repository root, as in index.html. -->
+<base href="../">
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.186.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.186.0/examples/jsm/"
+  }
+}
+</script>
+<style>
+  html, body { margin: 0; height: 100%; background: #0c0908; overflow: hidden; font: 14px/1.3 Georgia, serif; color: #f3e6c8; }
+  #view { position: fixed; inset: 0; }
+  #view canvas { display: block; width: 100%; height: 100%; transition: filter 0.9s ease; }
+  #view.blur canvas { filter: blur(3px); }
+  #black { position: fixed; inset: 0; background: #000; opacity: 0; pointer-events: none; transition: opacity 0.7s ease; }
+  /* a stand-in for the real menu, to judge the composition (?menu=1) */
+  #mock { position: fixed; left: 0; top: 0; bottom: 0; width: 40%; display: none; flex-direction: column; justify-content: center; padding-left: 5%;
+          background: linear-gradient(90deg, rgba(10,7,6,0.55), rgba(10,7,6,0)); }
+  #mock h1 { font-size: 46px; margin: 0 0 24px; letter-spacing: 1px; color: #f0d9a6; font-weight: normal; }
+  #mock div { width: 260px; padding: 14px 20px; margin: 6px 0; border: 1px solid rgba(214,170,90,0.7); border-radius: 10px; background: rgba(20,14,10,0.55); font-size: 20px; }
+  #controls { position: fixed; right: 10px; bottom: 10px; display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+  #controls button { font: inherit; padding: 8px 12px; border-radius: 8px; border: 1px solid #a98445; background: rgba(20,14,10,0.8); color: #f3e6c8; }
+  #stats { position: fixed; left: 8px; bottom: 8px; font: 12px/1.3 monospace; color: #9f9; white-space: pre; display: none; }
+</style>
+</head>
+<body>
+<div id="view"></div>
+<div id="mock"><h1>Hotel Escape</h1><div>Practice alone</div><div>Play with bots</div><div>Settings</div></div>
+<div id="black"></div>
+<div id="controls">
+  <button id="b-play" type="button">Play (3 guests)</button>
+  <button id="b-practice" type="button">Practice (1 guest)</button>
+  <button id="b-reset" type="button">Reset</button>
+  <button id="b-blur" type="button">Blur</button>
+</div>
+<div id="stats"></div>
+<script type="module">
+// Standalone preview of the main-menu lobby (src/menu/lobbyScene.js) — dev tool, not the game.
+// URL options:  ?blur=1 (CSS blur like the menu)  ?enter=1 (play the boarding)  ?guests=1..3
+//               ?t=seconds (settle the scene this long before showing)  ?menu=1 (mock menu buttons)
+//               ?stats=1 (draw calls, triangles, frame time)  ?controls=0 (hide the buttons)
+//               ?pause=1 (no animation loop: tests drive window.__menu.step())
+import * as THREE from 'three';
+import { config } from './src/config.js';
+import { createLobbyScene } from './src/menu/lobbyScene.js';
+
+const q = new URLSearchParams(location.search);
+const view = document.getElementById('view');
+const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, config.render.maxPixelRatio));
+renderer.toneMapping = THREE.NeutralToneMapping;
+renderer.toneMappingExposure = config.render.exposure;
+view.appendChild(renderer.domElement);
+if (q.get('blur') === '1') view.classList.add('blur');
+if (q.get('menu') === '1') document.getElementById('mock').style.display = 'flex';
+if (q.get('controls') === '0') document.getElementById('controls').style.display = 'none';
+const showStats = q.get('stats') === '1';
+if (showStats) document.getElementById('stats').style.display = 'block';
+
+const lobby = createLobbyScene({ renderer, cfg: config });
+function resize() {
+  const w = view.clientWidth || innerWidth, h = view.clientHeight || innerHeight;
+  renderer.setSize(w, h, false);
+  lobby.setSize(w, h);
+}
+resize();
+addEventListener('resize', resize);
+
+let time = 0, frameMs = 0, lastStats = 0;
+function step(seconds, dt = 1 / 30) {
+  for (let s = 0; s < seconds - 1e-6; s += dt) { time += dt; lobby.update(dt, time); }
+}
+function render() {
+  const t0 = performance.now();
+  renderer.render(lobby.scene, lobby.camera);
+  frameMs = performance.now() - t0;
+}
+function stats() {
+  const i = renderer.info.render;
+  return { calls: i.calls, triangles: i.triangles, frameMs: +frameMs.toFixed(2), programs: renderer.info.programs?.length, geometries: renderer.info.memory.geometries, textures: renderer.info.memory.textures };
+}
+
+let entering = null;
+async function play(guests) {
+  if (entering) return;
+  view.classList.remove('blur');
+  entering = lobby.enter({ guests });
+  await entering;
+  document.getElementById('black').style.opacity = 1;
+  await new Promise(r => setTimeout(r, 1400));
+  lobby.reset();
+  entering = null;
+  if (q.get('blur') === '1') view.classList.add('blur');
+  document.getElementById('black').style.opacity = 0;
+}
+document.getElementById('b-play').onclick = () => play(3);
+document.getElementById('b-practice').onclick = () => play(1);
+document.getElementById('b-reset').onclick = () => { lobby.reset(); entering = null; };
+document.getElementById('b-blur').onclick = () => view.classList.toggle('blur');
+
+await lobby.ready;
+if (q.get('cam')) {   // debug: ?cam=x,y,z,tx,ty,tz[,fov]
+  const v = q.get('cam').split(',').map(Number);
+  lobby.debug.setCamera({ pos: v.slice(0, 3), target: v.slice(3, 6), fov: v[6] });
+}
+step(+(q.get('t') || 0.5));
+if (q.get('enter') === '1') { entering = lobby.enter({ guests: +(q.get('guests') || 3) }); }
+render();
+
+window.__menu = {
+  lobby, renderer, stats,
+  // advance the animation by `seconds` in fixed steps and draw one frame (deterministic screenshots)
+  step(seconds, dt) { step(seconds, dt); render(); return stats(); },
+  enter(guests = 3) { let done = false; const p = lobby.enter({ guests }); p.then(() => { done = true; }); return { get done() { return done; } }; },
+  get time() { return time; },
+};
+window.__ready = true;
+
+if (q.get('pause') !== '1') {
+  let last = performance.now();
+  renderer.setAnimationLoop(() => {
+    const now = performance.now();
+    const dt = Math.min(0.1, (now - last) / 1000); last = now;
+    time += dt;
+    lobby.update(dt, time);
+    render();
+    if (showStats && now - lastStats > 500) {
+      lastStats = now;
+      const s = stats();
+      document.getElementById('stats').textContent = `calls ${s.calls}  tris ${s.triangles}\nrender ${s.frameMs} ms  dt ${(dt * 1000).toFixed(1)} ms`;
+    }
+  });
+}
+</script>
+</body>
+</html>

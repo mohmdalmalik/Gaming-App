@@ -10,6 +10,7 @@ export function createFeed(doc) {
   const seen = new WeakSet();
   let lines = [];        // { el, until }
   let enabled = false;
+  let placedTop = -1;
 
   const escapeRe = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   function personal(text, me) {
@@ -53,6 +54,12 @@ export function createFeed(doc) {
     },
     // A line that is not in the rules' log (a public event the interface reports itself).
     say(text, cls = '') { if (enabled) add(text, cls); },
+    // Sit just under the room name and safe badge (`above`: their box), whatever their height.
+    place(above) {
+      if (host.hidden || !above) return;
+      const top = Math.round(above.getBoundingClientRect().bottom + 7);
+      if (top !== placedTop) { placedTop = top; host.style.top = `${top}px`; }
+    },
     // Fade out old lines (every frame; cheap).
     tick() {
       if (!lines.length) return;

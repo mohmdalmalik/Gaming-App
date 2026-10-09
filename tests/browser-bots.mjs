@@ -99,7 +99,7 @@ async function answerScreens() {
 console.log('\n1. main menu');
 await page.goto(`${baseUrl}?seed=31337&botpace=0.15`, { waitUntil: 'load' });
 await page.evaluate(() => { try { localStorage.clear(); } catch { /* fine */ } });
-await waitFor(() => window.__game && !document.getElementById('btn-menu-bots').disabled, null, 60000);
+await waitFor(() => window.__game && !document.getElementById('btn-menu-bots').disabled && window.__game.lobbyReady(), null, 90000);
 await page.goto(`${baseUrl}?seed=31337&botpace=0.15`, { waitUntil: 'domcontentloaded' });
 await waitFor(() => window.__game && !document.getElementById('btn-menu-bots').disabled, null, 60000);
 check(await visible('#menu-main'), 'the page opens on the main menu');
@@ -115,6 +115,8 @@ await page.click('#set-botSpeed .seg-btn[data-value="fast"]');
 await page.click('#set-follow .seg-btn[data-value="stay"]');
 await shot('02-settings');
 await tap('#btn-settings-done');
+// (let the lobby finish loading its guests first: leaving mid-download cuts the downloads off)
+await waitFor(() => window.__game.lobbyReady(), null, 90000);
 await page.reload({ waitUntil: 'domcontentloaded' });
 await waitFor(() => window.__game && !document.getElementById('btn-menu-bots').disabled, null, 60000);
 await tap('#btn-menu-settings');
@@ -350,6 +352,7 @@ for (let m = 0; m < MATCHES; m++) {
   const role = ['random', 'clean', 'possessed'][m % 3];
   const bots = [5, 4, 3][m % 3];
   await dressed().catch(() => {});
+  await waitFor(() => !window.__game || window.__game.characters.every(c => c.debug().loaded || !c.debug().model), null, 60000).catch(() => {});
   await page.goto(`${baseUrl}?mode=bots&bots=${bots}&role=${role}&botpace=0.1&intro=off&seed=${9000 + m}`, { waitUntil: 'domcontentloaded' });
   await waitFor(() => window.__game && !document.getElementById('btn-begin').disabled, null, 60000);
   await quick();

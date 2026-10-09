@@ -204,6 +204,7 @@ const discard = createDiscard(document, cfg, {
 // The hand, held as a fan of face-up cards; tapping one opens it large in the card view.
 const fan = createHandFan(document, { onOpen: cardId => { if (running && !uiBusy()) hand.open(state, floor, cardId); } });
 const feed = createFeed(document);     // what the other guests just did (a match)
+const topLeftEl = document.querySelector('.hud-top-left');
 const handoff = createHandoff(document);
 const meeting = createMeeting(document, cfg, { isViewer: p => !PRACTICE && p.index === humanSeat });
 
@@ -1514,7 +1515,7 @@ let queuedTap = null;   // { target, turn }
 // of the hand fan (between and above its tilted cards too), the buttons, End turn, the Move/Cancel bar,
 // a toast, the search icon — grown by DEAD_ZONE px.
 const DEAD_ZONE = 18;
-const TAP_GUARD = ['#room-name', '#safe-badge', '.hud-top-center', '.hud-top-right', '#player-panel', '#hand-fan', '#hand-fan .fan-card',
+const TAP_GUARD = ['.hud-top-left', '.hud-top-center', '.hud-top-right', '#player-panel', '#hand-fan', '#hand-fan .fan-card',
   '#hand-fan .fan-limit', '.hud-bottom-right', '#btn-end-turn', '#confirm-bar', '#toast', '#search-spot', '.path-label'];
 function inDeadZone(x, y) {
   const cr = container.getBoundingClientRect();
@@ -1711,7 +1712,7 @@ view.renderer.setAnimationLoop(now => {
   view.render();
   syncHandFan();
   syncSearchSpot();     // after the render, so it reads this frame's camera
-  if (running) { feed.sync(state, PRACTICE ? null : me()); feed.tick(); }
+  if (running) { feed.sync(state, PRACTICE ? null : me()); feed.tick(); feed.place(topLeftEl); }
   // The tags over the view, most important first (a later tag that would clash is left out): when zoomed
   // far out, the active guest's name (so they can always be found); Explore over the fogged rooms next
   // door; Go over the rooms next door (not when zoomed far out: the names take over); then the other

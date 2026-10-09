@@ -28,9 +28,10 @@
       <div class="hud-top-left">
         <div id="room-name" class="place">—</div>
         <div id="safe-badge" class="safe-badge" hidden><span class="shield">&#x1F6E1;&#xFE0E;</span>Safe zone</div>
-        <!-- A match: what the other guests just did, in public words (src/ui/feed.js). -->
-        <div id="feed" class="feed" aria-live="polite" hidden></div>
       </div>
+      <!-- A match: what the other guests just did, in public words (src/ui/feed.js). Just under the room
+           name, outside it, so taps on the hotel through it still count (it never takes a tap). -->
+      <div id="feed" class="feed" aria-live="polite" hidden></div>
       <!-- Top-centre: the guests, with clear current-turn and next-player indicators. -->
       <div class="hud-top-center">
         <div id="players-strip" class="players-strip"></div>

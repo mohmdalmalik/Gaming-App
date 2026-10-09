@@ -1,6 +1,7 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><title>glb preview</title>
 <style>html,body{margin:0;height:100%;background:#2a2118;overflow:hidden}</style>
+<style>html.clear,html.clear body{background:transparent}</style>
 <script type="importmap">
 { "imports": {
   "three": "https://cdn.jsdelivr.net/npm/three@0.186.0/build/three.module.js",
@@ -10,9 +11,15 @@
 <script type="module">
 // Generic character previewer. Mimics the game: Neutral tone mapping, hemisphere + warm point light,
 // PBR materials converted to matte Lambert (same as src/render/characterView.js).
+// possessed=1: the possessed look (red eyes) from the game's own module, so the portrait and the game agree.
+// bg=none: a transparent backdrop, no floor (portrait.mjs paints the possessed plate behind the guest afterwards);
+// bg=possessed: the private plum-crimson plate (vertical gradient) for viewing; bg=<hex>: a flat colour.
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { createPossessedEyes, POSSESSED_COLORS } from '../../src/render/possessedLook.js';
 const q = new URLSearchParams(location.search);
+const CLEAR = q.get('bg') === 'none';
+if (CLEAR) document.documentElement.classList.add('clear');
 const src = q.get('glb') || '/assets/characters/victor.glb';
 const view = q.get('view') || 'game';       // front | tq | side | back | game | gamescale
 const clipName = q.get('clip') || 'Idle';
@@ -20,7 +27,7 @@ const t = parseFloat(q.get('t') || '0');    // seconds into the clip to freeze a
 const yaw = parseFloat(q.get('yaw') || '0');  // model rotation about Y in degrees (turntable)
 const dist = parseFloat(q.get('dist') || '0');
 
-const renderer = new THREE.WebGLRenderer({ antialias: true });
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: CLEAR });
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.NeutralToneMapping; renderer.toneMappingExposure = 1.0;
 renderer.setPixelRatio(Math.min(2, devicePixelRatio || 1));
@@ -40,7 +47,7 @@ scene.add(hemi);
   if (NEUTRAL) { hemi.color.set('#ffffff'); hemi.groundColor.set('#9a9a9a'); hemi.intensity = 1.5; const dl = new THREE.DirectionalLight('#ffffff', 2.3); dl.position.set(q.get('key') === 'left' ? -1.5 : 1.5, 3, 4); scene.add(dl); }   // key=left: key light from the viewer's left (the guest sheets' studio key)
 const pt = new THREE.PointLight(new THREE.Color('#ffd9a8'), 22, 9, 2); pt.position.set(1.2, 2.6, 1.6); if (!NEUTRAL) scene.add(pt);
 const pt2 = new THREE.PointLight(new THREE.Color('#ffd9a8'), 10, 9, 2); pt2.position.set(-2.0, 2.4, -1.0); if (!NEUTRAL) scene.add(pt2);
-if (!isPortrait) {
+if (!isPortrait && !CLEAR) {   // (bg=none: no floor either — everything behind the guest is left to the caller)
   const floor = new THREE.Mesh(new THREE.PlaneGeometry(8, 8), new THREE.MeshLambertMaterial({ color: 0x8a5a2e }));
   floor.rotation.x = -Math.PI / 2; scene.add(floor);
   scene.add(new THREE.GridHelper(8, 16, 0x6a4626, 0x5a3c22));
@@ -67,6 +74,8 @@ new GLTFLoader().load(src, (gltf) => {
     o.material = Array.isArray(o.material) ? o.material.map(flatten) : flatten(o.material);
     for (const m of (Array.isArray(o.material) ? o.material : [o.material])) mats.set(m.name, '#' + m.color.getHexString());
   });
+  const eyes = createPossessedEyes(root); if (q.get('possessed') === '1') eyes.set(true);
+  window.__eyes = eyes;   // (debug: eyes.materials[i].userData.possessedUniforms for tuning the look)
   const box = new THREE.Box3().setFromObject(root); const size = box.getSize(new THREE.Vector3());
   const h = Math.max(0.5, size.y), cy = box.min.y + h * 0.5;
   // Camera placement per view
@@ -116,7 +125,15 @@ new GLTFLoader().load(src, (gltf) => {
     const pitch = THREE.MathUtils.degToRad(56), D = d;
     cam.position.set(0, Math.sin(pitch) * D, Math.cos(pitch) * D); cam.lookAt(0, 0.0, 0); cam.fov = 42;
   }
-  if (q.get('bg')) scene.background = new THREE.Color('#' + q.get('bg'));   // e.g. bg=7a716b: the guest sheets' grey
+  if (CLEAR) scene.background = null;
+  else if (q.get('bg') === 'possessed') {   // the private possessed plate: plum-crimson, lighter at the top
+    const c = document.createElement('canvas'); c.width = 4; c.height = 256;
+    const g2 = c.getContext('2d'), gr = g2.createLinearGradient(0, 0, 0, 256);
+    gr.addColorStop(0, POSSESSED_COLORS.plateTop); gr.addColorStop(1, POSSESSED_COLORS.plateBottom);
+    g2.fillStyle = gr; g2.fillRect(0, 0, 4, 256);
+    const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace; scene.background = tex;
+  }
+  else if (q.get('bg')) scene.background = new THREE.Color('#' + q.get('bg'));   // e.g. bg=7a716b: the guest sheets' grey
   cam.updateProjectionMatrix();
   mixer = new THREE.AnimationMixer(root);
   const clip = gltf.animations.find(a => a.name === clipName) || gltf.animations[0];
@@ -137,7 +154,8 @@ new GLTFLoader().load(src, (gltf) => {
     proj.push({ x: +((w.x + 1) / 2 * innerWidth).toFixed(1), y: +((1 - w.y) / 2 * innerHeight).toFixed(1) });
   }
   window.__info = { ok: true, clips: gltf.animations.map(a => ({ name: a.name, duration: +a.duration.toFixed(3) })), meshes, tris: Math.round(tris),
-    height: +size.y.toFixed(3), width: +size.x.toFixed(3), depth: +size.z.toFixed(3), minY: +box.min.y.toFixed(3), materials: Object.fromEntries(mats), points: proj };
+    height: +size.y.toFixed(3), width: +size.x.toFixed(3), depth: +size.z.toFixed(3), minY: +box.min.y.toFixed(3), materials: Object.fromEntries(mats), points: proj,
+    possessedEyes: { available: eyes.available, on: eyes.on } };
 }, undefined, (err) => { window.__info = { ok: false, error: String(err && err.message || err) }; });
 
 renderer.setAnimationLoop(() => { if (mixer && q.get('t') === 'play') mixer.update(clock.getDelta()); renderer.render(scene, cam); });

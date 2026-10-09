@@ -156,6 +156,7 @@ function castCharacters() {
     const cv = characterViews.get(def.id);
     cv.group.visible = true;
     cv.setDead(false);
+    cv.setPossessed(false);   // (views are reused: no red eyes left over from the last game)
     characters.push(cv);
   }
 }
@@ -245,7 +246,7 @@ function screenClear() {
 function actionPhaseClear() { return screenClear() && myTurn() && inActionPhase; }
 function syncHandFan() {
   fan.update(me(), screenClear() && me().alive, { withPossession: true });
-  hud.syncTell(state);
+  if (running) hud.syncTell(state);   // (not behind the menu: backToMenu's hud.hide() put the tell away)
   hud.syncEndTurn(state);
 }
 function syncSearchSpot() {
@@ -1708,7 +1709,9 @@ view.renderer.setAnimationLoop(now => {
   const fi = focusIndex();
   mood.update(state.players[fi].currentRoom, dt, time, movers[fi]);
   updateCutaway(roomViews, rig, state, cfg, dt);
-  characters.forEach((cv, i) => cv.update(movers[i], dt));
+  // Red eyes only on the player's own guest, on their own screen, while possessed; never in practice,
+  // and not on the old game still drawn behind the menu (when the menu's lobby scene is not loaded).
+  characters.forEach((cv, i) => { cv.setPossessed(phase === 'game' && !PRACTICE && i === humanSeat && !!state.players[i]?.possessed); cv.update(movers[i], dt); });
   view.render();
   syncHandFan();
   syncSearchSpot();     // after the render, so it reads this frame's camera

@@ -53,6 +53,7 @@ export function createHud(doc, cfg) {
     portrait: doc.getElementById('portrait-slot'),
     name: doc.getElementById('active-player'),
     role: doc.getElementById('panel-role'),
+    clean: doc.getElementById('panel-clean'),
     souls: doc.getElementById('panel-souls'),
     health: doc.getElementById('health'),
     apPips: doc.getElementById('ap-pips'),
@@ -140,7 +141,9 @@ export function createHud(doc, cfg) {
 
   const hud = {
     show() { el.root.hidden = false; },
-    hide() { el.root.hidden = true; },
+    // (Back to the menu: the corner shadow sits outside #hud, so it is hidden too; syncTell turns it
+    // back on in the next game only if the player is possessed there.)
+    hide() { el.root.hidden = true; el.tint.hidden = true; },
     // A new table: the strip is built again for its guests.
     rebuild() { mini = null; portraitKey = ''; soulsKey = ''; },
     update(state, floor) {
@@ -153,14 +156,6 @@ export function createHud(doc, cfg) {
       // The viewer's panel (their own private view: only they look at this screen).
       el.panel.style.setProperty('--player-color', p.color);
       el.panel.classList.toggle('waiting', !mine && !state.finished);
-      const showPossessed = !!p.possessed;
-      el.panel.classList.toggle('possessed', showPossessed);
-      const key = `${p.index}:${showPossessed}:${p.outfit}`;
-      if (key !== portraitKey) {
-        portraitKey = key;
-        el.portrait.innerHTML = '';
-        el.portrait.appendChild(makePortrait(doc, p, { possessed: showPossessed }));
-      }
       el.name.textContent = p.name;
       // Health is a Phase 1 system. While it is off nothing can change it, so showing three
       // bars would imply a rule that does not exist yet.
@@ -168,9 +163,8 @@ export function createHud(doc, cfg) {
       if (rules.healthEnabled) renderHealth(p.health);
       renderAp(mine ? p.actionPoints : 0);
       if (!mine && !state.finished) { el.ap.textContent = !p.alive ? 'Out' : 'Waiting'; el.ap.classList.remove('empty'); }
-      el.tint.hidden = !showPossessed;             // subtle possessed screen wash
-      // The same tell, in words: a POSSESSED label by the name and how many Possession cards
-      // ("souls") are left to trade.
+      // The private tell: the crimson plate, the POSSESSED badge by the name (or a quiet CLEAN in a
+      // match), how many Possession cards ("souls") are left to trade, and the faint corner shadow.
       hud.syncTell(state);
 
       // Header.
@@ -274,12 +268,27 @@ export function createHud(doc, cfg) {
       el.timerSeconds.textContent = `${Math.ceil(Math.max(0, left))}s`;
       el.timer.classList.toggle('low', left <= 10);
     },
-    // The POSSESSED label and souls count in the panel. Cheap (touches the page only on a change), so
-    // main.js also runs it every frame: in hot-seat it must be gone before any pass screen is up.
+    // The player's own role on their own panel: possessed → the crimson plate, the POSSESSED badge
+    // ("Only you can see this"), the souls count and the faint corner shadow over the hotel; clean, in a
+    // match → a quiet CLEAN badge; practice (one guest, no roles) → neither. Only ever the VIEWER's own
+    // role: the public strip never shows it. Cheap (touches the page only on a change), so main.js also
+    // runs it every frame — a mid-match possession turns it on at once, a new game turns it off.
     syncTell(state) {
       const p = viewerOf(state);
-      const on = !!p?.possessed;
-      el.role.hidden = !on;
+      if (!p) return;
+      const match = state.players.length > 1;
+      const on = match && !!p.possessed;
+      const clean = match && !on;
+      // Their own portrait: the possessed one (the same face, red eyes) only while possessed.
+      const key = `${p.index}:${on}:${p.outfit}`;
+      if (key !== portraitKey) {
+        portraitKey = key;
+        el.portrait.replaceChildren(makePortrait(doc, p, { possessed: on }));
+      }
+      el.panel.classList.toggle('possessed', on);
+      if (el.role.hidden !== !on) el.role.hidden = !on;
+      if (el.clean.hidden !== !clean) el.clean.hidden = !clean;
+      if (el.tint.hidden !== !on) el.tint.hidden = !on;
       el.souls.hidden = !on;
       const sk = on ? `${p.index}:${soulsHeld(p)}` : '';
       if (sk !== soulsKey) {

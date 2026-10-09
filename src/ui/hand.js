@@ -49,8 +49,9 @@ export function createHand(doc, cfg, { onUseBandage, onUnlock, onBarricade, onEs
 
     const showingSouls = card?.type === 'possession';
 
-    // The possessed guest's reminder: how many Possession cards ("souls") they can still trade, with
-    // their possessed portrait and the violet wash (only they look at this screen).
+    // The possessed guest's reminder, as the crimson plate (only they look at this screen): their
+    // possessed portrait (the same face, red eyes), the POSSESSED badge with "Only you can see this",
+    // what it means and how many Possession cards ("souls") they can still trade.
     const tell = !!p.possessed;
     overlay.classList.toggle('possessed', tell);
     banner.className = 'banner'; banner.innerHTML = '';   // nothing left behind for the next guest
@@ -61,14 +62,17 @@ export function createHand(doc, cfg, { onUseBandage, onUnlock, onBarricade, onEs
         port.appendChild(makePortrait(doc, p, { possessed: true }));
         banner.appendChild(port);
       }
+      const badge = doc.createElement('div'); badge.className = 'tell-badge possessed';
+      badge.innerHTML = '<span class="tell-pill">POSSESSED</span><span class="tell-note">Only you can see this</span>';
+      banner.appendChild(badge);
       const text = doc.createElement('div'); text.className = 'banner-text';
       const words = doc.createElement('div'); words.className = 'banner-words';
       // On the Possession card itself the count and what it does are in the detail beside it (said
       // once), so the banner keeps only the role; on every other card it carries both. The banner is
       // the same height either way (styles.css: two lines' room, the count chip beside the words), so
       // the card and the ‹ › arrows below it stay put while you step through the hand.
-      words.innerHTML = showingSouls ? 'You are <b>POSSESSED</b>. You can never escape.'
-        : 'You are <b>POSSESSED</b>. In a trade, give a Possession card to possess the other guest — unless they hand you a Lantern. You can never escape.';
+      words.innerHTML = showingSouls ? 'You can never escape.'
+        : 'In a trade, give a Possession card to possess the other guest — unless they hand you a Lantern. You can never escape.';
       text.append(words);
       if (!showingSouls) text.append(soulsChip(doc, souls));
       banner.appendChild(text);

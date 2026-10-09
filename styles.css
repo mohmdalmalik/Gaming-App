@@ -18,7 +18,17 @@
   --line: rgba(201, 162, 78, 0.42);
   --line-soft: rgba(201, 162, 78, 0.16);
   --crimson: #cf4a40;
-  --evil: #b46bff;
+  --evil: #b46bff;          /* the Possession CARD's violet (its art); not the possessed guest's look */
+
+  /* The possessed guest's own private look (panel, role card, card view): a dark plum-crimson plate
+     with a thin crimson line inside the brass border, like the owner's reference. Only ever on the
+     possessed player's own screen. The clean player's quiet badge is a dark green pill. */
+  --poss-plum: #2b1018;
+  --poss-deep: #160910;
+  --poss-line: #a3263a;
+  --poss-rim: #5e0b14;
+  --poss-red: #c0242f;
+  --clean-pill: #133a2a;
 
   /* aliases kept so existing references keep working */
   --text: var(--ivory);
@@ -181,20 +191,21 @@ html, body {
 .ctl.restart:active { color: var(--ivory-dim); }
 .ctl.restart[hidden] { display: none; }
 
-/* Possessed screen tint */
+/* Possessed: a barely-there dark plum shadow in the far corners of the hotel view (the possessed
+   player's own screen only). It sits UNDER the interface (z-index 0, before #hud in the page), so it
+   never tints or dims a panel or a button, and it is dark, not a red glow (a red edge reads as "hurt"). */
 .possess-tint {
-  position: absolute; inset: 0; pointer-events: none; z-index: 5;
-  background: radial-gradient(120% 80% at 50% 40%, rgba(122,43,208,0) 45%, rgba(90,20,140,0.26) 100%);
-  mix-blend-mode: screen;
+  position: absolute; inset: 0; pointer-events: none; z-index: 0;
+  background: radial-gradient(130% 95% at 50% 45%, rgba(22,9,16,0) 62%, rgba(43,10,20,0.2) 88%, rgba(30,6,14,0.32) 100%);
 }
 .possess-tint[hidden] { display: none; }
 
 .portrait-svg { display: block; width: 100%; height: 100%; }
 .portrait-img { display: block; width: 100%; height: 100%; object-fit: cover; object-position: 50% 20%; }
-/* Private possessed view when only a normal image is supplied: a cold, purple-shifted wash so the
-   current guest's own portrait reads as possessed. A dedicated possessed image opts out (no class).
-   The public strip always requests the neutral image, so it is never washed. */
-.portrait-img.possessed { filter: saturate(0.7) brightness(0.86) hue-rotate(-24deg) contrast(1.05); }
+/* A possessed portrait is its own image (the same face with red eyes, assets/portraits/*-possessed.jpg).
+   If a guest ever has only a normal image, the private view shows it unchanged — no colour wash on
+   the face; the crimson plate around it says the rest. The public strip always asks for normal. */
+.portrait-img.possessed { filter: none; }
 
 /* ---- Top player strip: portrait cards with turn / next indicators, on a charcoal plate so the
    names stay readable over bright walls ---- */
@@ -246,7 +257,21 @@ html, body {
   box-shadow: inset 0 0 0 1px rgba(0,0,0,0.5), 0 8px 22px rgba(0,0,0,0.42);
   -webkit-backdrop-filter: blur(7px); backdrop-filter: blur(7px);
 }
-.player-panel.possessed { border-color: rgba(180,107,255,0.7); box-shadow: 0 0 18px rgba(180,107,255,0.35); }
+/* Possessed (the player's own screen only): the reference's private plate — dark plum-crimson, a
+   brighter brass border and a thin crimson line just inside it (::before). */
+.player-panel { position: relative; }
+.player-panel.possessed {
+  border-color: rgba(201,162,78,0.8);
+  background:
+    radial-gradient(90% 120% at 0% 0%, rgba(110,20,38,0.42), rgba(110,20,38,0) 70%),
+    linear-gradient(160deg, rgba(43,16,24,0.95), rgba(22,9,16,0.96));
+  box-shadow: inset 0 0 0 1px rgba(0,0,0,0.45), 0 8px 22px rgba(0,0,0,0.45), 0 0 18px rgba(163,38,58,0.22);
+}
+.player-panel.possessed::before {
+  content: ''; position: absolute; inset: 3px; border-radius: 13px; pointer-events: none;
+  border: 1px solid rgba(163,38,58,0.85);
+}
+.player-panel.possessed .portrait-slot { border-color: var(--brass); box-shadow: inset 0 0 0 1px rgba(0,0,0,0.5), 0 0 10px rgba(163,38,58,0.35); }
 .portrait-slot {
   width: 74px; height: 88px; border-radius: 12px; overflow: hidden; flex: none; align-self: center;
   border: 1px solid var(--brass); box-shadow: inset 0 0 0 1px rgba(0,0,0,0.5);
@@ -491,7 +516,7 @@ html, body {
 
 .banner {
   margin: 12px 16px 0; padding: 11px 14px; border-radius: 12px; font-weight: 600; font-size: 14px;
-  background: rgba(180,107,255,0.16); border: 1px solid rgba(180,107,255,0.5); color: #dcc4ff;
+  background: rgba(255,255,255,0.05); border: 1px solid var(--line); color: var(--ivory);
 }
 .banner[hidden] { display: none; }
 .banner.info { background: rgba(143,216,255,0.14); border-color: rgba(143,216,255,0.45); color: #bfe6ff; }
@@ -773,10 +798,20 @@ html, body {
 .role-badge[hidden] { display: none; }
 .role-badge .role-word { font-family: var(--serif); font-weight: 700; letter-spacing: 0.18em; font-size: clamp(20px, 3.4vw, 30px); }
 .role-badge .role-line { font-size: 13px; line-height: 1.45; color: var(--ivory-dim); }
-.role-badge.good { border-color: rgba(120,200,150,0.5); }
-.role-badge.good .role-word { color: #9fe3b8; }
-.role-badge.evil { border-color: rgba(180,107,255,0.6); background: rgba(60,26,92,0.35); }
-.role-badge.evil .role-word { color: var(--evil); }
+.role-badge.good { border-color: var(--line); }
+/* The role word as the badge pill (the same pills as the player panel's; .tell-pill below). */
+.role-badge .role-word.tell-pill { font: 800 clamp(14px, 1.9vw, 17px)/1.45 var(--sans); padding: 5px 18px 5px 20px; letter-spacing: 0.2em; }
+.role-badge.evil {
+  position: relative; border-color: rgba(201,162,78,0.8);
+  background:
+    radial-gradient(70% 140% at 0% 0%, rgba(110,20,38,0.45), rgba(110,20,38,0) 70%),
+    linear-gradient(160deg, var(--poss-plum), var(--poss-deep));
+  box-shadow: 0 0 22px rgba(163,38,58,0.22);
+}
+.role-badge.evil::before {
+  content: ''; position: absolute; inset: 3px; border-radius: 11px; pointer-events: none;
+  border: 1px solid rgba(163,38,58,0.85);
+}
 
 .handoff-notes { display: flex; flex-direction: column; gap: 8px; margin: 0 auto 14px; max-width: 620px; }
 .handoff-notes[hidden] { display: none; }
@@ -860,64 +895,104 @@ html, body {
 .rotate-icon .ri-landscape { stroke: var(--brass-bright); fill: rgba(201,162,78,0.12); }
 .rotate-icon path { fill: none; stroke: var(--brass); stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
 
-/* ---- The possessed guest's own tell (src/ui/souls.js): how many Possession cards ("souls") they can
-   still trade, their possessed portrait and a violet wash. Only on that guest's private surfaces —
-   the role / turn hand-over screens and the card view — and, outside hot-seat, their own panel. ---- */
+/* ---- The possessed guest's own tell (src/ui/souls.js): the POSSESSED badge, how many Possession
+   cards ("souls") they can still trade and their possessed portrait (red eyes), on the crimson plate.
+   Only on that guest's private surfaces — the role screen, the card view and their own panel. ---- */
+/* The badge: a dark pill with a brass edge and a crimson hairline inside it, ivory capitals, and a
+   small "Only you can see this" under it. The clean player's is the same pill in dark green, quiet,
+   with no caption (src/hud.js shows it in a match only, never in practice). */
+.tell-badge { display: inline-flex; flex-direction: column; align-items: center; gap: 2px; flex: none; }
+.tell-badge[hidden] { display: none; }
+.tell-pill {
+  display: inline-block; padding: 2px 10px 2px 11px; border-radius: 999px; white-space: nowrap;
+  font: 800 10.5px/1.45 var(--sans); letter-spacing: 0.16em; text-transform: uppercase; color: var(--ivory);
+  background: linear-gradient(180deg, #2a0d15, #13070b); border: 1px solid var(--brass);
+  box-shadow: inset 0 0 0 1px rgba(163,38,58,0.95), 0 1px 4px rgba(0,0,0,0.5);
+}
+.tell-badge.clean .tell-pill, .role-badge.good .tell-pill {
+  background: linear-gradient(180deg, #17442f, var(--clean-pill)); border-color: rgba(201,162,78,0.85);
+  box-shadow: inset 0 0 0 1px rgba(0,0,0,0.35), 0 1px 4px rgba(0,0,0,0.45);
+}
+.tell-note { font-family: var(--serif); font-size: 10.5px; line-height: 1.2; color: var(--ivory-dim); white-space: nowrap; letter-spacing: 0.01em; }
+
 .souls-chip {
   display: inline-flex; align-items: center; gap: 8px; align-self: center;
   padding: 4px 12px 4px 5px; border-radius: 999px; font-size: 14px; font-weight: 600; line-height: 1.3;
-  background: rgba(122,43,208,0.28); border: 1px solid rgba(180,107,255,0.65); color: #ecdcff;
+  background: rgba(10,4,7,0.55); border: 1px solid rgba(163,38,58,0.9); color: var(--ivory);
 }
 .souls-chip b { font-size: 17px; font-weight: 800; color: #fff; }
 .souls-chip .souls-card { width: 20px; aspect-ratio: 2 / 3; border-radius: 2px; object-fit: cover; flex: none;
-  box-shadow: 0 0 0 1px rgba(180,107,255,0.8), 0 0 8px rgba(180,107,255,0.5); }
-/* None left: said calmly — no red, no warning look, the card greyed. */
-.souls-chip.none { background: rgba(255,255,255,0.05); border-color: rgba(180,107,255,0.35); color: var(--ivory-dim); font-weight: 500; border-radius: 12px; }
-.souls-chip.none .souls-card { filter: grayscale(1) brightness(0.6); box-shadow: 0 0 0 1px rgba(180,107,255,0.35); }
+  box-shadow: 0 0 0 1px rgba(201,162,78,0.7); }
+/* None left: said calmly — no warning look, the card greyed. */
+.souls-chip.none { background: rgba(255,255,255,0.04); border-color: rgba(163,38,58,0.45); color: var(--ivory-dim); font-weight: 500; border-radius: 12px; }
+.souls-chip.none .souls-card { filter: grayscale(1) brightness(0.6); box-shadow: 0 0 0 1px rgba(201,162,78,0.35); }
 .souls-chip.compact { padding: 2px 9px 2px 4px; font-size: 12px; gap: 6px; }
 .souls-chip.compact b { font-size: 14px; }
 .souls-chip.compact .souls-card { width: 14px; }
 
-/* Hand-over screens (role reveal, private turn): portrait beside the POSSESSED badge, violet wash. */
+/* Hand-over screens (role reveal, private turn): the brass card keeps its look, with a faint crimson
+   warmth at the top; the role box inside is the crimson plate (portrait, POSSESSED badge, souls). */
 .handoff-card.possessed {
-  border-color: rgba(180,107,255,0.6);
-  background: radial-gradient(120% 90% at 50% 0%, rgba(122,43,208,0.22), rgba(122,43,208,0) 60%), var(--panel-solid);
-  box-shadow: 0 0 0 1px rgba(180,107,255,0.35), 0 0 40px rgba(122,43,208,0.35), 0 18px 50px rgba(0,0,0,0.6);
+  border-color: rgba(201,162,78,0.7);
+  background: radial-gradient(120% 90% at 50% 0%, rgba(110,20,38,0.24), rgba(110,20,38,0) 60%), var(--panel-solid);
+  box-shadow: inset 0 0 0 1px rgba(0,0,0,0.5), inset 0 0 0 2px var(--line-soft), 0 0 32px rgba(163,38,58,0.14), 0 18px 50px rgba(0,0,0,0.6);
 }
-.role-badge.with-portrait { flex-direction: row; align-items: center; gap: 16px; text-align: left; padding: 10px 16px 10px 10px; }
+.role-badge.with-portrait { flex-direction: row; align-items: center; gap: 16px; text-align: left; padding: 12px 18px 12px 12px; }
 .role-badge .role-portrait { width: 62px; height: 74px; flex: none; border-radius: 10px; overflow: hidden;
-  border: 1px solid rgba(180,107,255,0.8); box-shadow: 0 0 14px rgba(180,107,255,0.45); }
+  border: 1px solid var(--brass); box-shadow: 0 0 12px rgba(163,38,58,0.4); }
 .role-badge .role-text { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; min-width: 0; }
-.role-badge .role-head { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 14px; }
+.role-badge .role-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; }
+.role-badge .role-head .tell-badge { align-items: center; }
+.role-badge .role-head .tell-note { font-size: 11.5px; }
 .role-badge .role-head .souls-chip { align-self: center; }
-.role-badge.with-portrait .role-text { gap: 3px; }
+.role-badge.with-portrait .role-text { gap: 6px; }
+.role-badge.evil .role-line { color: var(--ivory-dim); }
+/* A private note on the possessed guest's own role screen ("You were possessed by …"): the plate's
+   palette, not the general violet note. */
+.handoff-card.possessed .handoff-note { background: rgba(94,11,20,0.22); border-color: rgba(163,38,58,0.6); color: var(--ivory); }
 
-/* The card view: the banner carries the portrait and the count; the backdrop takes the wash. */
-.card-view.possessed { background: radial-gradient(120% 90% at 50% 40%, rgba(40,12,70,0.55), rgba(20,6,40,0.78)); }
-.card-view.possessed .cv-panel { border-color: rgba(180,107,255,0.55); box-shadow: inset 0 0 0 1px rgba(0,0,0,0.5), 0 0 34px rgba(122,43,208,0.35), 0 18px 50px rgba(0,0,0,0.6); }
-.banner.possessed { display: flex; align-items: center; gap: 12px; padding: 8px 12px 8px 8px; font-weight: 500; }
+/* The card view: the banner is the crimson plate (portrait, badge, words, count); the backdrop behind
+   the panel is only a little darker and warmer. */
+.card-view.possessed { background: radial-gradient(120% 90% at 50% 40%, rgba(30,10,16,0.55), rgba(14,5,9,0.78)); }
+.card-view.possessed .cv-panel { box-shadow: inset 0 0 0 1px rgba(0,0,0,0.5), inset 0 0 0 2px var(--line-soft), 0 0 30px rgba(163,38,58,0.2), 0 18px 50px rgba(0,0,0,0.6); }
+.banner.possessed {
+  position: relative; display: flex; align-items: center; gap: 14px; padding: 8px 14px 8px 8px; font-weight: 500; color: var(--ivory);
+  border-color: rgba(201,162,78,0.8);
+  background:
+    radial-gradient(60% 160% at 0% 0%, rgba(110,20,38,0.45), rgba(110,20,38,0) 70%),
+    linear-gradient(160deg, var(--poss-plum), var(--poss-deep));
+}
+.banner.possessed::before {
+  content: ''; position: absolute; inset: 3px; border-radius: 9px; pointer-events: none;
+  border: 1px solid rgba(163,38,58,0.85);
+}
 .banner.possessed[hidden] { display: none; }
-.banner.possessed b { font-weight: 800; letter-spacing: 0.06em; color: #e6d0ff; }
+.banner.possessed b { font-weight: 800; letter-spacing: 0.06em; color: #fff; }
 .banner .banner-portrait { width: 50px; height: 60px; flex: none; border-radius: 8px; overflow: hidden;
-  border: 1px solid rgba(180,107,255,0.8); box-shadow: 0 0 10px rgba(180,107,255,0.4); }
+  border: 1px solid var(--brass); box-shadow: 0 0 10px rgba(163,38,58,0.35); }
 /* The words, with the souls chip beside them, in room for two lines on every card: on the Possession
    card (one short line, no chip) the banner stays the same height, so the card and the ‹ › arrows below
    it do not jump as you step through the hand. */
 .banner .banner-text { display: flex; align-items: center; gap: 12px; min-width: 0; flex: 1; min-height: 40px; }
-.banner .banner-words { flex: 1; min-width: 0; line-height: 1.4; }
+.banner .banner-words { flex: 1; min-width: 140px; line-height: 1.4; }
 .banner .banner-text .souls-chip { flex: none; align-self: center; }
+/* None left (every Possession card traded away): the chip carries a whole sentence, so it takes a share
+   of the row and wraps inside its own box instead of squeezing the words to nothing. */
+.banner .banner-text .souls-chip.none { flex: 0 1 240px; min-width: 0; font-size: 13px; line-height: 1.3; padding: 5px 12px 5px 6px; }
 /* The ×N badge sits in the dark corner beside the mirror, clear of the card's printed title. */
 .big-card .face-badge.souls { top: auto; bottom: 21%; right: 6%; padding: 3px 12px; font-size: 22px; color: #fff;
   background: #7a2bd0; border: 1px solid #d7b3ff; box-shadow: 0 0 12px rgba(180,107,255,0.75), 0 2px 6px rgba(0,0,0,0.6); }
 .card-tile.face .face-badge.souls { top: 6%; right: 7%; padding: 2px 9px; font-size: 16px; color: #fff;
   background: #7a2bd0; border: 1px solid #d7b3ff; box-shadow: 0 0 8px rgba(180,107,255,0.7); }
-.card-view .d-line.souls-line { color: #e6d0ff; }
+.card-view .d-line.souls-line { color: var(--ivory); }
 .card-view .d-line.souls-line b { color: #fff; }
 
-/* The player panel and the fan, where the tell may be on the main screen (not hot-seat). */
-.player-name-row { display: flex; align-items: center; gap: 8px; min-width: 0; }
-.panel-role { flex: none; padding: 2px 7px; border-radius: 6px; font-size: 10.5px; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase;
-  color: #f1e4ff; background: rgba(122,43,208,0.55); border: 1px solid rgba(200,150,255,0.8); }
+/* The player panel: the name, with the player's own badge beside it (POSSESSED + its caption, or a
+   quiet CLEAN in a match), and the souls count. The pill lines up with the name; the caption hangs
+   under the pill. */
+.player-name-row { display: flex; align-items: flex-start; gap: 9px; min-width: 0; }
+.player-name-row .player-name { line-height: 22px; min-width: 0; }
+.player-name-row .tell-badge { margin-top: 1px; }
 .panel-role[hidden], .panel-souls[hidden] { display: none; }
 .panel-souls { display: flex; margin: -2px 0 -4px; }
 .fan-card .fan-badge.souls { color: #fff; background: #7a2bd0; border: 1px solid #d7b3ff; box-shadow: 0 0 8px rgba(180,107,255,0.7); }
@@ -1063,7 +1138,7 @@ html, body {
 .er-who { font-size: 13px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .er-row.you .er-who { color: var(--brass-bright); font-weight: 700; }
 .er-role { font-size: 12px; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; }
-.er-role.evil { color: var(--evil); }
+.er-role.evil { color: #e46b74; }   /* the possessed guests, revealed at the end: the crimson of the possessed look */
 .er-role.good { color: #9fe3b8; }
 .er-status { font-size: 12px; color: var(--muted); text-align: right; }
 .er-row.dead .er-name { text-decoration: line-through; opacity: 0.7; }

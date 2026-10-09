@@ -1,5 +1,5 @@
 // Character view. Two kinds, behind ONE surface { group, def, outfit, update(mover, dt),
-// setActive, setDead }:
+// setActive, setDead, setPossessed }:
 //   • a real rounded glTF guest (when the outfit has a `model`) — a skinned model with Idle/Walk
 //     clips, cross-faded by movement with the stride matched to speed;
 //   • the placeholder articulated box figure (everyone else) with a simple procedural walk.
@@ -9,6 +9,7 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { lambert, makeShadow } from './materials.js';
 import { bodyTypes, outfits } from '../data/characters.js';
 import { xrayGuest } from './xray.js';
+import { createPossessedEyes } from './possessedLook.js';
 
 const gltfLoader = new GLTFLoader();
 
@@ -89,6 +90,9 @@ export function createCharacterView(playerDef, cfg, scene) {
   let strideLength = outfit.strideLength || 1.0, walkDuration = 1;
   // Placeholder limbs (used only when !useModel).
   let arms = [], legs = [], skirt = null;
+  // The possessed look (red eyes, src/render/possessedLook.js): wanted state, applied once the model
+  // has loaded. The placeholder box figure has no eyes to change.
+  let eyes = null, possessedWanted = false;
 
   if (useModel) {
     // Load the real guest. Skinned meshes can be wrongly frustum-culled from a stale bind-pose
@@ -110,11 +114,14 @@ export function createCharacterView(playerDef, cfg, scene) {
           if (src.transparent) { m.transparent = true; m.opacity = src.opacity; }
           if (src.side !== undefined) m.side = src.side;
           if (src.vertexColors) m.vertexColors = true;   // baked shading (glTF COLOR_0) multiplies the base colour
+          m.name = src.name;                             // (the eyes are found by name: 'Eye', 'Shine')
           return guestLight(m);
         };
         o.material = Array.isArray(o.material) ? o.material.map(flatten) : flatten(o.material);
       });
       body.add(root);
+      eyes = createPossessedEyes(root);
+      eyes.set(possessedWanted);
       const top = new THREE.Box3().setFromObject(root).max.y;
       if (top > 0.8 && top < 2.4) { headY = top; marker.position.y = headY + c.markerHeight; }
       mixer = new THREE.AnimationMixer(root);
@@ -251,7 +258,13 @@ export function createCharacterView(playerDef, cfg, scene) {
     outfit,
     // Test/debug hook: what the animation is doing (stride in use, walk weight, walk phase 0..1).
     debug() {
-      return { model: useModel, loaded: !!mixer, strideLength, walkDuration, walkW, walkPhase: walkAction ? walkAction.time / walkDuration : 0 };
+      return { model: useModel, loaded: !!mixer, strideLength, walkDuration, walkW, walkPhase: walkAction ? walkAction.time / walkDuration : 0, possessedEyes: !!eyes?.on };
+    },
+    // The possessed look on this figure (red eyes). Cheap: does nothing unless it changes. Whose screen
+    // shows it is main.js's decision (only the player's own guest, never a computer guest's).
+    setPossessed(on) {
+      possessedWanted = !!on;
+      if (eyes) eyes.set(possessedWanted);
     },
     setActive(v) {
       active = v && !dead;

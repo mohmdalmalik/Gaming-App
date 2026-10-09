@@ -62,7 +62,7 @@ gitignored; recreate it with `ln -sfn ../../tests/node_modules tools/char-pipeli
 | `capture.mjs` | real-game screenshots at any viewport/dpr, N camera rotations (+ crops on Victor), hand/map open, `--still` freezes CSS animations; `--pre x,z` walks there first, `--prerot n` rotates the camera first, `--walk x,z --midwalk ms` screenshots mid-walk (use a clear hall edge, e.g. `--pre 3,3 --walk 0,3`) |
 | `walk_check.mjs` | drives walks/turns/interrupt/doorway from the real game; verifies stride in use, phase-vs-distance, mesh-vs-mover, settle; records a webm + frames |
 | `record_smooth.mjs` | deterministic 30 fps recording: steps the page clock per frame, screenshots, encodes a webm in-browser |
-| `portrait.mjs` + `portrait_post.py` | interface portraits (normal + possessed) rendered from the model |
+| `portrait.mjs` + `portrait_post.py` | interface portraits rendered from the model: the possessed one uses the game's own red eyes (`src/render/possessedLook.js`) on the plum-crimson plate; the normal one is rewritten only with `--normal` |
 | `scene_stats.mjs` | live draw calls / triangles / programs with Victor loaded |
 | `make_panels.py` | cuts `ref/victor-sheet.png` into `ref/panels/` (front, tq, side, back, face close-ups, elevated) |
 | `compare.py` | sheet panel vs render silhouette at equal displayed height: IoU, width per 4 % band, overlay image |
@@ -85,7 +85,8 @@ node tools/char-pipeline/preview_glb.mjs --glb assets/characters/victor.glb --ou
 python3 tools/char-pipeline/compare.py tools/char-pipeline/ref/panels/front.png tools/char-pipeline/shots/v5-body-0.png tools/char-pipeline/shots/cmp-front.png
 python3 tools/char-pipeline/compare_head.py front tools/char-pipeline/ref/panels/face-front.png tools/char-pipeline/shots/v5-face-0.png
 node tools/char-pipeline/capture.mjs --out tools/char-pipeline/shots/v5g --w 1194 --h 834 --dpr 2 --rot 4   # real game
-node tools/char-pipeline/portrait.mjs                            # interface portraits from the model
+node tools/char-pipeline/portrait.mjs all                        # the six private possessed portraits from the model
+# node tools/char-pipeline/portrait.mjs victor --normal         # also rewrites a normal portrait (only when a model changes)
 ```
 
 

@@ -52,12 +52,14 @@
       <!-- Bottom bar: ONE flex/grid container so the player panel, the hand opener and the buttons
            share the width and can never overlap (they shrink or re-flow instead). -->
       <div class="hud-bottom">
-        <!-- Left: the active player — portrait (normal / possessed), name, health, actions. -->
+        <!-- Left: the player's own guest — portrait (normal / possessed), name, health, actions. Their
+             own badge sits by the name: POSSESSED (+ "Only you can see this") on the crimson plate, or a
+             quiet CLEAN in a match (src/hud.js syncTell; never in practice). -->
         <div class="hud-bottom-left">
           <div id="player-panel" class="player-panel">
             <div id="portrait-slot" class="portrait-slot"></div>
             <div class="player-meta">
-              <div class="player-name-row"><div id="active-player" class="player-name">—</div><span id="panel-role" class="panel-role" hidden>Possessed</span></div>
+              <div class="player-name-row"><div id="active-player" class="player-name">—</div><span id="panel-role" class="panel-role tell-badge possessed" hidden><span class="tell-pill">Possessed</span><span class="tell-note">Only you can see this</span></span><span id="panel-clean" class="tell-badge clean" hidden><span class="tell-pill">Clean</span></span></div>
               <div id="health-row" class="stat"><span class="stat-label">Health</span><div id="health" class="health" aria-label="Health"></div></div>
               <div class="stat"><span class="stat-label">Actions</span><div id="ap-pips" class="ap-pips" aria-hidden="true"></div><span id="action-points" class="ap-count">— / —</span></div>
               <div id="panel-souls" class="panel-souls" hidden></div>

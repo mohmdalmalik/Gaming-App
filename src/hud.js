@@ -95,6 +95,8 @@ export function createHud(doc, cfg) {
       const port = doc.createElement('div'); port.className = 'mini-portrait';
       port.appendChild(makePortrait(doc, p, { possessed: false })); // never reveal roles here
       const name = doc.createElement('div'); name.className = 'mini-name'; name.textContent = p.name;
+      // A match: who is playing that guest — "You", or the computer guest's online-style name.
+      if (p.handle) { name.title = p.handle; const h = doc.createElement('span'); h.className = 'mini-user'; h.textContent = p.handle; name.appendChild(h); }
       // PUBLIC information only: where they are and their health. A hidden role is never shown here,
       // and neither is how many cards anyone holds (approved rule, docs/GAME_RULES.md > Possession: a
       // Possession card or a Lantern block changes counts unevenly). Your own count is in your own hand.

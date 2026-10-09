@@ -39,7 +39,8 @@ const shot = async n => { if (shots) await page.screenshot({ path: path.join(out
 const dressed = () => page.waitForFunction(() => !window.__game || window.__game.dressingDone(), null, { timeout: 90000, polling: 200 });
 async function load(query) {
   if (page.url().startsWith('http')) await dressed();
-  await page.goto(baseUrl + (query ? `?${query}` : ''), { waitUntil: 'domcontentloaded' });
+  // (?mode=practice: the direct link to practice, past the main menu)
+  await page.goto(`${baseUrl}?${['mode=practice', query].filter(Boolean).join('&')}`, { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__game && !document.getElementById('btn-begin').disabled, null, { timeout: 45000 });
   await dressed();
   await game(() => { window.__game.cfg.player.speed = 16; });

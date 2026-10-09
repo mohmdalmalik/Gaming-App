@@ -35,8 +35,12 @@ export function resetState(state, floor, seed) {
   state.discardPile = [];                // reshuffled into a new draw pile when the deck runs out
 
   // Exactly one guest starts secretly possessed, with the Possession supply in hand. Practice
-  // has no hidden role at all.
-  const possessedIndex = practice ? -1 : Math.floor(rng() * state.roster.length);
+  // has no hidden role at all. The "pick your role" option (state.setup.possessedIndex: a seat index)
+  // forces the seat; the random pick is still drawn first, so the engine's random sequence — the
+  // hotel, the deck, every later draw — is the same whether a seat is forced or not.
+  let possessedIndex = practice ? -1 : Math.floor(rng() * state.roster.length);
+  const forced = state.setup?.possessedIndex;
+  if (!practice && Number.isInteger(forced) && forced >= 0 && forced < state.roster.length) possessedIndex = forced;
 
   state.players = state.roster.map((p, index) => ({
     id: p.id,
@@ -54,6 +58,7 @@ export function resetState(state, floor, seed) {
     roleSeen: false,           // acknowledged their private role screen
     roleChangePending: false,  // converted, and not yet told privately
     notes: [],                 // private messages waiting for this guest's own screen
+    inbox: [],                 // PRIVATE structured events for this guest only (emitPrivate below)
   }));
   if (possessedIndex >= 0) state.players[possessedIndex].hand.push(...buildPossessionSupply());
 
@@ -70,9 +75,12 @@ export function resetState(state, floor, seed) {
   state.searchedRooms = new Set();       // a room gives up its card draw once
   state.escaped = new Set();
   state.log = [];                        // PUBLIC log — never a hidden role
+  state.events = [];                     // PUBLIC structured events, append-only (emitPublic below)
+  state.eventSeq = 0;                    // the last event number handed out (public and private share it)
   state.finished = false;
   state.won = null;            // 'humans' | 'possessed' | null
   state.dawn = false;          // true when the hotel won because dawn broke
+  emitPublic(state, { type: 'turn', seat: state.activeIndex, round: state.round });
   return state;
 }
 
@@ -81,6 +89,29 @@ export function logPublic(state, text) {
   state.log.push({ round: state.round, turn: state.turn, text });
   if (state.log.length > 60) state.log.shift();
   return text;
+}
+
+// --- Structured events (for the computer guests, src/bots/, and a future server) -----------------
+// The same facts as the log, as data, so nobody has to read log text. Seats are player.index.
+//   PUBLIC  state.events — what the whole table sees: turn, enter, open, search, trade, noTrade, attack,
+//           mirror, switchboard, unlock, barricade, infirmary, escape, relock. Never a role, a hand, a
+//           card count or a private result.
+//   PRIVATE player.inbox — what only that guest learns: traded (what they gave and got), blocked /
+//           blockedThem (a Lantern block), possessed / converted, mirrorSaw / mirroredBy.
+// Every event carries `seq` (one counter for both kinds, so they can be put in order), `round` and
+// `turn`. Emitting an event changes nothing else in the game.
+const stamp = (state, ev) => ({ seq: (state.eventSeq = (state.eventSeq || 0) + 1), round: state.round, turn: state.turn, ...ev });
+export function emitPublic(state, ev) {
+  if (!state.events) return null;
+  const e = stamp(state, ev);
+  state.events.push(e);
+  return e;
+}
+export function emitPrivate(state, player, ev) {
+  if (!player?.inbox) return null;
+  const e = stamp(state, ev);
+  player.inbox.push(e);
+  return e;
 }
 
 // --- Rooms: locked doors and barricades --------------------------------------------------------
@@ -199,8 +230,10 @@ export function enterRoom(state, floor, player, roomId) {
   const revealing = !state.discovered.has(roomId);
   result.cost = moveCostInto(state, roomId);
   player.actionPoints = Math.max(0, player.actionPoints - result.cost);
+  const from = player.currentRoom;
   player.currentRoom = roomId;
   if (revealing) { state.discovered.add(roomId); result.revealed = true; }
+  emitPublic(state, { type: 'enter', seat: player.index, from, to: roomId });
   result.enteredExit = !!floor.rooms.get(roomId)?.isExit;
   return result;
 }
@@ -231,8 +264,12 @@ export function endTurn(state, floor) {
   to.actionPoints = rules.actionPointsPerTurn;
   state.turn += 1;
   const relocked = relockDoors(state);
-  for (const id of relocked) logPublic(state, `The ${floor?.rooms.get(id)?.name ?? 'locked room'} door locked again.`);
+  for (const id of relocked) {
+    logPublic(state, `The ${floor?.rooms.get(id)?.name ?? 'locked room'} door locked again.`);
+    emitPublic(state, { type: 'relock', room: id });
+  }
   expireBarricades(state);
+  emitPublic(state, { type: 'turn', seat: to.index, round: state.round });
   return { ok: true, from, to, finished: false, round: state.round, relocked };
 }
 

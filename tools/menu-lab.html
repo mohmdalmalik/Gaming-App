@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><title>lab</title><base href="../">
+<script type="importmap">
+{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.186.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.186.0/examples/jsm/" } }
+</script>
+<style>html,body{margin:0;background:#222;overflow:hidden}canvas{display:block}</style></head>
+<body><script type="module">
+import * as THREE from 'three';
+import { createActor, preloadCast } from './src/menu/lobbyCast.js';
+const q = new URLSearchParams(location.search);
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.NeutralToneMapping;
+document.body.appendChild(renderer.domElement);
+const scene = new THREE.Scene(); scene.background = new THREE.Color('#333');
+scene.add(new THREE.HemisphereLight('#fff', '#444', 1.6));
+const dl = new THREE.DirectionalLight('#fff', 1.5); dl.position.set(3, 5, 4); scene.add(dl);
+const cam = new THREE.PerspectiveCamera(30, innerWidth / innerHeight, 0.1, 100);
+const view = q.get('view') || 'side';
+if (view === 'side') { cam.position.set(6, 0.8, 0.4); cam.lookAt(0, 0.6, 0.4); }
+else if (view === 'front') { cam.position.set(0, 1.0, 6); cam.lookAt(0, 0.6, 0); }
+else { cam.position.set(4, 1.6, 4.5); cam.lookAt(0, 0.6, 0); }
+const floor = new THREE.Mesh(new THREE.PlaneGeometry(20, 20), new THREE.MeshLambertMaterial({ color: '#777' })); floor.rotation.x = -Math.PI / 2; scene.add(floor);
+const grid = new THREE.GridHelper(4, 40, '#555', '#555'); grid.position.y = 0.002; scene.add(grid);
+const ids = (q.get('ids') || 'victor,eleanor,clara,henry,beatrice,marcus').split(',');
+await preloadCast(ids);
+const seatY = +(q.get('seat') || 0.3);
+const w = +(q.get('w') ?? 1);
+const actors = [];
+ids.forEach(async (id, i) => {});
+for (let i = 0; i < ids.length; i++) {
+  const x = (i - (ids.length - 1) / 2) * 0.9;
+  const a = await createActor({ name: ids[i], model: ids[i], phase: 0.2 }, scene);
+  const seat = { x, z: 0, y: seatY, heading: 0 };
+  // a seat block: cushion top at seatY, pelvis point at z=0, cushion from z=-0.3 to +0.25, back at -0.3
+  const box = new THREE.Mesh(new THREE.BoxGeometry(0.7, seatY, 0.36), new THREE.MeshLambertMaterial({ color: '#8a2a2a', transparent: true, opacity: q.get('ghost') ? 0.4 : 1 }));
+  box.position.set(x, seatY / 2, -0.08); scene.add(box);
+  const back = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.45, 0.15), box.material); back.position.set(x, seatY + 0.22, -0.26 - 0.075); scene.add(back);
+  a.sitAt(seat, true);
+  a.sitW = w; a.sitTarget = w;
+  actors.push(a);
+}
+let t = 0;
+const T = +(q.get('t') || 0.5);
+for (let k = 0; k < 30; k++) { actors.forEach(a => a.update(T / 30)); }
+renderer.render(scene, cam);
+window.__ready = true;
+</script></body></html>

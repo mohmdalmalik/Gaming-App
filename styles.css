@@ -1073,3 +1073,7 @@ html, body {
   .end-reveal { gap: 4px; margin-bottom: 14px; }
   .er-row { padding: 5px 10px; }
 }
+
+/* Who plays each guest (a match): "You", or the computer guest's name, small under the guest's name. */
+.mini-user { display: block; max-width: 82px; margin: 1px auto 0; font-family: var(--sans); font-size: 10px; font-weight: 600; letter-spacing: 0.02em; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-decoration: none; }
+.mini-player.me .mini-user { color: var(--brass); }

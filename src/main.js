@@ -71,15 +71,24 @@ const floor = createHotel(hotel, cfg);
 //   ?seed=123                            force the deal, the hidden role and the hotel's room deck (testing)
 //   ?timer=off                           play without the 45-second turn clock
 //   ?intro=off                           no lift sequence between the menu and the game
+//   ?botpace=0.1                         the computer guests think 10x faster (testing)
 //   ?camera=square / classic             the previous square-on view / the older, higher one
 //   ?stats=1                             a small frame-rate / draw-call readout, for measuring on the iPad
 const params = new URLSearchParams(window.location.search);
 if (params.get('camera') === 'square') Object.assign(cfg.camera, cfg.cameraSquare);     // the previous square-on view
 if (params.get('camera') === 'classic') Object.assign(cfg.camera, cfg.cameraClassic);   // the old, higher view
 if (params.get('camera') === 'diagonal') Object.assign(cfg.camera, cfg.cameraDiagonal); // (the standard view; old links)
+// (?mode=hotseat&players=6, the old pass-one-iPad mode, is gone: old links open a match against bots
+// with the same number of guests, the player in the first seat.)
+if (params.get('mode') === 'hotseat') {
+  params.set('mode', 'bots');
+  if (!params.has('bots')) params.set('bots', String(Math.max(3, Math.min(5, (parseInt(params.get('players'), 10) || 6) - 1))));
+  if (!params.has('seat')) params.set('seat', '0');
+}
 const DIRECT = ['practice', 'bots'].includes(params.get('mode')) ? params.get('mode') : null;
 const TIMER_OFF = params.get('timer') === 'off';
 const INTRO = params.get('intro') !== 'off';
+const BOT_PACE = Math.max(0, parseFloat(params.get('botpace'))) || 1;
 const forcedSeed = parseInt(params.get('seed'), 10);
 const newSeed = () => (Number.isFinite(forcedSeed) && forcedSeed > 0 ? forcedSeed
   : PRACTICE && rules.practiceSeed != null ? rules.practiceSeed
@@ -682,7 +691,7 @@ function botThink(i, kind) {
   let base = 600;
   try { base = bots?.thinkMs(i, kind) ?? 600; } catch { /* keep the default */ }
   const k = settings.choice('botSpeed')?.think ?? 1;
-  return base * k * (me()?.alive ? 1 : 0.5);
+  return base * k * BOT_PACE * (me()?.alive ? 1 : 0.5);
 }
 function botWalkScale() { return (settings.choice('botSpeed')?.walk ?? 1.45) * (me()?.alive ? 1 : 1.4); }
 
@@ -698,7 +707,7 @@ function startBotTurn(p) {
 function botTick(now) {
   if (!running || PRACTICE || state.finished || !bots) return;
   const p = activePlayer(state);
-  if (!isBot(p.index) || now < botNextAt) return;
+  if (!isBot(p.index) || now < botNextAt || walkCutShort) return;
   if (meetingLive || pendingArrival || activeMover().walking || activeMover().path.length) return;
   if (handoff.isOpen || overlays.noticeOpen || overlays.askOpen || overlays.endOpen || discard.isOpen || meeting.isOpen) return;
   botStep(p);
@@ -1170,6 +1179,9 @@ function setupGame(plan) {
   if (!PRACTICE) {
     const seats = botProfiles.map((profile, index) => (profile ? { index, profile } : null)).filter(Boolean);
     bots = botModules.index.createBotTable(state, floor, seats, ((seed * 2654435761) >>> 0) || 1);
+    // (who plays each guest, for the strip: interface only, never read by the rules or the bots)
+    state.players.forEach((p, i) => { p.handle = i === humanSeat ? 'You' : botProfiles[i]?.username || ''; });
+    hud.rebuild();
     botsAutoplay = botModules.autoplay;
     movers.forEach((m, i) => { m.speedScale = isBot(i) ? botWalkScale() : 1; });
   }

@@ -56,8 +56,11 @@ async function noLeak(where) {
   check(!bad.length, `${where}: no other guest's role shows on the public screen${bad.length ? ` (${bad.join(', ')})` : ''}`);
 }
 
+// Headless software rendering draws a few frames a second, so walks (which follow the frames) are slow:
+// the walking speed is raised and the picture made smaller.
+const quick = () => game(() => { window.__game.cfg.player.speed = 30; window.__game.setPixelRatio(0.5); });
 // The player's turn has started (no private screen up), or the match is over.
-async function untilMyTurn(timeout = 120000) {
+async function untilMyTurn(timeout = 400000) {
   await waitFor(() => { const g = window.__game; return g.isFinished() || (g.myTurn() && g.inActionPhase() && !g.handoffOpen() && !g.meetingOpen()); }, null, timeout);
 }
 // Answer whatever the bots put in front of the player: a card to give (the first one), a private note,
@@ -142,10 +145,10 @@ await page.waitForTimeout(400);
 // ------------------------------------------------------------------------------------------------
 console.log('\n2. the bots play');
 await dressed();
-await game(() => { window.__game.cfg.player.speed = 12; });
+await quick();
 const t0 = Date.now();
 let sawBotTurn = false, myTurns = 0;
-for (let k = 0; k < 40 && myTurns < 2; k++) {
+while (Date.now() - t0 < 400000 && myTurns < 2) {
   await answerScreens();
   const s = await game(() => ({ mine: window.__game.myTurn(), fin: window.__game.isFinished(), bot: window.__game.isBot(window.__game.state.activeIndex) }));
   if (s.fin) break;
@@ -205,7 +208,7 @@ console.log('\n4. meetings');
     t.attackWith = (i, j) => (j === me ? null : origAttack(i, j));
   }, myRoom);
   await game(() => window.__game.endTurn());
-  await waitFor(() => window.__game.handoffKind() === 'pick' || window.__game.isFinished() || window.__game.myTurn(), null, 90000);
+  await waitFor(() => window.__game.handoffKind() === 'pick' || window.__game.isFinished() || window.__game.myTurn(), null, 400000);
   const picked = await game(() => window.__game.handoffKind() === 'pick');
   check(picked, 'a bot walks in on you and asks for a trade: you choose a card in private');
   if (picked) {
@@ -277,7 +280,7 @@ console.log('\n5. out of the match, the end screen');
   const safeNow = await game(() => { const g = window.__game; return g.floor.rooms.get(g.state.players[g.humanSeat()].currentRoom).safe; });
   if (!safeNow) {
     await game(() => window.__game.endTurn());
-    await waitFor(() => !document.getElementById('encounter-overlay').hidden || window.__game.isFinished(), null, 90000).catch(() => {});
+    await waitFor(() => !document.getElementById('encounter-overlay').hidden || window.__game.isFinished(), null, 400000).catch(() => {});
     const hit = await game(() => /hit you/.test(document.getElementById('encounter-body').innerText));
     check(hit, 'a bot attacks you: the result says "hit you"');
     await shot('12-attacked');
@@ -297,6 +300,7 @@ console.log('\n5. out of the match, the end screen');
   await shot('14-end');
   await tap('#btn-restart');      // Play again
   await waitFor(() => window.__game.isRunning() && !window.__game.endOpen() && window.__game.handoffKind() === 'role', null, 30000);
+  await quick();
   check(true, 'Play again starts a new match at a new table (your role first)');
   await page.click('#btn-handoff-next');
   // The Menu button mid-match.
@@ -317,6 +321,7 @@ console.log('\n6. playing possessed');
   await page.click('#opt-role .seg-btn[data-value="possessed"]');
   await tap('#btn-bots-find');
   await waitFor(() => window.__game.phase() === 'game' && window.__game.handoffKind() === 'role', null, 90000);
+  await quick();
   check(await game(() => window.__game.state.players.length) === 6 && await game(() => window.__game.state.players[window.__game.humanSeat()].possessed), 'role "Possessed": a table of 6, and you start possessed');
   check(/POSSESSED/.test(await page.textContent('#handoff-role')), 'the role screen says POSSESSED');
   await shot('15-possessed-role');
@@ -336,16 +341,16 @@ for (let m = 0; m < MATCHES; m++) {
   const bots = [5, 4, 3][m % 3];
   await page.goto(`${baseUrl}?mode=bots&bots=${bots}&role=${role}&botpace=0.1&intro=off&seed=${9000 + m}`, { waitUntil: 'domcontentloaded' });
   await waitFor(() => window.__game && !document.getElementById('btn-begin').disabled, null, 60000);
-  await game(() => { window.__game.cfg.player.speed = 14; window.__game.setPixelRatio(0.5); });
+  await quick();
   await page.click('#btn-begin');
   const start = Date.now();
   let lastTurn = -1, lastChange = Date.now(), stalled = false, turnsPlayed = 0;
-  while (Date.now() - start < 420000) {
+  while (Date.now() - start < 1200000) {
     await answerScreens();
     const s = await game(() => { const g = window.__game; return { fin: g.isFinished(), turn: g.state.turn, mine: g.myTurn() && g.inActionPhase() && !g.handoffOpen() && !g.meetingOpen(), alive: g.state.players[g.humanSeat()].alive }; });
     if (s.fin) break;
     if (s.turn !== lastTurn) { lastTurn = s.turn; lastChange = Date.now(); turnsPlayed++; }
-    if (Date.now() - lastChange > 70000) { stalled = true; break; }
+    if (Date.now() - lastChange > 150000) { stalled = true; break; }
     if (s.mine) {
       // The stand-in: open a door or step to a room next door, search if it can, then end the turn.
       await game(() => {

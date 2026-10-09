@@ -1111,3 +1111,41 @@ Target: `docs/art-reference.jpg` (style, palette and finish; not its layout or i
 - **Jammed doors**: a door that turns out jammed is refused by the engine ('jammed') but is a discovery, not
   a mistake — each is tried once and then drops out of the view. Bots stop trying doors once no room tiles
   are left (the count is public).
+
+## Main menu, play with bots, hot-seat removed (Oct 2026, owner's request)
+- **One person looks at the screen.** Hot-seat (people passing one iPad) is gone at the owner's request:
+  no pass-the-device screens, no `?mode=hotseat` (old links open a match against bots), no
+  `ui.hotseatPossessedOnMainScreen`, no `?possessedTell`. The rules' multi-guest mode is now called `match`
+  (`applyMode('match', n)`; `'hotseat'` is still accepted as another name so the balance tools keep
+  working). A match is the online game's table with bots in the other seats: the player's seat is random
+  (like joining a table), and their OWN private information — hand, role, possessed tell, card count —
+  may show on their screen (`state.viewerIndex`: the HUD, the hand fan, the card view and the map show the
+  viewer, not whoever's turn it is). Nobody else's ever does.
+- **Turn flow** (`src/main.js`): on the player's turn they act as before; on a bot's turn `botTick` asks
+  the bot for ONE action at a time (`src/bots/index.js` nextAction) once nothing is under way and its
+  thinking pause is over, and carries it out through the same rules code and the same walks the player's
+  actions use. Refusals go back to the bot (`reject`); three in a turn, or a runaway turn, end it, and the
+  45-second clock runs for bots too as a backstop. A jammed door is not counted as a refusal (it is a
+  discovery). Meetings work in all directions: the player walks in on a bot (the usual panel; the bot
+  picks its card in secret), a bot walks in on the player (it pauses, then attacks — the player reads the
+  public result — or the player picks a card on a private screen while "Marcus is choosing…"), or two bots
+  meet (a public line in the feed). Voluntary Fire Exit trades: the player proposes and the bot answers
+  after a pause, or a bot proposes and the player accepts or declines in private. A player who dies can
+  watch, or skip to the end: `src/bots/autoplay.js` plays the rest through the rules at once.
+- **Pace**: the bots' thinking pauses (`thinkMs`) times the Bot speed setting (relaxed 1.1, normal 0.75,
+  fast 0.45), and bots walk 1.25 / 1.7 / 2.3 times the player's speed (`mover.speedScale`). The camera
+  follows whoever is playing unless the player chose "Stay on me".
+- **The feed** (`src/ui/feed.js`) shows the rules' own PUBLIC log lines (never a role, hand or private
+  result) for the last few things the others did, the player's own actions left out, "you" for the player.
+- **The menu** (`src/ui/menu.js`, `src/settings.js`): Play with bots (3-5 others, role random / clean /
+  possessed — `state.setup.possessedIndex`), Practice alone, Settings (localStorage, guarded; only
+  conveniences, never a rule). The table "fills up" with the bots' usernames at uneven intervals, like an
+  online lobby. Seats, guests and bots are rolled with their own generator (seeded by `?seed` for tests).
+- **The lobby behind the menu** (`src/menu/`): its own Three.js scene rendered by the game's renderer
+  while the menu is up (the game scene is not drawn meanwhile), blurred with CSS. On Play the blur eases
+  away and `lobby.enter()` plays the lift sequence; it is capped at 9 s so a slow device never waits on
+  it; then a fade to black, the game is set up (`setupGame`: new cast in place, character views kept per
+  guest and reused, movers rebuilt, bots created), and the lights come up on the player's role. If the
+  lobby scene fails to load, the menu shows over the blurred hotel lobby instead.
+- **Direct links** for tests: `?mode=practice`, `?mode=bots&bots=N&role=R&seat=S`, `?intro=off`,
+  `?botpace=0.1`. They skip the menu and show the old "Tap to begin" card.

@@ -14,22 +14,32 @@ technical choices are in **[docs/DECISIONS.md](docs/DECISIONS.md)**; status and 
 
 **The owner's restored ruleset is implemented and playable** (see `docs/GAME_RULES.md`, the product
 design; `CLAUDE.md` says no rule or number changes without the owner's approval of a before/after
-list). Two ways to play the same rules, chosen on the start screen:
+list). The page opens on a **main menu** over an animated, blurred hotel lobby (reception and concierge,
+guests seated and strolling, the manager walking by): **Play with bots**, **Practice alone**, **Settings**.
 
-- **Practice (default).** One guest alone in a random hotel: you start with 1 Lantern; open doors to
+- **Play with bots.** You and 3–5 computer guests (bots), like an online table filling up: choose how
+  many others and your role (random, clean guest or possessed), watch the guests join with their online
+  names, then the manager takes guests up in the lift, the screen goes black and the match opens. Every
+  rule applies: one hidden Possessor with two Possession cards (a guest they possess keeps the card and
+  gets one try with it), forced meetings with Trade or Attack, trades chosen in secret, 4 health and
+  weapons, Lanterns that block possession (and are used up doing it), three Lanterns to escape, private
+  search results, a 45-second turn clock (bots play much faster), and dawn after round 8. The bots
+  (`src/bots/`) see only what a real player could, play mostly a "medium" style (some bold, some
+  careful), and a possessed bot usually wins a guest's trust with a friendly trade before trying a
+  Possession card on them. Only you look at your screen, so your own hand and role show on it; nobody
+  else's ever does.
+- **Practice alone.** One guest alone in a random hotel: you start with 1 Lantern; open doors to
   explore, find 2 more by searching (dark rooms need a Flashlight, two rooms are locked), and escape
   through the Fire Exit.
-- **Hot-seat — `?mode=hotseat&players=6`.** Four to six people passing **one device**: one hidden
-  Possessor with two Possession cards (a guest they possess keeps the card and gets one try with it),
-  private role screens, forced meetings with Trade or Attack, trades chosen in private on the passed
-  device, 4 health and weapons, Lanterns that block
-  possession (and are used up doing it), three Lanterns to escape, private search results, a
-  45-second turn clock, and a dawn deadline: if nobody has escaped when round 8 ends, the hotel
-  wins. A testing tool for the real online game.
+- **Settings** (remembered on the device): bot speed (relaxed / normal / fast), the view on the other
+  guests' turns (follow them / stay on me), graphics (battery saver / balanced / sharp), and the menu
+  background (animated / still).
+
+Hot-seat (several people passing one iPad) was removed at the owner's request; old `?mode=hotseat`
+links open a match against bots instead.
 
 **Online multiplayer is not implemented.** There is no server, no networking, no accounts and no
-database in this project. No real art beyond the baked rooms and the six guests,
-no sound, no menu yet.
+database in this project. No sound yet.
 
 ## Open the preview
 
@@ -37,23 +47,22 @@ Published with GitHub Pages from `main`: **https://mohmdalmalik.github.io/Gaming
 (if it 404s, enable Pages once: repository → Settings → Pages → Deploy from a branch, `main`
 `/ (root)`).
 
-## Start a six-player hot-seat match
+## Play with bots
 
-1. Open the preview and tap **Hot-seat · 6 players**, or go straight to
-   `https://mohmdalmalik.github.io/Gaming-App/?mode=hotseat&players=6`.
-2. Tap **Tap to begin**. Each guest in turn takes the device, reads their secret role alone and
-   taps **I understand**.
-3. Every turn: a neutral *pass the device* screen → that guest's private screen (role, news,
-   health, hand, key pieces) → their 45-second action phase.
+1. Open the preview: the main menu appears over the lobby. Tap **Play with bots**.
+2. Choose how many **other guests** (3, 4 or 5) and **your role** (Random, Clean guest, Possessed),
+   then **Find a table**. The guests join one by one; when the table is full the lift sequence plays
+   and the match opens on your secret role.
+3. On your turn you act (tap rooms, the search icon, cards, buttons); on the others' turns the bots play
+   by themselves — the strip at the top shows who is **Playing**, the feed under the room name says what
+   they just did, and a bot that walks in on you asks you for a card in private or attacks you.
+4. If you die you can watch or **Skip to the end**. The end screen shows every guest's role;
+   **Play again** starts a new table with the same choices, **Main menu** goes back.
 
-`?players=4` / `?players=5` for a smaller table, `?timer=off` to play without the clock,
-`?seed=123` to deal the same hands, pick the same Possessor and shuffle the same hotel (the same
-lobby doors and room deck). During the possessed guest's own action phase the main screen shows their
-reminder — a POSSESSED label, "Souls to trade: N" and their Possession cards as one ×N card in the fan —
-as the owner-approved rules say (no possessed portrait or violet tint there); it is gone before the iPad
-is passed on. It is on by default (`ui.hotseatPossessedOnMainScreen` in `src/config.js`);
-`?possessedTell=private` previews the game with the reminder on the private screens only, `?possessedTell=main`
-forces it on.
+Direct links (they skip the menu and show a "Tap to begin" card; the tests use them):
+`?mode=practice`, `?mode=bots&bots=5&role=clean` (`role`: random | clean | possessed; `&seat=2` puts you
+in that seat). Also `?timer=off` (no clock), `?seed=123` (the same deal, Possessor, table and hotel),
+`?intro=off` (no lift sequence), `?botpace=0.1` (bots think 10× faster, for testing).
 
 The standard view is **corner-on**, like the owner's room pictures: the whole room at the default zoom,
 its two near walls cut down, rooms nearer the camera cut down too, and anything else that would hide the
@@ -105,18 +114,18 @@ readout at the top left (below the room name), for measuring speed on the iPad.
   (‹ › step through the hand; tap outside or ✕ to close). Bandage (heal 1), Master Key / Lock Pick
   (open a locked door next to you, until the end of your turn), Barricade (seal a doorway of your room for one round), Hand Mirror
   (1 AP: see the whole hand of a guest in your room, in private) and Espresso (free: +2 actions this
-  turn) are played from there. Lantern, Flashlight and weapons are used in context. In hot-seat the
-  fan shows only during your own turn. A possessed guest's Possession cards show there as one ×N card
-  (with POSSESSED and "Souls to trade: N" in their panel) during their own turn only, gone before the
-  pass screen; the card view shows them too.
-- **Meetings** (hot-seat) — walk in on a guest you have not met in that room this round and you
+  turn) are played from there. Lantern, Flashlight and weapons are used in context. In a match the
+  fan stays up on the other guests' turns (to look at; cards are used on your own turn). A possessed
+  player's Possession cards show there as one ×N card, with POSSESSED and "Souls to trade: N" in their
+  panel; the card view shows them too.
+- **Meetings** (a match) — walk in on a guest you have not met in that room this round and you
   must Trade or Attack. In a trade each side picks a card in private and sees only what they
   received. If either guest has no ordinary card (Possession cards don't count), the trade is
-  skipped and each is told why (the table sees only "no trade"). Give a Lantern and a Possession card
+  skipped and each is told why (the others see only "no trade"). Give a Lantern and a Possession card
   cannot take you. The lobby is safe. The weapon picker has a Back button.
 - **Escape** — a clean guest carrying three Lanterns walks into the Fire Exit (1 AP) and taps
   **Escape** (1 AP). Arrive with nothing left and you can escape on your next turn; the exit is safe.
-- **Dawn** (hot-seat) — the header reads "Round 3 of 8"; round 8 is marked as the final round.
+- **Dawn** (a match) — the header reads "Round 3 of 8"; round 8 is marked as the final round.
   If nobody has escaped when it ends, dawn breaks and the hotel wins. Practice has no deadline.
 - **End turn** — refills action points to 4; if you hold more than 6 ordinary cards you discard
   first (Lanterns count; Possession cards never do): tap a card to pick it, then confirm with the
@@ -148,8 +157,12 @@ Three.js loads from a CDN, so the first load needs an internet connection.
 index.html            page shell: import map, HUD, panels, overlays
 styles.css            interface styling (touch-safe, safe-area aware)
 src/
-  main.js             starts everything; the turn flow; window.__game debug hooks
+  main.js             starts everything; the menu → lift → game flow; the turn flow (the player's turns
+                      and the bots' turns, meetings both ways); window.__game debug hooks
   config.js           display / camera / feel tuning
+  settings.js         the player's own settings (bot speed, view, graphics, menu background), kept on the device
+  menu/               the lobby behind the main menu (lobbyScene.js: reception, seated and strolling
+                      guests, the manager, the lift sequence), built from simple shapes + the guest models
   data/
     rules.js          THE RULE NUMBERS — implements docs/GAME_RULES.md (owner-approved changes only)
     hotel.js          THE HOTEL: the lobby and the 24-tile room deck (doorways, dark, locked, furniture, moods)
@@ -183,10 +196,11 @@ src/
     screenTags.js                     the one layer for tags over the 3D view: under the interface, never over it
     guestTags.js                      one name tag per room with guests, when zoomed far out
     goTags.js                         the quiet "Go · 1 AP" tags on rooms next door
-    handoff.js                        pass-the-device + every private screen (role, turn, card pick,
-                                      result, the found-card reveal)
-    souls.js                          the possessed guest's own "Souls to trade: N" count (their private screens,
-                                      and the main screen during their own turn)
+    menu.js                           the main menu screens: Play with bots, the table, the guests joining, Settings
+    feed.js                           what the other guests just did (public words), under the room name
+    handoff.js                        every private screen (role, card pick, trade result, the found-card reveal,
+                                      a Hand Mirror's view)
+    souls.js                          the possessed player's own "Souls to trade: N" count
     meeting.js                        the PUBLIC side of a meeting: who, Trade or Attack, weapon, outcome
     discard.js                        the end-of-turn discard down to the hand limit (the only hand-limit screen)
 docs/                 GAME_RULES (spec), GAME_CONCEPT, DECISIONS, PROGRESS
@@ -248,9 +262,8 @@ python3 -m http.server 8123 --bind 127.0.0.1 &
 node tests/rules-check.mjs        # the rules engine against docs/GAME_RULES.md (359 assertions)
 node tests/logic-check.mjs        # floor, map topology, grid, pathfinding
 node tests/browser-practice.mjs   # practice mode in a real browser [--screens]
-node tests/browser-hotseat.mjs    # hot-seat in a real browser: roles, private trades, attacks, escape [--screens]
+node tests/browser-bots.mjs       # the main menu and matches against bots in a real browser: settings, the table filling up, the lift, bots' turns, privacy, meetings both ways, being attacked, the end screen, whole matches [--screens] [--matches 3]
 node tests/browser-lobby.mjs      # the baked starting room, fog rooms, tap to open / move, camera (big hotel), draw calls
-node tests/autoplay.mjs --url http://127.0.0.1:8123/ --matches 10   # bots play whole hot-seat matches through the real UI (tests/autoplay-report.md)
 node tools/balance/hotseat-sim.mjs 400 6   # 400 six-player matches under the rules as they stand (--before: same bots on the rules before Part 2; --compare: Lantern variants; --cautious)
 node tools/balance/hotseat-sim.mjs --study  # six player personalities (tools/balance/personalities.mjs) + rule proposals, in memory only (tests/personality-report.md)
 node tests/autoplay.mjs --url http://127.0.0.1:8123/ --persona-study --matches 30   # the same personalities through the real UI

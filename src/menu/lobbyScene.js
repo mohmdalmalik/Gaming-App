@@ -8,8 +8,9 @@
 //   const lobby = createLobbyScene({ renderer, cfg });
 //   await lobby.ready;                       // models loaded (always resolves; failures are logged)
 //   lobby.setSize(w, h);                     // CSS pixels, on every resize
-//   lobby.update(dt, time);                  // every frame while the menu shows (seconds; `time` is
-//                                            //  optional, an internal clock is used without it)
+//   lobby.update(dt, time);                  // every frame while the menu shows. dt in seconds (up
+//                                            //  to 0.5, sub-stepped); all motion follows dt, so dt = 0
+//                                            //  freezes the room. `time` is accepted but not needed.
 //   renderer.render(lobby.scene, lobby.camera);
 //   await lobby.enter({ guests: 3 });        // the boarding; resolves when the lift doors have shut
 //                                            //  (~5.8 s for 3 guests, ~4.8 s for 1); the dial keeps
@@ -347,30 +348,40 @@ export function createLobbyScene({ renderer, cfg, layout = lobbyLayout } = {}) {
   setSize(16, 9);
 
   // ---- per frame -------------------------------------------------------------------------------
+  // Everything moves by `dt` alone (an internal clock), so dt = 0 freezes the room completely (the
+  // menu's "reduce motion"). A long frame (up to 0.5 s) is split into small steps, so the lift
+  // sequence keeps to the clock on a slow device without anyone skipping through furniture.
   let clock = 0;
-  function update(dt, time) {
-    dt = Math.min(Math.max(dt || 0, 0), 0.1);
-    clock = time ?? clock + dt;
+  function stepOnce(dt) {
+    clock += dt;
     if (seq) updateSequence(dt);
+    if (!loaded) return;
+    for (const [name, st] of strolls) { const a = actors.get(name); if (a) updateStroll(a, st, dt); }
+    // conversations: the speakers take turns
+    const conv = (a, b, speed, off) => {
+      const k = Math.sin(clock * speed + off);
+      if (a) a.talk += ((k > 0.15 ? (a.spec.talk || 0.6) : 0) - a.talk) * Math.min(1, dt * 2);
+      if (b) b.talk += ((k < -0.15 ? (b.spec.talk || 0.6) : 0) - b.talk) * Math.min(1, dt * 2);
+    };
+    conv(actors.get('eleanor'), actors.get('concierge'), 0.45, 0);
+    conv(actors.get('extraM'), actors.get('extraF'), 0.38, 1.3);
+    for (const a of actors.values()) {
+      if (!seq) idleGlances(a, dt, clock);
+      else if (a.board) { if (a.path) a.headYawTarget = 0; }
+      else if (a.spec.name !== 'manager' && !a.path && seq.t > (a.lookDelay ??= 0.3 + Math.random() * 1.2)) {
+        lookAt(a, lift.x, L.room.z0, 1.3);   // everyone left behind turns to watch the lift
+      }
+      a.update(dt);
+    }
+  }
+  function update(dt /* seconds */, time /* accepted, not needed */) {
+    dt = Math.min(Math.max(+dt || 0, 0), 0.5);
+    const n = Math.max(1, Math.ceil(dt / 0.05 - 1e-9));
+    for (let i = 0; i < n; i++) stepOnce(dt / n);
     if (loaded) {
-      for (const [name, st] of strolls) { const a = actors.get(name); if (a) updateStroll(a, st, dt); }
-      // conversations: the speakers take turns
-      const conv = (a, b, speed, off) => {
-        const k = Math.sin(clock * speed + off);
-        if (a) a.talk += ((k > 0.15 ? (a.spec.talk || 0.6) : 0) - a.talk) * Math.min(1, dt * 2);
-        if (b) b.talk += ((k < -0.15 ? (b.spec.talk || 0.6) : 0) - b.talk) * Math.min(1, dt * 2);
-      };
-      conv(actors.get('eleanor'), actors.get('concierge'), 0.45, 0);
-      conv(actors.get('extraM'), actors.get('extraF'), 0.38, 1.3);
+      // contact shadows: under the feet when standing, under the seat when sitting (hidden)
       let i = firstActorShadow;
       for (const a of actors.values()) {
-        if (!seq) idleGlances(a, dt, clock);
-        else if (a.board) { if (a.path) a.headYawTarget = 0; }
-        else if (a.spec.name !== 'manager' && !a.path && seq.t > (a.lookDelay ??= 0.3 + Math.random() * 1.2)) {
-          lookAt(a, lift.x, L.room.z0, 1.3);   // everyone left behind turns to watch the lift
-        }
-        a.update(dt);
-        // contact shadow: under the feet when standing, under the seat when sitting
         const seat = a.sitW > 0.5 && a.seat;
         shadows.set(i++, seat ? a.seat.x : a.x, seat ? a.seat.z : a.z, 0.85, 0.85, 0, seat ? -1 : 0.013);
       }

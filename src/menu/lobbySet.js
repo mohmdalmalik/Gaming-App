@@ -558,7 +558,7 @@ export function buildLobbySet(L) {
     G.add(new THREE.CylinderGeometry(0.15, 0.24, 0.3, 16, 1, true), C.glow, fl.x, 1.5, fl.z);
     G.add(new THREE.CircleGeometry(0.24, 16), '#fff2d0', fl.x, 1.351, fl.z, Math.PI / 2, 0, 0);
     glows.add({ type: 'bill', pos: [fl.x, 1.48, fl.z], size: [1.4, 1.4], color: '#ffbb66', intensity: 0.85 });
-    glows.add({ type: 'floor', pos: [fl.x, 0.02, fl.z], size: [3.4, 3.4], color: '#ff9e50', intensity: 0.42 });
+    glows.add({ type: 'floor', pos: [fl.x, 0.02, fl.z], size: [2.9, 2.9], color: '#ff9e50', intensity: 0.46 });
   }
 
   // --- rugs ---
@@ -608,11 +608,11 @@ export function buildLobbySet(L) {
     }
     G.add(new THREE.ConeGeometry(0.16, 0.32, 12), '#ffe7bf', ch.x, y - 0.06, ch.z, Math.PI, 0, 0);
     S.add(new THREE.SphereGeometry(0.05, 8, 6), C.brass, ch.x, y - 0.25, ch.z);
-    glows.add({ type: 'bill', pos: [ch.x, ch.y - 0.2, ch.z], size: [3.4, 3.4], color: '#ffb866', intensity: 0.55 });
+    glows.add({ type: 'bill', pos: [ch.x, ch.y - 0.2, ch.z], size: [2.7, 2.7], color: '#ffb866', intensity: 0.62 });
     glows.add({ type: 'bill', pos: [ch.x, ch.y - 0.2, ch.z], size: [1.5, 1.5], color: '#ffd9a0', intensity: 0.6 });
-    glows.add({ type: 'floor', pos: [ch.x, 0.02, ch.z], size: [5.5, 5.5], color: '#ff9e50', intensity: 0.2 });
+    glows.add({ type: 'floor', pos: [ch.x, 0.02, ch.z], size: [4.4, 4.4], color: '#ff9e50', intensity: 0.24 });
     // a glow on the ceiling above
-    glows.add({ type: 'floor', pos: [ch.x, H - 0.33, ch.z], size: [3.5, 3.5], color: '#ff9a40', intensity: 0.22 });
+    glows.add({ type: 'floor', pos: [ch.x, H - 0.33, ch.z], size: [2.8, 2.8], color: '#ff9a40', intensity: 0.26 });
   }
 
   // --- luggage trolley by the lift (brass birdcage cart with cases) ---

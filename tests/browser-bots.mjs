@@ -305,7 +305,7 @@ console.log('\n5. out of the match, the end screen');
   if (!(await game(() => window.__game.endOpen()))) { await game(() => window.__game.skipToEnd()); await waitFor(() => window.__game.endOpen(), null, 30000).catch(() => {}); }
   check(await game(() => window.__game.endOpen()), 'the match ends with the end screen');
   const rows = await game(() => [...document.querySelectorAll('#end-reveal .er-row')].map(r => r.innerText.replace(/\s+/g, ' ')));
-  check(rows.length === 4 && rows.filter(r => /Possessed/.test(r)).length >= 1 && rows.some(r => /You/.test(r)), `the end screen shows every guest's role (${rows.join(' / ')})`);
+  check(rows.length === 4 && rows.filter(r => /possessed/i.test(r)).length >= 1 && rows.some(r => /\bYou\b/.test(r)), `the end screen shows every guest's role (${rows.join(' / ')})`);
   await shot('14-end');
   await tap('#btn-restart');      // Play again
   await waitFor(() => window.__game.isRunning() && !window.__game.endOpen() && window.__game.handoffKind() === 'role', null, 30000);

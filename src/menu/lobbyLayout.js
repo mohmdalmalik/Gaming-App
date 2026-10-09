@@ -56,7 +56,7 @@ export const lobbyLayout = {
   sofas: [
     { id: 'sofa', x: 4.35, z: -3.0, heading: 8, seats: 2, kind: 'sofa' },
     { id: 'armchairR', x: 2.7, z: -2.1, heading: 66, seats: 1, kind: 'armchair' },
-    { id: 'armchairL', x: -2.75, z: -1.55, heading: 40, seats: 1, kind: 'armchair', color: '#2c4a3c' },
+    { id: 'armchairL', x: -2.75, z: -1.55, heading: 78, seats: 1, kind: 'armchair', color: '#2c4a3c' },
   ],
   seatHeight: 0.25,
   tables: [
@@ -84,6 +84,8 @@ export const lobbyLayout = {
     { id: 'lampL', pos: [-3.55, 1.45, -2.4], color: '#ffb766', intensity: 4, distance: 7, decay: 1.6 },
     { id: 'lift', pos: [3.2, 2.0, -5.9], color: '#ffd9a0', intensity: 0, distance: 8, decay: 1.4, open: 9 },
   ],
+  // dust drifting in the lamp light (boxes: [x0, x1, y0, y1, z0, z1], count)
+  motes: [[[-0.6, 3.6, 1.2, 3.9, -2.6, 0.6], 70], [[3.0, 6.6, 0.6, 3.6, -3.6, -0.6], 60]],
   hemisphere: { sky: '#ffdcb0', ground: '#2a1a12', intensity: 0.34 },
 
   // The people. `model` = a guest GLB in assets/characters; `dress` re-colours parts by material
@@ -95,7 +97,7 @@ export const lobbyLayout = {
     { name: 'clara', model: 'clara', seat: ['sofa', 1], boards: 2, boardDelay: 0.6, splay: 0.02, recline: 0.12, feetForward: 0.22 },
     { name: 'henry', model: 'henry', seat: ['armchairR', 0], boards: 3, boardDelay: 0.05, splay: 0.14, recline: 0.2, feetForward: 0.35 },
     // seated in the left lounge
-    { name: 'marcus', model: 'marcus', seat: ['armchairL', 0], splay: 0.2, recline: 0.28, feetForward: 0.45 },
+    { name: 'marcus', model: 'marcus', seat: ['armchairL', 0], splay: 0.2, recline: 0.28, feetForward: 0.45, headPitch: 0.22 },
     // at the desk, talking with the concierge
     { name: 'eleanor', model: 'eleanor', at: [0.95, -2.8, 200], talk: 0.6, talkHand: 'L' },
     // strolling
@@ -115,11 +117,11 @@ export const lobbyLayout = {
   // Idle walks (looping): [x, z, pause seconds, heading to face while paused (deg) or null, glance (deg)]
   strolls: {
     manager: [
-      [2.05, -3.55, 3.0, 150, -40],
+      [2.3, -3.45, 3.0, 150, -40],
       [5.3, -4.25, 0.0, null, 0],
       [7.05, -2.75, 4.0, 90, 0],      // at the window, looking out into the night
-      [6.2, -2.3, 0.0, null, 0],
-      [5.0, -4.3, 0.0, null, 0],
+      [6.3, -3.9, 0.0, null, 0],
+      [5.0, -4.35, 0.0, null, 0],
       [3.25, -4.35, 2.0, 200, 35],    // glancing over the lounge
     ],
     beatrice: [
@@ -144,8 +146,8 @@ export const lobbyLayout = {
     target: [1.5, 1.72, -3.2],
     drift: { x: 0.35, y: 0.06, z: 0.2, period: 46 },
     // the push toward the lift during the boarding sequence
-    enterPos: [1.7, 1.75, 1.3],
-    enterTarget: [3.2, 1.4, -5.6],
-    enterFov: 33,
+    enterPos: [2.45, 1.75, 0.75],
+    enterTarget: [3.2, 1.6, -5.6],
+    enterFov: 34,
   },
 };

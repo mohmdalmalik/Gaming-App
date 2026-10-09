@@ -131,7 +131,6 @@ export function preloadCast(ids) {
 
 // ---- small maths helpers --------------------------------------------------------------------
 const _q = new THREE.Quaternion(), _q2 = new THREE.Quaternion(), _q3 = new THREE.Quaternion();
-const _v = new THREE.Vector3();
 const X = new THREE.Vector3(1, 0, 0), Y = new THREE.Vector3(0, 1, 0), Z = new THREE.Vector3(0, 0, 1);
 const qAxis = (axis, ang, out = new THREE.Quaternion()) => out.setFromAxisAngle(axis, ang);
 const smooth = t => t <= 0 ? 0 : t >= 1 ? 1 : t * t * (3 - 2 * t);

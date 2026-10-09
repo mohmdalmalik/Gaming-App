@@ -656,6 +656,26 @@ export function buildLobbySet(L) {
   group.add(glowMesh, washMesh, shaftMesh);
   disposables.push(glowMesh.geometry, washMesh.geometry, shaftMesh.geometry, glows.mat, washes.mat, shafts.mat);
 
+  // dust motes drifting slowly in the warm light (one draw call; they show when the view is sharp)
+  let motes = null;
+  if (L.motes) {
+    const seeds = [];
+    for (const [[x0, x1, y0, y1, z0, z1], n] of L.motes) {
+      for (let i = 0; i < n; i++) seeds.push([x0 + Math.random() * (x1 - x0), y0 + Math.random() * (y1 - y0), z0 + Math.random() * (z1 - z0), Math.random() * 100]);
+    }
+    const pos = new Float32Array(seeds.length * 3);
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    const m = new THREE.PointsMaterial({ map: TX.glowTexture(), size: 0.035, color: new THREE.Color('#ffd49a').multiplyScalar(0.8), transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false });
+    const pts = new THREE.Points(g, m);
+    pts.frustumCulled = false;
+    pts.renderOrder = 6;
+    pts.name = 'motes';
+    group.add(pts);
+    disposables.push(g, m);
+    motes = { seeds, pos, g };
+  }
+
   // real lights
   const lights = {};
   for (const l of L.lights) {
@@ -705,6 +725,17 @@ export function buildLobbySet(L) {
       washes.set(flickerWash, 0.42 * fl);
       const f = 1 + Math.sin(time * 1.7) * 0.015 + Math.sin(time * 4.3) * 0.01;
       lights.chandA.intensity = lights.chandA.userData.base * f;
+      if (motes) {
+        const { seeds, pos, g } = motes;
+        for (let i = 0; i < seeds.length; i++) {
+          const [x, y, z, ph] = seeds[i];
+          const t = time * 0.12 + ph;
+          pos[i * 3] = x + Math.sin(t * 0.9) * 0.25 + Math.sin(t * 2.3) * 0.05;
+          pos[i * 3 + 1] = y + Math.sin(t * 0.6 + ph) * 0.3;
+          pos[i * 3 + 2] = z + Math.cos(t * 0.7) * 0.25;
+        }
+        g.attributes.position.needsUpdate = true;
+      }
       lights.chandB.intensity = lights.chandB.userData.base * (2 - f);
     },
     dispose() {

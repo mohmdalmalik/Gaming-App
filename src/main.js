@@ -1117,6 +1117,7 @@ let lobby = null;            // the lobby scene, once it has loaded (or null: th
 let lobbyReady = false;
 let lastChoice = { practice: true };
 let botModules = null;       // src/bots/*, loaded the first time a match is set up
+const LIFT_MAX_MS = 9000;    // the lift sequence normally takes about 5 s
 const fadeEl = document.getElementById('fade');
 const wait = ms => new Promise(r => setTimeout(r, ms));
 const frame = () => new Promise(r => requestAnimationFrame(() => r()));
@@ -1197,7 +1198,8 @@ async function enterGame(plan, { guests = 3 } = {}) {
   phase = 'intro';
   container.classList.remove('blurred');
   if (INTRO && lobbyReady && lobby) {
-    try { await lobby.enter({ guests }); } catch (err) { console.warn('the lift sequence failed:', err); }
+    // (never longer than LIFT_MAX_MS: on a struggling device the scene runs slow, and the game must not wait)
+    try { await Promise.race([lobby.enter({ guests }), wait(LIFT_MAX_MS)]); } catch (err) { console.warn('the lift sequence failed:', err); }
   } else await wait(400);
   await fade(true, 650);
   menu.hide();
@@ -1650,11 +1652,13 @@ view.compile();
 let last = performance.now();
 let frames = 0;
 const lobbySize = { w: 0, h: 0 };
+let lastLobby = performance.now();
 view.renderer.setAnimationLoop(now => {
   perfStats.frame(now - last);
   const dt = Math.min(0.05, Math.max(0, (now - last) / 1000));
   last = now;
   const time = now / 1000;
+  const prevLobby = lastLobby; lastLobby = now;
   // The main menu and the lift: the lobby scene (once loaded; until then, the hotel itself shows,
   // blurred, behind the menu).
   if (phase !== 'game' && lobbyReady && lobby) {
@@ -1662,7 +1666,9 @@ view.renderer.setAnimationLoop(now => {
       lobbySize.w = view.size.w; lobbySize.h = view.size.h;
       lobby.setSize(lobbySize.w, lobbySize.h);
     }
-    lobby.update(phase === 'menu' && settings.get('menuMotion') === 'off' ? 0 : dt, time);
+    // (the lift keeps to the clock even when frames are slow: up to a quarter of a second per frame)
+    const ldt = phase === 'intro' ? Math.min(0.25, Math.max(0, (now - prevLobby) / 1000)) : dt;
+    lobby.update(phase === 'menu' && settings.get('menuMotion') === 'off' ? 0 : ldt, time);
     view.renderer.render(lobby.scene, lobby.camera);
     if (++frames >= 2 && !framesReady) { framesReady = true; maybeReady(); }
     return;

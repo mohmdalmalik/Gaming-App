@@ -1,20 +1,25 @@
-// The animated 3D background of the main menu: a grand Art Deco hotel lobby at night, with the
-// guests seated, chatting and strolling, a concierge at the desk and the manager pacing in the back.
-// On Play, the manager leads a few of the seated guests into the lift, the doors close and the dial
-// swings up toward the fourth floor (the game's starting room).
+// The animated 3D background of the main menu: a grand Art Deco hotel lobby at night. Guests sit on
+// the velvet sofas, chat at reception and stroll; the concierge works the desk; the manager paces the
+// back of the room, pausing at the night windows. On Play, the manager steps into the lift, the
+// chosen seated guests rise and follow him in, turn to face out, the brass doors close and the floor
+// dial swings up toward the fourth floor (the game's starting room), while the camera pushes in and
+// everyone left behind turns to watch.
 //
 //   const lobby = createLobbyScene({ renderer, cfg });
-//   await lobby.ready;                       // models loaded (resolves even if some failed)
+//   await lobby.ready;                       // models loaded (always resolves; failures are logged)
 //   lobby.setSize(w, h);                     // CSS pixels, on every resize
-//   lobby.update(dt, time);                  // every frame while the menu shows
+//   lobby.update(dt, time);                  // every frame while the menu shows (seconds; `time` is
+//                                            //  optional, an internal clock is used without it)
 //   renderer.render(lobby.scene, lobby.camera);
-//   await lobby.enter({ guests: 3 });        // boarding; resolves when the lift doors have shut
-//   lobby.reset();                           // back to the calm tableau
+//   await lobby.enter({ guests: 3 });        // the boarding; resolves when the lift doors have shut
+//                                            //  (~5.8 s for 3 guests, ~4.8 s for 1); the dial keeps
+//                                            //  moving afterwards, so keep rendering during the fade
+//   lobby.reset();                           // back to the calm tableau (instant)
 //   lobby.dispose();
 //
 // It renders with the game's own renderer and never changes its settings. Everything placed in the
 // room comes from src/menu/lobbyLayout.js (data); the room is built by src/menu/lobbySet.js and the
-// people are src/menu/lobbyCast.js.
+// people are src/menu/lobbyCast.js. Preview: tools/menu-preview.html; checks: tests/menu-scene-shots.mjs.
 import * as THREE from 'three';
 import { lobbyLayout } from './lobbyLayout.js';
 import { buildLobbySet } from './lobbySet.js';
@@ -359,8 +364,11 @@ export function createLobbyScene({ renderer, cfg, layout = lobbyLayout } = {}) {
       conv(actors.get('extraM'), actors.get('extraF'), 0.38, 1.3);
       let i = firstActorShadow;
       for (const a of actors.values()) {
-        if (!seq || !a.board) idleGlances(a, dt, clock);
-        if (seq && a.board && a.path) a.headYawTarget = 0;
+        if (!seq) idleGlances(a, dt, clock);
+        else if (a.board) { if (a.path) a.headYawTarget = 0; }
+        else if (a.spec.name !== 'manager' && !a.path && seq.t > (a.lookDelay ??= 0.3 + Math.random() * 1.2)) {
+          lookAt(a, lift.x, L.room.z0, 1.3);   // everyone left behind turns to watch the lift
+        }
         a.update(dt);
         // contact shadow: under the feet when standing, under the seat when sitting
         const seat = a.sitW > 0.5 && a.seat;
@@ -375,7 +383,7 @@ export function createLobbyScene({ renderer, cfg, layout = lobbyLayout } = {}) {
     if (seq && !seq.done) { seq.done = true; seq.resolve(); }
     seq = null;
     strolls.clear();
-    for (const a of actors.values()) { a.board = null; placeActor(a); }
+    for (const a of actors.values()) { a.board = null; a.lookDelay = undefined; placeActor(a); }
     set.lift.setOpen(0);
     set.lift.setFloor(0);
     set.lift.setDing(0);

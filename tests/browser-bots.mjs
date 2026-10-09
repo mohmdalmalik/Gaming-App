@@ -253,8 +253,15 @@ console.log('\n4. meetings');
     check(meet, 'walking into a bot\'s room forces a meeting');
     if (meet) {
       await shot('11-you-meet');
-      const label = await game(() => document.getElementById('encounter-title').innerText);
-      check(/^You meet/.test(label), `the panel speaks to you ("${label}")`);
+      let label = await game(() => document.getElementById('encounter-title').innerText);
+      // Several guests in the room: first choose whom to meet.
+      if (/You are not alone/.test(label)) {
+        check(await game(() => document.querySelectorAll('#encounter-actions .btn').length) >= 2, 'several guests there: "You are not alone" — you choose whom to meet');
+        await page.click('#encounter-actions .btn');
+        await page.waitForTimeout(300);
+        label = await game(() => document.getElementById('encounter-title').innerText);
+      }
+      check(/^You meet/.test(label), `the panel speaks to you ("${label.replace(/\s+/g, ' ')}")`);
       await page.click('#encounter-actions .btn.primary');      // Trade
       await waitFor(() => window.__game.handoffKind() === 'pick', null, 10000);
       await page.click('#offer-cards .card-tile');

@@ -117,7 +117,9 @@ readout at the top left (below the room name), for measuring speed on the iPad.
   turn) are played from there. Lantern, Flashlight and weapons are used in context. In a match the
   fan stays up on the other guests' turns (to look at; cards are used on your own turn). A possessed
   player's Possession cards show there as one ×N card, with POSSESSED and "Souls to trade: N" in their
-  panel; the card view shows them too.
+  panel; the card view shows them too. Only on their own screen, a possessed player's guest has red
+  eyes and their panel turns dark crimson with "Only you can see this"; a clean player sees a quiet
+  CLEAN badge. Everyone else (and the guest strip) always sees the normal guest.
 - **Meetings** (a match) — walk in on a guest you have not met in that room this round and you
   must Trade or Attack. In a trade each side picks a card in private and sees only what they
   received. If either guest has no ordinary card (Possession cards don't count), the trade is
@@ -187,7 +189,8 @@ src/
                       searched-room ticks; bakedRoom.js loads the baked rooms; xray.js fades
                       whatever stands between the camera and the active guest / search spot;
                       fog.js the fogged rooms beyond closed doors (+ "Explore · 1 AP" tags);
-                      pathPreview.js the dotted path, outline + cost tag of a move to confirm
+                      pathPreview.js the dotted path, outline + cost tag of a move to confirm;
+                      possessedLook.js the possessed player's own red eyes (shared with the portrait tool)
   camera.js input.js player.js discovery.js   camera rig (zoom to fit the hotel, free pan, centre on
                                                me), gestures, movement, room→walk glue
   hud.js  map.js  overlays.js   HUD + action bar (room job / Escape, Trade, End turn), 2D map, overlays
@@ -222,7 +225,8 @@ python3 tools/char-pipeline/make_guest.py victor          # suited guests: victo
 python3 tools/char-pipeline/make_dress_guest.py eleanor   # dress guests: eleanor, clara, beatrice
 python3 tools/char-pipeline/sheet_compare.py ...          # sheet panels vs renders (see its header)
 node tools/char-pipeline/lineup.mjs                       # all six in the real lobby light (+ scene cost)
-node tools/char-pipeline/portrait.mjs <name>              # interface portraits from the model
+node tools/char-pipeline/portrait.mjs all                 # private possessed portraits from the model
+                                                          # (<name> --normal also rewrites a normal one)
 ```
 (`tools/char-pipeline/README.md` lists every tool. `make_victor.py` is Victor's older builder, kept for
 reference.)

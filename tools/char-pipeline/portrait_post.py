@@ -1,14 +1,17 @@
-# Post-process the raw portrait render into the two interface portraits.
-#   python3 portrait_post.py shots/portrait-raw.png '[[xL,yL],[xR,yR]]' assets/portraits
-# normal:    crop to a 3:4 bust, 576x768, JPEG
-# possessed: the same crop with a cold violet wash, a faint vignette and one altered "weird" eye
-#            (red iris, slit pupil, violet ring) drawn over the RIGHT eye as rendered — the private
-#            possessed tell. The public strip never uses this file.
-import sys, json, math
-from PIL import Image, ImageDraw, ImageFilter, ImageEnhance, ImageOps
+# Post-process the raw portrait renders into the interface portraits (called by portrait.mjs).
+#   python3 portrait_post.py <raw-normal.png> <raw-possessed.png> '[[xL,yL],[xR,yR]]' <portraits dir> <name> <shots dir> [--normal]
+# normal:    crop to a 3:4 bust, 576x768, JPEG. Written to <portraits dir>/<name>.jpg ONLY with --normal;
+#            otherwise to <shots dir>/portrait-check-<name>.jpg (to check the line-up, assets untouched).
+# possessed: the SAME crop of the possessed render (red eyes, transparent backdrop) laid on the private
+#            plum-crimson plate — a soft vertical gradient with a gentle vignette. No colour wash and
+#            nothing painted on the face: the guest is exactly the normal one apart from the eyes.
+#            -> <portraits dir>/<name>-possessed.jpg. The public strip never uses this file.
+import sys, json, os
+from PIL import Image, ImageChops
 
-src, eyes_json, out_dir = sys.argv[1], sys.argv[2], sys.argv[3]
-name = sys.argv[4] if len(sys.argv) > 4 else 'victor'
+args = [a for a in sys.argv[1:] if not a.startswith('--')]
+write_normal = '--normal' in sys.argv[1:]
+src, src_p, eyes_json, out_dir, name, shots = args[:6]
 eyes = json.loads(eyes_json)
 im = Image.open(src).convert('RGB')
 W, H = im.size
@@ -32,39 +35,41 @@ cx0 = int(ex - cw / 2); cy0 = int(ey - ch * eye_frac)
 cx0 = max(0, min(W - cw, cx0)); cy0 = max(0, min(H - ch, cy0))
 box = (cx0, cy0, cx0 + cw, cy0 + ch)
 bust = im.crop(box).resize((576, 768), Image.LANCZOS)
-bust.save(f'{out_dir}/{name}.jpg', quality=90)
-print(f'portrait normal: crop={box} -> {out_dir}/{name}.jpg')
+normal_path = f'{out_dir}/{name}.jpg' if write_normal else f'{shots}/portrait-check-{name}.jpg'
+bust.save(normal_path, quality=90)
+print(f'portrait normal: crop={box} -> {normal_path}')
 
-# --- possessed variant ----------------------------------------------------------------------
-p = bust.copy()
-# cold, slightly desaturated wash shifted toward violet
-p = ImageEnhance.Color(p).enhance(0.72)
-p = ImageEnhance.Brightness(p).enhance(0.9)
-r, g, b = p.split()
-r = r.point(lambda v: min(255, int(v * 0.97 + 4)))
-g = g.point(lambda v: int(v * 0.90))
-b = b.point(lambda v: min(255, int(v * 1.08 + 10)))
-p = Image.merge('RGB', (r, g, b))
-# vignette
-vig = Image.new('L', p.size, 0)
-vd = ImageDraw.Draw(vig)
-vd.ellipse((-140, -120, p.width + 140, p.height + 200), fill=255)
-vig = vig.filter(ImageFilter.GaussianBlur(120))
-violet = Image.new('RGB', p.size, (52, 22, 84))
-p = Image.composite(p, Image.blend(p, violet, 0.55), vig)
-# the altered eye: over the eye on the viewer's right, sized from the eye gap
-sx = 576 / cw; sy = 768 / ch
-exr = (eyes[1][0] - cx0) * sx; eyr = (eyes[1][1] - cy0) * sy
-rad = eye_gap * sx * 0.19
-d = ImageDraw.Draw(p, 'RGBA')
-d.ellipse((exr - rad * 1.35, eyr - rad * 1.35, exr + rad * 1.35, eyr + rad * 1.35), fill=(255, 226, 226, 255))   # pale sclera
-d.ellipse((exr - rad * 1.05, eyr - rad * 1.05, exr + rad * 1.05, eyr + rad * 1.05), fill=(214, 46, 46, 255))    # red iris
-d.ellipse((exr - rad * 0.28, eyr - rad * 1.0, exr + rad * 0.28, eyr + rad * 1.0), fill=(28, 3, 8, 255))          # slit pupil
-d.ellipse((exr - rad * 1.45, eyr - rad * 1.45, exr + rad * 1.45, eyr + rad * 1.45), outline=(180, 107, 255, 230), width=max(2, int(rad * 0.16)))
-glow = Image.new('RGBA', p.size, (0, 0, 0, 0))
-gd = ImageDraw.Draw(glow)
-gd.ellipse((exr - rad * 2.4, eyr - rad * 2.4, exr + rad * 2.4, eyr + rad * 2.4), fill=(180, 107, 255, 110))
-glow = glow.filter(ImageFilter.GaussianBlur(rad * 0.9))
-p = Image.alpha_composite(p.convert('RGBA'), glow).convert('RGB')
+# --- possessed variant: the same crop, on the private plum-crimson plate --------------------------
+TOP, BOTTOM = (0x2b, 0x10, 0x18), (0x16, 0x09, 0x10)   # POSSESSED_COLORS.plateTop / plateBottom
+
+
+def plate(w, h):
+    """Vertical gradient top -> bottom, with a gentle vignette (corners about 18% darker)."""
+    col = Image.new('RGB', (1, 256))
+    for y in range(256):
+        t = y / 255
+        col.putpixel((0, y), tuple(round(TOP[i] + (BOTTOM[i] - TOP[i]) * t) for i in range(3)))
+    grad = col.resize((w, h), Image.BILINEAR)
+    vig = Image.radial_gradient('L').resize((w, h), Image.BILINEAR)   # 0 at the centre .. 255 at the rim
+    vig = vig.point(lambda v: 255 - int(min(1.0, max(0.0, (v - 110) / 145)) ** 1.6 * 46))
+    return ImageChops.multiply(grad, Image.merge('RGB', (vig, vig, vig)))
+
+
+pim = Image.open(src_p).convert('RGBA')
+if pim.size != im.size:
+    sys.exit(f'possessed render is {pim.size}, the normal one {im.size}: not the same frame')
+guest = pim.crop(box)
+p = plate(cw, ch).convert('RGBA')
+p.alpha_composite(guest)
+p = p.convert('RGB').resize((576, 768), Image.LANCZOS)
 p.save(f'{out_dir}/{name}-possessed.jpg', quality=90)
-print(f'portrait possessed: eye at ({exr:.0f},{eyr:.0f}) r={rad:.0f} -> {out_dir}/{name}-possessed.jpg')
+
+# Check: inside the guest (fully opaque), only the eyes may differ from the normal render.
+a = guest.getchannel('A').point(lambda v: 255 if v == 255 else 0)
+diff = ImageChops.difference(im.crop(box), guest.convert('RGB')).convert('L').point(lambda v: 255 if v > 24 else 0)
+diff = ImageChops.multiply(diff, a)
+bb = diff.getbbox()
+sx = 576 / cw
+bb = tuple(round(v * sx) for v in bb) if bb else None
+size = os.path.getsize(f'{out_dir}/{name}-possessed.jpg')
+print(f'portrait possessed: changed pixels on the guest within {bb} (576x768 px) -> {out_dir}/{name}-possessed.jpg ({size // 1024} KB)')

@@ -1,14 +1,15 @@
 // Character portraits. A real illustration drops in via PORTRAIT_ART (keyed by outfit) without
 // touching callers; until then a refined placeholder bust is drawn as an SVG — a period-dressed
-// guest, framed in brass, with two states: normal and POSSESSED (a "weird eye" + a colder wash).
+// guest, framed in brass, with two states: normal and POSSESSED (the same face, both eyes a deep
+// blood-red iris with a white catchlight; nothing else changes).
 // Callers only ask for a portrait of a player in a given state and place the returned element.
 import { outfits, bodyTypes } from '../data/characters.js';
 
 // Drop-in artwork: outfit id → an image path, OR an object with separate looks:
 //   tuxedo: 'assets/portraits/victor.png'                            // one image (normal)
 //   tuxedo: { normal: '…/victor.png', possessed: '…/victor-poss.png' } // both looks supplied
-// Empty until real portraits are supplied; then the image is used automatically. If only a normal
-// image is given, the private possessed view reuses it with a cold "possessed" wash (CSS).
+// If only a normal image is given, the private possessed view shows it unchanged (no colour wash;
+// the crimson plate around it carries the state).
 export const PORTRAIT_ART = {
   // Victor (tuxedo): supplied portraits. The public strip always requests `normal`, so his hidden
   // role never leaks; his own active-player panel uses `possessed` when he is possessed.
@@ -22,8 +23,8 @@ export const PORTRAIT_ART = {
 
 export function makePortrait(doc, player, { possessed = false } = {}) {
   // Real artwork, if registered for this guest's outfit. Honour the possessed state: use a
-  // dedicated possessed image when supplied, otherwise wash the normal image. The public strip
-  // always asks for the neutral look (possessed:false), so it is never washed.
+  // dedicated possessed image when supplied (the same face with red eyes), otherwise the normal image
+  // unchanged. The public strip always asks for the neutral look (possessed:false).
   const entry = PORTRAIT_ART[player.outfit];
   if (entry) {
     const normal = typeof entry === 'string' ? entry : entry.normal;
@@ -31,7 +32,7 @@ export function makePortrait(doc, player, { possessed = false } = {}) {
     const img = doc.createElement('img');
     img.alt = `${player.name}${possessed ? ', possessed' : ''}`;
     if (possessed && possessedSrc) { img.className = 'portrait-img'; img.src = possessedSrc; }
-    else if (possessed) { img.className = 'portrait-img possessed'; img.src = normal; }  // wash fallback
+    else if (possessed) { img.className = 'portrait-img possessed'; img.src = normal; }  // no possessed image: the normal one
     else { img.className = 'portrait-img'; img.src = normal; }
     return img;
   }
@@ -60,17 +61,16 @@ export function makePortrait(doc, player, { possessed = false } = {}) {
       ? `<path d="M50 76 l-4 4 l4 22 l4 -22 z" fill="${outfit.neckwearColor || '#8a1c2b'}"/>`
       : `<path d="M42 78 Q50 92 58 78" fill="none" stroke="${shade(clothes, -0.25)}" stroke-width="2"/>`;
 
-  const eyes = possessed
-    ? `<g class="eye"><ellipse cx="41" cy="50" rx="6" ry="4.6" fill="#fff"/><circle cx="41" cy="50" r="2.6" fill="#1a1420"/></g>
-       <g class="eye weird"><circle cx="61" cy="49" r="8.6" fill="#ffdede"/><circle cx="61" cy="49" r="7" fill="#e23b3b"/><ellipse cx="61" cy="49" rx="1.7" ry="6" fill="#210206"/><circle cx="61" cy="49" r="8.6" fill="none" stroke="#b46bff" stroke-width="1.4" opacity="0.9"/></g>
-       <path d="M33 41 L47 44" stroke="#2a2030" stroke-width="2.2" stroke-linecap="round"/><path d="M70 38 L53 43" stroke="#2a2030" stroke-width="2.6" stroke-linecap="round"/>`
-    : `<g class="eye"><ellipse cx="41" cy="50" rx="5.4" ry="4.4" fill="#fff"/><circle cx="41" cy="50" r="2.4" fill="#1a1420"/></g>
-       <g class="eye"><ellipse cx="60" cy="50" rx="5.4" ry="4.4" fill="#fff"/><circle cx="60" cy="50" r="2.4" fill="#1a1420"/></g>
+  // The eyes: the normal dark pupils, or (possessed) a deep blood-red iris — darker at the rim, brighter
+  // in the middle — with a small white catchlight at the upper left. Same brows, same mouth.
+  const pupil = (cx, cy) => possessed
+    ? `<circle cx="${cx}" cy="${cy}" r="2.9" fill="url(#iris-${uid})"/><circle cx="${cx - 0.9}" cy="${cy - 1}" r="0.85" fill="#fff"/>`
+    : `<circle cx="${cx}" cy="${cy}" r="2.4" fill="#1a1420"/>`;
+  const eyes = `<g class="eye"><ellipse cx="41" cy="50" rx="5.4" ry="4.4" fill="#fff"/>${pupil(41, 50)}</g>
+       <g class="eye"><ellipse cx="60" cy="50" rx="5.4" ry="4.4" fill="#fff"/>${pupil(60, 50)}</g>
        <path d="M34 43 L47 43" stroke="#2a2030" stroke-width="1.8" stroke-linecap="round"/><path d="M53 43 L66 43" stroke="#2a2030" stroke-width="1.8" stroke-linecap="round"/>`;
 
-  const mouth = possessed
-    ? `<path d="M41 68 Q50 63 59 68" fill="none" stroke="#3a1520" stroke-width="2.2" stroke-linecap="round"/>`
-    : `<path d="M43 65 Q50 70 57 65" fill="none" stroke="#7a4630" stroke-width="2.2" stroke-linecap="round"/>`;
+  const mouth = `<path d="M43 65 Q50 70 57 65" fill="none" stroke="#7a4630" stroke-width="2.2" stroke-linecap="round"/>`;
 
   const hairShape = long
     ? `<path d="M24 50 Q22 20 50 18 Q78 20 76 50 L76 68 Q72 44 64 37 Q57 33 50 33 Q43 33 36 37 Q28 44 24 68 Z" fill="${hair}"/>`
@@ -80,9 +80,10 @@ export function makePortrait(doc, player, { possessed = false } = {}) {
     <defs>
       <clipPath id="clip-${uid}"><rect x="2" y="2" width="96" height="114" rx="12"/></clipPath>
       <linearGradient id="bg-${uid}" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0" stop-color="${possessed ? '#2a1c38' : '#232838'}"/>
-        <stop offset="1" stop-color="${possessed ? '#170f22' : '#12141d'}"/>
+        <stop offset="0" stop-color="#232838"/>
+        <stop offset="1" stop-color="#12141d"/>
       </linearGradient>
+      ${possessed ? `<radialGradient id="iris-${uid}"><stop offset="0" stop-color="#c0242f"/><stop offset="0.55" stop-color="#a51d2a"/><stop offset="1" stop-color="#4a0710"/></radialGradient>` : ''}
     </defs>
     <g clip-path="url(#clip-${uid})">
       <rect x="2" y="2" width="96" height="114" fill="url(#bg-${uid})"/>
@@ -99,7 +100,6 @@ export function makePortrait(doc, player, { possessed = false } = {}) {
       ${eyes}
       <path d="M49 52 Q47 58 50 60" fill="none" stroke="${shade(skin, -0.18)}" stroke-width="1.6" stroke-linecap="round"/>
       ${mouth}
-      ${possessed ? '<rect x="2" y="2" width="96" height="114" fill="#7a2bd0" opacity="0.12"/>' : ''}
       <rect x="2" y="2" width="96" height="114" rx="12" fill="none" stroke="rgba(0,0,0,0.35)" stroke-width="6"/>
     </g>
     <rect x="3.5" y="3.5" width="93" height="111" rx="11" fill="none" stroke="${accent}" stroke-width="2.5"/>

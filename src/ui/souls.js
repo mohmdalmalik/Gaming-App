@@ -13,7 +13,7 @@ export function soulsText(n) {
   return `Souls to trade: ${n}`;
 }
 
-// A small violet chip: a mini Possession card and the count. `compact` drops the 0-souls explanation
+// A small chip on the crimson plate: a mini Possession card and the count. `compact` drops the 0-souls explanation
 // to a short line (the player panel has little room).
 export function soulsChip(doc, n, { compact = false } = {}) {
   const chip = doc.createElement('div');

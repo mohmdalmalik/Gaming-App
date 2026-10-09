@@ -173,8 +173,8 @@ Implements `docs/GAME_RULES.md`. Kept pure and separate from rendering so a serv
 - A dead player's character view lies flat with a small blood pool (`characterView.setDead`) and stays where they fell; the turn strip crosses them out.
 
 ## Interface layout (portraits, panels, hand)
-- Placeholder character faces live in `src/ui/portrait.js` (`makePortrait(doc, player, {possessed})`) as inline SVG — one function behind which real face art can drop in later without touching the interface logic. Normal and POSSESSED (an altered "weird eye" plus a colder wash) are two states of the same call; callers just pass the player and whether to show the possessed look.
-- Bottom-left **active-player panel**: portrait (normal / possessed), name, three health bars, AP. The possessed portrait and a subtle full-screen tint (`#possess-tint`, pointer-events none, under the HUD) are driven by the active player's `possessed` flag, so they update automatically.
+- Placeholder character faces live in `src/ui/portrait.js` (`makePortrait(doc, player, {possessed})`) as inline SVG — one function behind which real face art can drop in later without touching the interface logic. Normal and POSSESSED (the same face with both eyes a deep blood-red iris and a white catchlight — the drawn fallback for the possessed portrait images) are two states of the same call; callers just pass the player and whether to show the possessed look.
+- Bottom-left **active-player panel**: portrait (normal / possessed), name, three health bars, AP. The possessed portrait and a faint dark-plum corner shadow (`#possess-tint`, pointer-events none, under the HUD; hidden again by `hud.hide()` on the way back to the menu) are driven by the viewer's own `possessed` flag, so they update automatically.
 - Top **players strip**: a small portrait + name per player, the active one highlighted with a coloured ring and a TURN tag, the dead crossed out. These portraits are always drawn normal — they never reveal a possessed role (hidden information).
 - Bottom-centre **hand**: the active player's cards face down (card backs, capped at 8 drawn) with a count badge that re-renders on every `refresh()` (after trading, searching, using, discarding). Tapping the strip opens the detailed face-up hand panel.
 - The AP display, turn indicator, rotate buttons, End turn and the map button are kept; the layout puts player info bottom-left, cards bottom-centre, actions + view controls bottom-right, so the middle stays clear on an iPad in landscape.
@@ -191,7 +191,7 @@ Implements `docs/GAME_RULES.md`. Kept pure and separate from rendering so a serv
   always drawn neutral — possession is never shown here.
 - **Active-player panel**: larger portrait, health segments (`#health`), action pips (`#ap-pips`) +
   a numeric `#action-points` ("x / y"), and a *Private details* link that opens the hand. The
-  possessed tell (weird-eye portrait + `#possess-tint`) shows only on the current guest's own panel.
+  possessed tell (red-eyed portrait, crimson plate, POSSESSED badge + `#possess-tint`) shows only on the player's own panel.
 - **Hand** (`ui/hand.js`): a bottom-docked sheet (`.overlay.sheet` + `.panel.sheet`) that keeps the
   room visible above it. Cards are large selectable tiles (`ui/cards.js` `cardTile`, now with an
   `.art` panel); selecting one fills a detail pane with the description, a plain-language note on how
@@ -340,8 +340,8 @@ the lessons). Key decisions:
 - **Shading**: matte Lambert conversion on load (unchanged), colours authored as sRGB hex. No scene
   lighting was changed to flatter the character.
 - **Portraits from the model**: `portrait.mjs` renders a bust with the game's look; `portrait_post.py`
-  crops it and makes the private possessed variant (cold wash, vignette, altered eye drawn at the
-  projected eye position). Same filenames as before, so the interface code and the public/private
+  crops it and makes the private possessed variant (since the possessed-look pass: a second render of the
+  same guest with the game's own red eyes from `src/render/possessedLook.js`, laid on the plum-crimson plate). Same filenames as before, so the interface code and the public/private
   rule are unchanged.
 - **Interface**: one `.hud-bottom` container (flex; a two-row grid in portrait) so the panel, hand
   opener and buttons can never overlap; guest strip on a charcoal plate; ≥48 px targets; drawn SVG
@@ -868,12 +868,12 @@ Target: `docs/art-reference.jpg` (style, palette and finish; not its layout or i
 
 - **"Souls to trade"** is the owner's word for the Possession cards a possessed guest still holds
   (`soulsHeld` in `src/ui/souls.js`, simply the Possession cards in their hand). It is shown as a small
-  violet chip with a mini Possession card, and with 0 left it says so calmly ("No souls left to trade —
+  dark chip with a crimson edge and a mini Possession card (violet before the possessed-look pass), and with 0 left it says so calmly ("No souls left to trade —
   you still win with the possessed side if dawn breaks first"), never as an error.
 - **Where it shows in hot-seat — the private surfaces, and the main screen during their own turn**, as
   the owner-approved `docs/GAME_RULES.md` (Possession) says. Private surfaces: the role screen (also the "Something has changed" screen of a newly converted guest) and the private
-  turn screen (possessed portrait beside the POSSESSED badge, the count on the same line, a violet wash on
-  that card, the Possession cards as ONE tile with a ×N badge, and the hand's tiles sharing one row,
+  turn screen (possessed portrait beside the POSSESSED badge, the count on the same line, the crimson plate on
+  that card (a violet wash before the possessed-look pass), the Possession cards as ONE tile with a ×N badge, and the hand's tiles sharing one row,
   118px wide at most and narrower as the hand grows (`--n` set in `renderHand`), so 3 Possession + 7
   cards and a note still fit above the Start button on a 1024×768 iPad). The card view shows the Possession cards as one
   stack with a ×N badge; on that card the count and what it does are said ONCE, beside it ("Souls to
@@ -1158,3 +1158,34 @@ Target: `docs/art-reference.jpg` (style, palette and finish; not its layout or i
   each guest reaches the doors, and walk speed adapts so feet never slide. `enter({ guests })` resolves when
   the doors shut (about 5.8 s for three guests). If the iPad struggles, the two background extras (about
   60k triangles) are the first thing to cut.
+
+## The possessed look (red eyes, crimson private plate)
+
+- **What it is** (owner's reference, Oct 2026): a possessed guest looks exactly like the normal guest —
+  same face, skin, hair and clothes — except both eyes, which become a deep blood-red iris (darker at the
+  rim, brighter low in the middle) with a small white catchlight high and a little right of centre. No
+  purple, no glow beyond a faint 0.12 self-light, no change to the skin. It replaces the old violet
+  "weird eye" + cold wash.
+- **One module for game and portraits**: `src/render/possessedLook.js` (imports only `three`) holds the
+  colours (`POSSESSED_COLORS`), the eye's paint (`POSSESSED_EYE`) and `createPossessedEyes(root)`, which
+  finds the material named `Eye` on a loaded guest (and the women's own `Shine` highlight), measures each
+  eye oval from the mesh, and swaps in one red matte material (hiding `Shine`) while on. No extra draw
+  calls; one extra shader program, prepared the first time it is shown. `characterView.js` keeps material
+  names when it flattens the GLB and exposes `setPossessed(on)`; `tools/char-pipeline/preview_glb.html`
+  uses the same module (`possessed=1`), so `portrait.mjs all` renders the private portraits
+  (`assets/portraits/<name>-possessed.jpg`) with exactly the game's eyes on the plum-crimson plate.
+  The normal portraits are approved art and only rewritten with `--normal` when a model changes.
+- **Who sees it** is decided in ONE place, `src/main.js`: each frame
+  `cv.setPossessed(phase === 'game' && !PRACTICE && i === humanSeat && state.players[i].possessed)` — only
+  the player's own guest, on their own screen; never a computer guest (even a possessed bot), never in
+  practice, never on the old game still drawn behind the menu. The interface tell likewise only syncs
+  while a game is running (`syncHandFan`), and `hud.hide()` also hides `#possess-tint`.
+  `castCharacters()` resets it because character views are reused between games. The public guest strip
+  always uses the normal portraits.
+- **The interface** (`styles.css`, `src/hud.js` `syncTell`, `src/ui/handoff.js`, `src/ui/hand.js`): the
+  player's own panel, role card and card-view banner use a dark plum-crimson plate (#2b1018 → #160910)
+  with a thin crimson line (#a3263a) inside the gold border, and a POSSESSED pill with "Only you can see
+  this". A clean player in a match gets a quiet green CLEAN pill; practice shows neither. `#possess-tint`
+  is now a barely visible dark-plum corner shadow (red screen edges read as "you are hurt" in games).
+  `--evil` (violet) is kept only for the Possession card itself. The reference's ring icon and split
+  floor ring were deliberately left out (owner: ignore them for now).

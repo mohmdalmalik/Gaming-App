@@ -64,22 +64,28 @@ export function createHandoff(doc) {
   function renderRole(player) {
     el.role.hidden = false;
     el.role.className = `role-badge ${player.possessed ? 'evil' : 'good'}`;
-    el.role.innerHTML = `<span class="role-word">${player.possessed ? 'POSSESSED' : 'CLEAN GUEST'}</span>`
+    // The role word is the same badge pill as on the player panel (dark green CLEAN GUEST, or the dark
+    // POSSESSED pill with its brass and crimson edge).
+    el.role.innerHTML = `<span class="role-word tell-pill">${player.possessed ? 'POSSESSED' : 'CLEAN GUEST'}</span>`
       + `<span class="role-line">${player.possessed
         ? 'In a trade, give a Possession card to possess the other guest — unless they hand you a Lantern: then both cards are used up and they learn you are possessed. You can never escape.'
         : `Find Lanterns, pass them to one clean guest, and get that guest out through the fire exit with ${rules.lanternsToEscape}. Give a Lantern in a trade if you fear who you are trading with — it blocks possession, but is used up doing it.`}</span>`;
     if (!player.possessed) return;
-    // The private tell (docs/GAME_RULES.md, Possession): their own possessed portrait, a violet wash
-    // on this card, and how many Possession cards ("souls") they can still trade. reset() clears all
-    // of it, so the next pass screen carries none of it.
+    // The private tell (docs/GAME_RULES.md, Possession), as the crimson plate: their own possessed
+    // portrait (the same face, red eyes), the POSSESSED badge with "Only you can see this" under it, and
+    // how many Possession cards ("souls") they can still trade. reset() clears all of it, so the next
+    // screen carries none of it.
     el.card.classList.add('possessed');
     el.role.classList.add('with-portrait');
-    // The souls count sits on the same line as the POSSESSED word, so the box is no taller than
-    // before and a full hand still fits above the Start button on a smaller iPad.
+    // The souls count sits on the same line as the badge, so the box stays short and a full hand still
+    // fits above the Start button on a smaller iPad.
     const text = doc.createElement('div'); text.className = 'role-text';
     const head = doc.createElement('div'); head.className = 'role-head';
     const [word, ...rest] = [...el.role.childNodes];
-    head.append(word, soulsChip(doc, soulsHeld(player)));
+    const badge = doc.createElement('div'); badge.className = 'tell-badge possessed';
+    const caption = doc.createElement('span'); caption.className = 'tell-note'; caption.textContent = 'Only you can see this';
+    badge.append(word, caption);
+    head.append(badge, soulsChip(doc, soulsHeld(player)));
     text.append(head, ...rest);
     const port = doc.createElement('div'); port.className = 'role-portrait';
     port.appendChild(makePortrait(doc, player, { possessed: true }));

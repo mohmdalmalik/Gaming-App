@@ -406,7 +406,7 @@ function passTurn() {
   // Never past the hand limit: anything that ends a turn goes through the discard screen first.
   if (!state.finished && overHandLimit(activePlayer(state)) > 0) { endTurnNow(); return; }
   hud.hideConfirm(); selectedMove = null; activeWalk = null; walkCutShort = false;
-  hand.close();
+  if (myTurn()) hand.close();     // (a computer guest's turn ending leaves the player's card view open)
   stopTimer();
   const sealedBefore = [...(state.barricades?.keys() ?? [])];
   const result = endTurn(state, floor);
@@ -540,6 +540,7 @@ function afterMeeting() {
   meetingLive = false;
   syncViews(false); refresh();
   if (state.finished) { showEnd(); return; }
+  if (skipQueued) { skipToEnd(); return; }
   if (isBot(state.activeIndex)) botNextAt = performance.now() + botThink(state.activeIndex, 'act');
   checkPlayerOut();
 }
@@ -549,7 +550,7 @@ function afterMeeting() {
 // reads, in private, what they received (and what it did to them). Between two computer guests nothing
 // is shown but the public line in the feed. If either has no card they may give, the trade is skipped
 // (GAME_RULES, Trade): skippedTrade.
-function runTrade(A, B, onDone = afterMeeting) {
+function runTrade(A, B, onDone = afterMeeting, { voluntary = false } = {}) {
   if (!canTrade(A, B).ok) { skippedTrade(A, B, onDone); return; }
   const human = !isBot(A.index) ? A : !isBot(B.index) ? B : null;
   const botCard = (X, Y) => {
@@ -559,15 +560,14 @@ function runTrade(A, B, onDone = afterMeeting) {
     return ids.includes(id) ? id : ids[0];
   };
   if (!human) {
-    resolveTrade(state, floor, A, B, botCard(A, B), botCard(B, A));
-    if (focusIndex() === A.index) hud.toast(`${A.name} and ${B.name} traded.`);
+    resolveTrade(state, floor, A, B, botCard(A, B), botCard(B, A));   // (the feed says they traded)
     onDone();
     return;
   }
   const other = human === A ? B : A;
   const theirs = botCard(other, human);
   handoff.privatePick(human, {
-    kicker: human === A ? `A trade with ${other.name}` : `${other.name} walked in — a trade`,
+    kicker: voluntary ? `The Fire Exit — a trade with ${other.name}` : human === A ? `A trade with ${other.name}` : `${other.name} walked in — a trade`,
     title: `Give one card to ${other.name}`,
     sub: `${other.name} is choosing a card for you at the same moment. Neither of you sees the other's card until they have changed hands.`,
     cards: tradeableCards(human),
@@ -639,7 +639,7 @@ function onTrade() {
       meeting.close();
       let yes = false;
       try { yes = !!bots.acceptTrade(Q.index, P.index); } catch (err) { console.warn('bot acceptTrade failed', err); }
-      if (yes) runTrade(P, Q);
+      if (yes) runTrade(P, Q, afterMeeting, { voluntary: true });
       else meeting.notice(`${Q.name} declined.`, afterMeeting, 'No trade');
     });
   };
@@ -664,7 +664,7 @@ function botProposeTrade(P, Q) {
     title: `${P.name} would like to trade`,
     sub: 'You each give one card, in secret. You do not have to agree.',
     options: [{ label: 'Accept', value: true, primary: true }, { label: 'Decline', value: false }],
-    onPick: yes => (yes ? runTrade(P, Q) : afterMeeting()),
+    onPick: yes => (yes ? runTrade(P, Q, afterMeeting, { voluntary: true }) : afterMeeting()),
   });
 }
 
@@ -832,18 +832,26 @@ function botDiscardDown(p) {
 // rules (src/bots/autoplay.js), and the guests are put where the rules left them.
 let botsAutoplay = null;     // src/bots/autoplay.js, loaded with the bots
 function skipToEnd() {
-  if (state.finished || !bots || !botsAutoplay || meetingLive) return;
+  if (state.finished || !bots || !botsAutoplay) return;
+  if (meetingLive) { overlays.hideAsk(); hud.toast('A meeting is under way — skipping as soon as it ends.', 3); skipQueued = true; return; }
+  skipQueued = false;
   overlays.hideAsk();
   hand.close(); map.close(); hud.hideConfirm(); selectedMove = null; activeWalk = null;
   stopTimer();
   for (const m of movers) m.halt();
+  // A bot arriving in a room this very moment still has its forced meeting.
+  const arriving = !!pendingArrival;
   pendingArrival = null;
-  try { botsAutoplay.playOut(state, floor, bots, { maxTurns: 600 }); } catch (err) { console.error('could not finish the match:', err); }
-  if (!state.finished) checkWin(state, floor);
+  try {
+    if (arriving && isBot(state.activeIndex)) botsAutoplay.runMeeting(state, floor, bots, activePlayer(state));
+    botsAutoplay.playOut(state, floor, bots, { maxTurns: 600 });
+  } catch (err) { console.error('could not finish the match:', err); }
   movers.forEach((m, i) => { const s = standingSlot(state.players[i].currentRoom, i); m.reset(s.x, s.z); });
   rebuildGrid(); discovery.refresh(); syncViews(false); refresh();
-  showEnd();
+  if (state.finished) showEnd();
+  else { hud.toast('The match could not be finished at once — it plays on.', 4); beginTurn(); }
 }
+let skipQueued = false;       // "Skip to the end" was asked for during a meeting
 
 // --- Actions -----------------------------------------------------------------------------
 const SEARCH_FAIL = {
@@ -1079,7 +1087,7 @@ function resetWorld() {
   rebuildGrid();
   movers.forEach((m, i) => { m.reset(startSpot(i)[0], startSpot(i)[1]); m.speedScale = 1; });
   pendingArrival = null; selectedMove = null; activeWalk = null; walkCutShort = false; queuedTap = null;
-  meetingLive = false; outNoticeShown = false; botNextAt = 0; lockNews = '';
+  meetingLive = false; outNoticeShown = false; botNextAt = 0; lockNews = ''; skipQueued = false;
   inActionPhase = PRACTICE;
   fan.reset();
   fog.reset();
@@ -1196,6 +1204,7 @@ function setupGame(plan) {
 async function enterGame(plan, { guests = 3 } = {}) {
   menu.leave();
   phase = 'intro';
+  applyPixelRatio();
   container.classList.remove('blurred');
   if (INTRO && lobbyReady && lobby) {
     // (never longer than LIFT_MAX_MS: on a struggling device the scene runs slow, and the game must not wait)
@@ -1227,6 +1236,8 @@ async function startBots(choice) {
     overlays.showError('The computer guests could not be loaded. Check the internet connection and reload.');
     return;
   }
+  // (the player went back, or started something else, while the computer guests were loading)
+  if (phase !== 'menu' || menu.screen !== 'bots') return;
   const seats = [humanSeatFirst(plan)].concat(plan.cast.map((def, i) => ({ i, def })).filter(x => x.i !== plan.humanSeat).map(x => ({
     name: x.def.name, color: x.def.color, username: plan.profiles[x.i]?.username || 'guest', you: false,
   })));
@@ -1262,6 +1273,7 @@ async function backToMenu() {
   meetingLive = false;
   bots = null;
   lobby?.reset();
+  applyPixelRatio();
   container.classList.add('blurred');
   menu.show('main');
   await fade(false, 700);
@@ -1502,7 +1514,7 @@ let queuedTap = null;   // { target, turn }
 // of the hand fan (between and above its tilted cards too), the buttons, End turn, the Move/Cancel bar,
 // a toast, the search icon — grown by DEAD_ZONE px.
 const DEAD_ZONE = 18;
-const TAP_GUARD = ['.hud-top-left', '.hud-top-center', '.hud-top-right', '#player-panel', '#hand-fan', '#hand-fan .fan-card',
+const TAP_GUARD = ['#room-name', '#safe-badge', '.hud-top-center', '.hud-top-right', '#player-panel', '#hand-fan', '#hand-fan .fan-card',
   '#hand-fan .fan-limit', '.hud-bottom-right', '#btn-end-turn', '#confirm-bar', '#toast', '#search-spot', '.path-label'];
 function inDeadZone(x, y) {
   const cr = container.getBoundingClientRect();
@@ -1588,8 +1600,13 @@ const menu = createMenu(document, {
   onPractice: () => startPractice(),
   onSettingChanged: name => applySettings(name),
 });
+// The lobby behind the menu is drawn at a lower resolution (it is blurred anyway: cheaper on the iPad);
+// the lift sequence and the game use the Graphics setting.
+const MENU_PIXEL_RATIO = 0.75;
+function gamePixelRatio() { return settings.choice('graphics')?.pixelRatio ?? cfg.render.maxPixelRatio; }
+function applyPixelRatio() { view.setPixelRatio(phase === 'menu' && !DIRECT ? Math.min(MENU_PIXEL_RATIO, gamePixelRatio()) : gamePixelRatio()); }
 function applySettings(name = null) {
-  if (!name || name === 'graphics') view.setPixelRatio(settings.choice('graphics')?.pixelRatio ?? cfg.render.maxPixelRatio);
+  if (!name || name === 'graphics') applyPixelRatio();
   if (name === 'botSpeed' && bots) movers.forEach((m, i) => { if (isBot(i)) m.speedScale = botWalkScale(); });
 }
 applySettings();

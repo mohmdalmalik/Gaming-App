@@ -929,7 +929,7 @@ html, body {
    ========================================================================================== */
 /* The lobby behind the menu, soft and a little dim; the blur eases away as the lift sequence starts. */
 #view canvas { transition: filter 1.4s ease, transform 1.4s ease; }
-#view.blurred canvas { filter: blur(3.5px) saturate(0.92) brightness(0.82); transform: scale(1.03); }
+#view.blurred canvas { filter: blur(2.5px) saturate(0.92) brightness(0.82); transform: scale(1.03); }
 
 .menu { position: fixed; inset: 0; z-index: 40; }
 .menu-shade {
@@ -964,9 +964,8 @@ html, body {
 .menu-btn {
   appearance: none; display: flex; flex-direction: column; align-items: flex-start; justify-content: center; gap: 3px;
   min-height: 64px; padding: 12px 22px; border-radius: 14px; cursor: pointer; text-align: left;
-  background: rgba(16, 18, 26, 0.78); border: 1px solid var(--line); color: var(--ivory);
+  background: rgba(16, 18, 26, 0.86); border: 1px solid var(--line); color: var(--ivory);
   box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.5), 0 10px 28px rgba(0, 0, 0, 0.35);
-  -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
   transition: transform 0.12s ease, border-color 0.2s ease, background 0.2s ease;
   font: inherit;
 }
@@ -1021,7 +1020,8 @@ html, body {
 }
 
 /* The feed: what the other guests just did. */
-.feed { display: flex; flex-direction: column; gap: 4px; max-width: min(340px, 33vw); pointer-events: none; }
+/* (narrow enough to stay clear of the guest strip in the middle — six guests at 1024 wide included) */
+.feed { display: flex; flex-direction: column; gap: 4px; max-width: min(340px, 33vw, calc(50vw - 272px)); min-width: 0; pointer-events: none; }
 .feed-line {
   font-size: 13px; line-height: 1.3; padding: 5px 10px; border-radius: 8px; color: var(--ivory-dim);
   background: rgba(14, 16, 22, 0.8); border: 1px solid var(--line-soft);
@@ -1075,5 +1075,5 @@ html, body {
 }
 
 /* Who plays each guest (a match): "You", or the computer guest's name, small under the guest's name. */
-.mini-user { display: block; max-width: 82px; margin: 1px auto 0; font-family: var(--sans); font-size: 10px; font-weight: 600; letter-spacing: 0.02em; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-decoration: none; }
+.mini-user { display: block; max-width: 72px; margin: 1px auto 0; font-family: var(--sans); font-size: 10px; font-weight: 600; letter-spacing: 0.02em; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-decoration: none; }
 .mini-player.me .mini-user { color: var(--brass); }

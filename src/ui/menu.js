@@ -74,6 +74,7 @@ export function createMenu(doc, { onPlayBots, onPractice, onSettingChanged } = {
   // uneven wait. `seats`: [{ name, username, color, you }] in the order they arrive. `onFull` runs a
   // moment after the last one is in; Cancel goes back to the bots screen.
   function matchmake(seats, { onFull, onCancel }) {
+    mmStarted = performance.now();
     show('matchmaking');
     clearMatchmaking();
     const list = $('mm-seats');
@@ -113,6 +114,7 @@ export function createMenu(doc, { onPlayBots, onPractice, onSettingChanged } = {
     cancelHandler = () => { clearMatchmaking(); onCancel?.(); };
   }
   let cancelHandler = null;
+  let mmStarted = 0;
   function clearMatchmaking() { mmTimers.forEach(clearTimeout); mmTimers = []; }
 
   const click = (el, fn) => el.addEventListener('click', e => { e.preventDefault(); fn(); });
@@ -124,7 +126,11 @@ export function createMenu(doc, { onPlayBots, onPractice, onSettingChanged } = {
     const n = BOT_CHOICES.includes(+settings.get('bots')) ? +settings.get('bots') : 5;
     onPlayBots?.({ bots: n, role: settings.get('role') || 'random' });
   });
-  click($('btn-mm-cancel'), () => { cancelHandler?.(); cancelHandler = null; show('bots'); });
+  // (a second tap of "Find a table" lands where Cancel appears: ignore Cancel for a moment)
+  click($('btn-mm-cancel'), () => {
+    if (performance.now() - mmStarted < 700) return;
+    cancelHandler?.(); cancelHandler = null; show('bots');
+  });
   click($('btn-settings-done'), () => show('main'));
 
   return {

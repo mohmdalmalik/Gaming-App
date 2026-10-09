@@ -1,5 +1,25 @@
 # PROGRESS
 
+## Main menu, play with bots, hot-seat removed (2026-10-09)
+
+At the owner's request; no rule or rule number changed (docs/GAME_RULES.md still mentions hot-seat in four
+places — a before/after list waits for the owner's approval).
+- **Main menu** over an animated lobby (reception + concierge, guests seated, chatting and strolling, the
+  manager walking by), blurred: Play with bots · Practice alone · Settings. Play: the guests rise and take
+  the lift with the manager, the doors close, the screen fades to black, the game opens.
+- **Play with bots**: 3-5 computer guests, your role random / clean / possessed, the table filling up with
+  online-style names. Bots (`src/bots/`) see only what a person could, are mostly "medium" with some bold
+  and some careful, build trust before trying a Possession card, think briefly before each action (faster
+  than a person; Settings: Bot speed). Meetings both ways, Fire Exit trades both ways, the feed, the end
+  screen with every role, Play again, Main menu, watch or skip to the end when you are out.
+- **Hot-seat removed** (pass screens, its tests and the autoplay harness). `?mode=hotseat` links open a
+  match against bots.
+- **Measured** (all-bot, 2,000 matches per size): clean side wins about 50% at 6 guests, 42% at 5, 34% at 4.
+- **Tests**: rules-check, logic-check, bots-check (bots: honesty, 450 matches, determinism, behaviour),
+  browser-practice, browser-lobby, browser-bots (menu, settings, the table, the lift, bots' turns, privacy,
+  meetings both ways, being attacked, out of the match, end screen, possessed, 3 whole matches),
+  menu-scene-shots (the lobby scene).
+
 ## Locked doors: open until the end of the opener's turn (2026-09-30)
 
 Owner-approved rule (GAME_RULES, Rooms) implemented end to end; no other rule changed.

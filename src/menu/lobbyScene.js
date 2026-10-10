@@ -14,7 +14,9 @@
 //   renderer.render(lobby.scene, lobby.camera);
 //   await lobby.enter({ guests: 3 });        // the boarding; resolves when the lift doors have shut
 //                                            //  (~5.8 s for 3 guests, ~4.8 s for 1); the dial keeps
-//                                            //  moving afterwards, so keep rendering during the fade
+//                                            //  moving afterwards, so keep rendering during the fade.
+//                                            //  onCue(name) (optional) is told 'liftDing' / 'liftDoors'
+//                                            //  as the bell rings and the doors open, then close
 //   lobby.reset();                           // back to the calm tableau (instant)
 //   lobby.dispose();
 //
@@ -228,7 +230,7 @@ export function createLobbyScene({ renderer, cfg, layout = lobbyLayout } = {}) {
     return len;
   };
 
-  function enter({ guests = 3 } = {}) {
+  function enter({ guests = 3, onCue = null } = {}) {
     if (seq) return seq.promise;
     let resolve;
     const promise = new Promise(r => { resolve = r; });
@@ -238,7 +240,7 @@ export function createLobbyScene({ renderer, cfg, layout = lobbyLayout } = {}) {
       .sort((a, b) => (a.boardDelay ?? 0) - (b.boardDelay ?? 0))
       .map(c => actors.get(c.name)).filter(Boolean);
     const slots = lift.slots[boarders.length] || [];
-    seq = { t: 0, promise, resolve, boarders, closeAt: null, shutAt: null, done: false, ding: 0 };
+    seq = { t: 0, promise, resolve, boarders, closeAt: null, shutAt: null, done: false, ding: 0, onCue };
     // guest i reaches the doors at doorTimes[i] (s after Play)
     const doorTimes = boarders.length === 1 ? [3.6] : boarders.length === 2 ? [3.5, 4.2] : [3.3, 3.9, 4.5];
     boarders.forEach((a, i) => {
@@ -279,6 +281,7 @@ export function createLobbyScene({ renderer, cfg, layout = lobbyLayout } = {}) {
     a.walkPath([...toDoor, ...inside], { speed, face: 0, onArrive: () => { b.inside = true; } });
   }
 
+  const cue = (s, name) => { try { s.onCue?.(name); } catch { /* a sound must never stop the lift */ } };
   function updateSequence(dt) {
     const s = seq;
     s.t += dt;
@@ -287,12 +290,12 @@ export function createLobbyScene({ renderer, cfg, layout = lobbyLayout } = {}) {
     // doors: open straight away (with a ding); close once everybody is past them
     const pastDoors = a => a.z < L.room.z0 - 0.45;
     const everyoneIn = s.boarders.every(a => a.board.started && pastDoors(a)) && (!manager || pastDoors(manager));
-    if (s.closeAt == null && ((everyoneIn && s.t > 1.5) || s.t > 6.0)) s.closeAt = s.t + 0.1;
+    if (s.closeAt == null && ((everyoneIn && s.t > 1.5) || s.t > 6.0)) { s.closeAt = s.t + 0.1; cue(s, 'liftDoors'); }
     let open = ease((s.t - 0.15) / 1.0);
     if (s.closeAt != null) open *= 1 - ease((s.t - s.closeAt) / 0.95);
     set.lift.setOpen(open);
     s.ding = Math.max(0, s.ding - dt * 1.2);
-    if (s.t > 0.15 && !s.dinged) { s.dinged = true; s.ding = 1; }
+    if (s.t > 0.15 && !s.dinged) { s.dinged = true; s.ding = 1; cue(s, 'liftDing'); cue(s, 'liftDoors'); }
     set.lift.setDing(s.ding);
     // shut: the dial's needle climbs toward the fourth floor; the promise resolves
     if (s.closeAt != null && s.t >= s.closeAt + 0.95) {

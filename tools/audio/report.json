@@ -1,0 +1,1024 @@
+{
+ "music:lobby": {
+  "file": "assets/audio/music-lobby.mp3",
+  "kind": "music-loop",
+  "bytes": 1284014,
+  "channels": 2,
+  "duration": 80.186,
+  "peak_dbfs": -2.84,
+  "true_peak_dbtp": -2.79,
+  "lufs": -16.9,
+  "short_term_max": -14.9,
+  "momentary_max": -12.4,
+  "dc": 1.6210713802457283e-06,
+  "ffmpeg_lufs": -16.8,
+  "ffmpeg_true_peak": -2.8,
+  "seam_diff_db_off0": -27.4,
+  "seam_diff_db_off1105": -28.9,
+  "seam_click_score": 6.3,
+  "body_click_score": 8.8,
+  "seam_pcm_click": 5.6,
+  "stems_lufs": {
+   "melody": -26.5,
+   "lh": -28.6,
+   "bass": -23.3,
+   "pad": -12.0,
+   "cello": -14.5,
+   "smel": -16.0,
+   "celesta": -16.9,
+   "mbox": -9.2,
+   "harm": -17.4,
+   "crackle": -27.6
+  },
+  "render_s": 69.2,
+  "library": {
+   "file": "music-lobby.mp3",
+   "loopStart": 0.09288,
+   "loopEnd": 80.09288,
+   "loop": true,
+   "duration": 80.186
+  }
+ },
+ "music:game": {
+  "file": "assets/audio/music-game.mp3",
+  "kind": "music-loop",
+  "bytes": 1923910,
+  "channels": 2,
+  "duration": 120.186,
+  "peak_dbfs": -3.57,
+  "true_peak_dbtp": -3.56,
+  "lufs": -18.4,
+  "short_term_max": -15.8,
+  "momentary_max": -11.5,
+  "dc": 8.275007977741932e-06,
+  "ffmpeg_lufs": -18.4,
+  "ffmpeg_true_peak": -3.6,
+  "seam_diff_db_off0": -26.2,
+  "seam_diff_db_off1105": -28.2,
+  "seam_click_score": 23.7,
+  "body_click_score": 34.5,
+  "seam_pcm_click": 25.2,
+  "stems_lufs": {
+   "drone": -13.1,
+   "violas": -13.3,
+   "piano": -35.3,
+   "mbox": -13.6,
+   "harm": -19.6,
+   "clock": -33.8,
+   "wind": -21.5
+  },
+  "render_s": 60.4,
+  "library": {
+   "file": "music-game.mp3",
+   "loopStart": 0.09288,
+   "loopEnd": 120.09288,
+   "loop": true,
+   "duration": 120.186
+  }
+ },
+ "music:final": {
+  "file": "assets/audio/music-final.mp3",
+  "kind": "music-loop",
+  "bytes": 857278,
+  "channels": 2,
+  "duration": 53.519,
+  "peak_dbfs": -2.04,
+  "true_peak_dbtp": -2.04,
+  "lufs": -17.4,
+  "short_term_max": -15.9,
+  "momentary_max": -14.2,
+  "dc": 6.812392900333113e-06,
+  "ffmpeg_lufs": -17.3,
+  "ffmpeg_true_peak": -2.0,
+  "seam_diff_db_off0": -16.6,
+  "seam_diff_db_off1105": -18.5,
+  "seam_click_score": 5.8,
+  "body_click_score": 9.2,
+  "seam_pcm_click": 5.5,
+  "stems_lufs": {
+   "pulse": -18.0,
+   "drone": -17.9,
+   "line": -14.2,
+   "trem": -12.0,
+   "high": -18.7,
+   "piano": -25.3,
+   "timp": -17.4,
+   "wind": -21.7
+  },
+  "render_s": 36.7,
+  "library": {
+   "file": "music-final.mp3",
+   "loopStart": 0.09288,
+   "loopEnd": 53.426213,
+   "loop": true,
+   "duration": 53.519
+  }
+ },
+ "music:win": {
+  "file": "assets/audio/music-win.mp3",
+  "kind": "stinger",
+  "bytes": 145075,
+  "channels": 2,
+  "duration": 9.0,
+  "peak_dbfs": -4.94,
+  "true_peak_dbtp": -4.9,
+  "lufs": -16.4,
+  "short_term_max": -15.1,
+  "momentary_max": -13.5,
+  "dc": 1.4319219495028327e-05,
+  "ffmpeg_lufs": -16.3,
+  "ffmpeg_true_peak": -4.9,
+  "stems_lufs": {
+   "strings": -8.1,
+   "piano": -22.8,
+   "celesta": -9.8,
+   "bell": -21.1,
+   "bass": -16.0
+  },
+  "render_s": 7.7,
+  "library": {
+   "file": "music-win.mp3",
+   "loop": false,
+   "duration": 9.0
+  }
+ },
+ "music:winPossessed": {
+  "file": "assets/audio/music-winPossessed.mp3",
+  "kind": "stinger",
+  "bytes": 137134,
+  "channels": 2,
+  "duration": 8.5,
+  "peak_dbfs": -3.59,
+  "true_peak_dbtp": -3.59,
+  "lufs": -16.4,
+  "short_term_max": -14.9,
+  "momentary_max": -12.7,
+  "dc": 4.612181053197323e-06,
+  "ffmpeg_lufs": -16.4,
+  "ffmpeg_true_peak": -3.6,
+  "stems_lufs": {
+   "strings": -10.5,
+   "piano": -22.9,
+   "mbox": -8.9,
+   "bell": -20.0,
+   "bass": -15.0
+  },
+  "render_s": 6.3,
+  "library": {
+   "file": "music-winPossessed.mp3",
+   "loop": false,
+   "duration": 8.5
+  }
+ },
+ "music:lose": {
+  "file": "assets/audio/music-lose.mp3",
+  "kind": "stinger",
+  "bytes": 145075,
+  "channels": 2,
+  "duration": 9.0,
+  "peak_dbfs": -3.43,
+  "true_peak_dbtp": -3.42,
+  "lufs": -16.4,
+  "short_term_max": -14.1,
+  "momentary_max": -12.7,
+  "dc": 2.0424299475807633e-05,
+  "ffmpeg_lufs": -16.3,
+  "ffmpeg_true_peak": -3.4,
+  "stems_lufs": {
+   "piano": -23.4,
+   "low": -11.6,
+   "slide": -13.1,
+   "mbox": -11.5,
+   "timp": -19.2
+  },
+  "render_s": 5.5,
+  "library": {
+   "file": "music-lose.mp3",
+   "loop": false,
+   "duration": 9.0
+  }
+ },
+ "music:dawn": {
+  "file": "assets/audio/music-dawn.mp3",
+  "kind": "stinger",
+  "bytes": 160958,
+  "channels": 2,
+  "duration": 10.0,
+  "peak_dbfs": -4.04,
+  "true_peak_dbtp": -4.04,
+  "lufs": -16.4,
+  "short_term_max": -15.1,
+  "momentary_max": -13.1,
+  "dc": 3.650467705182332e-05,
+  "ffmpeg_lufs": -16.4,
+  "ffmpeg_true_peak": -4.0,
+  "stems_lufs": {
+   "bell": -15.6,
+   "strings": -11.7,
+   "harm": -21.1,
+   "wind": -21.7
+  },
+  "render_s": 2.9,
+  "library": {
+   "file": "music-dawn.mp3",
+   "loop": false,
+   "duration": 10.0
+  }
+ },
+ "sfx:click": {
+  "file": "assets/audio/sfx-click.mp3",
+  "kind": "sfx",
+  "bytes": 1297,
+  "channels": 1,
+  "duration": 0.09,
+  "peak_dbfs": -10.27,
+  "true_peak_dbtp": -10.26,
+  "lufs": -23.6,
+  "short_term_max": -23.6,
+  "momentary_max": -23.6,
+  "dc": 0.0002903964311833229,
+  "ffmpeg_lufs": -70.0,
+  "ffmpeg_true_peak": -10.3,
+  "render_s": 0.3,
+  "library": {
+   "file": "sfx-click.mp3",
+   "duration": 0.09
+  }
+ },
+ "sfx:open": {
+  "file": "assets/audio/sfx-open.mp3",
+  "kind": "sfx",
+  "bytes": 7776,
+  "channels": 1,
+  "duration": 0.9,
+  "peak_dbfs": -14.47,
+  "true_peak_dbtp": -14.46,
+  "lufs": -24.1,
+  "short_term_max": -24.6,
+  "momentary_max": -22.4,
+  "dc": 6.858889699016232e-07,
+  "ffmpeg_lufs": -26.9,
+  "ffmpeg_true_peak": -14.5,
+  "render_s": 0.3,
+  "library": {
+   "file": "sfx-open.mp3",
+   "duration": 0.9
+  }
+ },
+ "sfx:close": {
+  "file": "assets/audio/sfx-close.mp3",
+  "kind": "sfx",
+  "bytes": 6940,
+  "channels": 1,
+  "duration": 0.8,
+  "peak_dbfs": -15.44,
+  "true_peak_dbtp": -15.37,
+  "lufs": -24.7,
+  "short_term_max": -25.1,
+  "momentary_max": -23.4,
+  "dc": 9.716527757743508e-07,
+  "ffmpeg_lufs": -27.4,
+  "ffmpeg_true_peak": -15.4,
+  "render_s": 0.3,
+  "library": {
+   "file": "sfx-close.mp3",
+   "duration": 0.8
+  }
+ },
+ "sfx:select": {
+  "file": "assets/audio/sfx-select.mp3",
+  "kind": "sfx",
+  "bytes": 5477,
+  "channels": 1,
+  "duration": 0.604,
+  "peak_dbfs": -14.25,
+  "true_peak_dbtp": -14.24,
+  "lufs": -24.6,
+  "short_term_max": -24.5,
+  "momentary_max": -23.5,
+  "dc": 9.600479196147905e-07,
+  "ffmpeg_lufs": -27.2,
+  "ffmpeg_true_peak": -14.2,
+  "render_s": 0.3,
+  "library": {
+   "file": "sfx-select.mp3",
+   "duration": 0.604
+  }
+ },
+ "sfx:deny": {
+  "file": "assets/audio/sfx-deny.mp3",
+  "kind": "sfx",
+  "bytes": 3178,
+  "channels": 1,
+  "duration": 0.328,
+  "peak_dbfs": -7.06,
+  "true_peak_dbtp": -7.05,
+  "lufs": -21.4,
+  "short_term_max": -21.4,
+  "momentary_max": -21.4,
+  "dc": 0.0002023146949521518,
+  "ffmpeg_lufs": -70.0,
+  "ffmpeg_true_peak": -7.1,
+  "render_s": 0.3,
+  "library": {
+   "file": "sfx-deny.mp3",
+   "duration": 0.328
+  }
+ },
+ "sfx:joined": {
+  "file": "assets/audio/sfx-joined.mp3",
+  "kind": "sfx",
+  "bytes": 18225,
+  "channels": 1,
+  "duration": 2.2,
+  "peak_dbfs": -16.07,
+  "true_peak_dbtp": -16.06,
+  "lufs": -25.5,
+  "short_term_max": -26.0,
+  "momentary_max": -21.5,
+  "dc": 7.879164582909048e-07,
+  "ffmpeg_lufs": -28.1,
+  "ffmpeg_true_peak": -16.1,
+  "render_s": 0.4,
+  "library": {
+   "file": "sfx-joined.mp3",
+   "duration": 2.2
+  }
+ },
+ "sfx:liftDing": {
+  "file": "assets/audio/sfx-liftDing.mp3",
+  "kind": "sfx",
+  "bytes": 36615,
+  "channels": 1,
+  "duration": 4.5,
+  "peak_dbfs": -12.43,
+  "true_peak_dbtp": -12.39,
+  "lufs": -23.1,
+  "short_term_max": -21.8,
+  "momentary_max": -17.4,
+  "dc": 3.7100674873515366e-06,
+  "ffmpeg_lufs": -26.0,
+  "ffmpeg_true_peak": -12.4,
+  "render_s": 0.7,
+  "library": {
+   "file": "sfx-liftDing.mp3",
+   "duration": 4.5
+  }
+ },
+ "sfx:liftDoors": {
+  "file": "assets/audio/sfx-liftDoors.mp3",
+  "kind": "sfx",
+  "bytes": 19688,
+  "channels": 1,
+  "duration": 2.378,
+  "peak_dbfs": -1.86,
+  "true_peak_dbtp": -1.85,
+  "lufs": -22.3,
+  "short_term_max": -24.5,
+  "momentary_max": -18.4,
+  "dc": 0.0013778355487902808,
+  "ffmpeg_lufs": -25.2,
+  "ffmpeg_true_peak": -1.9,
+  "render_s": 0.5,
+  "library": {
+   "file": "sfx-liftDoors.mp3",
+   "duration": 2.378
+  }
+ },
+ "sfx:fadeIn": {
+  "file": "assets/audio/sfx-fadeIn.mp3",
+  "kind": "sfx",
+  "bytes": 32018,
+  "channels": 2,
+  "duration": 2.6,
+  "peak_dbfs": -13.37,
+  "true_peak_dbtp": -13.36,
+  "lufs": -25.8,
+  "short_term_max": -27.9,
+  "momentary_max": -22.4,
+  "dc": 1.0444493064107022e-05,
+  "ffmpeg_lufs": -25.8,
+  "ffmpeg_true_peak": -13.4,
+  "render_s": 0.7,
+  "library": {
+   "file": "sfx-fadeIn.mp3",
+   "duration": 2.6
+  }
+ },
+ "sfx:yourTurn": {
+  "file": "assets/audio/sfx-yourTurn.mp3",
+  "kind": "sfx",
+  "bytes": 32018,
+  "channels": 2,
+  "duration": 2.6,
+  "peak_dbfs": -10.44,
+  "true_peak_dbtp": -10.43,
+  "lufs": -20.5,
+  "short_term_max": -21.1,
+  "momentary_max": -17.5,
+  "dc": 1.0745335694393676e-05,
+  "ffmpeg_lufs": -20.4,
+  "ffmpeg_true_peak": -10.4,
+  "render_s": 0.6,
+  "library": {
+   "file": "sfx-yourTurn.mp3",
+   "duration": 2.6
+  }
+ },
+ "sfx:tick": {
+  "file": "assets/audio/sfx-tick.mp3",
+  "kind": "sfx",
+  "bytes": 879,
+  "channels": 1,
+  "duration": 0.043,
+  "peak_dbfs": -7.52,
+  "true_peak_dbtp": -7.27,
+  "lufs": -19.4,
+  "short_term_max": -19.4,
+  "momentary_max": -19.4,
+  "dc": 0.00044263543275894005,
+  "ffmpeg_lufs": -70.0,
+  "ffmpeg_true_peak": -7.3,
+  "render_s": 0.3,
+  "library": {
+   "file": "sfx-tick.mp3",
+   "duration": 0.043
+  }
+ },
+ "sfx:timeUp": {
+  "file": "assets/audio/sfx-timeUp.mp3",
+  "kind": "sfx",
+  "bytes": 26166,
+  "channels": 1,
+  "duration": 3.2,
+  "peak_dbfs": -9.89,
+  "true_peak_dbtp": -9.88,
+  "lufs": -20.2,
+  "short_term_max": -20.0,
+  "momentary_max": -16.0,
+  "dc": 9.732731109099884e-06,
+  "ffmpeg_lufs": -23.1,
+  "ffmpeg_true_peak": -9.9,
+  "render_s": 0.6,
+  "library": {
+   "file": "sfx-timeUp.mp3",
+   "duration": 3.2
+  }
+ },
+ "sfx:doorOpen": {
+  "file": "assets/audio/sfx-doorOpen.mp3",
+  "kind": "sfx",
+  "bytes": 16971,
+  "channels": 1,
+  "duration": 2.063,
+  "peak_dbfs": -1.32,
+  "true_peak_dbtp": -1.31,
+  "lufs": -24.5,
+  "short_term_max": -23.3,
+  "momentary_max": -18.0,
+  "dc": 7.06761935874563e-05,
+  "ffmpeg_lufs": -27.4,
+  "ffmpeg_true_peak": -1.3,
+  "render_s": 0.5,
+  "library": {
+   "file": "sfx-doorOpen.mp3",
+   "duration": 2.063
+  }
+ },
+ "sfx:doorJammed": {
+  "file": "assets/audio/sfx-doorJammed.mp3",
+  "kind": "sfx",
+  "bytes": 11119,
+  "channels": 1,
+  "duration": 1.326,
+  "peak_dbfs": -4.0,
+  "true_peak_dbtp": -3.98,
+  "lufs": -18.7,
+  "short_term_max": -20.5,
+  "momentary_max": -16.4,
+  "dc": 0.0006676893564429626,
+  "ffmpeg_lufs": -21.7,
+  "ffmpeg_true_peak": -4.0,
+  "render_s": 0.4,
+  "library": {
+   "file": "sfx-doorJammed.mp3",
+   "duration": 1.326
+  }
+ },
+ "sfx:doorLocked": {
+  "file": "assets/audio/sfx-doorLocked.mp3",
+  "kind": "sfx",
+  "bytes": 5268,
+  "channels": 1,
+  "duration": 0.58,
+  "peak_dbfs": -1.49,
+  "true_peak_dbtp": -1.44,
+  "lufs": -19.5,
+  "short_term_max": -19.9,
+  "momentary_max": -18.3,
+  "dc": 0.0006014986546825229,
+  "ffmpeg_lufs": -22.3,
+  "ffmpeg_true_peak": -1.5,
+  "render_s": 0.4,
+  "library": {
+   "file": "sfx-doorLocked.mp3",
+   "duration": 0.58
+  }
+ },
+ "sfx:unlock": {
+  "file": "assets/audio/sfx-unlock.mp3",
+  "kind": "sfx",
+  "bytes": 8821,
+  "channels": 1,
+  "duration": 1.037,
+  "peak_dbfs": -1.6,
+  "true_peak_dbtp": -1.6,
+  "lufs": -19.8,
+  "short_term_max": -20.8,
+  "momentary_max": -18.8,
+  "dc": 0.00018092110363390488,
+  "ffmpeg_lufs": -22.5,
+  "ffmpeg_true_peak": -1.6,
+  "render_s": 0.4,
+  "library": {
+   "file": "sfx-unlock.mp3",
+   "duration": 1.037
+  }
+ },
+ "sfx:lockFail": {
+  "file": "assets/audio/sfx-lockFail.mp3",
+  "kind": "sfx",
+  "bytes": 8612,
+  "channels": 1,
+  "duration": 1.017,
+  "peak_dbfs": -3.51,
+  "true_peak_dbtp": -3.33,
+  "lufs": -19.2,
+  "short_term_max": -20.5,
+  "momentary_max": -17.3,
+  "dc": 4.851472257175223e-07,
+  "ffmpeg_lufs": -22.2,
+  "ffmpeg_true_peak": -3.3,
+  "render_s": 0.3,
+  "library": {
+   "file": "sfx-lockFail.mp3",
+   "duration": 1.017
+  }
+ },
+ "sfx:barricade": {
+  "file": "assets/audio/sfx-barricade.mp3",
+  "kind": "sfx",
+  "bytes": 16553,
+  "channels": 1,
+  "duration": 1.993,
+  "peak_dbfs": -1.49,
+  "true_peak_dbtp": -1.47,
+  "lufs": -18.0,
+  "short_term_max": -19.1,
+  "momentary_max": -15.4,
+  "dc": 0.00029653308728426025,
+  "ffmpeg_lufs": -20.9,
+  "ffmpeg_true_peak": -1.5,
+  "render_s": 0.4,
+  "library": {
+   "file": "sfx-barricade.mp3",
+   "duration": 1.993
+  }
+ },
+ "sfx:search": {
+  "file": "assets/audio/sfx-search.mp3",
+  "kind": "sfx",
+  "bytes": 11955,
+  "channels": 1,
+  "duration": 1.429,
+  "peak_dbfs": -9.26,
+  "true_peak_dbtp": -9.06,
+  "lufs": -21.2,
+  "short_term_max": -22.0,
+  "momentary_max": -18.1,
+  "dc": 2.2135044108617455e-05,
+  "ffmpeg_lufs": -24.0,
+  "ffmpeg_true_peak": -9.1,
+  "render_s": 0.4,
+  "library": {
+   "file": "sfx-search.mp3",
+   "duration": 1.429
+  }
+ },
+ "sfx:cardFound": {
+  "file": "assets/audio/sfx-cardFound.mp3",
+  "kind": "sfx",
+  "bytes": 9239,
+  "channels": 1,
+  "duration": 1.093,
+  "peak_dbfs": -3.73,
+  "true_peak_dbtp": -3.48,
+  "lufs": -18.9,
+  "short_term_max": -19.4,
+  "momentary_max": -17.4,
+  "dc": 1.8505098198413397e-06,
+  "ffmpeg_lufs": -21.5,
+  "ffmpeg_true_peak": -3.5,
+  "render_s": 0.3,
+  "library": {
+   "file": "sfx-cardFound.mp3",
+   "duration": 1.093
+  }
+ },
+ "sfx:cardFlip": {
+  "file": "assets/audio/sfx-cardFlip.mp3",
+  "kind": "sfx",
+  "bytes": 1297,
+  "channels": 1,
+  "duration": 0.102,
+  "peak_dbfs": -8.44,
+  "true_peak_dbtp": -8.41,
+  "lufs": -21.0,
+  "short_term_max": -21.0,
+  "momentary_max": -21.0,
+  "dc": 2.9033732747994447e-07,
+  "ffmpeg_lufs": -70.0,
+  "ffmpeg_true_peak": -8.4,
+  "render_s": 0.3,
+  "library": {
+   "file": "sfx-cardFlip.mp3",
+   "duration": 0.102
+  }
+ },
+ "sfx:bandage": {
+  "file": "assets/audio/sfx-bandage.mp3",
+  "kind": "sfx",
+  "bytes": 8821,
+  "channels": 1,
+  "duration": 1.028,
+  "peak_dbfs": -7.67,
+  "true_peak_dbtp": -7.52,
+  "lufs": -18.9,
+  "short_term_max": -19.7,
+  "momentary_max": -18.0,
+  "dc": 1.0771744620178216e-05,
+  "ffmpeg_lufs": -21.8,
+  "ffmpeg_true_peak": -7.5,
+  "render_s": 0.3,
+  "library": {
+   "file": "sfx-bandage.mp3",
+   "duration": 1.028
+  }
+ },
+ "sfx:espresso": {
+  "file": "assets/audio/sfx-espresso.mp3",
+  "kind": "sfx",
+  "bytes": 8403,
+  "channels": 1,
+  "duration": 0.98,
+  "peak_dbfs": -10.92,
+  "true_peak_dbtp": -10.82,
+  "lufs": -23.2,
+  "short_term_max": -22.2,
+  "momentary_max": -18.5,
+  "dc": 2.8733082121198834e-07,
+  "ffmpeg_lufs": -25.9,
+  "ffmpeg_true_peak": -10.8,
+  "render_s": 0.3,
+  "library": {
+   "file": "sfx-espresso.mp3",
+   "duration": 0.98
+  }
+ },
+ "sfx:mirror": {
+  "file": "assets/audio/sfx-mirror.mp3",
+  "kind": "sfx",
+  "bytes": 27943,
+  "channels": 2,
+  "duration": 2.255,
+  "peak_dbfs": -11.43,
+  "true_peak_dbtp": -11.31,
+  "lufs": -22.1,
+  "short_term_max": -23.8,
+  "momentary_max": -18.4,
+  "dc": 3.330399882819481e-07,
+  "ffmpeg_lufs": -21.9,
+  "ffmpeg_true_peak": -11.3,
+  "render_s": 0.5,
+  "library": {
+   "file": "sfx-mirror.mp3",
+   "duration": 2.255
+  }
+ },
+ "sfx:tradeSwap": {
+  "file": "assets/audio/sfx-tradeSwap.mp3",
+  "kind": "sfx",
+  "bytes": 9762,
+  "channels": 2,
+  "duration": 0.75,
+  "peak_dbfs": -4.37,
+  "true_peak_dbtp": -4.36,
+  "lufs": -19.0,
+  "short_term_max": -19.9,
+  "momentary_max": -17.2,
+  "dc": 8.673415645721378e-05,
+  "ffmpeg_lufs": -18.9,
+  "ffmpeg_true_peak": -4.4,
+  "render_s": 0.3,
+  "library": {
+   "file": "sfx-tradeSwap.mp3",
+   "duration": 0.75
+  }
+ },
+ "sfx:lanternBlock": {
+  "file": "assets/audio/sfx-lanternBlock.mp3",
+  "kind": "sfx",
+  "bytes": 36981,
+  "channels": 2,
+  "duration": 2.567,
+  "peak_dbfs": -3.11,
+  "true_peak_dbtp": -2.2,
+  "lufs": -19.4,
+  "short_term_max": -21.4,
+  "momentary_max": -14.2,
+  "dc": 4.485778443610354e-05,
+  "ffmpeg_lufs": -19.3,
+  "ffmpeg_true_peak": -2.2,
+  "render_s": 0.6,
+  "library": {
+   "file": "sfx-lanternBlock.mp3",
+   "duration": 2.567
+  }
+ },
+ "sfx:possessed": {
+  "file": "assets/audio/sfx-possessed.mp3",
+  "kind": "sfx",
+  "bytes": 53438,
+  "channels": 2,
+  "duration": 3.746,
+  "peak_dbfs": -6.37,
+  "true_peak_dbtp": -6.37,
+  "lufs": -18.8,
+  "short_term_max": -19.9,
+  "momentary_max": -15.9,
+  "dc": 8.500624818516e-05,
+  "ffmpeg_lufs": -18.7,
+  "ffmpeg_true_peak": -6.4,
+  "render_s": 1.3,
+  "library": {
+   "file": "sfx-possessed.mp3",
+   "duration": 3.746
+  }
+ },
+ "sfx:possessOther": {
+  "file": "assets/audio/sfx-possessOther.mp3",
+  "kind": "sfx",
+  "bytes": 39228,
+  "channels": 2,
+  "duration": 3.2,
+  "peak_dbfs": -6.36,
+  "true_peak_dbtp": -6.36,
+  "lufs": -20.9,
+  "short_term_max": -22.6,
+  "momentary_max": -16.1,
+  "dc": 8.196220506703897e-06,
+  "ffmpeg_lufs": -20.8,
+  "ffmpeg_true_peak": -6.4,
+  "render_s": 0.8,
+  "library": {
+   "file": "sfx-possessOther.mp3",
+   "duration": 3.2
+  }
+ },
+ "sfx:noTrade": {
+  "file": "assets/audio/sfx-noTrade.mp3",
+  "kind": "sfx",
+  "bytes": 9239,
+  "channels": 1,
+  "duration": 1.08,
+  "peak_dbfs": -6.33,
+  "true_peak_dbtp": -6.28,
+  "lufs": -23.3,
+  "short_term_max": -23.0,
+  "momentary_max": -20.4,
+  "dc": 0.00010071914190599564,
+  "ffmpeg_lufs": -26.1,
+  "ffmpeg_true_peak": -6.3,
+  "render_s": 0.4,
+  "library": {
+   "file": "sfx-noTrade.mp3",
+   "duration": 1.08
+  }
+ },
+ "sfx:knife": {
+  "file": "assets/audio/sfx-knife.mp3",
+  "kind": "sfx",
+  "bytes": 6940,
+  "channels": 1,
+  "duration": 0.799,
+  "peak_dbfs": -4.87,
+  "true_peak_dbtp": -4.7,
+  "lufs": -17.6,
+  "short_term_max": -18.7,
+  "momentary_max": -15.7,
+  "dc": 0.00022635143081103449,
+  "ffmpeg_lufs": -20.5,
+  "ffmpeg_true_peak": -4.7,
+  "render_s": 0.3,
+  "library": {
+   "file": "sfx-knife.mp3",
+   "duration": 0.799
+  }
+ },
+ "sfx:revolver": {
+  "file": "assets/audio/sfx-revolver.mp3",
+  "kind": "sfx",
+  "bytes": 24495,
+  "channels": 2,
+  "duration": 1.979,
+  "peak_dbfs": -2.39,
+  "true_peak_dbtp": -2.39,
+  "lufs": -16.8,
+  "short_term_max": -20.2,
+  "momentary_max": -13.9,
+  "dc": 9.399660451857139e-05,
+  "ffmpeg_lufs": -16.7,
+  "ffmpeg_true_peak": -2.4,
+  "render_s": 0.4,
+  "library": {
+   "file": "sfx-revolver.mp3",
+   "duration": 1.979
+  }
+ },
+ "sfx:hurt": {
+  "file": "assets/audio/sfx-hurt.mp3",
+  "kind": "sfx",
+  "bytes": 10076,
+  "channels": 2,
+  "duration": 0.782,
+  "peak_dbfs": -5.01,
+  "true_peak_dbtp": -5.0,
+  "lufs": -20.3,
+  "short_term_max": -19.5,
+  "momentary_max": -16.6,
+  "dc": 6.152480497681116e-05,
+  "ffmpeg_lufs": -20.2,
+  "ffmpeg_true_peak": -5.0,
+  "render_s": 0.4,
+  "library": {
+   "file": "sfx-hurt.mp3",
+   "duration": 0.782
+  }
+ },
+ "sfx:death": {
+  "file": "assets/audio/sfx-death.mp3",
+  "kind": "sfx",
+  "bytes": 48946,
+  "channels": 2,
+  "duration": 4.0,
+  "peak_dbfs": -1.78,
+  "true_peak_dbtp": -1.78,
+  "lufs": -17.2,
+  "short_term_max": -17.6,
+  "momentary_max": -15.0,
+  "dc": 5.113148780396635e-05,
+  "ffmpeg_lufs": -17.2,
+  "ffmpeg_true_peak": -1.8,
+  "render_s": 1.8,
+  "library": {
+   "file": "sfx-death.mp3",
+   "duration": 4.0
+  }
+ },
+ "sfx:infirmary": {
+  "file": "assets/audio/sfx-infirmary.mp3",
+  "kind": "sfx",
+  "bytes": 26063,
+  "channels": 2,
+  "duration": 2.091,
+  "peak_dbfs": -11.75,
+  "true_peak_dbtp": -11.72,
+  "lufs": -23.9,
+  "short_term_max": -23.5,
+  "momentary_max": -18.4,
+  "dc": 1.6467518372170036e-06,
+  "ffmpeg_lufs": -23.6,
+  "ffmpeg_true_peak": -11.7,
+  "render_s": 0.4,
+  "library": {
+   "file": "sfx-infirmary.mp3",
+   "duration": 2.091
+  }
+ },
+ "sfx:switchboard": {
+  "file": "assets/audio/sfx-switchboard.mp3",
+  "kind": "sfx",
+  "bytes": 32018,
+  "channels": 2,
+  "duration": 2.603,
+  "peak_dbfs": -9.48,
+  "true_peak_dbtp": -9.38,
+  "lufs": -18.1,
+  "short_term_max": -18.7,
+  "momentary_max": -16.4,
+  "dc": 1.020626484832389e-06,
+  "ffmpeg_lufs": -17.8,
+  "ffmpeg_true_peak": -9.4,
+  "render_s": 0.4,
+  "library": {
+   "file": "sfx-switchboard.mp3",
+   "duration": 2.603
+  }
+ },
+ "sfx:escape": {
+  "file": "assets/audio/sfx-escape.mp3",
+  "kind": "sfx",
+  "bytes": 36981,
+  "channels": 2,
+  "duration": 2.566,
+  "peak_dbfs": -3.56,
+  "true_peak_dbtp": -3.55,
+  "lufs": -18.4,
+  "short_term_max": -19.3,
+  "momentary_max": -15.4,
+  "dc": 5.841198936703166e-05,
+  "ffmpeg_lufs": -18.3,
+  "ffmpeg_true_peak": -3.6,
+  "render_s": 0.6,
+  "library": {
+   "file": "sfx-escape.mp3",
+   "duration": 2.566
+  }
+ },
+ "sfx:steps": {
+  "file": "assets/audio/sfx-steps.mp3",
+  "kind": "sfx",
+  "bytes": 41630,
+  "channels": 1,
+  "duration": 5.14,
+  "peak_dbfs": -6.34,
+  "true_peak_dbtp": -6.34,
+  "lufs": -23.7,
+  "short_term_max": -22.4,
+  "momentary_max": -20.5,
+  "dc": 0.0005828348690654808,
+  "ffmpeg_lufs": -26.7,
+  "ffmpeg_true_peak": -6.3,
+  "render_s": 0.5,
+  "library": {
+   "file": "sfx-steps.mp3",
+   "duration": 5.14,
+   "slices": {
+    "carpet": [
+     [
+      0.04,
+      0.36
+     ],
+     [
+      0.46,
+      0.36
+     ],
+     [
+      0.88,
+      0.36
+     ],
+     [
+      1.3,
+      0.36
+     ]
+    ],
+    "wood": [
+     [
+      1.72,
+      0.36
+     ],
+     [
+      2.14,
+      0.36
+     ],
+     [
+      2.56,
+      0.36
+     ],
+     [
+      2.98,
+      0.36
+     ]
+    ],
+    "marble": [
+     [
+      3.4,
+      0.36
+     ],
+     [
+      3.82,
+      0.36
+     ],
+     [
+      4.24,
+      0.36
+     ],
+     [
+      4.66,
+      0.36
+     ]
+    ]
+   }
+  }
+ }
+}

@@ -46,6 +46,7 @@ import { createSearchSpot } from './ui/searchSpot.js';
 import { createDiscard } from './ui/discard.js';
 import { createHandoff } from './ui/handoff.js';
 import { createMeeting } from './ui/meeting.js';
+import { createTradeReveal, tradeOutcome } from './ui/tradeReveal.js';
 import { roundLabel, finalRoundNote, isFinal } from './ui/roundLabel.js';
 import { createPerfStats } from './ui/perfStats.js';
 import { createGuestTags } from './ui/guestTags.js';
@@ -56,6 +57,9 @@ import { usePracticeWording } from './ui/cards.js';
 import { createMenu } from './ui/menu.js';
 import { createFeed } from './ui/feed.js';
 import { settings } from './settings.js';
+import { createAudio } from './audio/index.js';
+import { createGameSounds } from './audio/gameSounds.js';
+import { sfx } from './audio/bus.js';
 import { makeRng, shuffle } from './game/cards.js';
 
 // --- World (pure data + rules) ---------------------------------------------------------
@@ -208,6 +212,7 @@ const feed = createFeed(document);     // what the other guests just did (a matc
 const topLeftEl = document.querySelector('.hud-top-left');
 const handoff = createHandoff(document);
 const meeting = createMeeting(document, cfg, { isViewer: p => !PRACTICE && p.index === humanSeat });
+const tradeReveal = createTradeReveal(document, { handoff });   // the player's own trade, as cards
 
 let running = false;
 let pendingArrival = null;   // enterRoom result waiting for the walk to finish
@@ -329,6 +334,7 @@ function beginTurn() {
     startTimer();
     refresh();
     hud.toast(`Your turn — ${rules.actionPointsPerTurn} actions.${lockNews ? ` ${lockNews}` : ''}`, lockNews ? 5 : undefined);
+    sfx('yourTurn');
     lockNews = '';
   };
   if (p.roleChangePending) { p.roleChangePending = false; handoff.revealRole(p, { changed: true }, go); return; }
@@ -355,7 +361,10 @@ function tickTimer(dt) {
   if (!rules.turnTimerEnabled || state.finished || timerLeft <= 0) return;
   if (myTurn() && !inActionPhase) return;
   if (timerPaused()) return;
+  const secsBefore = Math.ceil(timerLeft);
   timerLeft -= dt;
+  // (the player's own clock ticks out loud for its last ten seconds)
+  if (myTurn() && timerLeft > 0 && timerLeft <= 10 && Math.ceil(timerLeft) < secsBefore) sfx('tick', { volume: timerLeft <= 3.5 ? 1 : 0.7 });
   // A guest still walking when the clock runs out always ends on a standing spot: the walk is cut short
   // at the next room (or, if they have just stepped into a room, at its middle), and they finish arriving
   // first (a forced meeting there pauses the clock); the turn then ends at once. Ending it mid-walk would
@@ -389,7 +398,7 @@ function cutWalkShort() {
 
 function onTimeUp() {
   stopTimer();
-  if (myTurn()) hud.toast(PRACTICE ? `Time is up — ${activePlayer(state).name}'s turn ends.` : 'Time is up — your turn ends.');
+  if (myTurn()) { hud.toast(PRACTICE ? `Time is up — ${activePlayer(state).name}'s turn ends.` : 'Time is up — your turn ends.'); sfx('timeUp'); }
   endTurnNow();
 }
 
@@ -432,6 +441,7 @@ function passTurn() {
   mood.snap(activePlayer(state).currentRoom);
   refresh();
   hud.toast(`Turn ${state.turn} — ${rules.actionPointsPerTurn} action points.${relocked ? ` ${relocked}` : ''}`, relocked ? 5 : undefined);
+  sfx('yourTurn', { volume: 0.7 });
 }
 
 // End the turn (the End turn button, or the 45-second clock running out). The hand limit is settled
@@ -568,6 +578,7 @@ function runTrade(A, B, onDone = afterMeeting, { voluntary = false } = {}) {
   }
   const other = human === A ? B : A;
   const theirs = botCard(other, human);
+  tradeReveal.preload();     // (the card faces the reveal will turn over)
   handoff.privatePick(human, {
     kicker: voluntary ? `The Fire Exit — a trade with ${other.name}` : human === A ? `A trade with ${other.name}` : `${other.name} walked in — a trade`,
     title: `Give one card to ${other.name}`,
@@ -579,17 +590,22 @@ function runTrade(A, B, onDone = afterMeeting, { voluntary = false } = {}) {
       after(botThink(other.index, 'trade'), () => {
         meeting.close();
         const [cA, cB] = human === A ? [card, theirs] : [theirs, card];
+        // (the two cards, kept before they change hands: the reveal shows them)
+        const mine = human.hand.find(c => c.id === card), given = other.hand.find(c => c.id === theirs);
+        const wasPossessed = human.possessed;
         const events = resolveTrade(state, floor, A, B, cA, cB);
-        // What the player reads in private: what they received, then the rules' own notes. A Possession
-        // card is explained by the note ("…You are now POSSESSED"), so it gets no "You received" line.
-        const got = events.ok ? events.received[human.id] : null;
-        const lines = !events.ok ? ['The trade could not be made.']
-          : got === 'possession' ? []
-            : [got ? `You received ${aCard(got)} from ${other.name}.` : `The card ${other.name} gave you burned away in your Lantern's light.`];
-        const newly = !!events.possessed?.some(e => e.newly === human.id);
+        if (!events.ok) { refresh(); handoff.privateNote(human, ['The trade could not be made.'], onDone); return; }
+        const newly = events.possessed?.find(e => e.newly === human.id);
         if (newly) human.roleChangePending = false;
         refresh();
-        handoff.privateNote(human, lines, () => (newly ? handoff.revealRole(human, { changed: true }, onDone) : onDone()));
+        // What the player sees in private: the trade as cards with its effect (src/ui/tradeReveal.js),
+        // then, if it possessed them, their new role. The Possession cards they now hold: the one they
+        // were given and any extra ones the rules dealt with it.
+        const held = Math.max(human.hand.filter(c => c.type === 'possession').length, newly ? 1 + (newly.extra ?? 0) : 0);
+        tradeReveal.show({
+          outcome: tradeOutcome(events, human, other), me: human, other, mine, theirs: given,
+          held, wasPossessed, notes: events.notes?.[human.id],
+        }, () => (newly ? handoff.revealRole(human, { changed: true }, onDone) : onDone()));
       });
     },
   });
@@ -598,28 +614,35 @@ function runTrade(A, B, onDone = afterMeeting, { voluntary = false } = {}) {
 // The trade is skipped: nothing changes hands, the meeting ends. The player (if in it) reads why, in
 // private (the rules' own note, worded the same whatever anyone's role).
 function skippedTrade(A, B, onDone) {
-  skipTrade(state, floor, A, B);
+  const r = skipTrade(state, floor, A, B);
   const human = [A, B].find(X => !isBot(X.index));
   if (!human) { onDone(); return; }
-  handoff.privateNote(human, [], onDone);
+  if (!r.ok) { handoff.privateNote(human, [], onDone); return; }
+  // An empty slot for whoever had nothing to give (src/ui/tradeReveal.js, 'noTrade').
+  tradeReveal.show({
+    outcome: 'noTrade', me: human, other: human === A ? B : A, empty: r.empty || [],
+    wasPossessed: human.possessed, notes: r.notes?.[human.id] ? [r.notes[human.id]] : [],
+  }, onDone);
 }
 
 // The player attacks: choose a weapon, then the public result.
 function runAttack(P, Q, onBack = null) {
   meeting.attackPick(P, Q, weaponId => {
+    const before = Q.health;
     const events = resolveAttack(state, floor, P, Q, weaponId);
     if (events.killed) layBodyClear(Q.index);   // (the figure falls when the result is dismissed)
-    meeting.attackResult(P, Q, events, afterMeeting);
+    meeting.attackResult(P, Q, events, afterMeeting, { before });
   }, onBack);
 }
 
 // A computer guest attacks. If the player is the one attacked, they read it (and tap on); between two
 // computer guests a short public line says what happened.
 function botAttack(P, Q, weaponId) {
+  const before = Q.health;
   const events = resolveAttack(state, floor, P, Q, weaponId);
   if (!events.ok) { runTrade(P, Q); return; }
   if (events.killed) layBodyClear(Q.index);
-  if (!isBot(Q.index)) { meeting.attackResult(P, Q, events, afterMeeting); return; }
+  if (!isBot(Q.index)) { meeting.attackResult(P, Q, events, afterMeeting, { before }); return; }
   hud.toast(`${P.name} attacked ${Q.name} with ${aCard(events.weapon)}${events.killed ? ` — ${Q.name} is dead` : ''}.`, 4);
   afterMeeting();
 }
@@ -896,6 +919,7 @@ function onSearch() {
     lines: [line + tally + limitNote],
     soft: true,
   }, then);
+  if (found.length) sfx('cardFound', { delay: 0.55 });
 }
 
 // The search icon (or its furniture) was tapped: search it from where the guest stands — they do not
@@ -924,6 +948,7 @@ function onUseBandage(cardId) {
   const r = useBandage(state, activePlayer(state), cardId);
   if (!r.ok) { hud.toast(r.reason === 'full' ? 'Already at full health.' : r.reason === 'ap' ? 'No action points left.' : 'Cannot use that now.'); return; }
   hud.toast(`Bandaged — health ${r.health} of ${rules.maxHealth}.`);
+  sfx('bandage');
   refresh();
 }
 
@@ -958,6 +983,7 @@ function onEspresso(cardId) {
   const r = useEspresso(state, activePlayer(state), cardId);
   if (!r.ok) { hud.toast(r.reason === 'ap' ? 'No action points left.' : 'Cannot use that now.'); return; }
   hud.toast(`Espresso — ${r.gained} extra actions this turn.`);
+  sfx('espresso');
   refresh();
 }
 
@@ -1042,6 +1068,7 @@ function showEnd() {
   stopTimer();
   meetingLive = false;
   hud.hideConfirm(); selectedMove = null;
+  endMusic();
   if (state.practice) {
     overlays.showEnd('You reached the fire exit',
       `Practice complete: ${rules.lanternsToEscape} Lanterns carried out.\n${floor.roomList.length} rooms of the hotel revealed, on round ${state.round}.`,
@@ -1206,12 +1233,14 @@ function setupGame(plan) {
 async function enterGame(plan, { guests = 3 } = {}) {
   menu.leave();
   phase = 'intro';
+  audio.setScene('intro');
   applyPixelRatio();
   container.classList.remove('blurred');
   if (INTRO && lobbyReady && lobby) {
     // (never longer than LIFT_MAX_MS: on a struggling device the scene runs slow, and the game must not wait)
-    try { await Promise.race([lobby.enter({ guests }), wait(LIFT_MAX_MS)]); } catch (err) { console.warn('the lift sequence failed:', err); }
+    try { await Promise.race([lobby.enter({ guests, onCue: name => sfx(name) }), wait(LIFT_MAX_MS)]); } catch (err) { console.warn('the lift sequence failed:', err); }
   } else await wait(400);
+  audio.setScene('none');          // (the lobby music goes with the picture)
   await fade(true, 650);
   menu.hide();
   setupGame(plan);
@@ -1223,6 +1252,7 @@ async function enterGame(plan, { guests = 3 } = {}) {
     overlays.showNotice('Practice',
       `You are alone in the hotel. You start with ${rules.lanternsDealtEach} Lantern — find ${rules.lanternsToEscape - rules.lanternsDealtEach} more and escape through the Fire Exit.`, refresh);
   }
+  sfx('fadeIn');
   await fade(false, 900);
 }
 
@@ -1253,6 +1283,7 @@ function humanSeatFirst(plan) {
 // Play again (a match): a new table with the same choices, straight in (no menu, no lift).
 async function playAgain() {
   const plan = await planGame(lastChoice.practice ? { practice: true } : lastChoice);
+  audio.stopStinger();
   await fade(true, 450);
   setupGame(plan);
   begin();
@@ -1262,10 +1293,12 @@ async function playAgain() {
 
 // Back to the main menu (from the end screen or the Menu button).
 async function backToMenu() {
+  audio.stopStinger();
   await fade(true, 450);
   gameToken++;
   running = false;
   phase = 'menu';
+  audio.setScene('menu');
   stopTimer();
   hud.hide();
   overlays.hideEnd(); overlays.hideNotice(); overlays.hideAsk(); overlays.hideStart();
@@ -1407,7 +1440,7 @@ function offerMove(destId) {
   const plan = discovery.planToRoom(destId, standAtFor(player.index));
   if (!plan.ok) {
     hud.hideConfirm(); selectedMove = null;
-    if (plan.reason !== 'finished' && plan.reason !== 'dead') hud.toast(moveRefusal(plan, dest, player), 4);
+    if (plan.reason !== 'finished' && plan.reason !== 'dead') { hud.toast(moveRefusal(plan, dest, player), 4); sfx(plan.reason === 'locked' ? 'doorLocked' : 'deny'); }
     return;
   }
   const end = plan.waypoints[plan.waypoints.length - 1];
@@ -1596,6 +1629,43 @@ hud.on('restartPractice', () => {
     { yes: 'Restart', no: 'Keep playing' }, restart);
 });
 
+// --- Music and sound -------------------------------------------------------------------------------
+// src/audio/: the music of each scene (the lobby waltz in the menu and the lift, the night ambience in
+// a game, the final-round piece in round 8, a stinger on the end screen) and every sound cue
+// (src/audio/bus.js). The hotel's own sounds - doors, searches, attacks, footsteps - come from the
+// engine's PUBLIC events (src/audio/gameSounds.js), so the game code needs no sound calls for them.
+const audio = createAudio({ settings });
+const gameSounds = createGameSounds({
+  state,
+  humanSeat: () => humanSeat,
+  positionOf: i => (movers[i] ? [movers[i].x, movers[i].z] : null),
+  listener: () => rig.centre,
+  panOf: (x, z) => { const sp = groundToScreen(x, z); return innerWidth > 0 ? (sp.x / innerWidth) * 2 - 1 : 0; },
+  mover: i => movers[i],
+  walkPhase: i => { const d = characters[i]?.debug?.(); return d?.model && d.loaded ? { phase: d.walkPhase, stride: d.strideLength } : null; },
+  // (an attack the player is in shows on the meeting screen, which plays its own blow: src/ui/meeting.js)
+  skipAttack: e => e.by === humanSeat || e.target === humanSeat,
+});
+function syncSound() {
+  const playing = running && phase === 'game';
+  gameSounds.update(playing);
+  if (!playing || state.finished) return;
+  audio.setScene(!PRACTICE && isFinal(state) ? 'final' : 'game');
+  if (!PRACTICE && state.round >= rules.roundLimit - 1) audio.prefetch('final');
+}
+// The end screen: the round's music gives way to a stinger, from the player's side of the table (dawn
+// tolls its bell first).
+function endMusic() {
+  if (audio.scene === 'end') return;              // (the end screen shown again: one stinger is enough)
+  audio.setScene('end');
+  const lead = state.escaped?.size ? 0.9 : 0.2;     // (an escape's door and night air go first)
+  if (state.practice) { sfx('win', { delay: lead }); return; }
+  const you = me();
+  const yourSideWon = (state.won === 'humans') !== !!you?.possessed;
+  const side = yourSideWon ? (you?.possessed ? 'winPossessed' : 'win') : 'lose';
+  if (state.dawn) { sfx('dawn'); sfx(side, { delay: 3.2, volume: 0.8 }); } else sfx(side, { delay: lead });
+}
+
 // --- Start: the main menu, or a direct link --------------------------------------------------------
 const menu = createMenu(document, {
   onPlayBots: choice => startBots(choice),
@@ -1609,6 +1679,7 @@ function gamePixelRatio() { return settings.choice('graphics')?.pixelRatio ?? cf
 function applyPixelRatio() { view.setPixelRatio(phase === 'menu' && !DIRECT ? Math.min(MENU_PIXEL_RATIO, gamePixelRatio()) : gamePixelRatio()); }
 function applySettings(name = null) {
   if (!name || name === 'graphics') applyPixelRatio();
+  if (name === 'music' || name === 'sound') audio.applySettings();
   if (name === 'botSpeed' && bots) movers.forEach((m, i) => { if (isBot(i)) m.speedScale = botWalkScale(); });
 }
 applySettings();
@@ -1641,6 +1712,7 @@ if (DIRECT) {
   overlays.onBegin(() => { if (startReady) begin(); });
 } else {
   menu.show('main');
+  audio.setScene('menu');          // (heard from the first tap: browsers allow no sound before one)
   container.classList.add('blurred');
   import('./menu/lobbyScene.js')
     .then(mod => {
@@ -1716,6 +1788,7 @@ view.renderer.setAnimationLoop(now => {
   syncHandFan();
   syncSearchSpot();     // after the render, so it reads this frame's camera
   if (running) { feed.sync(state, PRACTICE ? null : me()); feed.tick(); feed.place(topLeftEl); }
+  syncSound();
   // The tags over the view, most important first (a later tag that would clash is left out): when zoomed
   // far out, the active guest's name (so they can always be found); Explore over the fogged rooms next
   // door; Go over the rooms next door (not when zoomed far out: the names take over); then the other
@@ -1779,7 +1852,17 @@ window.__game = {
   backToMenu: () => backToMenu(),
   endOpen: () => overlays.endOpen,
   askOpen: () => overlays.askOpen,
-  handoff, meeting,
+  handoff, meeting, tradeReveal,
+  // QA: the private trade reveal for one outcome (src/ui/tradeReveal.js: swap, blocked, blockedMe,
+  // possessed, possessedThem, noTrade, and the extra samples noTradeMe, noTradeBoth, possessedThree,
+  // swapPossession), with sample cards, for your guest and another; nothing in the game changes.
+  previewTradeReveal: (outcome = 'swap') => {
+    const you = state.players[humanSeat] || roster[0];
+    const them = state.players.find(p => p !== you) || roster.find(r => r.outfit !== you.outfit) || roster[1];
+    return tradeReveal.preview(outcome, you, them);
+  },
+  tradeRevealOutcome: () => tradeReveal.outcome,
+  skipTradeReveal: () => tradeReveal.skip(),
   handoffOpen: () => handoff.isOpen, handoffKind: () => handoff.kind,
   handoffNext: () => document.getElementById('btn-handoff-next').click(),
   meetingOpen: () => meeting.isOpen,
@@ -1787,6 +1870,7 @@ window.__game = {
   clickNotice: () => document.getElementById('btn-notice-ok').click(),
   timeLeft: () => timerLeft,
   forceTimeUp: () => { timerLeft = 0.0001; },
+  setTimeLeft: secs => { if (timerLeft > 0) timerLeft = secs; },     // (tests: the clock's last seconds)
   inActionPhase: () => inActionPhase,
   dressingDone: () => dressingDone,
   publicLog: () => state.log.map(l => l.text),

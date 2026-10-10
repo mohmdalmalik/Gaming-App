@@ -3,10 +3,13 @@
 //   main         Play with bots · Practice alone · Settings
 //   bots         how many other guests (3-5) and your role (random, clean, possessed)
 //   matchmaking  the table filling up, guest by guest, as in an online game
-//   settings     bot speed, the view on other guests' turns, graphics, the menu background
+//   settings     bot speed, the view on other guests' turns, graphics, the menu background, music
+//                and sound effects (each applied at once, through onSettingChanged)
 // Choices are remembered on this device (src/settings.js). Nothing here touches the game itself:
-// main.js gets the choice through the callbacks and starts the match.
+// main.js gets the choice through the callbacks and starts the match. A guest joining the table rings
+// the reception bell (the sound cue bus, src/audio/bus.js).
 import { settings, SETTING_CHOICES } from '../settings.js';
+import { sfx } from '../audio/bus.js';
 
 const ROLE_CHOICES = [
   { value: 'random', label: 'Random', note: 'Like a real table: you are told your role when the game starts. Usually you are a clean guest.' },
@@ -103,6 +106,7 @@ export function createMenu(doc, { onPlayBots, onPractice, onSettingChanged } = {
       t += 380 + Math.random() * 900 + (Math.random() < 0.2 ? 700 : 0);
       mmTimers.push(setTimeout(() => {
         fill(i);
+        sfx('joined');
         $('mm-note').textContent = i < total - 1 ? `${i + 1} of ${total} here` : '';
       }, t));
     }

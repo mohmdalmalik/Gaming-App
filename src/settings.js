@@ -1,7 +1,7 @@
 // The player's own settings (the Settings screen of the main menu). Kept on this device only
 // (localStorage); every read and write is guarded, so a private window or blocked storage simply
 // falls back to the defaults. Nothing here is a game rule: these change how the game looks and
-// how quickly the computer guests play, never what anyone may do.
+// sounds and how quickly the computer guests play, never what anyone may do.
 const KEY = 'hotelEscape.settings.v1';
 
 export const SETTING_CHOICES = {
@@ -27,9 +27,23 @@ export const SETTING_CHOICES = {
     { value: 'on', label: 'Animated' },
     { value: 'off', label: 'Still' },
   ],
+  // Sound (src/audio/): the music (the lobby waltz, the night ambience, the end stingers) and the
+  // sound effects, each with its own volume. `gain` is the level it plays at (1 = full).
+  music: [
+    { value: 'off', label: 'Off', gain: 0 },
+    { value: 'low', label: 'Low', gain: 0.22 },
+    { value: 'medium', label: 'Medium', gain: 0.45 },
+    { value: 'high', label: 'High', gain: 0.75 },
+  ],
+  sound: [
+    { value: 'off', label: 'Off', gain: 0 },
+    { value: 'low', label: 'Low', gain: 0.3 },
+    { value: 'medium', label: 'Medium', gain: 0.6 },
+    { value: 'high', label: 'High', gain: 1 },
+  ],
 };
 
-const DEFAULTS = { botSpeed: 'normal', follow: 'follow', graphics: 'balanced', menuMotion: 'on', bots: 5, role: 'random' };
+const DEFAULTS = { botSpeed: 'normal', follow: 'follow', graphics: 'balanced', menuMotion: 'on', music: 'medium', sound: 'high', bots: 5, role: 'random' };
 
 function load() {
   try {

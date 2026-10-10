@@ -5,14 +5,15 @@
 // stacking context under #hud), never takes a tap (pointer-events: none: a tap lands on the room or fog
 // under it), stays whole inside the screen, and is hidden for as long as it would overlap any part of
 // the interface (the guest strip, the room name and round, the panel, the hand, the buttons, the
-// Move/Cancel bar, a toast, the search icon, the path tag) or a more important tag placed before it in
+// Move/Cancel bar, a toast, the search icon, the path tag, the chat panel, the feed's lines) or a more important tag placed before it in
 // the same frame (a tag that would clash with another tag first tries one tag-height higher, then lower). Cheap: positions are written only when they change, sizes are measured only when a
 // tag's words change, the interface's boxes are re-read every few frames, and the view's size is
 // cached until it is resized.
 
 // The parts of the interface a tag must never cover (whichever are showing).
 export const INTERFACE = ['.hud-top-left', '.hud-top-center', '.hud-top-right', '#player-panel', '#hand-fan .fan-card',
-  '#hand-fan .fan-limit', '.hud-bottom-right', '#confirm-bar', '#toast', '#search-spot', '.path-label'];
+  '#hand-fan .fan-limit', '.hud-bottom-right', '#confirm-bar', '#toast', '#search-spot', '.path-label', '#chat-panel',
+  '#feed .feed-line'];
 
 const shown = el => !!el && !el.hidden && !el.closest('[hidden]') && el.getClientRects().length > 0
   && getComputedStyle(el).visibility !== 'hidden' && getComputedStyle(el).display !== 'none';

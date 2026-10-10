@@ -4,6 +4,7 @@
 import { CARDS, countableCount } from '../game/cards.js';
 import { rules } from '../data/rules.js';
 import { cardIcon } from './cardIcons.js';
+import { soulFaceSrc, markSoul, prepareSoulFaces } from './soulFace.js';
 
 // Over the hand limit DURING a turn is allowed (approved rule: the limit is settled only when the turn
 // ends). This is the gentle reminder shown wherever the count is: '' when within the limit, otherwise
@@ -52,6 +53,22 @@ export const CARD_FACE = {
 };
 export const CARD_BACK = 'assets/cards/back.jpg';
 
+// The face of one card. A Possession card is its owner's own soul (soul cards, approved 10 Oct 2026): it
+// shows their possessed face in the card's mirror (card.owner, drawn by src/ui/soulFace.js), or the plain
+// face while that is being drawn and for a card whose owner is unknown. Every other card: its type's face.
+export function cardFaceSrc(card) {
+  const plain = CARD_FACE[card?.type];
+  return card?.type === 'possession' ? soulFaceSrc(card.owner, plain) : plain;
+}
+// Put a card's face on an <img>. A soul's own face replaces the plain one by itself once it is drawn.
+export function setCardFace(img, card) {
+  img.src = cardFaceSrc(card) || '';
+  markSoul(img, card?.type === 'possession' ? card.owner : null);
+  return img;
+}
+// Draw these guests' soul faces ahead, one at a time (main.js, when a game is set up).
+export const prepareSoulCards = ids => prepareSoulFaces(ids, CARD_FACE.possession);
+
 // Practice is one guest alone — no trades, no possessed guest — so card words that talk about those
 // are swapped for these there (main.js switches it on in practice only). The rules' own words are in
 // src/data/rules.js and are unchanged.
@@ -96,7 +113,7 @@ export function cardTile(doc, card, opts = {}) {
 
   if (face) {
     const f = doc.createElement('div'); f.className = 'face-img';
-    const img = doc.createElement('img'); img.alt = `${meta.name}${shots}`; img.src = face; f.appendChild(img);
+    const img = doc.createElement('img'); img.alt = `${meta.name}${shots}`; setCardFace(img, card); f.appendChild(img);
     if (shots) { const b = doc.createElement('span'); b.className = 'face-badge'; b.textContent = `${card.shots} shot${card.shots === 1 ? '' : 's'}`; f.appendChild(b); }
     el.appendChild(f);
   } else {
@@ -139,7 +156,7 @@ export function bigCard(doc, card, opts = {}) {
   const face = doc.createElement('div');
   face.className = 'bc-face';
   if (CARD_FACE[card.type]) {
-    const img = doc.createElement('img'); img.src = CARD_FACE[card.type]; img.alt = meta.name; face.appendChild(img);
+    const img = doc.createElement('img'); setCardFace(img, card); img.alt = meta.name; face.appendChild(img);
   } else {
     face.appendChild(cardArt(doc, card.type));
   }

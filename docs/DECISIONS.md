@@ -160,7 +160,7 @@ Short record of the choices that shape the code and why, so another coding agent
 Implements `docs/GAME_RULES.md`. Kept pure and separate from rendering so a server can reuse it.
 - **All rule numbers live in `src/data/rules.js`** — action points (4/turn), action costs (move 1, discover 1, search 1, use-card 1, attack 1), health (3), hand size (4), the searchable deck composition, the possessed supply (3 Possession cards), Lanterns-to-escape (3), and per-card behaviour. Change values there, never in code.
 - **Entering a room costs move + discover the first time (2 AP for a new room, 1 for a known one).** `moveCostInto`/`enterRoom` add the discover point when the room is being revealed; `usableDoorways` only blinks a door the player can actually afford, and the confirm bar shows the real cost.
-- **Cards** (`src/game/cards.js`): a seeded PRNG (mulberry32) drives shuffling and dealing so a game is reproducible in tests; `main.js` seeds from `Date.now()` and reseeds on New game. Each card is an instance with a unique id (revolvers carry their own `shots`). The draw pile excludes Possession cards — those are the possessed side's private supply, dealt to the possessed player at setup and then passed on in successful trades; each conversion adds `rules.possessionOnConvert` (1) new card, so the number in play can grow past 3 (see 'Owner-approved (10 Oct 2026)').
+- **Cards** (`src/game/cards.js`): a seeded PRNG (mulberry32) drives shuffling and dealing so a game is reproducible in tests; `main.js` seeds from `Date.now()` and reseeds on New game. Each card is an instance with a unique id (revolvers carry their own `shots`). The draw pile excludes Possession cards — those are the possessed side's souls, dealt to the possessed player at setup. Each carries its `owner` (soul cards: only the owner holds and gives it); one that has done its work leaves the game, and each conversion makes `rules.soulsOnConvert` (2) new souls for the newly possessed guest, so the number in play can grow past 3 (see 'Owner-approved (10 Oct 2026): soul cards').
 - **State** (`src/game/state.js`): per-player `health`, `alive`, `possessed`, `hand`, `knows` (ids unmasked), `currentRoom`, `actionPoints`; shared `discovered` rooms and `encounterLocks`. `enterRoom` charges the move and reveals; `endTurn` skips the dead, refills AP and, on a new lap, bumps the round and clears the encounter locks. `checkWin`: humans win when a clean, living player with 3 Lanterns enters the exit; the possessed side wins when no living clean player remains.
 - **Encounters** (`src/game/actions.js`): `resolveTrade` takes both players' chosen cards and applies the spec exactly — a Possession card converts the receiver unless they gave a Lantern, in which case possession fails and the Lantern and the Possession card are both discarded (`rules.lanternBlock` 'discard'), and the defender learns the giver is possessed. `resolveAttack` applies knife/revolver damage, spends and discards an empty revolver, and marks a player dead at 0 HP. A per-room, per-round `encounterLocks` set stops the same pair being forced to meet twice in one room in a round.
 - **Cards deferred per spec §11**: Master Key, Lock Pick and Barricade are in the deck (so its composition matches the 6-player spec) but have no effect yet because locked/hidden rooms are explicitly out of this build; the hand panel labels them as such.
@@ -1199,6 +1199,8 @@ Target: `docs/art-reference.jpg` (style, palette and finish; not its layout or i
   cards came (`events.possessed[].extra`, and the private `possessed` event), so the interface and the bots
   can show / use them. Approved from a before/after list in the chat; docs/GAME_RULES.md updated with the
   approved wording. Reason: in play against bots the possessed side felt very hard to win.
+- (The "keep the card and get one more" part was replaced later the same day by soul cards: see
+  'Owner-approved (10 Oct 2026): soul cards'. `possessionOnConvert` and `.extra` are gone.)
 
 ## Music and sound effects (Oct 2026, owner's request)
 - **All made from code, nothing downloaded.** `tools/audio/` (Python: numpy/scipy + ffmpeg) synthesises
@@ -1277,3 +1279,164 @@ Target: `docs/art-reference.jpg` (style, palette and finish; not its layout or i
 - **Cheaper idle frames**: the turn clock touches the page only when its second changes (the bar is a
   `scaleX` transform: no re-layout every frame); the 'Still' menu background is drawn again only on a new
   size or pixel ratio, coming back from a game, or twice a second (its guests may still be arriving).
+
+## Owner-approved (10 Oct 2026): soul cards
+Approved word for word from a before/after list in the chat. The owner had noticed that after a trade in
+which both possessed guests handed over a Possession card, nobody lost one and the player held two.
+- **Before:** Possession cards were interchangeable. Receiving one possessed you; you kept that card and got
+  one more (`possessionOnConvert: 1`). Two possessed guests who both handed one over simply swapped them
+  (nothing lost), and one handed to a guest already possessed was kept by them (the possessed side lost
+  nothing, and the receiver gained a try).
+- **After:** each possessed guest's Possession cards are their own souls, with their own face; you only ever
+  hold and give your own. (1) Becoming possessed: the card that possessed you is used up and you get two
+  souls of your own (`rules.soulsOnConvert: 2`). (2) Both hand over a soul: both are used up, each loses a
+  try, each now knows the other. (3) A soul handed to a guest already possessed (they gave an ordinary
+  card): used up; the giver still gets their card, the other gains nothing; each now knows the other.
+  Unchanged: 3 to start, a Lantern blocks whatever the blocker's role (both burn, the blocker learns who
+  tried), the dead take their souls out of the game, souls never count toward the hand limit and can't be
+  discarded. No other balance change (owner's choice). docs/GAME_RULES.md updated with the approved wording.
+- **Engine** (`src/game/cards.js`, `actions.js`): every Possession card carries `owner` (a player id;
+  `makeCard('possession', { owner })`, the starting supply is the first possessed guest's). `mayGive` /
+  `tradeableCards`: a soul only by a possessed guest who owns it, else `resolveTrade` says `illegal`. A used-up
+  soul goes nowhere (not the discard pile, not the deck). `resolveTrade` returns `possessed[] { newly, by,
+  souls }`, `blocks[]`, `spent[] { by, at }` (rules 2 and 3; two entries when both handed one over) and the
+  private notes; `received` is null where nothing arrived, and `'possession'` for a guest a card possessed.
+  New private events: `soulSpent { by }` (receiver) / `alreadyPossessed { who }` (giver), and
+  `soulsCrossed { with }` (each); both sides go into each other's `knows`. The public log is still only
+  "X and Y traded."
+- **What a guest knows** (`src/game/knowledge.js`): `knownPossessed(state, player)` gives the ids that guest
+  certainly knows are possessed, from their own record and private events only (who possessed them, whom
+  they possessed, a Possession card that reached them, a block they made, a spent or crossed soul, a Hand
+  Mirror that showed one, their `knows`). Never from other guests' secrets (tested by scrambling them). For
+  the interface's red eyes on known allies; a server can reuse it.
+- **Bots** (`src/bots/brain.js`): the old guess ("a Possession card I gave neither converted nor was blocked,
+  so they were already possessed") is gone; they learn allies from the new events and never hand a soul to a
+  known ally (bots-check: 0 in 450 matches). Still information-honest (the scramble test covers the new
+  events and the owner field) and deterministic.
+- **Bot matches** (`node tools/balance/bot-match.mjs --n 1000`, clean side's wins, before → after): 6 players
+  43.2% → 44.3%, 5 players 38.1% → 38.4%, 4 players 31.2% → 31.1%. The hotel wins less by possessing
+  everyone (6 players 15.1% → 9.2%) and more at dawn (41.7% → 46.5%). Souls spent between possessed guests
+  per match (on one already possessed / both handed over): 0.69 / 0.46 at 6 players, 0.37 / 0.36 at 5,
+  0.10 / 0.14 at 4. Refused actions 0, unfinished matches 0.
+
+## Soul cards on screen; red eyes on known allies (10 Oct 2026, owner-approved — interface only)
+- **A soul's face** (`src/ui/soulFace.js`, used through `src/ui/cards.js` `setCardFace`): every Possession
+  card the player sees shows its OWNER's possessed portrait (`card.owner` -> the roster guest ->
+  `assets/portraits/<id>-possessed.jpg`) inside the card's own brass mirror, behind the card's purple smoke,
+  with a thin crimson line inside the brass. Drawn once per guest on a canvas (the card face with the mirror
+  opened by a per-pixel pass, the portrait under it) into one JPEG data URL, so every surface keeps a single
+  `<img>`: the hand fan, the tiles (role and turn screens, the card pick, the Hand Mirror), the card view,
+  the souls chip and the trade scenes (whose burning dissolve reads the same image). No new image file and
+  nothing per frame. `main.js` draws the table's faces ahead at game set-up, one per tick; an image shown
+  before its face was ready carries `data-soul` and is upgraded the moment it is. An unknown owner keeps the
+  plain face. Chosen over a small medallion because the mirror is already the card's medallion and makes the
+  face legible at the hand-fan size (~70 px wide).
+- **Trade scenes** (`src/ui/tradeReveal.js`): three new outcomes from `events.spent` — `soulSpent`,
+  `alreadyPossessed`, `soulsCrossed` — and `possessed` redrawn: a soul that is used up burns out in CRIMSON
+  (the same dissolve as the Lantern burn with a rose-to-crimson rim, crimson sparks and a smoke puff instead
+  of ash); possessed raises two souls with your own face where the card that possessed you burned. Each
+  caption is one short line. Cues reuse existing names (`possessOther` for "they are possessed too"); no new
+  sound. Previews: `previewTradeReveal('soulSpent' | 'alreadyPossessed' | 'soulsCrossed' | 'blockedPossessed')`
+  (the old `possessedThree` and `swapPossession` samples no longer match a rule and are gone).
+- **Red eyes on known allies** (`src/ui/allies.js` `redEyedAllies`): while the player is possessed, the guests
+  `knownPossessed` (src/game/knowledge.js) lists — and nothing else — wear red eyes on their screen: the 3D
+  guest (the render loop's `setPossessed`), the guest strip (`hud.js`), the attack result's portraits
+  (`meeting.js`) and the trade scenes. Never in practice, never for a clean viewer. A guest the scene on
+  screen is about to show to be possessed is held back (`holdAlly`) until it shows it, so the strip or the
+  hotel behind the scene never tells first (`runTrade` now refreshes the HUD after the scene opens). Views
+  are reset per game (castCharacters, hud.rebuild; the memo is keyed on the viewer's record). The player's
+  own red eyes are unchanged.
+- **Tested** by `tests/trade-reveal-check.mjs`: seven real trades through the interface (conversion,
+  blocked, swap, possessedThem, soulSpent, alreadyPossessed, soulsCrossed): faces on the cards (pick screen,
+  scene, role screen chip, hand fan), the hands afterwards, and the red eyes absent before, absent as the
+  scene starts, present after (strip and the 3D guest), and never for a clean player.
+
+## Quick chat and emotes (Oct 2026, owner-approved idea A — a social layer, no rule)
+- **What**: in a match, a Chat button beside the Menu button opens a small panel: nine preset lines and six
+  emotes (brass line drawings, no emoji), all in `src/data/chat.js`. One tap sends and closes it; a 3 s
+  cooldown. A message shows as a speech bubble over the speaker's guest (3.5 s, through the shared tag layer,
+  so it stays under the interface and drops out where it would clash — the feed's lines count as interface
+  too, since chat made the feed busier: no bubble or other tag shows through a feed line) and as a feed line ("Henry: Good
+  evening!", "You wave."), with a soft `click` for other guests' messages. Never in practice, never over a
+  private screen, a meeting or the map (on other guests' turns and while watching after death it works). The
+  end screen gets a one-tap "Good game!" and shows what is said there. Settings > Quick chat: Off removes all
+  of it, the bots' chat included.
+- **Not a rule**: nothing in `src/game/` knows about chat (tests/chat-check.mjs checks it). A message is
+  `{ seat, id, at }` and nothing else; it travels through `src/social/chat.js` (`say` for the player, `post`
+  for others). Online, `say` would go to the server and its relay would come back through `post`; the server
+  would check the id and the cooldown again.
+- **Bots** (`src/bots/chatter.js`): a separate, pure module (not part of `createBotTable`), asked four times a
+  second by `main.js`. Each bot reads only `botView` with its inbox cursor past the end — so the public events,
+  where everyone is and its own hand, never its private events — and the chat it heard. Moments and chances
+  are data (`BOT_CHAT`): a greeting at the start, "Thank you." after its own trade (whatever changed hands),
+  "Watch out!" / a gasp when attacked, "Sorry!" now and then after attacking, "Good game!" at the end,
+  answers to the player's greeting / apology / "Good game!", and at its turn's start near someone "Shall we
+  trade?", "Trust me." or "I have a Lantern.". Possessed and clean bots say the same things, as often (so no
+  line is a tell); "I have a Lantern." is now and then a bluff, so it is a claim, not proof; bots never offer
+  a Lantern ("Need a Lantern?" would mostly come from a possessed bot). Bold guests talk more, careful ones
+  less; one line per bot per 20 s at most and one for the table per 4.5 s (1.3 s at the end); a line waits
+  while a screen covers the game (a brief one, like walking in on someone, is dropped). Own random numbers
+  (one per bot from the match seed, plus one for who answers first), so the game plays the same with or
+  without chat (bots-check's determinism unchanged; chat-check compares matches event for event).
+- **Tested**: `node tests/chat-check.mjs` — honesty (what a bot says is identical when everything it could
+  not know is scrambled, and when its own role and inbox are scrambled too), pacing, sense ("Thank you."
+  only after its own trade, "Watch out!" only after it was attacked), answers, the channel, the game
+  untouched.
+
+## Choose your guest; your record (Oct 2026, owner-approved ideas B and F — interface only, no rule)
+- **Your guest** (`src/ui/guestPicker.js`): a row on the Play with bots screen — Random and the six guests,
+  each by portrait (`makePortrait`, the same images as the strip) and name — remembered as the `guest`
+  setting (a roster id, default `random`). `planGame` (main.js) leaves the chosen guest out of the shuffle
+  and seats them at your random seat, so the bots get the others; with Random the deal is exactly as
+  before (same random numbers, so seeded tests are unchanged). Practice uses the same choice (Random: any
+  of the six). Direct links take `&guest=clara` (a name or id, or `random`); without it they behave as
+  before (practice is Victor), so the test suites' direct links are unchanged. The lift
+  (`lobbyScene.enter({ prefer })`) boards your guest when they are one of the three seated guests who can
+  board (Victor, Clara, Henry); the other three have no boarding path, so then the lift is as before.
+  The tiles are built once and only re-marked on a pick, so the portraits never reload.
+- **Your record** (`src/record.js`): played / won / lost (your side's result, alive or not), the same split
+  by the side you ended on, your own escapes, and practice escapes apart — in localStorage, every read
+  and write guarded like settings.js. It counts on top of what is saved (another tab may have counted),
+  except once a write has failed (storage that reads but refuses writes): then the count in memory is
+  newer and is kept for the visit. `main.js countRecord` counts once per game (`gameToken`), when the end
+  screen shows — the end screen can show twice for one game (e.g. the role screen's Continue after Skip to
+  the end), and Play again / Restart practice deal a new token. A match left early never reaches the end
+  screen, so it is never counted. Words in `src/data/record.js`.
+- **On screen** (`src/ui/record.js`): a fourth, smaller main-menu button opens the record screen in the
+  Settings panel style (big brass numerals, the win rate on a rule, quiet rows); Reset swaps the button row
+  for a confirm step, and every step resets the menu's tap guard so a double tap cannot confirm it. The end
+  screen gets one quiet italic line under the result (a match: wins and losses; practice: practice
+  escapes). Only the player's own results — nothing about another guest.
+
+## Tips during your first matches (Oct 2026, owner-approved idea E, "can be toggled off" — interface only, no rule)
+- **What**: a small Art Deco card (`src/ui/tips.js`; the words and timing in `src/data/tips.js`) the first
+  time something comes up — your first turn (actions, glowing doors, tapping rooms), the Move bar,
+  searching, a new card, Lanterns and the Fire Exit, the turn clock, a meeting (Trade or Attack; a Lantern
+  handed over blocks a Possession card), starting possessed and being possessed mid-match (your souls
+  carry your face, you can never escape, how you win), the Switchboard, the Infirmary, a full hand, the
+  final round, the map, quick chat, being out. Each once per device (`hotelEscape.tips.v1`, guarded like
+  settings.js), in matches and in practice (practice has its own Lantern and Switchboard tips, so seeing
+  those in practice never hides the match's, which carry the clean-guest escape and what the call reveals).
+  Settings > Tips (On / Off) and **Show tips again** (forgets the ones seen and turns tips on).
+- **Never in the way** (designed for the online game): the card sits beside what it explains — placed
+  against the boxes of every showing part of the interface (strip, panel, hand cards, buttons, Move bar,
+  magnifier, toast, chat panel), and off the "Go" / "Explore" tags and the player's own guest when that
+  costs little nearness (else its arrow could point at the wrong thing). With no clear place it waits.
+  Only the card takes taps (it is also in main.js's tap dead zone, so a near miss of Got it opens no
+  door). One at a time from a queue; each hides itself after 9 s; a tip about a passing moment (the Move
+  bar, the magnifier, a meeting) is dropped when the moment passes and may take over from one that has
+  been up 4 s. **The clock never stops for a tip**: a player's own tips must not hold up an online table.
+  None shows over a private screen, the trade scene, the card view, a notice or question, the map, the
+  chat panel, the black between screens or the "turn sideways" card; one cut off by them within 2 s comes
+  back later. The meeting tip is the one shown beside an open meeting panel (never over its buttons).
+- **Privacy**: main.js hands the tips only the player's own situation (their turn, room, own hand and
+  role, where their own guest stands) and what the whole table sees (round, rooms found, a meeting they
+  are in, when another guest last spoke) — never another guest's role, hand or private result, so no tip
+  can hint at one. A clean player can never be shown a possessed tip.
+- **Tests**: every existing browser check starts with tips Off (`tests/smoke-lib.mjs` `tipsOff`, an init
+  script that writes `tips: 'off'` into the saved settings before each page loads unless the settings
+  already say; also in browser-practice, browser-lobby and qa-lib). `node tests/tips-check.mjs` turns
+  them on and checks placement, that nothing is blocked (End turn under the finger, a tap beside the card
+  opens a door, the clock runs on), once per device, Hide tips, Show tips again, practice, at any size.
+- **Settings screen**: eight rows now, so on short screens the gaps between rows tighten a little more
+  (buttons keep their size): it fits 1024 x 768 (46..743) and 1024 x 690.

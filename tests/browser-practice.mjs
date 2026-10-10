@@ -9,6 +9,7 @@
 import { chromium } from 'playwright-core';
 import fs from 'node:fs';
 import path from 'node:path';
+import { tipsOff } from './smoke-lib.mjs';
 
 const args = process.argv.slice(2);
 const baseUrl = args.includes('--url') ? args[args.indexOf('--url') + 1] : 'http://127.0.0.1:8123/';
@@ -36,6 +37,7 @@ const check = (cond, msg) => { if (cond) console.log('  ok  ', msg); else { cons
 const browser = await chromium.launch({ executablePath: findChrome(), headless: true, args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--no-sandbox'] });
 // iPad-landscape sized viewport with touch enabled — the primary target.
 const context = await browser.newContext({ viewport: { width: 1180, height: 820 }, deviceScaleFactor: 2, hasTouch: true });
+await context.addInitScript(tipsOff);     // (first-match tips Off: none over what this suite taps)
 const page = await context.newPage();
 const consoleMessages = [];
 page.on('console', m => { if (['error', 'warning'].includes(m.type())) consoleMessages.push(`${m.type()}: ${m.text()}`); });

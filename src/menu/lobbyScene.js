@@ -13,6 +13,7 @@
 //                                            //  freezes the room. `time` is accepted but not needed.
 //   renderer.render(lobby.scene, lobby.camera);
 //   await lobby.enter({ guests: 3 });        // the boarding; resolves when the lift doors have shut
+//                                            //  (prefer: 'clara' boards that guest, if they can)
 //                                            //  (~5.8 s for 3 guests, ~4.8 s for 1); the dial keeps
 //                                            //  moving afterwards, so keep rendering during the fade.
 //                                            //  onCue(name) (optional) is told 'liftDing' / 'liftDoors'
@@ -230,13 +231,17 @@ export function createLobbyScene({ renderer, cfg, layout = lobbyLayout } = {}) {
     return len;
   };
 
-  function enter({ guests = 3, onCue = null } = {}) {
+  function enter({ guests = 3, prefer = null, onCue = null } = {}) {
     if (seq) return seq.promise;
     let resolve;
     const promise = new Promise(r => { resolve = r; });
     const n = Math.max(0, Math.min(3, Math.round(+guests) || 0));
-    // who boards: the first `n` by `boards`; they leave their seats (and fill the car) by `boardDelay`
-    const boarders = L.cast.filter(c => c.boards).sort((a, b) => a.boards - b.boards).slice(0, n)
+    // who boards: the first `n` by `boards`; they leave their seats (and fill the car) by `boardDelay`.
+    // `prefer` (a cast name, e.g. 'clara': the player's own guest) boards too, when they are one who can.
+    const pool = L.cast.filter(c => c.boards).sort((a, b) => a.boards - b.boards);
+    const mine = pool.findIndex(c => c.name === prefer);
+    if (mine >= n) pool.unshift(...pool.splice(mine, 1));
+    const boarders = pool.slice(0, n)
       .sort((a, b) => (a.boardDelay ?? 0) - (b.boardDelay ?? 0))
       .map(c => actors.get(c.name)).filter(Boolean);
     const slots = lift.slots[boarders.length] || [];

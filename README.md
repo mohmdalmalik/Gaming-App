@@ -20,9 +20,9 @@ guests seated and strolling, the manager walking by): **Play with bots**, **Prac
 - **Play with bots.** You and 3–5 computer guests (bots), like an online table filling up: choose how
   many others and your role (random, clean guest or possessed), watch the guests join with their online
   names, then the manager takes guests up in the lift, the screen goes black and the match opens. Every
-  rule applies: one hidden Possessor with three Possession cards (a guest they possess keeps the card and
-  gets one more: two tries), forced meetings with Trade or Attack, trades chosen in secret, 4 health and
-  weapons, Lanterns that block possession (and are used up doing it), three Lanterns to escape, private
+  rule applies: one hidden Possessor with three Possession cards, their own souls (a guest they possess
+  gets two souls of their own: two tries), forced meetings with Trade or Attack, trades chosen in secret,
+  4 health and weapons, Lanterns that block possession (and are used up doing it), three Lanterns to escape, private
   search results, a 45-second turn clock (bots play much faster), and dawn after round 8. The bots
   (`src/bots/`) see only what a real player could, play mostly a "medium" style (some bold, some
   careful), and a possessed bot usually wins a guest's trust with a friendly trade before trying a
@@ -33,15 +33,22 @@ guests seated and strolling, the manager walking by): **Play with bots**, **Prac
   through the Fire Exit.
 - **Settings** (remembered on the device): bot speed (relaxed / normal / fast), the view on the other
   guests' turns (follow them / stay on me), graphics (battery saver / balanced / sharp), the menu
-  background (animated / still), and Music and Sound effects (off / low / medium / high each).
+  background (animated / still), and Music and Sound effects (off / low / medium / high each), Quick
+  chat (on / off) and Tips (on / off, with **Show tips again**).
+- **Tips during your first matches**: a small card beside the thing it explains, the first time it
+  comes up (your turn, the Move bar, searching, a new card, Lanterns, the clock, a meeting, being
+  possessed, the Switchboard and Infirmary, a full hand, the final round, the map, chat, being out), once
+  per device. **Got it** puts it away, **Hide tips** turns them off. They never stop the clock, never
+  cover a button, and wait while a private screen is up.
 - **Music and sound** (`src/audio/`, all made from code by `tools/audio/`): a melancholy 1930s waltz in
   the menu, a quiet night ambience in the game that turns tenser in the final round, a stinger on the end
   screen, and sound effects for the interface, the lift, doors, searches, cards, trades, attacks, rooms
   and footsteps. Browsers play no sound before the first tap, so the music starts with it.
 - **Trades shown as cards** (`src/ui/tradeReveal.js`): your own trade plays as a short private scene
   instead of sentences: the cards cross and turn over, a Lantern flares and burns a Possession card to
-  ash, crimson smoke curls round you when you are possessed, an empty hand when someone had nothing to
-  give. A tap skips to the end. Attacks show the weapon and the lost hearts; the feed has an icon per line.
+  ash, crimson smoke curls round you when you are possessed, a spent soul burns out in crimson, an empty
+  hand when someone had nothing to give. A tap skips to the end. Every Possession card shows its owner's
+  face, and while you are possessed the guests you know are possessed have red eyes on your screen. Attacks show the weapon and the lost hearts; the feed has an icon per line.
 
 Hot-seat (several people passing one iPad) was removed at the owner's request; old `?mode=hotseat`
 links open a match against bots instead.
@@ -58,18 +65,26 @@ Published with GitHub Pages from `main`: **https://mohmdalmalik.github.io/Gaming
 ## Play with bots
 
 1. Open the preview: the main menu appears over the lobby. Tap **Play with bots**.
-2. Choose how many **other guests** (3, 4 or 5) and **your role** (Random, Clean guest, Possessed),
-   then **Find a table**. The guests join one by one; when the table is full the lift sequence plays
+2. Choose **your guest** (Random, or one of the six by portrait; practice uses the same choice), how
+   many **other guests** (3, 4 or 5) and **your role** (Random, Clean guest, Possessed), then **Find a
+   table**. The guests join one by one; when the table is full the lift sequence plays
    and the match opens on your secret role.
 3. On your turn you act (tap rooms, the search icon, cards, buttons); on the others' turns the bots play
    by themselves — the strip at the top shows who is **Playing**, the feed under the room name says what
    they just did, and a bot that walks in on you asks you for a card in private or attacks you.
+   **Chat** (by the Menu button) opens quick chat: nine preset lines and six emotes, one tap sends to the
+   whole table. It shows as a speech bubble over your guest and a line in the feed; the bots chat too,
+   now and then. Settings > Quick chat turns all of it off.
 4. If you die you can watch or **Skip to the end**. The end screen shows every guest's role;
-   **Play again** starts a new table with the same choices, **Main menu** goes back.
+   **Play again** starts a new table with the same choices, **Main menu** goes back. A quiet line under
+   the result gives your record ("Your record: 7 wins · 4 losses"); **Your record** on the main menu
+   shows it in full (played, won, lost, win rate, by side, your escapes, practice escapes), kept on this
+   device, with a Reset that asks first. A match left early is not counted.
 
 Direct links (they skip the menu and show a "Tap to begin" card; the tests use them):
 `?mode=practice`, `?mode=bots&bots=5&role=clean` (`role`: random | clean | possessed; `&seat=2` puts you
-in that seat). Also `?timer=off` (no clock), `?seed=123` (the same deal, Possessor, table and hotel),
+in that seat; `&guest=clara` plays that guest, or `random`; without it practice is Victor and a match
+deals a random guest). Also `?timer=off` (no clock), `?seed=123` (the same deal, Possessor, table and hotel),
 `?intro=off` (no lift sequence), `?botpace=0.1` (bots think 10× faster, for testing).
 
 The standard view is **corner-on**, like the owner's room pictures: the whole room at the default zoom,
@@ -170,7 +185,9 @@ src/
   main.js             starts everything; the menu → lift → game flow; the turn flow (the player's turns
                       and the bots' turns, meetings both ways); window.__game debug hooks
   config.js           display / camera / feel tuning
-  settings.js         the player's own settings (bot speed, view, graphics, menu background, music, sound), kept on the device
+  settings.js         the player's own settings (bot speed, view, graphics, menu background, music, sound, quick chat, tips), kept on the device
+  record.js           your record (played / won / lost, by side, escapes, practice escapes), kept on the device; counted by main.js at the end screen
+  social/chat.js      the table's quick-chat channel: a message is { seat, id, at } and nothing else (a server would relay it)
   audio/              music and sound (Web Audio): bus.js (the cue bus: sfx('doorOpen')), index.js (the player:
                       unlock on the first tap, music by scene with crossfades, effects with variation and a
                       voice cap), gameSounds.js (the hotel's sounds from the engine's PUBLIC events, footsteps),
@@ -184,11 +201,15 @@ src/
     rules.js          THE RULE NUMBERS — implements docs/GAME_RULES.md (owner-approved changes only)
     hotel.js          THE HOTEL: the lobby and the 24-tile room deck (doorways, dark, locked, furniture, moods)
     characters.js     body types, outfits and the guests (up to six)
+    chat.js           quick chat: the preset lines and emotes, the cooldown, and when the bots may speak (BOT_CHAT)
+    record.js         the words of Your record and of the end screen's record line
+    tips.js           the first-match tips' words (one or two sentences each) and their timing
   game/               pure rules, no rendering (a server could reuse these)
     hotel.js  grid.js   the random hotel (tiles placed as doors open), walkable grid + A* pathfinding
     cards.js            deck build, seeded shuffle, deal, hand helpers
     state.js            players, turns, locked rooms, barricades, meetings, escape and win checks
     actions.js          search, the deck and discard pile, cards played, trade, attack, death
+    knowledge.js        knownPossessed: who a guest KNOWS is possessed, from their own private events only
     moves.js            plan a walk to a tapped room (fewest-rooms route, 1 AP per room entered)
   bots/               the computer guests — pure, no rendering, run in the browser and in Node
     view.js             botView: THE one place a bot's information is built (public board + its own
@@ -197,6 +218,8 @@ src/
     profiles.js         usernames and playing styles (mostly medium; some bold, some careful)
     index.js            createBotTable: the API the interface calls (nextAction, tradeCard, thinkMs, …)
     autoplay.js         plays bot turns straight through the rules (Node tools; finishing a match at once)
+    chatter.js          the bots' quick chat: greetings, thanks, "Watch out!", "Good game!", answers — from
+                        each bot's own view only, never its private events; its own random numbers
   render/             Three.js visuals: greybox rooms, doors, characters, cutaway, mood,
                       searched-room ticks; bakedRoom.js loads the baked rooms; xray.js fades
                       whatever stands between the camera and the active guest / search spot;
@@ -214,12 +237,22 @@ src/
     screenTags.js                     the one layer for tags over the 3D view: under the interface, never over it
     guestTags.js                      one name tag per room with guests, when zoomed far out
     goTags.js                         the quiet "Go · 1 AP" tags on rooms next door
-    menu.js                           the main menu screens: Play with bots, the table, the guests joining, Settings
+    menu.js                           the main menu screens: Play with bots, the table, the guests joining, Settings, Your record
+    guestPicker.js                    "Your guest" on the table screen: Random or one of the six, by portrait
+    record.js                         the Your record screen and the end screen's record line (words: src/data/record.js)
     feed.js                           what the other guests just did (public words), under the room name
+    chat.js                           quick chat: the Chat button and panel, speech bubbles over the guests, feed
+                                      lines, the end screen's "Good game!" (brass line emotes, no emoji)
+    tips.js                           first-match tips: when each comes up, where its card sits (beside what it
+                                      explains, clear of the interface), once per device; Settings' "Show tips
+                                      again" (words and timing: src/data/tips.js)
     handoff.js                        every private screen (role, card pick, the found-card reveal, a Hand Mirror's
                                       view); the player's own trade result is drawn on it by tradeReveal.js
     tradeReveal.js                    the player's own trade SHOWN as the two guests and cards with an effect (swap,
-                                      Lantern burn, possession smoke, no trade) instead of sentences; tap to skip
+                                      Lantern burn, possession smoke, a spent soul burning out, no trade) instead
+                                      of sentences; tap to skip
+    soulFace.js                       each guest's own soul card: their possessed face in the card's mirror
+    allies.js                         red eyes on the guests a possessed player KNOWS are possessed (knowledge.js)
     souls.js                          the possessed player's own "Souls to trade: N" count
     meeting.js                        the PUBLIC side of a meeting: who, Trade or Attack, weapon, outcome
     discard.js                        the end-of-turn discard down to the hand limit (the only hand-limit screen)
@@ -291,12 +324,14 @@ node tests/browser-bots.mjs       # the main menu and matches against bots in a 
 node tests/browser-lobby.mjs      # the baked starting room, fog rooms, tap to open / move, camera (big hotel), draw calls
 node tests/audio-check.mjs        # music and sound: unlock on the first tap, every file decodes, Settings, the menu -> lift -> game music, cues in a match and practice [--quick]
 node tests/trade-reveal-check.mjs # the trade scene: real trades for swap / possessed (two tries, then your role) / Lantern block / you possess them
+node tests/tips-check.mjs         # first-match tips ON: where they sit, never blocking, the clock runs on, once per device, Hide tips, Show tips again [--size 1024x768] [--shots DIR]
 python3 tools/audio/build.py      # rebuild every sound, ~6 min (tools/audio/README.md); needs numpy, scipy, ffmpeg
 python3 tools/audio/build.py revolver lobby   # rebuild only these (effect or music names); updates library.js + report.json
 node tools/balance/hotseat-sim.mjs 400 6   # 400 six-player matches under the rules as they stand (--before: same bots on the rules before Part 2; --compare: Lantern variants; --cautious)
 node tools/balance/hotseat-sim.mjs --study  # six player personalities (tools/balance/personalities.mjs) + rule proposals, in memory only (tests/personality-report.md)
 node tests/autoplay.mjs --url http://127.0.0.1:8123/ --persona-study --matches 30   # the same personalities through the real UI
 node tests/bots-check.mjs                  # the computer guests: information honesty, 450 seeded matches, determinism, the feed's icons (~5 s)
+node tests/chat-check.mjs                  # quick chat: the lines, the channel, the bots' chat honesty (scrambled hidden state, own role too), no effect on the game, pacing, answers (~5 s)
 node tools/balance/bot-match.mjs --n 1000  # all-bot matches at 6, 5 and 4 players: who wins, trust-building, blocks, waits
                                            # (--players 6, --trace one match, --tune blockBias=-0.2,... to try a bot knob)
 ```

@@ -8,7 +8,7 @@
 // (src/bots/view.js); this tool sees everything, to measure.
 //
 // Reports, per table size: who wins and how, match length, when the first conversion happens, possession
-// attempts / successes / blocks, how often a possessed bot's FIRST trade with a guest was a friendly one and
+// attempts / successes / blocks, souls spent between possessed guests (soul cards), how often a possessed bot's FIRST trade with a guest was a friendly one and
 // how often a later attempt on that guest followed, kills (clean-on-clean vs other), escapes, the Fire Exit
 // found, Lantern blocks by clean bots, results per playing style, and an estimate of the waiting time per
 // bot turn (actions per turn × the bots' thinking pauses, before the player's speed setting).
@@ -80,11 +80,15 @@ function collect(state, table, profiles, base) {
   const conv = [];                // { seat, by, round, seq }
   for (const p of P) for (const e of p.inbox) if (e.type === 'possessed') conv.push({ seat: p.index, by: e.by, round: e.round, seq: e.seq });
   const possessedAt = (seat, seq) => seat === base.startPossessed || conv.some(c => c.seat === seat && c.seq < seq);
-  let attempts = 0, successes = 0, blocks = 0;
+  let attempts = 0, successes = 0, blocks = 0, spentOnPossessed = 0, crossed = 0;
   for (const box of inbox) for (const e of box) {
-    if (e.type === 'traded' && e.gave === 'possession' && e.got !== 'possession') attempts++;
+    if (e.type === 'traded' && e.gave === 'possession') attempts++;
     if (e.type === 'converted') successes++;
     if (e.type === 'blockedThem') blocks++;
+    // Soul cards: a soul handed to a guest already possessed is spent; two possessed guests who both hand
+    // over a soul spend both (each of the two is told: counted once per pair, and not as attempts).
+    if (e.type === 'alreadyPossessed') spentOnPossessed++;
+    if (e.type === 'soulsCrossed') { crossed += 0.5; attempts--; }
   }
   const kills = state.events.filter(e => e.type === 'attack' && e.killed).map(e => ({
     byPossessed: possessedAt(e.by, e.seq), victimPossessed: possessedAt(e.target, e.seq), round: e.round,
@@ -122,7 +126,7 @@ function collect(state, table, profiles, base) {
     rounds: Math.min(state.round, rules.roundLimit),
     firstConv: conv.length ? Math.min(...conv.map(c => c.round)) : null,
     convRounds: conv.map(c => c.round),
-    attempts, successes, blocks,
+    attempts, successes, blocks, spentOnPossessed, crossed,
     kills, attacks,
     firstTrades, firstFriendly, friendlyThenAttempt, firstAttempt, early,
     blockDecisions,
@@ -172,6 +176,7 @@ export function summarise(list) {
     noConversion: list.filter(m => m.firstConv == null).length / n,
     convByRound: [1, 2, 3, 4, 5, 6, 7, 8].map(r => byRound(r) / Math.max(1, convRounds.length)),
     attempts: mean(list.map(m => m.attempts)), successes: mean(list.map(m => m.successes)), blocks: mean(list.map(m => m.blocks)),
+    spentOnPossessed: mean(list.map(m => m.spentOnPossessed)), crossed: mean(list.map(m => m.crossed)),
     firstFriendlyRate: ft ? ff / ft : 0, firstAttemptRate: ft ? fa / ft : 0, friendlyThenAttemptRate: ff ? fta / ff : 0,
     early: (() => { const e = list.reduce((a, m) => ({ n: a.n + m.early.n, f: a.f + m.early.friendly, t: a.t + m.early.attempt }), { n: 0, f: 0, t: 0 }); return { friendly: e.n ? e.f / e.n : 0, attempt: e.n ? e.t / e.n : 0 }; })(),
     kills: kills.length / n, cleanOnCleanKills: kills.filter(k => !k.byPossessed && !k.victimPossessed).length / n,
@@ -204,6 +209,7 @@ function print(players, s) {
   line('First conversion, median round (no conversion at all)', `${s.firstConvMed} (${pct(s.noConversion * s.n, s.n)})`);
   line('Conversions by round 1..8', s.convByRound.map(x => (100 * x).toFixed(0) + '%').join(' '));
   line('Possession attempts / successes / blocks per match', `${s.attempts.toFixed(2)} / ${s.successes.toFixed(2)} / ${s.blocks.toFixed(2)}`);
+  line('Souls spent: on a guest already possessed / both handed over', `${s.spentOnPossessed.toFixed(2)} / ${s.crossed.toFixed(2)} per match`);
   line("Possessed bot's first trade with a guest: friendly / attempt", `${pct(s.firstFriendlyRate, 1)} / ${pct(s.firstAttemptRate, 1)}`);
   line('  … in rounds 1-3 only: friendly / attempt', `${pct(s.early.friendly, 1)} / ${pct(s.early.attempt, 1)}`);
   line('  … friendly first, later an attempt on the same guest', pct(s.friendlyThenAttemptRate, 1));

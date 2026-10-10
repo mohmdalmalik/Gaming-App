@@ -37,7 +37,8 @@ export function createHand(doc, cfg, { onUseBandage, onUnlock, onBarricade, onEs
     const souls = soulsHeld(p);
 
     // Possession cards first, then the rest grouped by type (Lanterns lead the catalogue). The
-    // Possession cards are one stack (×N): they are all the same card, and the count is what matters.
+    // Possession cards are one stack (×N): they are all your own souls, with your own face (you never
+    // hold anyone else's), and the count is what matters.
     const sorted = sortHand(p.hand);
     const firstSoul = sorted.find(c => c.type === 'possession');
     const hand = sorted.filter(c => c.type !== 'possession' || c === firstSoul);
@@ -72,9 +73,9 @@ export function createHand(doc, cfg, { onUseBandage, onUnlock, onBarricade, onEs
       // the same height either way (styles.css: two lines' room, the count chip beside the words), so
       // the card and the ‹ › arrows below it stay put while you step through the hand.
       words.innerHTML = showingSouls ? 'You can never escape.'
-        : 'In a trade, give a Possession card to possess the other guest — unless they hand you a Lantern. You can never escape.';
+        : 'In a trade, give one of your souls to possess the other guest — unless they hand you a Lantern. You can never escape.';
       text.append(words);
-      if (!showingSouls) text.append(soulsChip(doc, souls));
+      if (!showingSouls) text.append(soulsChip(doc, souls, { owner: p.id }));
       banner.appendChild(text);
     } else if (p.knows.size) {
       const names = [...p.knows].map(id => state.players.find(q => q.id === id)?.name).filter(Boolean);
@@ -145,7 +146,7 @@ export function createHand(doc, cfg, { onUseBandage, onUnlock, onBarricade, onEs
     if (card.type === 'possession') {
       // One count line and one description, said once (docs/GAME_RULES.md > Meetings, Possession).
       line(`Souls to trade: <b>${souls}</b>`, 'd-line souls-line');
-      line('Give one in a trade to possess the other guest — unless they hand you a Lantern: then both cards are used up and they learn you are possessed. Never counts toward your hand limit.', 'd-desc');
+      line('Your own soul, with your face. Give one in a trade to possess the other guest — unless they hand you a Lantern: then both cards are used up and they learn you are possessed. If they are possessed already, your soul is spent and you each learn the other is. Never counts toward your hand limit.', 'd-desc');
       return;
     }
     if (card.type === 'flashlight') return; // (its description above says it all: searches dark rooms, never used up)

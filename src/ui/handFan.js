@@ -9,7 +9,8 @@
 //
 // The fan is the player's own hand (only they look at this screen): main.js shows it on every guest's
 // turn, and CSS hides it whenever a private or public screen is up. The Possession cards go on it — as
-// ONE card with a ×N badge — when main.js passes `withPossession`.
+// ONE card with a ×N badge — when main.js passes `withPossession`. They are all the guest's own souls
+// (you never hold anyone else's), so that one card shows their own face (src/ui/soulFace.js).
 //
 // Over the hand limit: during a turn a guest keeps everything, even past 6 (approved rule), so a
 // small calm label sits just above the fan — "Cards 8/6 · discard 2 at end of turn", on one line. It
@@ -19,7 +20,7 @@
 //
 // Cheap on the iPad: the cards are rebuilt only when the hand changes; positions are CSS transforms.
 import { CARDS } from '../game/cards.js';
-import { CARD_FACE, sortHand, handLimitWarning } from './cards.js';
+import { CARD_FACE, setCardFace, sortHand, handLimitWarning } from './cards.js';
 
 const STEP = 0.62;       // spacing between card centres, as a share of the card width, when there is room
 const MIN_STEP = 0.36;   // closest the cards may crowd before they shrink instead
@@ -84,9 +85,8 @@ export function createHandFan(doc, { onOpen }) {
     b.className = 'fan-card' + (meta.evil ? ' evil' : '') + (dealt ? ' dealt' : '');
     b.dataset.cardId = card.id;
     b.dataset.type = card.type;
-    const face = CARD_FACE[card.type];
-    if (face) {
-      const img = doc.createElement('img'); img.src = face; img.alt = ''; img.draggable = false; b.appendChild(img);
+    if (CARD_FACE[card.type]) {
+      const img = doc.createElement('img'); setCardFace(img, card); img.alt = ''; img.draggable = false; b.appendChild(img);
     } else {
       const n = doc.createElement('span'); n.className = 'fan-name'; n.textContent = meta.name; b.appendChild(n);
     }

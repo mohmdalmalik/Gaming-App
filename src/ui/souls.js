@@ -3,7 +3,7 @@
 // the card view, and their player panel on the main screen (outside hot-seat always; in hot-seat during
 // their own action phase only, as docs/GAME_RULES.md > Possession says; src/main.js possessedTellOnMain).
 // Never call it for the public strip, the pass screen, a meeting, the map or another guest.
-import { CARD_FACE } from './cards.js';
+import { setCardFace } from './cards.js';
 
 export const soulsHeld = player => player.hand.filter(c => c.type === 'possession').length;
 
@@ -14,12 +14,13 @@ export function soulsText(n) {
 }
 
 // A small chip on the crimson plate: a mini Possession card and the count. `compact` drops the 0-souls explanation
-// to a short line (the player panel has little room).
-export function soulsChip(doc, n, { compact = false } = {}) {
+// to a short line (the player panel has little room). `owner`: whose souls they are (the guest's own id),
+// so the mini card carries their own face (soul cards, src/ui/soulFace.js).
+export function soulsChip(doc, n, { compact = false, owner = null } = {}) {
   const chip = doc.createElement('div');
   chip.className = 'souls-chip' + (n <= 0 ? ' none' : '') + (compact ? ' compact' : '');
   const img = doc.createElement('img');
-  img.className = 'souls-card'; img.src = CARD_FACE.possession; img.alt = ''; img.draggable = false;
+  img.className = 'souls-card'; setCardFace(img, { type: 'possession', owner }); img.alt = ''; img.draggable = false;
   const text = doc.createElement('span');
   text.className = 'souls-text';
   if (n > 0) text.innerHTML = `Souls to trade: <b>${n}</b>`;

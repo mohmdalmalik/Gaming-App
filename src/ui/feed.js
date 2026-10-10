@@ -114,6 +114,22 @@ export function createFeed(doc) {
     },
     // A line that is not in the rules' log (a public event the interface reports itself).
     say(text, cls = '') { if (enabled) add(text, cls); },
+    // A quick-chat line (src/ui/chat.js): its own icon (the emote, or a speech bubble), who ("Henry:")
+    // and what. Chat is not a game event, so it is never in the rules' log.
+    chat(iconHtml, who, text, cls = '') {
+      if (!enabled) return;
+      const el = doc.createElement('div');
+      el.className = `feed-line has-icon ${cls}`.trim();
+      const i = doc.createElement('span'); i.className = 'feed-icon'; i.setAttribute('aria-hidden', 'true'); i.innerHTML = iconHtml;
+      const t = doc.createElement('span'); t.className = 'feed-text';
+      const w = doc.createElement('span'); w.className = 'feed-who'; w.textContent = who;
+      t.append(w, ` ${text}`);
+      el.append(i, t);
+      host.appendChild(el);
+      lines.push({ el, until: performance.now() + LIFE_MS });
+      while (lines.length > KEEP) lines.shift().el.remove();
+      host.hidden = false;
+    },
     // Sit just under the room name and safe badge (`above`: their box), whatever their height.
     place(above) {
       if (host.hidden || !above) return;

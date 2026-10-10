@@ -3,8 +3,9 @@
 // — which card each guest gives, what each receives — happens on the player's private screens in
 // handoff.js and src/ui/tradeReveal.js, so nothing here ever shows a hand, a role or a trade result.
 // The player (the viewer) is called "you". An attack is public, so its result is SHOWN here: the
-// two guests (their normal portraits, never a possessed one), the weapon card striking, and the
-// hearts the target lost dropping away.
+// two guests (their normal portraits — except, on a possessed player's own screen, red eyes on a guest
+// they KNOW is possessed: `redEyes`, src/ui/allies.js), the weapon card striking, and the hearts the
+// target lost dropping away.
 import { CARDS, weaponsIn } from '../game/cards.js';
 import { cardTile, CARD_FACE } from './cards.js';
 import { makePortrait } from './portrait.js';
@@ -14,7 +15,7 @@ import { tooSoon } from './tapGuard.js';
 
 const HEART = '<svg viewBox="0 0 24 22" aria-hidden="true"><path d="M12 20.5 3.6 12.4A5.2 5.2 0 0 1 11.3 5.4L12 6.2l.7-.8a5.2 5.2 0 0 1 7.7 7z"/></svg>';
 
-export function createMeeting(doc, cfg, { isViewer = () => false } = {}) {
+export function createMeeting(doc, cfg, { isViewer = () => false, redEyes = () => false } = {}) {
   const overlay = doc.getElementById('encounter-overlay');
   const title = doc.getElementById('encounter-title');
   const body = doc.getElementById('encounter-body');
@@ -95,7 +96,8 @@ export function createMeeting(doc, cfg, { isViewer = () => false } = {}) {
         const seat = (p, cls) => {
           const s = el('div', `atk-seat ${cls}`, stage);
           const port = el('div', 'atk-port', s);
-          port.appendChild(makePortrait(doc, p, { possessed: false }));   // public: never a possessed face
+          // (a possessed face only for an ally the player knows, on their own screen; never their own here)
+          port.appendChild(makePortrait(doc, p, { possessed: !isViewer(p) && !!redEyes(p) }));
           if (cls === 'atk-target') el('div', 'atk-slash', port);
           el('div', 'atk-name', s).innerHTML = who(p);
           return s;

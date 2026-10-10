@@ -150,10 +150,11 @@ function playMatch(seed, players, assign, ov = {}) {
       // Proposal: a Possession card is spent when it converts someone (it leaves the game).
       if (ov.spendOnConvert) { const k = X.hand.findIndex(c => c.type === 'possession'); if (k >= 0) X.hand.splice(k, 1); }
       // Proposal: only the original possessed guest spreads possession — the card goes back to the giver.
+      // (soul cards: the card changes owner with it, or the giver could never give it again)
       if (ov.returnToGiver) {
         const G = st.players.find(x => x.id === e.by);
         const k = X.hand.findIndex(c => c.type === 'possession');
-        if (k >= 0 && G) G.hand.push(X.hand.splice(k, 1)[0]);
+        if (k >= 0 && G) { const card = X.hand.splice(k, 1)[0]; card.owner = G.id; G.hand.push(card); }
       }
       // Proposal "one generation" (the owner's idea, reading 2): only the first possessed guest's cards
       // pass on. A guest HE possessed holds that one card (one chance); when such a converted guest

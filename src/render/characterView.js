@@ -261,7 +261,8 @@ export function createCharacterView(playerDef, cfg, scene) {
       return { model: useModel, loaded: !!mixer, strideLength, walkDuration, walkW, walkPhase: walkAction ? walkAction.time / walkDuration : 0, possessedEyes: !!eyes?.on };
     },
     // The possessed look on this figure (red eyes). Cheap: does nothing unless it changes. Whose screen
-    // shows it is main.js's decision (only the player's own guest, never a computer guest's).
+    // shows it is main.js's decision (the player's own guest while possessed, and the guests a possessed
+    // player KNOWS are possessed: src/ui/allies.js; never from a guest's real role).
     setPossessed(on) {
       possessedWanted = !!on;
       if (eyes) eyes.set(possessedWanted);

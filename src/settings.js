@@ -41,9 +41,20 @@ export const SETTING_CHOICES = {
     { value: 'medium', label: 'Medium', gain: 0.6 },
     { value: 'high', label: 'High', gain: 1 },
   ],
+  // Quick chat in a match (src/ui/chat.js): the Chat button, the speech bubbles, the chat lines in the
+  // feed and their sound, the computer guests' chat included. Off: none of it.
+  chat: [
+    { value: 'on', label: 'On' },
+    { value: 'off', label: 'Off' },
+  ],
+  // First-match tips (src/ui/tips.js): a small card the first time something comes up. Off: none.
+  tips: [
+    { value: 'on', label: 'On' },
+    { value: 'off', label: 'Off' },
+  ],
 };
 
-const DEFAULTS = { botSpeed: 'normal', follow: 'follow', graphics: 'balanced', menuMotion: 'on', music: 'medium', sound: 'high', bots: 5, role: 'random' };
+const DEFAULTS = { botSpeed: 'normal', follow: 'follow', graphics: 'balanced', menuMotion: 'on', music: 'medium', sound: 'high', chat: 'on', tips: 'on', bots: 5, role: 'random', guest: 'random' };
 
 function load() {
   try {

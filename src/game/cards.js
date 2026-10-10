@@ -16,10 +16,13 @@ export function makeRng(seed) {
 }
 
 let nextId = 1;
-export function makeCard(type) {
+// `owner`: for a Possession card, the player id of the guest whose soul it is (soul cards, approved
+// 10 Oct 2026): only they hold it and only they can give it (resolveTrade in actions.js).
+export function makeCard(type, { owner = null } = {}) {
   const meta = CARDS[type];
   const card = { id: `c${nextId++}`, type };
   if (meta?.shots != null) card.shots = meta.shots; // per-instance ammo (revolver)
+  if (owner != null) card.owner = owner;
   return card;
 }
 
@@ -32,8 +35,9 @@ export function buildDrawDeck(spec = rules.deck) {
   return deck;
 }
 
-export function buildPossessionSupply() {
-  return Array.from({ length: rules.possessionSupply }, () => makeCard('possession'));
+// The first possessed guest's starting souls: rules.possessionSupply (3) Possession cards, all theirs.
+export function buildPossessionSupply(owner) {
+  return Array.from({ length: rules.possessionSupply }, () => makeCard('possession', { owner }));
 }
 
 
@@ -66,11 +70,11 @@ export function deal(deck, playerCount, rng) {
 }
 
 // --- Hand helpers ------------------------------------------------------------------------
-// Possession cards are the possessed side's hidden supply: they never count toward the hand limit and
+// Possession cards are the possessed side's hidden souls: they never count toward the hand limit and
 // can't be discarded. A guest's card count is private (docs/GAME_RULES.md > Possession: the table never
-// sees other guests' counts, since a Possession card changing hands or a Lantern block changes them
-// unevenly); the guest's own count, shown only to them, leaves the Possession cards out, so it reads
-// the same whatever their role. Lanterns are ordinary cards and count like any other.
+// sees other guests' counts, since a soul being used up or a Lantern block changes them unevenly); the
+// guest's own count, shown only to them, leaves the Possession cards out, so it reads the same whatever
+// their role. Lanterns are ordinary cards and count like any other.
 export const isCountable = card => card.type !== 'possession';
 export const hasEscapeLanterns = hand =>
   hand.filter(c => c.type === 'lantern').length >= rules.lanternsToEscape;

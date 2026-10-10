@@ -15,8 +15,9 @@
 //   PRIVATE (only this guest)
 //     its own hand (Possession cards included), role, action points and health; its own private event
 //     list (player.inbox: the trades it made and what it gave and got, a Lantern block it made or
-//     suffered, being possessed and by whom, whom it possessed, a Hand Mirror it used or that was used
-//     on it).
+//     suffered, being possessed and by whom, whom it possessed, a soul spent between it and another
+//     possessed guest, a Hand Mirror it used or that was used on it). Its Possession cards are all its
+//     own souls (soul cards: it never holds anyone else's), so the view leaves out whose they are.
 //   NEVER
 //     another guest's hand, card count or role; the draw pile or the room deck; another guest's notes or
 //     inbox; which seats are people and which are computer guests (the view has no names or ids:

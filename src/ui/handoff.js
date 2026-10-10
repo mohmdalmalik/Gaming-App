@@ -72,7 +72,7 @@ export function createHandoff(doc) {
     // POSSESSED pill with its brass and crimson edge).
     el.role.innerHTML = `<span class="role-word tell-pill">${player.possessed ? 'POSSESSED' : 'CLEAN GUEST'}</span>`
       + `<span class="role-line">${player.possessed
-        ? 'In a trade, give a Possession card to possess the other guest — unless they hand you a Lantern: then both cards are used up and they learn you are possessed. You can never escape.'
+        ? 'Your Possession cards are your own souls. Give one in a trade to possess the other guest — unless they hand you a Lantern: then both cards are used up and they learn you are possessed. You can never escape.'
         : `Find Lanterns, pass them to one clean guest, and get that guest out through the Fire Exit with ${rules.lanternsToEscape} Lanterns. Give a Lantern in a trade if you fear who you are trading with — it blocks possession, but is used up doing it.`}</span>`;
     if (!player.possessed) return;
     // The private tell (docs/GAME_RULES.md, Possession), as the crimson plate: their own possessed
@@ -89,7 +89,7 @@ export function createHandoff(doc) {
     const badge = doc.createElement('div'); badge.className = 'tell-badge possessed';
     const caption = doc.createElement('span'); caption.className = 'tell-note'; caption.textContent = 'Only you can see this';
     badge.append(word, caption);
-    head.append(badge, soulsChip(doc, soulsHeld(player)));
+    head.append(badge, soulsChip(doc, soulsHeld(player), { owner: player.id }));
     text.append(head, ...rest);
     const port = doc.createElement('div'); port.className = 'role-portrait';
     port.appendChild(makePortrait(doc, player, { possessed: true }));
@@ -109,8 +109,8 @@ export function createHandoff(doc) {
 
   function renderHand(player) {
     el.hand.hidden = false;
-    // Possession cards are one stack with a ×N badge (all the same card; the count is what matters,
-    // and it keeps a full hand on one screen with the Start button).
+    // Possession cards are one stack with a ×N badge (all your own souls, with your face; the count is
+    // what matters, and it keeps a full hand on one screen with the Start button).
     const souls = player.hand.filter(c => c.type === 'possession');
     const cards = [...souls.slice(0, 1), ...countableCards(player.hand)];
     if (!cards.length) { el.hand.innerHTML = '<div class="panel-note">No cards.</div>'; return; }

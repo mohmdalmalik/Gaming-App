@@ -2,8 +2,9 @@
 // (tools/char-pipeline/preview_glb.html), so the guest in the hotel and the guest in the interface
 // have the same eyes. A possessed guest looks exactly like the normal guest except BOTH eyes: the
 // black eye ovals become a deep blood-red iris — dark at the rim, brighter low in the middle — with a
-// small crisp white catchlight high and a little right of centre, like the owner's reference. Only the
-// player's own guest on their own screen ever wears it (main.js decides; nothing here knows who).
+// small crisp white catchlight high and a little right of centre, like the owner's reference. Only on
+// the player's own screen: their own guest while possessed, and the guests a possessed player knows are
+// possessed (main.js decides, through src/ui/allies.js; nothing here knows who).
 //
 // Use (any guest GLB whose materials keep their names — 'Eye', and 'Shine' for the women's own
 // catchlights):

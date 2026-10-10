@@ -675,13 +675,19 @@ html, body {
 .map-legend .sw.here { background: rgba(201,162,78,0.3); border-color: var(--brass); }
 .map-legend .sw.searched { background: rgba(120,200,150,0.18); border-color: rgba(120,200,150,0.5); }
 .map-legend .sw.frontier { background: var(--brass-bright); border-color: var(--brass); height: 4px; margin-top: 5px; }
-.map-legend .sw.objective { background: rgba(201,162,78,0.35); border-color: var(--brass-bright); border-radius: 50%; }
+/* A guest on the plan: a round dot in their colour (src/map.js; the guest whose turn it is: an arrow).
+   The swatch is quartered in four of the guests' colours, so it reads as "a coloured dot", not one guest. */
+.map-legend .sw.guest {
+  width: 12px; height: 12px; border-radius: 50%; border: 1.5px solid #1d1509;
+  background: conic-gradient(#e6b45a 0 25%, #5ac8e6 0 50%, #a8e05a 0 75%, #e67ab8 0);
+}
 /* Rooms with jobs carry a small mark on the plan (drawn in src/map.js in the same colours). */
 .map-legend .mk-bar { width: 18px; height: 18px; flex: none; }
 .map-legend .mk { font-family: var(--serif); font-weight: 700; font-size: 14px; line-height: 1; }
 .map-legend .mk.infirmary { color: #f08c84; }
 .map-legend .mk.switchboard { color: #9fd0f0; }
 .map-legend .mk.linen { color: #efe7d6; }
+.map-legend .mk.drop { color: var(--brass-bright); }   /* the brass ◆ src/map.js draws in a room's corner */
 
 /* The one-off announcement when the exit opens, and the end-screen button pair. */
 .card.notice { max-width: 440px; }
@@ -749,7 +755,7 @@ html, body {
 }
 .turn-timer[hidden] { display: none; }
 .tt-track { width: 104px; height: 6px; border-radius: 999px; background: rgba(0,0,0,0.45); overflow: hidden; }
-.tt-fill { height: 100%; width: 100%; background: linear-gradient(90deg, var(--brass), var(--brass-bright)); transition: width 0.2s linear; }
+.tt-fill { height: 100%; width: 100%; background: linear-gradient(90deg, var(--brass), var(--brass-bright)); transform-origin: left center; }   /* (shrunk by hud.showTimer: transform: scaleX) */
 .tt-seconds { font-family: var(--serif); font-size: 14px; font-variant-numeric: tabular-nums; color: var(--ivory-dim); min-width: 3.2ch; text-align: right; }
 .turn-timer.low { border-color: rgba(207,74,64,0.6); }
 .turn-timer.low .tt-fill { background: linear-gradient(90deg, #8c3a34, var(--crimson)); }
@@ -1028,7 +1034,7 @@ html, body {
   margin-bottom: 8px;
 }
 .menu-title {
-  margin: 0; font-family: var(--serif); font-weight: 700; font-size: clamp(46px, 6.4vw, 76px); line-height: 0.98;
+  margin: 0; font-family: var(--serif); font-weight: 700; font-size: clamp(46px, 6.4vw, 64px); line-height: 0.98;
   letter-spacing: 0.01em; color: var(--brass-bright);
   background: linear-gradient(180deg, #f6e2a8 0%, #e2bd67 55%, #a8812f 100%); -webkit-background-clip: text; background-clip: text;
   -webkit-text-fill-color: transparent; text-shadow: none; filter: drop-shadow(0 3px 14px rgba(0, 0, 0, 0.55));
@@ -1129,7 +1135,8 @@ html, body {
 /* The end of a match: everyone's role, now that it is over. */
 .end-reveal { display: grid; gap: 6px; margin: 2px auto 22px; width: min(540px, 80vw); text-align: left; }
 .er-row {
-  display: grid; grid-template-columns: 12px minmax(0, 1fr) minmax(0, 1fr) auto 64px; gap: 10px; align-items: center;
+  /* (a fixed role column, wide enough for POSSESSED, so every row's columns line up) */
+  display: grid; grid-template-columns: 12px minmax(0, 1fr) minmax(0, 1fr) 92px 64px; gap: 10px; align-items: center;
   padding: 7px 12px; border-radius: 10px; background: rgba(255, 255, 255, 0.03); border: 1px solid var(--line-soft);
 }
 .er-row.you { border-color: var(--brass); }
@@ -1155,3 +1162,306 @@ html, body {
 /* Who plays each guest (a match): "You", or the computer guest's name, small under the guest's name. */
 .mini-user { display: block; max-width: 72px; margin: 1px auto 0; font-family: var(--sans); font-size: 10px; font-weight: 600; letter-spacing: 0.02em; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-decoration: none; }
 .mini-player.me .mini-user { color: var(--brass); }
+
+/* ==== Trade reveal, attack result, feed icons (src/ui/tradeReveal.js, meeting.js, feed.js) ========
+   A trade the player is in is SHOWN, not told: the two guests and the two cards, with an effect for
+   what happened, on the private hand-over card. Motion is transforms, opacity and small filters on a
+   handful of elements; embers, ash and smoke are one canvas (no big blurs). Skipped by a tap. ==== */
+.handoff-card.trade-reveal { width: min(940px, 94vw); max-width: min(940px, 94vw); padding: 18px 26px 20px; }
+.handoff-card.trade-reveal > h1, .handoff-card.trade-reveal > #handoff-sub { display: none; }
+.handoff-card.trade-reveal .handoff-kicker { margin-bottom: 0; }
+.handoff-card.trade-reveal .modal-actions { margin-top: 4px; transition: opacity 0.35s ease; }
+.handoff-card.trade-reveal.tr-playing .modal-actions { visibility: hidden; opacity: 0; }
+.handoff-card:not(.trade-reveal) :is(.tr-stage, .tr-caption) { display: none; }
+
+.tr-stage {
+  --H: clamp(230px, 46vh, 420px); --cw: calc(var(--H) * 0.4); --pw: calc(var(--H) * 0.36); --cy: calc(50% - 10px);
+  position: relative; height: var(--H); margin: 2px 0 2px; cursor: pointer;
+}
+.tr-fx { position: absolute; left: -14px; top: -14px; width: calc(100% + 28px); height: calc(100% + 28px); pointer-events: none; z-index: 5; }
+
+/* The two guests: you on the left, them on the right. */
+.tr-seat {
+  position: absolute; top: var(--cy); width: calc(var(--pw) + 8px); margin-left: calc(var(--pw) / -2 - 4px); margin-top: calc(var(--pw) * -0.667);
+  display: flex; flex-direction: column; align-items: center; gap: 8px; animation: tr-seat-in 0.45s ease-out both;
+}
+.tr-seat.me { left: 10%; }
+.tr-seat.them { left: 90%; animation-delay: 0.06s; }
+.tr-port {
+  position: relative; width: var(--pw); aspect-ratio: 3 / 4; border-radius: 12px; overflow: hidden; background: #12141d;
+  border: 1px solid var(--brass); box-shadow: inset 0 0 0 1px rgba(0,0,0,0.5), 0 8px 22px rgba(0,0,0,0.55);
+  transition: box-shadow 0.7s ease, border-color 0.7s ease;
+}
+.tr-port > img, .tr-port > svg { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
+.tr-port .tr-p2 { opacity: 0; transition: opacity 0.9s ease; }
+.tr-seat.turned .tr-p2 { opacity: 1; }
+/* Turned (you are possessed) / known (you know they are): the crimson hairline of the possessed plate. */
+.tr-seat.turned .tr-port, .tr-seat.known .tr-port {
+  border-color: rgba(201,162,78,0.9);
+  box-shadow: inset 0 0 0 1px rgba(0,0,0,0.5), 0 0 0 2px var(--poss-line), 0 0 22px rgba(163,38,58,0.55), 0 8px 22px rgba(0,0,0,0.55);
+}
+.tr-port::after {
+  content: ''; position: absolute; inset: 0; pointer-events: none; opacity: 0;
+  background: radial-gradient(75% 65% at 50% 45%, rgba(150,16,36,0) 35%, rgba(120,10,28,0.72) 100%);
+}
+.tr-seat.pulse .tr-port::after { animation: tr-flash 1.1s ease-out both; }
+.tr-ring {
+  position: absolute; left: 0; top: -4px; width: 100%; height: calc(var(--pw) * 4 / 3 + 8px); border-radius: 15px; pointer-events: none; opacity: 0;
+  border: 2px solid rgba(208,48,62,0.95); box-shadow: 0 0 16px rgba(192,36,47,0.65), inset 0 0 14px rgba(192,36,47,0.45);
+}
+.tr-seat.pulse .tr-ring { animation: tr-ring 1s ease-out both; }
+.tr-seat.pulse .tr-ring.two { animation-delay: 0.28s; }
+.tr-name { display: inline-flex; align-items: center; gap: 7px; font-family: var(--serif); font-weight: 700; font-size: 16px; color: var(--ivory); white-space: nowrap; }
+.tr-name .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--player-color); box-shadow: 0 0 0 1px rgba(0,0,0,0.4); }
+
+/* A card: rail (crosses the stage) > card (its slot) > tilt (leans, sinks) > flip (turns) > faces. */
+.tr-rail { position: absolute; inset: 0; pointer-events: none; z-index: 1; }
+.tr-stage.o-blockedMe .tr-rail.mine, .tr-stage.o-possessedThem .tr-rail.mine { z-index: 2; }
+.tr-card {
+  position: absolute; top: var(--cy); width: var(--cw); height: calc(var(--cw) * 1.5); margin-left: calc(var(--cw) / -2); margin-top: calc(var(--cw) * -0.75);
+  animation: tr-card-in 0.45s cubic-bezier(0.2, 0.8, 0.25, 1) 0.08s both;
+}
+.tr-card.at-l { left: 31%; }
+.tr-card.at-r { left: 69%; }
+.tr-rail.theirs .tr-card { animation-delay: 0.16s; }
+.tr-tilt { position: absolute; inset: 0; z-index: 0; perspective: 900px; }
+.tr-flip { position: absolute; inset: 0; -webkit-transform-style: preserve-3d; transform-style: preserve-3d; }
+.tr-flip.down { transform: rotateY(180deg); }
+.tr-flip.reveal { animation: tr-flip 0.5s cubic-bezier(0.3, 0.7, 0.3, 1) both; }
+.tr-face {
+  position: absolute; inset: 0; border-radius: 7% / 4.7%; overflow: hidden; background: #15130f;
+  -webkit-backface-visibility: hidden; backface-visibility: hidden;
+  box-shadow: 0 10px 26px rgba(0,0,0,0.6), 0 0 0 1px rgba(201,162,78,0.45); transition: box-shadow 0.5s ease;
+}
+.tr-face img { display: block; width: 100%; height: 100%; object-fit: cover; transition: filter 0.6s ease; }
+.tr-back { transform: rotateY(180deg); }
+.tr-badge { position: absolute; top: 7%; right: 8%; padding: 2px 8px; border-radius: 999px; font-size: 12px; font-weight: 800; color: #2a2016; background: var(--brass-bright); box-shadow: 0 1px 4px rgba(0,0,0,0.5); }
+.tr-burn { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+/* The card you got: a soft brass shimmer and edge. The card you gave: a little dimmer (theirs now). */
+.tr-front::after {
+  content: ''; position: absolute; inset: 0; pointer-events: none; opacity: 0; transform: translateX(-120%);
+  background: linear-gradient(105deg, rgba(255,236,190,0) 36%, rgba(255,236,190,0.5) 50%, rgba(255,236,190,0) 64%);
+}
+.tr-front.shine::after { animation: tr-shine 0.9s ease-out 0.05s both; }
+.tr-card.got .tr-front { box-shadow: 0 10px 26px rgba(0,0,0,0.6), 0 0 0 1.5px var(--brass-bright), 0 0 24px rgba(232,202,128,0.45); }
+.tr-card.given .tr-front img { filter: brightness(0.8) saturate(0.85); }
+.tr-card.evil-land .tr-front { box-shadow: 0 10px 26px rgba(0,0,0,0.6), 0 0 0 1.5px rgba(208,48,62,0.95), 0 0 26px rgba(163,38,58,0.6); }
+.tr-tilt.sink .tr-front { box-shadow: 0 0 0 1.5px rgba(208,48,62,0.95), 0 0 26px rgba(163,38,58,0.7); }
+/* A Lantern: it flares (a warm halo with a slow deco sunburst), then gutters out, used up. */
+.tr-card.lit .tr-front { box-shadow: 0 10px 26px rgba(0,0,0,0.5), 0 0 0 1.5px rgba(255,220,150,0.95), 0 0 34px rgba(255,190,90,0.65); }
+.tr-card.lit .tr-front img { filter: brightness(1.18) saturate(1.1); }
+.tr-card.spent .tr-front { box-shadow: 0 8px 20px rgba(0,0,0,0.5), 0 0 0 1px rgba(201,162,78,0.22); }
+.tr-card.spent .tr-front img { filter: grayscale(0.85) brightness(0.5); transition: filter 1.1s ease; }
+.tr-card.spent .tr-tilt { opacity: 0.72; transition: opacity 1.1s ease; }
+.tr-halo {
+  position: absolute; left: 50%; top: 42%; width: 300%; height: calc(var(--cw) * 3); z-index: -1; pointer-events: none; border-radius: 50%; opacity: 0;
+  transform: translate(-50%, -50%) scale(0.5);
+  background: radial-gradient(closest-side, rgba(255,230,170,0.78), rgba(255,186,90,0.34) 36%, rgba(230,140,50,0.11) 62%, rgba(200,110,40,0) 100%);
+}
+.tr-halo::after {
+  content: ''; position: absolute; inset: 6%; border-radius: 50%;
+  background: repeating-conic-gradient(from 0deg, rgba(255,222,150,0.22) 0deg 5deg, rgba(255,222,150,0) 5deg 18deg);
+  -webkit-mask: radial-gradient(closest-side, #000 28%, transparent 100%); mask: radial-gradient(closest-side, #000 28%, transparent 100%);
+}
+.tr-halo.flare { animation: tr-flare 0.75s cubic-bezier(0.2, 0.8, 0.3, 1) both; }
+.tr-halo.flare::after, .tr-halo.gutter::after { animation: tr-rays 7s linear both; }
+.tr-halo.gutter { animation: tr-gutter 1s linear both; }
+/* A Possession card burning away (the dissolve itself is a canvas); then only a little ash. */
+.tr-card.burning .tr-front { box-shadow: none; background: transparent; }
+.tr-card.burnt .tr-flip { visibility: hidden; }
+.tr-card.fade-burn .tr-front { animation: tr-fade-burn 0.5s ease-in forwards; }
+.tr-ash {
+  position: absolute; left: 6%; right: 6%; bottom: -3%; height: 18%; pointer-events: none; opacity: 0; transition: opacity 0.8s ease;
+  background: radial-gradient(50% 50% at 50% 60%, rgba(140,130,120,0.34), rgba(80,74,68,0.16) 55%, rgba(60,55,50,0) 100%);
+}
+.tr-card.burnt .tr-ash { opacity: 1; }
+/* The Possession cards you now hold fan out. */
+.tr-card.tr-extra { animation: none; opacity: 0; transform: none; transition: transform 0.5s cubic-bezier(0.2, 0.8, 0.25, 1), opacity 0.3s ease; }
+.tr-card.tr-extra.fanned { opacity: 1; transform: translate(var(--fan-x), -3%) rotate(var(--fan-r)); }
+.tr-card.tr-extra .tr-front { box-shadow: 0 10px 26px rgba(0,0,0,0.6), 0 0 0 1.5px rgba(208,48,62,0.85), 0 0 18px rgba(163,38,58,0.45); }
+.tr-tilt.fan-main { transition: transform 0.5s cubic-bezier(0.2, 0.8, 0.25, 1); transform: rotate(var(--fan-r)); }
+/* No trade: an empty, dimmed slot (an open hand) for whoever had nothing. */
+.tr-empty {
+  position: absolute; top: var(--cy); width: var(--cw); height: calc(var(--cw) * 1.5); margin-left: calc(var(--cw) / -2); margin-top: calc(var(--cw) * -0.75);
+  border-radius: 7% / 4.7%; border: 2px dashed rgba(201,162,78,0.42);
+  background: radial-gradient(80% 60% at 50% 45%, rgba(255,255,255,0.04), rgba(0,0,0,0.25));
+  display: flex; align-items: center; justify-content: center; animation: tr-card-in 0.45s ease-out 0.08s both;
+}
+.tr-empty.at-l { left: 31%; }
+.tr-empty.at-r { left: 69%; }
+.tr-empty svg { width: 46%; height: auto; fill: none; stroke: rgba(201,162,78,0.55); stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+.tr-empty.shrug svg { animation: tr-shrug 0.8s ease-in-out both; }
+
+/* The moves. */
+.tr-rail.go-cross-r { animation: tr-cross-r 0.9s cubic-bezier(0.55, 0, 0.3, 1) both; }
+.tr-rail.go-cross-l { animation: tr-cross-l 0.9s cubic-bezier(0.55, 0, 0.3, 1) both; }
+.tr-rail.go-strike-l { animation: tr-strike-l 0.75s cubic-bezier(0.3, 0, 0.2, 1) both; }
+.tr-rail.go-strike-r { animation: tr-strike-r 0.75s cubic-bezier(0.3, 0, 0.2, 1) both; }
+.tr-rail.go-nudge-r { animation: tr-nudge-r 0.6s ease-out 0.2s both; }
+.tr-rail.go-nudge-l { animation: tr-nudge-l 0.6s ease-out 0.2s both; }
+.tr-rail.go-sink-r { animation: tr-sink-r 1.1s cubic-bezier(0.5, 0, 0.4, 1) both; }
+.tr-rail.go-offer-r { animation: tr-offer-r 1.1s ease-in-out both; }
+.tr-tilt.tilt-a { animation: tr-tilt-a 0.9s ease-in-out both; }
+.tr-tilt.tilt-b { animation: tr-tilt-b 0.9s ease-in-out both; }
+.tr-tilt.sink { animation: tr-sink 1.1s ease-in both; }
+@keyframes tr-seat-in { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+@keyframes tr-card-in { from { opacity: 0; transform: translateY(24px) scale(0.94); } to { opacity: 1; transform: none; } }
+@keyframes tr-cross-r { 0% { transform: translate(0, 0); } 50% { transform: translate(19%, -10%); } 100% { transform: translate(38%, 0); } }
+@keyframes tr-cross-l { 0% { transform: translate(0, 0); } 50% { transform: translate(-19%, 10%); } 100% { transform: translate(-38%, 0); } }
+@keyframes tr-strike-l { 0% { transform: translate(0, 0); } 70% { transform: translate(-14%, -3%); } 100% { transform: translate(-16%, 0); } }
+@keyframes tr-strike-r { 0% { transform: translate(0, 0); } 70% { transform: translate(14%, -3%); } 100% { transform: translate(16%, 0); } }
+@keyframes tr-nudge-r { to { transform: translateX(2.5%); } }
+@keyframes tr-nudge-l { to { transform: translateX(-2.5%); } }
+@keyframes tr-sink-r { 0% { transform: translate(0, 0); } 35% { transform: translate(19%, -10%); } 60% { transform: translate(36%, -1%); } 100% { transform: translate(59%, -3%); } }
+@keyframes tr-sink { 0% { transform: rotate(0deg) scale(1); opacity: 1; } 35% { transform: rotate(-7deg) scale(1); } 60% { transform: rotate(0deg) scale(0.92); opacity: 1; } 100% { transform: rotate(0deg) scale(0.22); opacity: 0; } }
+@keyframes tr-offer-r { 0%, 100% { transform: translateX(0); } 45%, 60% { transform: translateX(9%); } }
+@keyframes tr-tilt-a { 0%, 100% { transform: rotate(0deg); } 50% { transform: rotate(-8deg); } }
+@keyframes tr-tilt-b { 0%, 100% { transform: rotate(0deg); } 50% { transform: rotate(8deg); } }
+@keyframes tr-flip { 0% { transform: rotateY(180deg); } 50% { transform: rotateY(90deg) scale(1.06); } 100% { transform: rotateY(0deg); } }
+@keyframes tr-shine { 0% { opacity: 0; transform: translateX(-120%); } 15%, 85% { opacity: 1; } 100% { opacity: 0; transform: translateX(120%); } }
+@keyframes tr-flare { 0% { opacity: 0; transform: translate(-50%, -50%) scale(0.45); } 35% { opacity: 1; transform: translate(-50%, -50%) scale(1.1); } 100% { opacity: 0.9; transform: translate(-50%, -50%) scale(1); } }
+@keyframes tr-rays { from { transform: rotate(0deg); } to { transform: rotate(50deg); } }
+@keyframes tr-gutter { 0% { opacity: 0.9; transform: translate(-50%, -50%) scale(1); } 16% { opacity: 0.45; } 28% { opacity: 0.78; } 44% { opacity: 0.22; } 56% { opacity: 0.5; } 74% { opacity: 0.1; } 100% { opacity: 0; transform: translate(-50%, -50%) scale(0.8); } }
+@keyframes tr-fade-burn { 0% { opacity: 1; filter: none; } 40% { opacity: 1; filter: sepia(1) brightness(1.5) saturate(2); } 100% { opacity: 0; filter: sepia(1) brightness(0.4); } }
+@keyframes tr-ring { 0% { opacity: 0; transform: scale(0.92); } 18% { opacity: 1; transform: scale(1); } 100% { opacity: 0; transform: scale(1.32); } }
+@keyframes tr-flash { 0% { opacity: 0; } 25% { opacity: 1; } 100% { opacity: 0; } }
+@keyframes tr-shrug { 0%, 100% { transform: translateX(0) rotate(0deg); } 20% { transform: translateX(-5px) rotate(-6deg); } 45% { transform: translateX(5px) rotate(6deg); } 70% { transform: translateX(-3px) rotate(-3deg); } }
+/* Skipped (a tap): every move jumps to where it ends. Reduced motion: every move is short. */
+.tr-stage.tr-end, .tr-stage.tr-end *, .tr-stage.tr-end *::before, .tr-stage.tr-end *::after { animation-delay: 0s !important; animation-duration: 0s !important; transition: none !important; }
+.tr-stage.tr-reduced *, .tr-stage.tr-reduced *::before, .tr-stage.tr-reduced *::after { animation-duration: 0.3s !important; animation-delay: 0s !important; }
+
+/* The few words under it. */
+.tr-caption {
+  min-height: 2.6em; margin: 0 auto; max-width: 680px; font-family: var(--serif); font-size: clamp(19px, 2.3vw, 24px); line-height: 1.3;
+  color: var(--ivory); text-wrap: balance; opacity: 0; transform: translateY(6px); transition: opacity 0.4s ease, transform 0.4s ease;
+}
+.tr-caption.on { opacity: 1; transform: none; }
+.tr-caption .tr-who { color: var(--brass-bright); }
+.tr-caption .tr-evil { color: #e46b74; }
+/* Behind the two cards: a faint brass sunburst and rule, the hotel's deco, where the cards change hands. */
+.tr-deco {
+  position: absolute; left: 50%; top: var(--cy); width: calc(var(--H) * 0.95); height: calc(var(--H) * 0.95); transform: translate(-50%, -50%);
+  border-radius: 50%; pointer-events: none; opacity: 0.9;
+  background: repeating-conic-gradient(from -2deg, rgba(201,162,78,0.10) 0deg 4deg, rgba(201,162,78,0) 4deg 15deg);
+  -webkit-mask: radial-gradient(closest-side, #000 18%, rgba(0,0,0,0.5) 55%, transparent 100%); mask: radial-gradient(closest-side, #000 18%, rgba(0,0,0,0.5) 55%, transparent 100%);
+}
+.tr-deco::after {
+  content: ''; position: absolute; left: 50%; top: 50%; width: 9px; height: 9px; transform: translate(-50%, -50%) rotate(45deg);
+  background: var(--brass); box-shadow: 0 0 0 3px rgba(201,162,78,0.18);
+}
+
+/* The attack result (public, the meeting panel): attacker, the weapon card striking, the target with
+   the hearts they lost dropping away. Restrained: a bright slash or a muzzle flash, never blood. */
+.atk-stage { display: flex; align-items: flex-start; justify-content: center; gap: clamp(16px, 3.4vw, 34px); margin: 2px 0 6px; }
+.atk-seat { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.atk-port {
+  position: relative; width: clamp(78px, 12vh, 104px); aspect-ratio: 3 / 4; border-radius: 10px; overflow: hidden; background: #12141d;
+  border: 1px solid var(--brass); box-shadow: inset 0 0 0 1px rgba(0,0,0,0.5), 0 6px 18px rgba(0,0,0,0.5);
+}
+.atk-port > img, .atk-port > svg { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
+.atk-name { font-size: 15px; color: var(--ivory); }
+.atk-name .who { gap: 6px; }
+.atk-weapon { position: relative; z-index: 2; width: clamp(74px, 11vh, 96px); aspect-ratio: 2 / 3; flex: none; }
+.atk-weapon img { display: block; width: 100%; height: 100%; object-fit: cover; border-radius: 7% / 4.7%; box-shadow: 0 8px 20px rgba(0,0,0,0.55), 0 0 0 1px rgba(201,162,78,0.45); }
+.atk-knife .atk-weapon { animation: atk-lunge 0.55s cubic-bezier(0.4, 0, 0.2, 1) 0.15s both; }
+.atk-revolver .atk-weapon { animation: atk-recoil 0.5s ease-out 0.5s both; }
+.atk-flash {
+  position: absolute; right: -62%; top: -6%; width: 110%; aspect-ratio: 1; border-radius: 50%; pointer-events: none; opacity: 0; transform: scale(0.3);
+  background: radial-gradient(closest-side, rgba(255,252,232,1), rgba(255,214,120,0.95) 22%, rgba(255,150,50,0.42) 50%, rgba(255,120,30,0) 100%);
+}
+.atk-flash::after {
+  content: ''; position: absolute; inset: 0; border-radius: 50%;
+  background: repeating-conic-gradient(from 0deg, rgba(255,236,170,0.75) 0deg 6deg, rgba(255,236,170,0) 6deg 30deg);
+  -webkit-mask: radial-gradient(closest-side, #000 25%, transparent 100%); mask: radial-gradient(closest-side, #000 25%, transparent 100%);
+}
+.atk-revolver .atk-flash { animation: atk-flash 0.45s ease-out 0.5s both; }
+.atk-weapon.gone img { animation: atk-grey 0.8s ease 1.1s both; }
+.atk-empty {
+  position: absolute; left: 50%; bottom: 9%; transform: translateX(-50%); padding: 2px 9px; border-radius: 999px; white-space: nowrap;
+  font: 800 11px/1.4 var(--sans); letter-spacing: 0.08em; text-transform: uppercase; color: var(--ivory-dim);
+  background: rgba(20,16,12,0.92); border: 1px solid var(--brass-dim); opacity: 0; animation: atk-tag 0.4s ease 1.2s both;
+}
+.atk-slash {
+  position: absolute; left: -12%; right: -12%; top: 47%; height: 4px; pointer-events: none; opacity: 0; transform: rotate(-32deg) scaleX(0);
+  background: linear-gradient(90deg, rgba(255,246,225,0), rgba(255,246,225,0.95) 30%, #fff 50%, rgba(255,246,225,0.95) 70%, rgba(255,246,225,0));
+  box-shadow: 0 0 10px rgba(255,236,200,0.85);
+}
+.atk-knife .atk-slash { animation: atk-slash 0.45s ease-out 0.56s both; }
+.atk-port::after {
+  content: ''; position: absolute; inset: 0; pointer-events: none; opacity: 0;
+  background: radial-gradient(circle at 50% 45%, rgba(255,230,190,0.5), rgba(207,74,64,0.28) 42%, rgba(207,74,64,0) 72%);
+}
+.atk-target .atk-port { animation: atk-shake 0.45s ease-in-out 0.58s both; }
+.atk-target .atk-port::after { animation: atk-hit 0.55s ease-out 0.58s both; }
+.atk-stage.killed .atk-target .atk-port > :is(img, svg) { animation: atk-grey 0.9s ease 1.1s both; }
+.atk-stage.killed .atk-target .atk-name { opacity: 0.7; }
+.atk-hearts { position: relative; display: flex; gap: 4px; margin-top: 1px; }
+.atk-heart { position: relative; width: 18px; height: 17px; }
+.atk-heart svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+.atk-heart .h-o { fill: rgba(255,255,255,0.05); stroke: rgba(207,74,64,0.55); stroke-width: 1.6; }
+.atk-heart .h-f { fill: var(--crimson); filter: drop-shadow(0 0 3px rgba(207,74,64,0.6)); transform-origin: 50% 60%; }
+.atk-heart.empty .h-f { display: none; }
+.atk-heart.lost .h-f { animation: atk-drop 0.75s cubic-bezier(0.5, 0, 0.7, 0.4) calc(0.62s + var(--i, 0) * 0.14s) both; }
+.atk-minus {
+  position: absolute; right: -30px; top: -2px; font: 800 15px/1 var(--sans); color: #ff9a8f; text-shadow: 0 1px 3px rgba(0,0,0,0.6);
+  opacity: 0; animation: atk-minus 1s ease-out 0.66s both;
+}
+.atk-line { margin: 4px 0 0; color: var(--ivory-dim); }
+@keyframes atk-lunge { 0% { transform: none; } 55% { transform: translateX(34px) rotate(10deg); } 100% { transform: none; } }
+@keyframes atk-recoil { 0% { transform: none; } 15% { transform: translateX(-8px) rotate(-7deg); } 100% { transform: none; } }
+@keyframes atk-flash { 0% { opacity: 0; transform: scale(0.3); } 25% { opacity: 1; transform: scale(1.1); } 100% { opacity: 0; transform: scale(1.45); } }
+@keyframes atk-slash { 0% { opacity: 1; transform: rotate(-32deg) scaleX(0); } 40% { opacity: 1; transform: rotate(-32deg) scaleX(1); } 100% { opacity: 0; transform: rotate(-32deg) scaleX(1); } }
+@keyframes atk-shake { 0%, 100% { transform: none; } 20% { transform: translateX(-6px); } 40% { transform: translateX(5px); } 60% { transform: translateX(-3px); } 80% { transform: translateX(2px); } }
+@keyframes atk-hit { 0% { opacity: 0; } 20% { opacity: 1; } 100% { opacity: 0; } }
+@keyframes atk-grey { to { filter: grayscale(1) brightness(0.45); } }
+@keyframes atk-tag { from { opacity: 0; } to { opacity: 1; } }
+@keyframes atk-drop { 0% { transform: none; opacity: 1; } 22% { transform: scale(1.25); opacity: 1; } 100% { transform: translateY(24px) rotate(28deg) scale(0.7); opacity: 0; } }
+@keyframes atk-minus { 0% { opacity: 0; transform: translateY(4px); } 25% { opacity: 1; transform: none; } 75% { opacity: 1; } 100% { opacity: 0.9; transform: translateY(-6px); } }
+@media (prefers-reduced-motion: reduce) {
+  .atk-stage *, .atk-stage *::before, .atk-stage *::after { animation-duration: 0.01s !important; animation-delay: 0s !important; }
+}
+
+/* The feed: a small brass icon at the start of each line (src/ui/feed.js). */
+.feed-line.has-icon { display: flex; align-items: center; gap: 8px; padding-left: 6px; }
+.feed-text { min-width: 0; }
+.feed-icon {
+  position: relative; flex: none; width: 24px; height: 24px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center;
+  background: radial-gradient(circle at 50% 35%, #22252f, #12141b); border: 1px solid rgba(201,162,78,0.55); color: var(--brass-bright);
+}
+.feed-icon svg { width: 16px; height: 16px; display: block; }
+.feed-icon svg.icon { width: 19px; height: 19px; }
+.feed-icon.attack { border-color: rgba(207,74,64,0.75); color: #f2b0a6; }
+.feed-icon.attack.fatal { background: radial-gradient(circle at 50% 35%, #3a1418, #170a0c); }
+.feed-icon.escape { border-color: rgba(159,227,184,0.6); color: #bfeccd; }
+/* Two card backs crossing: a trade happened, nothing about what changed hands. */
+.feed-icon .fi-back {
+  position: absolute; left: 50%; top: 50%; width: 10px; height: 15px; margin: -7.5px 0 0 -5px; border-radius: 1.5px; object-fit: cover;
+  box-shadow: 0 0 0 0.75px rgba(232,202,128,0.9), 0 1px 2px rgba(0,0,0,0.6);
+}
+.feed-icon .fi-back.a { transform: translateX(-2.5px) rotate(-17deg); }
+.feed-icon .fi-back.b { transform: translateX(2.5px) rotate(17deg); }
+
+/* === Settings: Music and Sound effects rows (src/audio/) ==============================================
+   Six rows now: on a short screen (an iPad mini in landscape, Safari's bars showing) the settings
+   panel tightens its spacing so Done stays on screen. */
+@media (max-height: 760px) {
+  #menu-settings .menu-h2 { margin-bottom: 10px; font-size: 28px; }
+  #menu-settings .menu-field { margin-bottom: 11px; }
+  #menu-settings .mf-label { margin-bottom: 6px; }
+  #menu-settings .seg-btn { min-height: 44px; }
+  #menu-settings .menu-actions { margin-top: 14px; }
+}
+
+/* === Trade reveal: QA fixes (src/ui/tradeReveal.js) ===================================================
+   The effects canvas reaches into the card's side padding and fades out at its left and right edges,
+   so smoke near a portrait never stops on a hard line. The Continue button becomes visible (and so
+   tappable) a moment after the scene ends: a quick second tap meant to hurry the scene can't close it
+   unseen (the script also holds its taps off for that moment). No trade: the empty hand a little larger. */
+.tr-fx {
+  left: -24px; width: calc(100% + 48px);
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 40px, #000 calc(100% - 40px), transparent);
+  mask-image: linear-gradient(90deg, transparent, #000 40px, #000 calc(100% - 40px), transparent);
+}
+.handoff-card.trade-reveal .modal-actions { transition: opacity 0.35s ease 0.25s, visibility 0s linear 0.25s; }
+.handoff-card.trade-reveal.tr-playing .modal-actions { transition: none; }
+.tr-empty svg { width: 58%; }

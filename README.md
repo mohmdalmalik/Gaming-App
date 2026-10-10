@@ -20,8 +20,8 @@ guests seated and strolling, the manager walking by): **Play with bots**, **Prac
 - **Play with bots.** You and 3–5 computer guests (bots), like an online table filling up: choose how
   many others and your role (random, clean guest or possessed), watch the guests join with their online
   names, then the manager takes guests up in the lift, the screen goes black and the match opens. Every
-  rule applies: one hidden Possessor with two Possession cards (a guest they possess keeps the card and
-  gets one try with it), forced meetings with Trade or Attack, trades chosen in secret, 4 health and
+  rule applies: one hidden Possessor with three Possession cards (a guest they possess keeps the card and
+  gets one more: two tries), forced meetings with Trade or Attack, trades chosen in secret, 4 health and
   weapons, Lanterns that block possession (and are used up doing it), three Lanterns to escape, private
   search results, a 45-second turn clock (bots play much faster), and dawn after round 8. The bots
   (`src/bots/`) see only what a real player could, play mostly a "medium" style (some bold, some
@@ -32,14 +32,22 @@ guests seated and strolling, the manager walking by): **Play with bots**, **Prac
   explore, find 2 more by searching (dark rooms need a Flashlight, two rooms are locked), and escape
   through the Fire Exit.
 - **Settings** (remembered on the device): bot speed (relaxed / normal / fast), the view on the other
-  guests' turns (follow them / stay on me), graphics (battery saver / balanced / sharp), and the menu
-  background (animated / still).
+  guests' turns (follow them / stay on me), graphics (battery saver / balanced / sharp), the menu
+  background (animated / still), and Music and Sound effects (off / low / medium / high each).
+- **Music and sound** (`src/audio/`, all made from code by `tools/audio/`): a melancholy 1930s waltz in
+  the menu, a quiet night ambience in the game that turns tenser in the final round, a stinger on the end
+  screen, and sound effects for the interface, the lift, doors, searches, cards, trades, attacks, rooms
+  and footsteps. Browsers play no sound before the first tap, so the music starts with it.
+- **Trades shown as cards** (`src/ui/tradeReveal.js`): your own trade plays as a short private scene
+  instead of sentences: the cards cross and turn over, a Lantern flares and burns a Possession card to
+  ash, crimson smoke curls round you when you are possessed, an empty hand when someone had nothing to
+  give. A tap skips to the end. Attacks show the weapon and the lost hearts; the feed has an icon per line.
 
 Hot-seat (several people passing one iPad) was removed at the owner's request; old `?mode=hotseat`
 links open a match against bots instead.
 
 **Online multiplayer is not implemented.** There is no server, no networking, no accounts and no
-database in this project. No sound yet.
+database in this project.
 
 ## Open the preview
 
@@ -162,7 +170,11 @@ src/
   main.js             starts everything; the menu → lift → game flow; the turn flow (the player's turns
                       and the bots' turns, meetings both ways); window.__game debug hooks
   config.js           display / camera / feel tuning
-  settings.js         the player's own settings (bot speed, view, graphics, menu background), kept on the device
+  settings.js         the player's own settings (bot speed, view, graphics, menu background, music, sound), kept on the device
+  audio/              music and sound (Web Audio): bus.js (the cue bus: sfx('doorOpen')), index.js (the player:
+                      unlock on the first tap, music by scene with crossfades, effects with variation and a
+                      voice cap), gameSounds.js (the hotel's sounds from the engine's PUBLIC events, footsteps),
+                      sounds.js (the mix: cue -> file, levels, scenes), library.js (GENERATED file table)
   menu/               the lobby behind the main menu: lobbyScene.js (the API: idle life, the lift
                       sequence, the camera), lobbyLayout.js (every position, the cast, paths and camera as
                       data), lobbySet.js (the room), lobbyCast.js (guests, staff, seated poses),
@@ -204,11 +216,16 @@ src/
     goTags.js                         the quiet "Go · 1 AP" tags on rooms next door
     menu.js                           the main menu screens: Play with bots, the table, the guests joining, Settings
     feed.js                           what the other guests just did (public words), under the room name
-    handoff.js                        every private screen (role, card pick, trade result, the found-card reveal,
-                                      a Hand Mirror's view)
+    handoff.js                        every private screen (role, card pick, the found-card reveal, a Hand Mirror's
+                                      view); the player's own trade result is drawn on it by tradeReveal.js
+    tradeReveal.js                    the player's own trade SHOWN as the two guests and cards with an effect (swap,
+                                      Lantern burn, possession smoke, no trade) instead of sentences; tap to skip
     souls.js                          the possessed player's own "Souls to trade: N" count
     meeting.js                        the PUBLIC side of a meeting: who, Trade or Attack, weapon, outcome
     discard.js                        the end-of-turn discard down to the hand limit (the only hand-limit screen)
+assets/audio/         the music and effects (MP3), generated by tools/audio/ (see tools/audio/README.md)
+tools/audio/          the Python that makes every sound from code: dsp.py, instruments.py, music.py (the scores),
+                      sfx.py (the effects), build.py (mix, master, encode, measure -> report.json, library.js)
 docs/                 GAME_RULES (spec), GAME_CONCEPT, DECISIONS, PROGRESS
 tests/                Node checks (rules-check, logic-check) + a headless browser walkthrough
 ```
@@ -247,7 +264,8 @@ Output: `assets/models/lobby/` (`lobby.glb`, `lobby-light.jpg`, `lobby-floor-lig
 Every other room is built the same way as the starting room, from the game's own tile data, and matched to
 the owner's reference image for it (`tools/room-pipeline/ref/`; see `tools/room-pipeline/README.md`):
 `node tools/room-pipeline/dump_rooms.mjs > tools/room-pipeline/rooms.json`, `python3 tools/room-pipeline/textures_rooms.py`,
-`tools/room-pipeline/build_all.sh 1024 48` (about an hour on 4 CPUs). Then
+`tools/room-pipeline/build_all.sh 1024 48` (about an hour on 4 CPUs; it ends by saving the light maps at the
+512 the game ships, `shrink_maps.py`). Then
 `node tools/room-pipeline/vsref.mjs` puts each room in the game next to its reference
 (`tools/room-pipeline/shots/<room>-vs-ref.png`, contact sheet `shots/rooms-vs-refs.png`),
 `node tools/room-pipeline/walkcheck.mjs` walks a guest through every doorway of every room, and
@@ -271,10 +289,14 @@ node tests/logic-check.mjs        # floor, map topology, grid, pathfinding
 node tests/browser-practice.mjs   # practice mode in a real browser [--screens]
 node tests/browser-bots.mjs       # the main menu and matches against bots in a real browser: settings, the table filling up, the lift, bots' turns, privacy, meetings both ways, being attacked, the end screen, whole matches [--screens] [--matches 3]
 node tests/browser-lobby.mjs      # the baked starting room, fog rooms, tap to open / move, camera (big hotel), draw calls
+node tests/audio-check.mjs        # music and sound: unlock on the first tap, every file decodes, Settings, the menu -> lift -> game music, cues in a match and practice [--quick]
+node tests/trade-reveal-check.mjs # the trade scene: real trades for swap / possessed (two tries, then your role) / Lantern block / you possess them
+python3 tools/audio/build.py      # rebuild every sound, ~6 min (tools/audio/README.md); needs numpy, scipy, ffmpeg
+python3 tools/audio/build.py revolver lobby   # rebuild only these (effect or music names); updates library.js + report.json
 node tools/balance/hotseat-sim.mjs 400 6   # 400 six-player matches under the rules as they stand (--before: same bots on the rules before Part 2; --compare: Lantern variants; --cautious)
 node tools/balance/hotseat-sim.mjs --study  # six player personalities (tools/balance/personalities.mjs) + rule proposals, in memory only (tests/personality-report.md)
 node tests/autoplay.mjs --url http://127.0.0.1:8123/ --persona-study --matches 30   # the same personalities through the real UI
-node tests/bots-check.mjs                  # the computer guests: information honesty, 450 seeded matches, determinism (~5 s)
+node tests/bots-check.mjs                  # the computer guests: information honesty, 450 seeded matches, determinism, the feed's icons (~5 s)
 node tools/balance/bot-match.mjs --n 1000  # all-bot matches at 6, 5 and 4 players: who wins, trust-building, blocks, waits
                                            # (--players 6, --trace one match, --tune blockBias=-0.2,... to try a bot knob)
 ```

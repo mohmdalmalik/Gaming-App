@@ -47,10 +47,13 @@ export const rules = {
   bandageHeal: 1,
 
   // --- Possession ----------------------------------------------------------------------------
-  possessionSupply: 2,      // APPROVED (7 Oct 2026): the Possessed guest starts with 2 Possession cards (was 3).
-                            // The chain (docs/GAME_RULES.md > Possession) needs no number: a guest who is
-                            // possessed keeps the card that possessed them (one try with it); a Lantern block
-                            // discards both cards; a guest who dies takes theirs out of the game
+  possessionSupply: 3,      // APPROVED (10 Oct 2026): the Possessed guest starts with 3 Possession cards (was 2
+                            // from 7 Oct; 3 before that).
+  possessionOnConvert: 1,   // APPROVED (10 Oct 2026): a guest who becomes possessed keeps the card that
+                            // possessed them AND receives this many extra Possession cards: two tries. Each
+                            // guest they possess gets two tries the same way (docs/GAME_RULES.md > Possession).
+                            // A Lantern block still discards the card used (and the Lantern); a guest who dies
+                            // takes theirs out of the game
 
   // --- Lanterns and escape ------------------------------------------------------------------
   // A clean guest holding this many Lanterns, standing in the Fire Exit, may escape (escapeCost). Every

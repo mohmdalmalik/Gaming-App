@@ -126,6 +126,17 @@ export async function dressBaked(view, spec, cfg) {
   return root;
 }
 
+// Between games (main.js: a new hotel, back to the menu): free the graphics memory of every room tile's
+// light maps — a fully explored hotel holds 48 of them. The pictures stay loaded here, so a room that is
+// discovered again simply uploads its maps again when it is next drawn. The lobby's own maps (the
+// starting room, always there) and the shared albedo are kept.
+export function releaseTileTextures() {
+  for (const [model, loading] of cache) {
+    if (!model.startsWith('rooms/')) continue;
+    loading.then(({ light, floorLight }) => { light.dispose(); floorLight.dispose(); }, () => {});
+  }
+}
+
 // ---- Room tiles --------------------------------------------------------------------------------
 // Every other room is a tile built the same way (tools/room-pipeline/make_room.py), in the tile's
 // DEFAULT orientation: the model is turned with the tile here. Walls are simpler than the lobby's:
@@ -146,11 +157,11 @@ function sharedAlbedo(path) {
   return albedo;
 }
 
-export async function dressBakedTile(view, spec, cfg) {
-  const [{ gltf, light, floorLight }, map] = await Promise.all([loadAssets(spec), sharedAlbedo(spec.albedo)]);
+// A tile's materials, made from the model's: `convert(src, isFloor)` (one material per kind, shared).
+function tileConverter(spec, { light, floorLight }, map, view = null) {
   const intensity = LM_SCALE * Math.PI * (spec.exposure ?? 1);
   const mats = new Map();
-  const convert = (src, isFloor) => {
+  return (src, isFloor) => {
     const key = `${src.name}|${isFloor}`;
     let m = mats.get(key);
     if (m) return m;
@@ -161,9 +172,13 @@ export async function dressBakedTile(view, spec, cfg) {
     m.name = src.name;
     applyXray(m);                           // fades out where it would hide the guest (xray.js)
     mats.set(key, m);
-    if (m.lightMap) (view.bakedMats ||= []).push({ mat: m, base: intensity });   // (mood.js flickers these)
+    if (m.lightMap && view) (view.bakedMats ||= []).push({ mat: m, base: intensity });   // (mood.js flickers these)
     return m;
   };
+}
+
+// A copy of the tile's model with its game materials, and its nodes by name.
+function tileModel(gltf, convert) {
   const root = gltf.scene.clone(true);
   const nodes = new Map();
   root.traverse(o => {
@@ -175,6 +190,20 @@ export async function dressBakedTile(view, spec, cfg) {
       if (o.isMesh) o.material = Array.isArray(o.material) ? o.material.map(m => convert(m, isFloor)) : convert(o.material, isFloor);
     });
   }
+  return { root, nodes };
+}
+
+// One tile, built exactly as a revealed room's would be but placed nowhere, for the warm-up at the start
+// of a game (main.js warmUp): drawn once out of sight behind the black screen, so the shaders a room
+// tile needs are built then, not in the middle of play the first time a door opens.
+export async function warmTile(spec) {
+  const [assets, map] = await Promise.all([loadAssets(spec), sharedAlbedo(spec.albedo)]);
+  return tileModel(assets.gltf, tileConverter(spec, assets, map)).root;
+}
+
+export async function dressBakedTile(view, spec, cfg) {
+  const [assets, map] = await Promise.all([loadAssets(spec), sharedAlbedo(spec.albedo)]);
+  const { root, nodes } = tileModel(assets.gltf, tileConverter(spec, assets, map, view));
   for (const child of view.group.children) child.visible = false;
   // The tile turns about its centre: a quarter turn clockwise (seen from above) per step of
   // `room.rotation`, exactly as src/game/hotel.js turns the tile's doorways and furniture.

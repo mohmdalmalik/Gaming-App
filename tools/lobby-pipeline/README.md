@@ -10,6 +10,7 @@ python3 -m pip install "bpy==4.2.0" pillow numpy                          # once
 node    tools/lobby-pipeline/dump_lobby.mjs > tools/lobby-pipeline/lobby.json
 python3 tools/lobby-pipeline/textures.py
 python3 tools/lobby-pipeline/make_lobby.py --size 2048 --samples 64       # ~15 min on 4 CPUs
+python3 tools/room-pipeline/shrink_maps.py                                # ships lobby-light.jpg at 1024
 ```
 `--size 1024 --samples 32` is a quick look (~1–2 min). `--nobake` rebuilds geometry only (the light
 maps then no longer match; do not commit that).

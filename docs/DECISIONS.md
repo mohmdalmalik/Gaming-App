@@ -150,7 +150,7 @@ Short record of the choices that shape the code and why, so another coding agent
 
 ## Input
 - Pointer Events on the canvas handle touch and mouse alike. One finger = tap to walk (only if it stayed single-finger, moved ≤ 10 px and lasted ≤ 450 ms); two fingers = pinch zoom + pan; right/middle mouse drag = pan; wheel = zoom (ctrl+wheel = trackpad pinch); Safari's gesture events are used only when no touch pointers are active (desktop trackpad). `touch-action: none` plus non-passive `touchmove`/`gesture*` listeners stop iPad Safari from zooming or scrolling the page.
-- No audio yet. The "Tap to begin" click handler is the place to unlock audio later (iOS only allows it inside a tap).
+- Audio: unlocked by the first tap anywhere (iOS only allows it inside a tap) — see "Music and sound effects" below.
 
 ## Testing
 - Headless Chromium (Playwright) loads the real `index.html` from a static server; the CDN requests for Three.js are intercepted and served from a local copy because the sandbox blocks the CDN. The suite drives the game through real taps/clicks and through `window.__game` (the debug hooks in `main.js`), checks for console errors, and verifies discovery, action points, End turn, rotate/cutaway, map, exit, restart, pinch, pan, wheel, draw calls and that the shader program count never grows. Screenshots are used for visual sanity.
@@ -160,9 +160,9 @@ Short record of the choices that shape the code and why, so another coding agent
 Implements `docs/GAME_RULES.md`. Kept pure and separate from rendering so a server can reuse it.
 - **All rule numbers live in `src/data/rules.js`** — action points (4/turn), action costs (move 1, discover 1, search 1, use-card 1, attack 1), health (3), hand size (4), the searchable deck composition, the possessed supply (3 Possession cards), Lanterns-to-escape (3), and per-card behaviour. Change values there, never in code.
 - **Entering a room costs move + discover the first time (2 AP for a new room, 1 for a known one).** `moveCostInto`/`enterRoom` add the discover point when the room is being revealed; `usableDoorways` only blinks a door the player can actually afford, and the confirm bar shows the real cost.
-- **Cards** (`src/game/cards.js`): a seeded PRNG (mulberry32) drives shuffling and dealing so a game is reproducible in tests; `main.js` seeds from `Date.now()` and reseeds on New game. Each card is an instance with a unique id (revolvers carry their own `shots`). The draw pile excludes Possession cards — those are the possessed side's private supply, dealt to the possessed player at setup and then circulated only through successful trades, so the supply stays capped at 3.
+- **Cards** (`src/game/cards.js`): a seeded PRNG (mulberry32) drives shuffling and dealing so a game is reproducible in tests; `main.js` seeds from `Date.now()` and reseeds on New game. Each card is an instance with a unique id (revolvers carry their own `shots`). The draw pile excludes Possession cards — those are the possessed side's private supply, dealt to the possessed player at setup and then passed on in successful trades; each conversion adds `rules.possessionOnConvert` (1) new card, so the number in play can grow past 3 (see 'Owner-approved (10 Oct 2026)').
 - **State** (`src/game/state.js`): per-player `health`, `alive`, `possessed`, `hand`, `knows` (ids unmasked), `currentRoom`, `actionPoints`; shared `discovered` rooms and `encounterLocks`. `enterRoom` charges the move and reveals; `endTurn` skips the dead, refills AP and, on a new lap, bumps the round and clears the encounter locks. `checkWin`: humans win when a clean, living player with 3 Lanterns enters the exit; the possessed side wins when no living clean player remains.
-- **Encounters** (`src/game/actions.js`): `resolveTrade` takes both players' chosen cards and applies the spec exactly — a Possession card converts the receiver unless they gave a Lantern, in which case possession fails, the Lantern goes to the possessed giver, the Possession card stays on the possessed side, and the defender learns the giver is possessed. `resolveAttack` applies knife/revolver damage, spends and discards an empty revolver, and marks a player dead at 0 HP. A per-room, per-round `encounterLocks` set stops the same pair being forced to meet twice in one room in a round.
+- **Encounters** (`src/game/actions.js`): `resolveTrade` takes both players' chosen cards and applies the spec exactly — a Possession card converts the receiver unless they gave a Lantern, in which case possession fails and the Lantern and the Possession card are both discarded (`rules.lanternBlock` 'discard'), and the defender learns the giver is possessed. `resolveAttack` applies knife/revolver damage, spends and discards an empty revolver, and marks a player dead at 0 HP. A per-room, per-round `encounterLocks` set stops the same pair being forced to meet twice in one room in a round.
 - **Cards deferred per spec §11**: Master Key, Lock Pick and Barricade are in the deck (so its composition matches the 6-player spec) but have no effect yet because locked/hidden rooms are explicitly out of this build; the hand panel labels them as such.
 
 ## Turn-based interaction
@@ -647,7 +647,7 @@ Target: `docs/art-reference.jpg` (style, palette and finish; not its layout or i
   plus "floor". Three materials (vertex colour, the shared atlas, and unlit lamp glass): about 10–15 draw
   calls a room; 13 rooms revealed come to ~130 (the grey boxes were ~150).
 - **One shared albedo atlas** (`rooms/albedo.jpg`, 16 cells: floors, rugs, paintings, wallpapers, book
-  spines, wall tiles, signs) loaded once; each room adds only its two light maps (1024 px JPEG) and its
+  spines, wall tiles, signs) loaded once; each room adds only its two light maps (512 px JPEG, baked at 1024) and its
   geometry. The .glb files carry no images and are packed (8-bit colours, 16-bit UVs) to ~0.6–1 MB.
 - **Loaded when revealed.** A room's files are fetched the first time its door is opened (and cached for
   the next match), in keeping with "load rooms on demand" in the path to mobile apps.
@@ -1189,3 +1189,91 @@ Target: `docs/art-reference.jpg` (style, palette and finish; not its layout or i
   is now a barely visible dark-plum corner shadow (red screen edges read as "you are hurt" in games).
   `--evil` (violet) is kept only for the Possession card itself. The reference's ring icon and split
   floor ring were deliberately left out (owner: ignore them for now).
+
+## Owner-approved (10 Oct 2026): 3 Possession cards; a newly possessed guest gets two tries
+- The possessed guest starts with **3** Possession cards again (`rules.possessionSupply`, was 2 from 7 Oct).
+- A guest who becomes possessed keeps the card that possessed them **and receives one extra** Possession
+  card (`rules.possessionOnConvert = 1`): two tries; each guest they possess gets two tries the same way. The
+  extra card is new (made in `resolveTrade`, src/game/actions.js — never taken from anyone, never from the
+  deck). A Lantern block still discards the card used and the Lantern. The trade events say how many extra
+  cards came (`events.possessed[].extra`, and the private `possessed` event), so the interface and the bots
+  can show / use them. Approved from a before/after list in the chat; docs/GAME_RULES.md updated with the
+  approved wording. Reason: in play against bots the possessed side felt very hard to win.
+
+## Music and sound effects (Oct 2026, owner's request)
+- **All made from code, nothing downloaded.** `tools/audio/` (Python: numpy/scipy + ffmpeg) synthesises
+  every piece of music and every effect — additive piano, saw-bank strings, FM celesta, music box, bells,
+  modal synthesis for struck things, filtered noise, a stick-slip hinge model, a synthetic hall reverb —
+  then masters and encodes it. No licensing questions; anything can be retuned and rebuilt. The style
+  brief: a 1920s-30s grand hotel at night, warm and slightly eerie (tools/audio/README.md describes each
+  piece).
+- **MP3** (44.1 kHz; music 128 kbps stereo, effects mostly 64 kbps mono): decodes in every browser the game
+  targets (iPad Safari, Chrome). About 5.5 MB in all. Loops are exactly periodic by construction, and each
+  loop file carries a little of its own end before it and start after it, so looping `[loopStart, loopEnd)`
+  is seamless even when a decoder shifts the audio by the MP3 encoder delay.
+- **Web Audio, one module** (`src/audio/index.js`): an AudioContext created on the first real gesture (iOS
+  allows no sound before one; Chrome warns about a context made earlier), separate music and effects
+  gains (the Settings levels), crossfades between scene tracks, small random pitch/level variation, a cap
+  of 12 effects at once, pause when the page is hidden. Music is decoded only while its scene is near
+  (a decoded minute of stereo is ~20 MB — iPad memory), effects are all decoded after the first tap. On
+  Safari 17+ the audio session is set to `playback` so the game is heard with the ring switch on silent.
+- **A cue bus, not calls into the audio code** (`src/audio/bus.js`): screens ask for a sound by name
+  (`sfx('lanternBlock')`); with sound off, before the first tap or in Node tests nothing happens. The
+  hotel's own sounds (doors, searches, unlocks, barricades, rooms, attacks, escape, footsteps) are not
+  called from the game code at all: `src/audio/gameSounds.js` reads the engine's PUBLIC event list each
+  frame, so a sound can never reveal more than the whole table already knows (no sound for a bot's
+  private card play), and a future server's event stream can drive it unchanged. Other guests' sounds are
+  quieter and panned by where they are on screen.
+- **Music by scene**: menu and lift → the lobby waltz; the game → the night ambience, crossfading to the
+  final-round piece in round 8; the end screen → a stinger from the player's side (win, the possessed
+  side's dark win, lose; dawn tolls its bell first); back to the menu → the waltz. Stingers follow the
+  Music setting.
+
+## Trades shown as cards; music and sound (Oct 2026, owner's request — interface only, no rule changed)
+- **The player's own trade is a short card scene, not sentences** (`src/ui/tradeReveal.js`): swap, Lantern
+  block (the Possession card burns to ash), blocked by them, you are possessed (crimson smoke, the cards you
+  now hold fan out), you possessed them, no trade (an empty hand held out). It opens as the usual private
+  "note" screen, so the turn clock, the tests and `#btn-handoff-next` behave as before; the rules' own
+  private note for that trade is taken off the waiting list (the scene says it). A tap skips to the end;
+  Continue appears, and takes taps, only a moment after the scene ends (a quick double tap can't close it
+  unseen). Reduced motion: shorter, no particles. Another guest's portrait is never the possessed one.
+- **Cheap to draw on an iPad**: CSS transforms/opacity on a few elements; embers, ash and smoke on one small
+  canvas (edges faded, so smoke never stops on a hard line); the burning card is a per-pixel dissolve of
+  its own face on a card-sized canvas. Attack results (`meeting.js`) and the feed (`feed.js`, icons picked
+  by the rules' action words, never by a room's name) use the same card art.
+- **Audio safety**: a limiter (DynamicsCompressor, -3 dB threshold, 20:1; the master trims its built-in
+  make-up gain) before the speakers, so a loud effect over the music never clips; measured transparent
+  below about -1.3 dBFS. Leaving the end screen stops every stinger (a dawn ending plays two). Music and
+  Sound effects both Off: the audio is suspended and the iPad's audio session given back, so the player's
+  own music isn't paused by a silent game. Effects are high-passed at 30 Hz at build time; the revolver
+  and the death sound carry a mid-range crack/knock so they still read on a tablet's small speakers.
+
+## Quality round fixes (10 Oct 2026 — interface and performance only, no rule changed)
+- **A double tap never answers the screen it opens** (`src/ui/tapGuard.js`): Trade opens the cards to give,
+  Attack the weapons, a guest's name Trade/Attack, a menu button the next menu screen — each right under
+  the finger. The private card pick and yes/no (`handoff.js`), every meeting panel (`meeting.js`) and the
+  menu screens (`menu.js`) ignore a pointer click in their first 300 ms; keyboard clicks (no pointer,
+  `e.detail` 0) always count. Tests that tap a screen the moment it opens wait 400 ms first.
+- **The Move bar names a guest waiting in the room the walk ends in** ("You will meet Clara there: a
+  meeting is forced."), not only one on the way (`offerMove`; the rules' `encountersIn`, so a safe zone or
+  a meeting already held this round says nothing).
+- **Shader warm-up** (`main.js warmUp`): a tile (the Fire Exit's, the smallest), the search tick, the
+  locked-door and barricade pieces and the player's own red eyes are drawn once out of sight behind the
+  black screen at the start of a game (behind "Tap to begin" on a direct link, without the eyes), so the
+  first door, search, barricade or possession no longer freezes the game while the iPad builds shaders.
+  Once per visit (programs are kept). `KHR_parallel_shader_compile` is used when there (no warning when not).
+- **Light maps at the size that shows**: the room tiles' two maps ship at 512 (baked at 1024, shrunk by
+  `tools/room-pipeline/shrink_maps.py`, which `build_all.sh` runs), the lobby's atlas at 1024. Side by side
+  at the iPad's 2x density they look the same; a fully explored hotel now holds ~118 MB of textures instead
+  of ~326 MB, and the downloads are ~4 MB smaller. Between games the room tiles' maps also leave the
+  graphics chip (`releaseTileTextures`; the pictures stay cached, a room seen again re-uploads its maps).
+- **The menu's picture first**: the hotel behind the menu (its starting room and the game's guest) loads
+  only after the menu's lobby scene has (or when a game is set up); before the lobby picture appears
+  ~11 MB downloads instead of ~15 MB. A game started before then waits up to 3 s behind the black screen
+  for its starting room, rather than open on the grey placeholder. Left for later: meshopt compression of the .glb files (gltfpack
+  `-cc -noq` shrinks a guest 1.18 → 0.44 MB) — it needs the decoder in every GLTFLoader, an extra step in
+  the character and room pipelines (their own tools read the .glb files), and it is only worth it if
+  GitHub Pages does not already gzip .glb (not checked: Pages is not reachable from here).
+- **Cheaper idle frames**: the turn clock touches the page only when its second changes (the bar is a
+  `scaleX` transform: no re-layout every frame); the 'Still' menu background is drawn again only on a new
+  size or pixel ratio, coming back from a game, or twice a second (its guests may still be arriving).

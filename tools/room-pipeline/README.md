@@ -60,7 +60,10 @@ stay dim in the game.
   style, floor, rugs, wall decoration, lights, per-room details (`fx`). `--nobake` builds geometry only,
   `--out` writes somewhere else.
 - `pack_glb.py` — packs the exported .glb (8-bit colours, 16-bit UVs) without changing the look.
-- `build_all.sh` — build, bake and pack all rooms (or the ones named).
+- `build_all.sh` — build, bake and pack all rooms (or the ones named), then `shrink_maps.py`.
+- `shrink_maps.py` — saves the shipped light maps at the size the game uses: each room's two maps at 512
+  (baked at 1024, then shrunk: the same look on the iPad at a quarter of the graphics memory), and the
+  lobby's atlas at 1024. Run it after any re-bake (rooms or lobby).
 - `vsref.mjs` + `vsref_sheet.py` — each room in the real game, camera at the game's own pitch and zoom,
   turned so the room's entrance (its south doorway) is at the bottom as in the reference; writes
   `shots/<room>-vs-ref.png` and the contact sheet `shots/rooms-vs-refs.png`.

@@ -3,10 +3,14 @@
 //   main         Play with bots · Practice alone · Settings
 //   bots         how many other guests (3-5) and your role (random, clean, possessed)
 //   matchmaking  the table filling up, guest by guest, as in an online game
-//   settings     bot speed, the view on other guests' turns, graphics, the menu background
+//   settings     bot speed, the view on other guests' turns, graphics, the menu background, music
+//                and sound effects (each applied at once, through onSettingChanged)
 // Choices are remembered on this device (src/settings.js). Nothing here touches the game itself:
-// main.js gets the choice through the callbacks and starts the match.
+// main.js gets the choice through the callbacks and starts the match. A guest joining the table rings
+// the reception bell (the sound cue bus, src/audio/bus.js).
 import { settings, SETTING_CHOICES } from '../settings.js';
+import { sfx } from '../audio/bus.js';
+import { tooSoon } from './tapGuard.js';
 
 const ROLE_CHOICES = [
   { value: 'random', label: 'Random', note: 'Like a real table: you are told your role when the game starts. Usually you are a clean guest.' },
@@ -23,9 +27,12 @@ export function createMenu(doc, { onPlayBots, onPractice, onSettingChanged } = {
   let current = 'main';
   let ready = false;
   let mmTimers = [];
+  let shownAt = 0;   // when the current screen opened: its buttons ignore the second tap of the double
+                     // tap that opened it (src/ui/tapGuard.js). Re-rendering after a pick does not reset it.
 
   function show(name = 'main') {
     current = name;
+    shownAt = performance.now();
     root.hidden = false;
     root.classList.remove('leaving');
     for (const [k, el] of Object.entries(screens)) el.hidden = k !== name;
@@ -44,7 +51,7 @@ export function createMenu(doc, { onPlayBots, onPractice, onSettingChanged } = {
       b.setAttribute('aria-checked', String(o.value === value));
       b.dataset.value = String(o.value);
       b.textContent = o.label;
-      b.addEventListener('click', e => { e.preventDefault(); onPick(o.value); });
+      b.addEventListener('click', e => { e.preventDefault(); if (tooSoon(e, shownAt)) return; onPick(o.value); });
       host.appendChild(b);
     }
   }
@@ -103,6 +110,7 @@ export function createMenu(doc, { onPlayBots, onPractice, onSettingChanged } = {
       t += 380 + Math.random() * 900 + (Math.random() < 0.2 ? 700 : 0);
       mmTimers.push(setTimeout(() => {
         fill(i);
+        sfx('joined');
         $('mm-note').textContent = i < total - 1 ? `${i + 1} of ${total} here` : '';
       }, t));
     }
@@ -117,7 +125,7 @@ export function createMenu(doc, { onPlayBots, onPractice, onSettingChanged } = {
   let mmStarted = 0;
   function clearMatchmaking() { mmTimers.forEach(clearTimeout); mmTimers = []; }
 
-  const click = (el, fn) => el.addEventListener('click', e => { e.preventDefault(); fn(); });
+  const click = (el, fn) => el.addEventListener('click', e => { e.preventDefault(); if (tooSoon(e, shownAt)) return; fn(); });
   click(btn.bots, () => { if (ready) show('bots'); });
   click(btn.practice, () => { if (ready) onPractice?.(); });
   click(btn.settings, () => show('settings'));

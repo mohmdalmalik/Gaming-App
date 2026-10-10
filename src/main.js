@@ -15,7 +15,7 @@ import { buildGrid } from './game/grid.js';
 import {
   createState, resetState, endTurn, activePlayer, nextPlayer, checkWin, canEscape,
   openableDoors, pendingEncounters, lockEncounter, playersInRoom, isLocked,
-  isBarricaded, canTradeVoluntarily, doorBetween,
+  isBarricaded, canTradeVoluntarily, doorBetween, encountersIn,
 } from './game/state.js';
 import {
   search, canSearch, escape, useBandage, useUnlock, useBarricade, resolveTrade, resolveAttack,
@@ -26,6 +26,8 @@ import { CARDS, weaponsIn, countableCount } from './game/cards.js';
 import { createScene } from './render/scene.js';
 import { addRoomView, clearRoomViews, createDoorwayViews } from './render/roomView.js';
 import { dressRoom } from './render/roomDressing.js';
+import { warmTile, releaseTileTextures } from './render/bakedRoom.js';
+import { roomDressings } from './data/dressing.js';
 import { updateCutaway } from './render/cutaway.js';
 import { createMood } from './render/mood.js';
 import { createCharacterView } from './render/characterView.js';
@@ -46,6 +48,7 @@ import { createSearchSpot } from './ui/searchSpot.js';
 import { createDiscard } from './ui/discard.js';
 import { createHandoff } from './ui/handoff.js';
 import { createMeeting } from './ui/meeting.js';
+import { createTradeReveal, tradeOutcome } from './ui/tradeReveal.js';
 import { roundLabel, finalRoundNote, isFinal } from './ui/roundLabel.js';
 import { createPerfStats } from './ui/perfStats.js';
 import { createGuestTags } from './ui/guestTags.js';
@@ -56,6 +59,9 @@ import { usePracticeWording } from './ui/cards.js';
 import { createMenu } from './ui/menu.js';
 import { createFeed } from './ui/feed.js';
 import { settings } from './settings.js';
+import { createAudio } from './audio/index.js';
+import { createGameSounds } from './audio/gameSounds.js';
+import { sfx } from './audio/bus.js';
 import { makeRng, shuffle } from './game/cards.js';
 
 // --- World (pure data + rules) ---------------------------------------------------------
@@ -160,7 +166,19 @@ function castCharacters() {
     characters.push(cv);
   }
 }
-castCharacters();
+// The hotel behind the main menu is not seen once the menu's own lobby scene is up, so its starting
+// room's model and the game's guest are loaded only after that scene has loaded (or failed to: then
+// the menu shows over the hotel), or when a game is set up — they no longer hold the menu's picture up.
+// A direct link (?mode=) needs them at once.
+let holdHotel = !DIRECT;
+function releaseHotel() {
+  if (!holdHotel) return;
+  holdHotel = false;
+  castCharacters();
+  for (const v of roomViews.values()) trackDressing(dressRoom(v, floor, cfg).then(done => { if (done) view.compile(); }));
+  syncViews(false);
+}
+if (!holdHotel) castCharacters();
 const searchMarks = createSearchMarks(floor, view.scene);
 const confirmBarEl = document.getElementById('confirm-bar');
 const pathPreview = createPathPreview(view.scene, view.camera, view.renderer.domElement, container,
@@ -208,6 +226,7 @@ const feed = createFeed(document);     // what the other guests just did (a matc
 const topLeftEl = document.querySelector('.hud-top-left');
 const handoff = createHandoff(document);
 const meeting = createMeeting(document, cfg, { isViewer: p => !PRACTICE && p.index === humanSeat });
+const tradeReveal = createTradeReveal(document, { handoff });   // the player's own trade, as cards
 
 let running = false;
 let pendingArrival = null;   // enterRoom result waiting for the walk to finish
@@ -259,7 +278,7 @@ function syncViews(animate) {
   for (const room of floor.roomList) {
     if (roomViews.has(room.id)) continue;
     const v = addRoomView(roomViews, room, cfg, view.scene, { animate });
-    trackDressing(dressRoom(v, floor, cfg).then(done => { if (done) view.compile(); }));
+    if (!holdHotel) trackDressing(dressRoom(v, floor, cfg).then(done => { if (done) view.compile(); }));
   }
   doorways.sync();
   // The camera may zoom out until every revealed room is in view, and pan over all of them.
@@ -329,6 +348,7 @@ function beginTurn() {
     startTimer();
     refresh();
     hud.toast(`Your turn — ${rules.actionPointsPerTurn} actions.${lockNews ? ` ${lockNews}` : ''}`, lockNews ? 5 : undefined);
+    sfx('yourTurn');
     lockNews = '';
   };
   if (p.roleChangePending) { p.roleChangePending = false; handoff.revealRole(p, { changed: true }, go); return; }
@@ -355,7 +375,10 @@ function tickTimer(dt) {
   if (!rules.turnTimerEnabled || state.finished || timerLeft <= 0) return;
   if (myTurn() && !inActionPhase) return;
   if (timerPaused()) return;
+  const secsBefore = Math.ceil(timerLeft);
   timerLeft -= dt;
+  // (the player's own clock ticks out loud for its last ten seconds)
+  if (myTurn() && timerLeft > 0 && timerLeft <= 10 && Math.ceil(timerLeft) < secsBefore) sfx('tick', { volume: timerLeft <= 3.5 ? 1 : 0.7 });
   // A guest still walking when the clock runs out always ends on a standing spot: the walk is cut short
   // at the next room (or, if they have just stepped into a room, at its middle), and they finish arriving
   // first (a forced meeting there pauses the clock); the turn then ends at once. Ending it mid-walk would
@@ -389,7 +412,7 @@ function cutWalkShort() {
 
 function onTimeUp() {
   stopTimer();
-  if (myTurn()) hud.toast(PRACTICE ? `Time is up — ${activePlayer(state).name}'s turn ends.` : 'Time is up — your turn ends.');
+  if (myTurn()) { hud.toast(PRACTICE ? `Time is up — ${activePlayer(state).name}'s turn ends.` : 'Time is up — your turn ends.'); sfx('timeUp'); }
   endTurnNow();
 }
 
@@ -432,6 +455,7 @@ function passTurn() {
   mood.snap(activePlayer(state).currentRoom);
   refresh();
   hud.toast(`Turn ${state.turn} — ${rules.actionPointsPerTurn} action points.${relocked ? ` ${relocked}` : ''}`, relocked ? 5 : undefined);
+  sfx('yourTurn', { volume: 0.7 });
 }
 
 // End the turn (the End turn button, or the 45-second clock running out). The hand limit is settled
@@ -474,8 +498,11 @@ function onArrive() {
   activeWalk = null;
   if (room?.isExit && !isBot(player.index)) {
     // The same words whoever you are, so they give nothing away about who is carrying what or who is
-    // possessed.
-    hud.toast(`The fire exit — a clean guest carrying ${rules.lanternsToEscape} Lanterns can escape here (${rules.actionCost.escape} action).`);
+    // possessed. (Practice has nothing to hide: it says plainly what to do.)
+    const cost = `${rules.actionCost.escape} action${rules.actionCost.escape === 1 ? '' : 's'}`;
+    hud.toast(!state.practice ? `The Fire Exit — a clean guest carrying ${rules.lanternsToEscape} Lanterns can escape here (${cost}).`
+      : canEscape(state, floor, player) ? `You carry ${rules.lanternsToEscape} Lanterns: tap Escape (${cost}).`
+        : `The Fire Exit — bring ${rules.lanternsToEscape} Lanterns here to escape (${cost}).`);
   }
   const candidates = pendingEncounters(state, floor, player);
   if (!candidates.length) { refresh(); return; }
@@ -568,6 +595,7 @@ function runTrade(A, B, onDone = afterMeeting, { voluntary = false } = {}) {
   }
   const other = human === A ? B : A;
   const theirs = botCard(other, human);
+  tradeReveal.preload();     // (the card faces the reveal will turn over)
   handoff.privatePick(human, {
     kicker: voluntary ? `The Fire Exit — a trade with ${other.name}` : human === A ? `A trade with ${other.name}` : `${other.name} walked in — a trade`,
     title: `Give one card to ${other.name}`,
@@ -579,17 +607,22 @@ function runTrade(A, B, onDone = afterMeeting, { voluntary = false } = {}) {
       after(botThink(other.index, 'trade'), () => {
         meeting.close();
         const [cA, cB] = human === A ? [card, theirs] : [theirs, card];
+        // (the two cards, kept before they change hands: the reveal shows them)
+        const mine = human.hand.find(c => c.id === card), given = other.hand.find(c => c.id === theirs);
+        const wasPossessed = human.possessed;
         const events = resolveTrade(state, floor, A, B, cA, cB);
-        // What the player reads in private: what they received, then the rules' own notes. A Possession
-        // card is explained by the note ("…You are now POSSESSED"), so it gets no "You received" line.
-        const got = events.ok ? events.received[human.id] : null;
-        const lines = !events.ok ? ['The trade could not be made.']
-          : got === 'possession' ? []
-            : [got ? `You received ${aCard(got)} from ${other.name}.` : `The card ${other.name} gave you burned away in your Lantern's light.`];
-        const newly = !!events.possessed?.some(e => e.newly === human.id);
+        if (!events.ok) { refresh(); handoff.privateNote(human, ['The trade could not be made.'], onDone); return; }
+        const newly = events.possessed?.find(e => e.newly === human.id);
         if (newly) human.roleChangePending = false;
         refresh();
-        handoff.privateNote(human, lines, () => (newly ? handoff.revealRole(human, { changed: true }, onDone) : onDone()));
+        // What the player sees in private: the trade as cards with its effect (src/ui/tradeReveal.js),
+        // then, if it possessed them, their new role. The Possession cards they now hold: the one they
+        // were given and any extra ones the rules dealt with it.
+        const held = Math.max(human.hand.filter(c => c.type === 'possession').length, newly ? 1 + (newly.extra ?? 0) : 0);
+        tradeReveal.show({
+          outcome: tradeOutcome(events, human, other), me: human, other, mine, theirs: given,
+          held, wasPossessed, notes: events.notes?.[human.id],
+        }, () => (newly ? handoff.revealRole(human, { changed: true }, onDone) : onDone()));
       });
     },
   });
@@ -598,28 +631,35 @@ function runTrade(A, B, onDone = afterMeeting, { voluntary = false } = {}) {
 // The trade is skipped: nothing changes hands, the meeting ends. The player (if in it) reads why, in
 // private (the rules' own note, worded the same whatever anyone's role).
 function skippedTrade(A, B, onDone) {
-  skipTrade(state, floor, A, B);
+  const r = skipTrade(state, floor, A, B);
   const human = [A, B].find(X => !isBot(X.index));
   if (!human) { onDone(); return; }
-  handoff.privateNote(human, [], onDone);
+  if (!r.ok) { handoff.privateNote(human, [], onDone); return; }
+  // An empty slot for whoever had nothing to give (src/ui/tradeReveal.js, 'noTrade').
+  tradeReveal.show({
+    outcome: 'noTrade', me: human, other: human === A ? B : A, empty: r.empty || [],
+    wasPossessed: human.possessed, notes: r.notes?.[human.id] ? [r.notes[human.id]] : [],
+  }, onDone);
 }
 
 // The player attacks: choose a weapon, then the public result.
 function runAttack(P, Q, onBack = null) {
   meeting.attackPick(P, Q, weaponId => {
+    const before = Q.health;
     const events = resolveAttack(state, floor, P, Q, weaponId);
     if (events.killed) layBodyClear(Q.index);   // (the figure falls when the result is dismissed)
-    meeting.attackResult(P, Q, events, afterMeeting);
+    meeting.attackResult(P, Q, events, afterMeeting, { before });
   }, onBack);
 }
 
 // A computer guest attacks. If the player is the one attacked, they read it (and tap on); between two
 // computer guests a short public line says what happened.
 function botAttack(P, Q, weaponId) {
+  const before = Q.health;
   const events = resolveAttack(state, floor, P, Q, weaponId);
   if (!events.ok) { runTrade(P, Q); return; }
   if (events.killed) layBodyClear(Q.index);
-  if (!isBot(Q.index)) { meeting.attackResult(P, Q, events, afterMeeting); return; }
+  if (!isBot(Q.index)) { meeting.attackResult(P, Q, events, afterMeeting, { before }); return; }
   hud.toast(`${P.name} attacked ${Q.name} with ${aCard(events.weapon)}${events.killed ? ` — ${Q.name} is dead` : ''}.`, 4);
   afterMeeting();
 }
@@ -896,6 +936,7 @@ function onSearch() {
     lines: [line + tally + limitNote],
     soft: true,
   }, then);
+  if (found.length) sfx('cardFound', { delay: 0.55 });
 }
 
 // The search icon (or its furniture) was tapped: search it from where the guest stands — they do not
@@ -924,6 +965,7 @@ function onUseBandage(cardId) {
   const r = useBandage(state, activePlayer(state), cardId);
   if (!r.ok) { hud.toast(r.reason === 'full' ? 'Already at full health.' : r.reason === 'ap' ? 'No action points left.' : 'Cannot use that now.'); return; }
   hud.toast(`Bandaged — health ${r.health} of ${rules.maxHealth}.`);
+  sfx('bandage');
   refresh();
 }
 
@@ -958,6 +1000,7 @@ function onEspresso(cardId) {
   const r = useEspresso(state, activePlayer(state), cardId);
   if (!r.ok) { hud.toast(r.reason === 'ap' ? 'No action points left.' : 'Cannot use that now.'); return; }
   hud.toast(`Espresso — ${r.gained} extra actions this turn.`);
+  sfx('espresso');
   refresh();
 }
 
@@ -1042,6 +1085,7 @@ function showEnd() {
   stopTimer();
   meetingLive = false;
   hud.hideConfirm(); selectedMove = null;
+  endMusic();
   if (state.practice) {
     overlays.showEnd('You reached the fire exit',
       `Practice complete: ${rules.lanternsToEscape} Lanterns carried out.\n${floor.roomList.length} rooms of the hotel revealed, on round ${state.round}.`,
@@ -1085,6 +1129,7 @@ function resetWorld() {
   resetState(state, floor, seed);          // a new random hotel
   state.viewerIndex = humanSeat;
   clearRoomViews(roomViews, view.scene);
+  releaseTileTextures();                   // (the old hotel's room light maps leave the graphics chip)
   doorways.reset();
   rebuildGrid();
   movers.forEach((m, i) => { m.reset(startSpot(i)[0], startSpot(i)[1]); m.speedScale = 1; });
@@ -1110,6 +1155,7 @@ function resetWorld() {
 // becomes a new match at a new table with the same choices (how many guests, your role).
 function restart() {
   if (PRACTICE) {
+    audio.stopStinger();          // (from the end screen: the win jingle stops, as in playAgain / backToMenu)
     resetWorld();
     if (running) hud.toast('Practice restarted.');
     return;
@@ -1173,6 +1219,7 @@ async function planGame(choice) {
 
 // Seat the table and deal a new game (no screens: the caller shows them).
 function setupGame(plan) {
+  holdHotel = false;                       // (this game's guests and rooms load now: castCharacters, resetWorld)
   PRACTICE = plan.practice;
   lastChoice = plan.choice || { practice: true };
   cast.length = 0; cast.push(...plan.cast);
@@ -1202,27 +1249,86 @@ function setupGame(plan) {
   refresh();
 }
 
+// --- Warm-up ---------------------------------------------------------------------------------------
+// The first time a door opens (a room tile), a room is searched (its tick), a door is locked or
+// barricaded, or the player is possessed (red eyes), the graphics chip has to build the shaders for it,
+// and the game froze for a moment right then. Instead, at the start of a game, behind the black screen
+// (or the "Tap to begin" card), one of each is drawn once out of sight, so those shaders are ready before
+// play begins. Once per visit: they are kept. What it needs (the smallest tile, the Fire Exit's) is
+// loaded early, so nothing waits for it.
+let warmGroup = null, warmPrep = null, warmDone = false, warmSettled = false;
+let warmEyes = -1, eyesWarm = false;            // (the seat whose guest wears red eyes for the warm-up)
+function prepareWarmUp() {
+  warmPrep ||= warmTile(roomDressings.exit).then(tile => {
+    const g = new THREE.Group();
+    g.name = 'warm-up';
+    g.add(tile, ...searchMarks.warmObjects(), ...doorways.warmObjects());
+    g.position.set(0, -500, 0);                 // far below the floor: out of sight, but still drawn
+    g.traverse(o => { o.frustumCulled = false; });
+    warmGroup = g;
+  }).catch(err => { console.warn('warm-up skipped:', err?.message || err); }).finally(() => { warmSettled = true; });
+  return warmPrep;
+}
+async function warmUp(maxWaitMs = 1500, { eyes = false } = {}) {
+  if (!warmDone) await warmScene(maxWaitMs);
+  // The red eyes of a guest who becomes possessed mid-match (src/render/possessedLook.js: one shader for
+  // every guest), worn for three frames by the player's own guest — only behind the black screen.
+  if (eyes && !eyesWarm) {
+    const cv = characters[humanSeat];
+    const until = performance.now() + maxWaitMs;
+    while (cv && !cv.debug().loaded && performance.now() < until) await wait(100);
+    if (cv?.debug().loaded) {
+      warmEyes = humanSeat;
+      await frame(); await frame(); await frame();
+      warmEyes = -1;
+      eyesWarm = true;
+    }
+  }
+}
+async function warmScene(maxWaitMs) {
+  await Promise.race([prepareWarmUp(), wait(maxWaitMs)]);
+  if (!warmGroup) return;                       // (not loaded in time: tried again at the next game)
+  view.scene.add(warmGroup);
+  // (with KHR_parallel_shader_compile the shaders build in the background first; without it they build
+  // during the draws below — behind the black screen either way)
+  try {
+    if (view.renderer.extensions.has('KHR_parallel_shader_compile')) await view.renderer.compileAsync(warmGroup, view.camera, view.scene);
+    else view.renderer.compile(warmGroup, view.camera, view.scene);
+  } catch { /* drawn below anyway */ }
+  await frame(); await frame(); await frame();  // (drawn: shaders linked, its textures uploaded)
+  view.scene.remove(warmGroup);
+  warmDone = true;
+}
+
 // From the menu into the game: the lift (unless switched off), black, the game, the lights come up.
 async function enterGame(plan, { guests = 3 } = {}) {
+  prepareWarmUp();
   menu.leave();
   phase = 'intro';
+  audio.setScene('intro');
   applyPixelRatio();
   container.classList.remove('blurred');
   if (INTRO && lobbyReady && lobby) {
     // (never longer than LIFT_MAX_MS: on a struggling device the scene runs slow, and the game must not wait)
-    try { await Promise.race([lobby.enter({ guests }), wait(LIFT_MAX_MS)]); } catch (err) { console.warn('the lift sequence failed:', err); }
+    try { await Promise.race([lobby.enter({ guests, onCue: name => sfx(name) }), wait(LIFT_MAX_MS)]); } catch (err) { console.warn('the lift sequence failed:', err); }
   } else await wait(400);
+  audio.setScene('none');          // (the lobby music goes with the picture)
   await fade(true, 650);
   menu.hide();
   setupGame(plan);
   phase = 'game';
   view.compile();
+  await warmUp(1500, { eyes: true });
+  // (a game started before the menu's lobby had loaded: its starting room may still be on its way —
+  // wait a little for it behind the black screen rather than show the grey placeholder)
+  await Promise.race([new Promise(r => { const t = () => (dressingDone ? r() : setTimeout(t, 100)); t(); }), wait(3000)]);
   await frame(); await frame();
   begin();
   if (PRACTICE) {
     overlays.showNotice('Practice',
       `You are alone in the hotel. You start with ${rules.lanternsDealtEach} Lantern — find ${rules.lanternsToEscape - rules.lanternsDealtEach} more and escape through the Fire Exit.`, refresh);
   }
+  sfx('fadeIn');
   await fade(false, 900);
 }
 
@@ -1253,8 +1359,10 @@ function humanSeatFirst(plan) {
 // Play again (a match): a new table with the same choices, straight in (no menu, no lift).
 async function playAgain() {
   const plan = await planGame(lastChoice.practice ? { practice: true } : lastChoice);
+  audio.stopStinger();
   await fade(true, 450);
   setupGame(plan);
+  await warmUp(1500, { eyes: true });
   begin();
   await frame();
   await fade(false, 700);
@@ -1262,10 +1370,12 @@ async function playAgain() {
 
 // Back to the main menu (from the end screen or the Menu button).
 async function backToMenu() {
+  audio.stopStinger();
   await fade(true, 450);
   gameToken++;
   running = false;
   phase = 'menu';
+  audio.setScene('menu');
   stopTimer();
   hud.hide();
   overlays.hideEnd(); overlays.hideNotice(); overlays.hideAsk(); overlays.hideStart();
@@ -1274,10 +1384,12 @@ async function backToMenu() {
   movers.forEach(m => m.halt());
   meetingLive = false;
   bots = null;
+  if (lobbyReady) releaseTileTextures();  // (the menu shows the lobby scene: the hotel's maps are not drawn)
   lobby?.reset();
   applyPixelRatio();
   container.classList.add('blurred');
   menu.show('main');
+  document.title = 'Hotel Escape';
   await fade(false, 700);
 }
 
@@ -1399,7 +1511,8 @@ function moveRefusal(plan, dest, player) {
 // Offer the walk to room `destId`: the fewest-rooms route there (1 AP per room entered) to a free
 // standing spot in its middle, shown as a dotted path, an outline round the room the walk ends in and a
 // cost tag, with the Move / Cancel bar. If a meeting is forced in a room on the way, the walk ends there
-// (the rules plan it so: planRoomMove) and the bar says so.
+// (the rules plan it so: planRoomMove) and the bar says so; a meeting waiting in the room it ends in is
+// named on the bar too.
 function offerMove(destId) {
   const player = activePlayer(state);
   const dest = floor.rooms.get(destId);
@@ -1407,14 +1520,17 @@ function offerMove(destId) {
   const plan = discovery.planToRoom(destId, standAtFor(player.index));
   if (!plan.ok) {
     hud.hideConfirm(); selectedMove = null;
-    if (plan.reason !== 'finished' && plan.reason !== 'dead') hud.toast(moveRefusal(plan, dest, player), 4);
+    if (plan.reason !== 'finished' && plan.reason !== 'dead') { hud.toast(moveRefusal(plan, dest, player), 4); sfx(plan.reason === 'locked' ? 'doorLocked' : 'deny'); }
     return;
   }
   const end = plan.waypoints[plan.waypoints.length - 1];
   plan.preview = { label: `Move · ${plan.cost} AP`, anchor: end, room: floor.rooms.get(plan.dest) };
   selectedMove = plan;
   const who = plan.meet.map(id => state.players.find(q => q.id === id)?.name).filter(Boolean);
-  const note = plan.stop ? ` You will stop in the ${floor.rooms.get(plan.stop).name} to meet ${andList(who)}.` : '';
+  // (a guest waiting in the room the walk ends in forces a meeting there too: say so before the tap)
+  const there = plan.stop ? [] : encountersIn(state, floor, player, plan.dest).map(q => q.name);
+  const note = plan.stop ? ` You will stop in the ${floor.rooms.get(plan.stop).name} to meet ${andList(who)}.`
+    : there.length ? ` You will meet ${andList(there)} there: a meeting is forced.` : '';
   hud.showConfirm(`Move to ${dest.name}?${note}`, `Move · ${plan.cost} AP`);
 }
 
@@ -1596,6 +1712,43 @@ hud.on('restartPractice', () => {
     { yes: 'Restart', no: 'Keep playing' }, restart);
 });
 
+// --- Music and sound -------------------------------------------------------------------------------
+// src/audio/: the music of each scene (the lobby waltz in the menu and the lift, the night ambience in
+// a game, the final-round piece in round 8, a stinger on the end screen) and every sound cue
+// (src/audio/bus.js). The hotel's own sounds - doors, searches, attacks, footsteps - come from the
+// engine's PUBLIC events (src/audio/gameSounds.js), so the game code needs no sound calls for them.
+const audio = createAudio({ settings });
+const gameSounds = createGameSounds({
+  state,
+  humanSeat: () => humanSeat,
+  positionOf: i => (movers[i] ? [movers[i].x, movers[i].z] : null),
+  listener: () => rig.centre,
+  panOf: (x, z) => { const sp = groundToScreen(x, z); return innerWidth > 0 ? (sp.x / innerWidth) * 2 - 1 : 0; },
+  mover: i => movers[i],
+  walkPhase: i => { const d = characters[i]?.debug?.(); return d?.model && d.loaded ? { phase: d.walkPhase, stride: d.strideLength } : null; },
+  // (an attack the player is in shows on the meeting screen, which plays its own blow: src/ui/meeting.js)
+  skipAttack: e => e.by === humanSeat || e.target === humanSeat,
+});
+function syncSound() {
+  const playing = running && phase === 'game';
+  gameSounds.update(playing);
+  if (!playing || state.finished) return;
+  audio.setScene(!PRACTICE && isFinal(state) ? 'final' : 'game');
+  if (!PRACTICE && state.round >= rules.roundLimit - 1) audio.prefetch('final');
+}
+// The end screen: the round's music gives way to a stinger, from the player's side of the table (dawn
+// tolls its bell first).
+function endMusic() {
+  if (audio.scene === 'end') return;              // (the end screen shown again: one stinger is enough)
+  audio.setScene('end');
+  const lead = state.escaped?.size ? 0.9 : 0.2;     // (an escape's door and night air go first)
+  if (state.practice) { sfx('win', { delay: lead }); return; }
+  const you = me();
+  const yourSideWon = (state.won === 'humans') !== !!you?.possessed;
+  const side = yourSideWon ? (you?.possessed ? 'winPossessed' : 'win') : 'lose';
+  if (state.dawn) { sfx('dawn'); sfx(side, { delay: 3.2, volume: 0.8 }); } else sfx(side, { delay: lead });
+}
+
 // --- Start: the main menu, or a direct link --------------------------------------------------------
 const menu = createMenu(document, {
   onPlayBots: choice => startBots(choice),
@@ -1609,6 +1762,7 @@ function gamePixelRatio() { return settings.choice('graphics')?.pixelRatio ?? cf
 function applyPixelRatio() { view.setPixelRatio(phase === 'menu' && !DIRECT ? Math.min(MENU_PIXEL_RATIO, gamePixelRatio()) : gamePixelRatio()); }
 function applySettings(name = null) {
   if (!name || name === 'graphics') applyPixelRatio();
+  if (name === 'music' || name === 'sound') audio.applySettings();
   if (name === 'botSpeed' && bots) movers.forEach((m, i) => { if (isBot(i)) m.speedScale = botWalkScale(); });
 }
 applySettings();
@@ -1636,11 +1790,12 @@ if (DIRECT) {
   }
   overlays.showStart();
   const planned = planGame(DIRECT === 'practice' ? { practice: true } : { bots: n, role });
-  planned.then(plan => { setupGame(plan); startReady = true; maybeReady(); })
+  planned.then(async plan => { setupGame(plan); await warmUp(5000); startReady = true; maybeReady(); })
     .catch(err => { console.error(err); overlays.showError(`The game could not be set up. (${err?.message || err})`); });
   overlays.onBegin(() => { if (startReady) begin(); });
 } else {
   menu.show('main');
+  audio.setScene('menu');          // (heard from the first tap: browsers allow no sound before one)
   container.classList.add('blurred');
   import('./menu/lobbyScene.js')
     .then(mod => {
@@ -1648,8 +1803,8 @@ if (DIRECT) {
       lobby.setSize(view.size.w, view.size.h);
       return lobby.ready;
     })
-    .then(() => { lobbyReady = !!lobby; })
-    .catch(err => { console.warn('The lobby behind the menu could not be loaded; the menu shows over the hotel instead.', err); lobby = null; });
+    .then(() => { lobbyReady = !!lobby; releaseHotel(); prepareWarmUp(); })
+    .catch(err => { console.warn('The lobby behind the menu could not be loaded; the menu shows over the hotel instead.', err); lobby = null; releaseHotel(); });
 }
 let startReady = !DIRECT;
 let framesReady = false;
@@ -1672,6 +1827,7 @@ let last = performance.now();
 let frames = 0;
 const lobbySize = { w: 0, h: 0 };
 let lastLobby = performance.now();
+let stillKey = '', stillAt = 0;     // what the 'Still' menu background last drew (size, pixel ratio), and when
 view.renderer.setAnimationLoop(now => {
   perfStats.frame(now - last);
   const dt = Math.min(0.05, Math.max(0, (now - last) / 1000));
@@ -1687,7 +1843,16 @@ view.renderer.setAnimationLoop(now => {
     }
     // (the lift keeps to the clock even when frames are slow: up to a quarter of a second per frame)
     const ldt = phase === 'intro' ? Math.min(0.25, Math.max(0, (now - prevLobby) / 1000)) : dt;
-    lobby.update(phase === 'menu' && settings.get('menuMotion') === 'off' ? 0 : ldt, time);
+    const still = phase === 'menu' && settings.get('menuMotion') === 'off';
+    lobby.update(still ? 0 : ldt, time);
+    // 'Still': the picture does not change, so it is drawn again only on a new size or pixel ratio (and
+    // the first frame after switching to Still or coming back from a game), otherwise at most twice a
+    // second (the lobby's guests may still be arriving); the canvas keeps the last picture meanwhile.
+    if (still) {
+      const key = `${view.size.w}x${view.size.h}@${view.renderer.getPixelRatio()}`;
+      if (framesReady && key === stillKey && now - stillAt < 500) return;
+      stillKey = key; stillAt = now;
+    } else stillKey = '';
     view.renderer.render(lobby.scene, lobby.camera);
     if (++frames >= 2 && !framesReady) { framesReady = true; maybeReady(); }
     return;
@@ -1711,11 +1876,13 @@ view.renderer.setAnimationLoop(now => {
   updateCutaway(roomViews, rig, state, cfg, dt);
   // Red eyes only on the player's own guest, on their own screen, while possessed; never in practice,
   // and not on the old game still drawn behind the menu (when the menu's lobby scene is not loaded).
-  characters.forEach((cv, i) => { cv.setPossessed(phase === 'game' && !PRACTICE && i === humanSeat && !!state.players[i]?.possessed); cv.update(movers[i], dt); });
+  // (warmEyes: three frames behind the black screen at the start of a game, see warmUp)
+  characters.forEach((cv, i) => { cv.setPossessed(i === warmEyes || (phase === 'game' && !PRACTICE && i === humanSeat && !!state.players[i]?.possessed)); cv.update(movers[i], dt); });
   view.render();
   syncHandFan();
   syncSearchSpot();     // after the render, so it reads this frame's camera
   if (running) { feed.sync(state, PRACTICE ? null : me()); feed.tick(); feed.place(topLeftEl); }
+  syncSound();
   // The tags over the view, most important first (a later tag that would clash is left out): when zoomed
   // far out, the active guest's name (so they can always be found); Explore over the fogged rooms next
   // door; Go over the rooms next door (not when zoomed far out: the names take over); then the other
@@ -1779,7 +1946,17 @@ window.__game = {
   backToMenu: () => backToMenu(),
   endOpen: () => overlays.endOpen,
   askOpen: () => overlays.askOpen,
-  handoff, meeting,
+  handoff, meeting, tradeReveal,
+  // QA: the private trade reveal for one outcome (src/ui/tradeReveal.js: swap, blocked, blockedMe,
+  // possessed, possessedThem, noTrade, and the extra samples noTradeMe, noTradeBoth, possessedThree,
+  // swapPossession), with sample cards, for your guest and another; nothing in the game changes.
+  previewTradeReveal: (outcome = 'swap') => {
+    const you = state.players[humanSeat] || roster[0];
+    const them = state.players.find(p => p !== you) || roster.find(r => r.outfit !== you.outfit) || roster[1];
+    return tradeReveal.preview(outcome, you, them);
+  },
+  tradeRevealOutcome: () => tradeReveal.outcome,
+  skipTradeReveal: () => tradeReveal.skip(),
   handoffOpen: () => handoff.isOpen, handoffKind: () => handoff.kind,
   handoffNext: () => document.getElementById('btn-handoff-next').click(),
   meetingOpen: () => meeting.isOpen,
@@ -1787,8 +1964,13 @@ window.__game = {
   clickNotice: () => document.getElementById('btn-notice-ok').click(),
   timeLeft: () => timerLeft,
   forceTimeUp: () => { timerLeft = 0.0001; },
+  setTimeLeft: secs => { if (timerLeft > 0) timerLeft = secs; },     // (tests: the clock's last seconds)
   inActionPhase: () => inActionPhase,
   dressingDone: () => dressingDone,
+  // (tests: nothing of the page is still downloading — the hotel behind the menu, its guests, the warm-up
+  // tile — so leaving the page cuts no download off)
+  settled: () => !holdHotel && dressingDone && (!warmPrep || warmSettled)
+    && characters.every(cv => { const d = cv.debug(); return !d.model || d.loaded; }),
   publicLog: () => state.log.map(l => l.text),
   notesOf: i => [...(state.players[i].notes || [])],
   possessedIndexes: () => state.players.filter(p => p.possessed).map(p => p.index),

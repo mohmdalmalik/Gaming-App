@@ -13,6 +13,7 @@
 //   6. behaviour: possessed bots make friendly trades before trying a Possession card on the same guest; clean
 //      bots block with a Lantern; bots escape; the possessed side wins sometimes; possessions are not all in
 //      round 1; profiles and thinking pauses look right
+//   7. the table feed (src/ui/feed.js) gives every public line of those matches its icon
 import fs from 'node:fs';
 import { rules, applyMode } from '../src/data/rules.js';
 import { hotel } from '../src/data/hotel.js';
@@ -27,6 +28,7 @@ import { createMind } from '../src/bots/brain.js';
 import { createBotTable } from '../src/bots/index.js';
 import { rollProfiles, rollProfile, USERNAMES } from '../src/bots/profiles.js';
 import { playBotTurn, playOut } from '../src/bots/autoplay.js';
+import { _kindOf as feedKind } from '../src/ui/feed.js';
 
 const t0 = Date.now();
 let failures = 0;
@@ -214,6 +216,7 @@ function choices(state, seat, profile) {
 console.log('\nall-bot matches');
 const stats = { matches: 0, unfinished: 0, crashes: 0, refusals: 0, maxRefusalsTurn: 0, jammed: 0, cleanWins: 0, escapes: 0, possessedWins: 0,
   conv: [], firstFriendly: 0, friendlyThenAttempt: 0, blockDecisions: 0, blocks: 0, attacks: 0, voluntary: 0, byPlayers: {} };
+const feedLines = new Map();      // every public log line of these matches -> its feed icon (section 7)
 for (let k = 0; k < 450; k++) {
   const players = 4 + (k % 3);
   const seed = 10000 + k * 37;
@@ -230,6 +233,7 @@ for (let k = 0; k < 450; k++) {
       stats.maxRefusalsTurn = Math.max(stats.maxRefusalsTurn, real.length);
       stats.voluntary += s.meetings.filter(m => m.voluntary).length;
     }
+    for (const l of state.log) feedLines.set(l.text, feedKind(l.text)?.icon ?? null);
     if (!state.finished) { stats.unfinished++; continue; }
     const b = (stats.byPlayers[players] ||= { n: 0, clean: 0 });
     b.n++;
@@ -267,6 +271,25 @@ check(stats.conv.length > n * 0.5 && r1 < stats.conv.length * 0.4, `possessions 
 check(stats.firstFriendly > n * 0.3 && stats.friendlyThenAttempt > n * 0.15, `possessed bots build trust first: ${stats.firstFriendly} friendly first trades, ${stats.friendlyThenAttempt} later followed by an attempt on the same guest`);
 check(stats.blockDecisions > n && stats.blocks > n * 0.3, `clean bots block with a Lantern: ${stats.blockDecisions} Lanterns handed over to block, ${stats.blocks} attempts actually blocked`);
 check(stats.attacks > 0, `bots attack now and then (${stats.attacks} attacks in ${n} matches)`);
+
+// --- 7. the table feed's icons -------------------------------------------------------------------------------
+// Every line the rules wrote in those matches gets an icon in the feed; and the rarer lines, and the ones a
+// room name could confuse, get the right one.
+console.log('\nthe table feed');
+{
+  const missing = [...feedLines].filter(([, icon]) => !icon).map(([t]) => t);
+  check(missing.length === 0, `all ${feedLines.size} different public lines of the matches get a feed icon${missing.length ? ` — none for: ${missing.slice(0, 4).join(' | ')}` : ''}`);
+  const want = {
+    'Ann and Bo traded.': 'trade', 'Ann and Bo met, but there was no trade.': 'noTrade',
+    'Ann attacked Bo with a Knife — fatally.': 'knife', 'Ann attacked Bo with a Revolver.': 'revolver',
+    'Ann searched Switchboard.': 'search', 'Ann opened a door: Infirmary.': 'door', 'Ann rang the Switchboard: 2 guests are possessed.': 'phone',
+    'Ann was treated in the Infirmary.': 'infirmary', 'Ann escaped through the Fire Exit.': 'escape', 'Ann used a Hand Mirror on Bo.': 'mirror',
+    'Ann barricaded a doorway of Kitchen.': 'barricade', 'The Cloakroom door locked again.': 'door',
+  };
+  const wrong = Object.entries(want).filter(([t, icon]) => feedKind(t)?.icon !== icon).map(([t, icon]) => `${t} -> ${feedKind(t)?.icon} (want ${icon})`);
+  check(wrong.length === 0, `each kind of line gets its own icon (a room's name never decides it)${wrong.length ? ` — ${wrong.join(' | ')}` : ''}`);
+  check(feedKind('Ann attacked Bo with a Knife — fatally.')?.cls === 'attack fatal', 'a fatal attack is marked as one');
+}
 
 // --- 5. determinism -----------------------------------------------------------------------------------------
 console.log('\ndeterminism');

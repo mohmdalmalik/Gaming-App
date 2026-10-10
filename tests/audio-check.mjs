@@ -74,8 +74,6 @@ check(s.playing.includes('lobby'), 'the lobby waltz plays');
 await waitFor(() => window.__audio.state().decoded.length >= 30, null, 30000);
 s = await st();
 check(s.failed.length === 0, `every file decoded (${s.decoded.length} decoded, failed: ${s.failed.join(', ') || 'none'})`);
-const log1 = await cues();
-check(log1.some(c => c === 'select:played' || c === 'open:played' || c === 'click:played') || true, 'interface cue heard (first tap may precede decoding)');
 
 // --- 2. Settings ------------------------------------------------------------------------------------
 console.log('2. Settings');
@@ -111,6 +109,7 @@ await page.reload({ waitUntil: 'domcontentloaded' });
 await waitFor(() => window.__game && !document.getElementById('btn-menu-bots').disabled, null, 90000);
 const kept = await ev(() => [...document.querySelectorAll('#set-music .seg-btn.on, #set-sound .seg-btn.on')].map(b => b.dataset.value));
 await page.click('#btn-menu-settings');
+await page.waitForTimeout(400);     // (a menu screen ignores taps in its first moments: src/ui/tapGuard.js)
 const kept2 = await ev(() => [...document.querySelectorAll('#set-music .seg-btn.on, #set-sound .seg-btn.on')].map(b => b.dataset.value));
 check(kept2.join(',') === 'medium,high', `settings kept after a reload (${kept2.join(',')})`);
 await page.click('#btn-settings-done');
@@ -119,6 +118,7 @@ await page.click('#btn-settings-done');
 console.log('3. Play with bots (menu, matchmaking, the lift)');
 await waitFor(() => window.__audio.state().unlocked && window.__game.lobbyReady(), null, 60000);
 await page.click('#btn-menu-bots');
+await page.waitForTimeout(400);
 await page.click('#opt-bots .seg-btn[data-value="3"]');
 await page.click('#btn-bots-find');
 await waitFor(() => window.__game.phase() === 'intro', null, 30000);
@@ -162,7 +162,7 @@ check(true, 'the night music after Begin');
 // play some turns: the player searches and ends; the bots play
 const seen = new Set();
 const deadline = Date.now() + (quick ? 60000 : 150000);
-let myTurns = 0, searched = false, ticked = false;
+let myTurns = 0, searched = false;
 while (Date.now() < deadline && myTurns < (quick ? 2 : 3)) {
   await page.waitForTimeout(400);
   const g = await ev(() => ({ my: window.__game.myTurn(), act: window.__game.inActionPhase(), ho: window.__game.handoffOpen(), meet: window.__game.meetingOpen(), notice: window.__game.noticeOpen(), fin: window.__game.isFinished() }));
@@ -176,11 +176,6 @@ while (Date.now() < deadline && myTurns < (quick ? 2 : 3)) {
       searched = true;
       await answerScreens();
     }
-    if (!ticked) {
-      // the last ten seconds of the clock
-      await ev(() => { /* jump the clock */ });
-      ticked = true;
-    }
     await page.waitForTimeout(300);
     await ev(() => window.__game.endTurn());
     await page.waitForTimeout(500);
@@ -192,7 +187,9 @@ console.log('      cues played:', [...new Set(matchPlayed)].join(' '));
 check(seen.has('yourTurn'), 'your-turn chime');
 check(seen.has('search'), 'the rummage of a search');
 check(seen.has('step'), 'footsteps');
-check(seen.has('doorOpen') || seen.has('search') || seen.has('doorJammed'), 'a computer guest heard (door / search)');
+// (another guest's sounds are played quieter, at most 0.8; the player's own at 1)
+const heard = await ev(() => (window.__audioLog || []).filter(l => l.why === 'played' && ['doorOpen', 'doorJammed', 'search'].includes(l.name) && l.vol < 1).map(l => l.name));
+check(heard.length > 0, `a computer guest heard (door / search: ${[...new Set(heard)].join(', ') || 'none'})`);
 const locked = (await cues()).filter(c => c.endsWith(':locked'));
 check(locked.length === 0, `no cue dropped for want of a tap after the first one (${locked.length})`);
 

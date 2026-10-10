@@ -30,7 +30,9 @@ const { browser, page, messages } = await launch({ width: 1180, height: 820 });
 const game = (fn, arg) => page.evaluate(fn, arg);
 const shot = async n => { if (shots) await page.screenshot({ path: path.join(outDir, `${n}.png`) }); };
 const visible = sel => page.evaluate(s => { const e = document.querySelector(s); return !!e && !e.hidden && !!e.offsetParent; }, sel);
-const tap = async sel => { await page.click(sel); await page.waitForTimeout(120); };
+// (a screen ignores taps in its first moments, so a double tap cannot answer it: src/ui/tapGuard.js)
+const tap = async sel => { await page.click(sel); await page.waitForTimeout(400); };
+const settle = () => page.waitForTimeout(400);
 const waitFor = (fn, arg, timeout = 30000) => page.waitForFunction(fn, arg, { timeout, polling: 100 });
 const dressed = () => page.waitForFunction(() => !window.__game || window.__game.dressingDone(), null, { timeout: 90000, polling: 200 });
 
@@ -226,6 +228,7 @@ console.log('\n4. meetings');
   if (picked) {
     await shot('09-bot-trade-pick');
     const before = await game(() => window.__game.state.players[window.__game.humanSeat()].hand.map(c => c.id).sort().join());
+    await settle();
     await page.click('#offer-cards .card-tile');
     await waitFor(() => window.__game.handoffKind() === 'note', null, 20000);
     check(true, 'after a short wait you read what you received, in private');
@@ -257,13 +260,16 @@ console.log('\n4. meetings');
       // Several guests in the room: first choose whom to meet.
       if (/You are not alone/.test(label)) {
         check(await game(() => document.querySelectorAll('#encounter-actions .btn').length) >= 2, 'several guests there: "You are not alone" — you choose whom to meet');
+        await settle();
         await page.click('#encounter-actions .btn');
         await page.waitForTimeout(300);
         label = await game(() => document.getElementById('encounter-title').innerText);
       }
       check(/^You meet/.test(label), `the panel speaks to you ("${label.replace(/\s+/g, ' ')}")`);
+      await settle();
       await page.click('#encounter-actions .btn.primary');      // Trade
       await waitFor(() => window.__game.handoffKind() === 'pick', null, 10000);
+      await settle();
       await page.click('#offer-cards .card-tile');
       await waitFor(() => window.__game.handoffKind() === 'note', null, 20000);
       check(true, 'you trade with the bot, and read the result in private');
@@ -304,6 +310,7 @@ console.log('\n5. out of the match, the end screen');
     check(hit, 'a bot attacks you: the result says "hit you"');
     await shot('12-attacked');
     if (hit) {
+      await settle();
       await page.click('#encounter-actions .btn');
       await waitFor(() => window.__game.askOpen() || window.__game.isFinished(), null, 10000);
       check(await game(() => window.__game.askOpen() && /You are out/.test(document.getElementById('ask-title').textContent)), 'dead: "You are out" — watch or skip to the result');

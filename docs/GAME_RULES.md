@@ -89,7 +89,7 @@ Guests are trapped on a hotel floor. Lanterns are the way out: a clean guest car
 - When the deck runs out, shuffle the discard pile into a new deck.
 
 ## Cards and deck (6 players)
-- Possession ×2 (the possessed guest's supply, not in the deck).
+- Possession ×3 (the possessed guest's supply, not in the deck).
 - Draw deck (48): Lantern ×14, Bandage ×7, Flashlight ×5, Knife ×4, Barricade ×4, Lock Pick ×4, Hand Mirror ×3, Espresso ×3, Revolver ×2, Master Key ×2.
 - Lantern: give it in a trade to block a possession attempt; three of them let a clean guest escape.
 - Hand Mirror: 1 AP. Choose a guest in your room; they show you their whole hand in private. Used up.

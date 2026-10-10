@@ -160,9 +160,9 @@ Short record of the choices that shape the code and why, so another coding agent
 Implements `docs/GAME_RULES.md`. Kept pure and separate from rendering so a server can reuse it.
 - **All rule numbers live in `src/data/rules.js`** — action points (4/turn), action costs (move 1, discover 1, search 1, use-card 1, attack 1), health (3), hand size (4), the searchable deck composition, the possessed supply (3 Possession cards), Lanterns-to-escape (3), and per-card behaviour. Change values there, never in code.
 - **Entering a room costs move + discover the first time (2 AP for a new room, 1 for a known one).** `moveCostInto`/`enterRoom` add the discover point when the room is being revealed; `usableDoorways` only blinks a door the player can actually afford, and the confirm bar shows the real cost.
-- **Cards** (`src/game/cards.js`): a seeded PRNG (mulberry32) drives shuffling and dealing so a game is reproducible in tests; `main.js` seeds from `Date.now()` and reseeds on New game. Each card is an instance with a unique id (revolvers carry their own `shots`). The draw pile excludes Possession cards — those are the possessed side's private supply, dealt to the possessed player at setup and then circulated only through successful trades, so the supply stays capped at 3.
+- **Cards** (`src/game/cards.js`): a seeded PRNG (mulberry32) drives shuffling and dealing so a game is reproducible in tests; `main.js` seeds from `Date.now()` and reseeds on New game. Each card is an instance with a unique id (revolvers carry their own `shots`). The draw pile excludes Possession cards — those are the possessed side's private supply, dealt to the possessed player at setup and then passed on in successful trades; each conversion adds `rules.possessionOnConvert` (1) new card, so the number in play can grow past 3 (see 'Owner-approved (10 Oct 2026)').
 - **State** (`src/game/state.js`): per-player `health`, `alive`, `possessed`, `hand`, `knows` (ids unmasked), `currentRoom`, `actionPoints`; shared `discovered` rooms and `encounterLocks`. `enterRoom` charges the move and reveals; `endTurn` skips the dead, refills AP and, on a new lap, bumps the round and clears the encounter locks. `checkWin`: humans win when a clean, living player with 3 Lanterns enters the exit; the possessed side wins when no living clean player remains.
-- **Encounters** (`src/game/actions.js`): `resolveTrade` takes both players' chosen cards and applies the spec exactly — a Possession card converts the receiver unless they gave a Lantern, in which case possession fails, the Lantern goes to the possessed giver, the Possession card stays on the possessed side, and the defender learns the giver is possessed. `resolveAttack` applies knife/revolver damage, spends and discards an empty revolver, and marks a player dead at 0 HP. A per-room, per-round `encounterLocks` set stops the same pair being forced to meet twice in one room in a round.
+- **Encounters** (`src/game/actions.js`): `resolveTrade` takes both players' chosen cards and applies the spec exactly — a Possession card converts the receiver unless they gave a Lantern, in which case possession fails and the Lantern and the Possession card are both discarded (`rules.lanternBlock` 'discard'), and the defender learns the giver is possessed. `resolveAttack` applies knife/revolver damage, spends and discards an empty revolver, and marks a player dead at 0 HP. A per-room, per-round `encounterLocks` set stops the same pair being forced to meet twice in one room in a round.
 - **Cards deferred per spec §11**: Master Key, Lock Pick and Barricade are in the deck (so its composition matches the 6-player spec) but have no effect yet because locked/hidden rooms are explicitly out of this build; the hand panel labels them as such.
 
 ## Turn-based interaction
@@ -647,7 +647,7 @@ Target: `docs/art-reference.jpg` (style, palette and finish; not its layout or i
   plus "floor". Three materials (vertex colour, the shared atlas, and unlit lamp glass): about 10–15 draw
   calls a room; 13 rooms revealed come to ~130 (the grey boxes were ~150).
 - **One shared albedo atlas** (`rooms/albedo.jpg`, 16 cells: floors, rugs, paintings, wallpapers, book
-  spines, wall tiles, signs) loaded once; each room adds only its two light maps (1024 px JPEG) and its
+  spines, wall tiles, signs) loaded once; each room adds only its two light maps (512 px JPEG, baked at 1024) and its
   geometry. The .glb files carry no images and are packed (8-bit colours, 16-bit UVs) to ~0.6–1 MB.
 - **Loaded when revealed.** A room's files are fetched the first time its door is opened (and cached for
   the next match), in keeping with "load rooms on demand" in the path to mobile apps.
@@ -1247,3 +1247,33 @@ Target: `docs/art-reference.jpg` (style, palette and finish; not its layout or i
   Sound effects both Off: the audio is suspended and the iPad's audio session given back, so the player's
   own music isn't paused by a silent game. Effects are high-passed at 30 Hz at build time; the revolver
   and the death sound carry a mid-range crack/knock so they still read on a tablet's small speakers.
+
+## Quality round fixes (10 Oct 2026 — interface and performance only, no rule changed)
+- **A double tap never answers the screen it opens** (`src/ui/tapGuard.js`): Trade opens the cards to give,
+  Attack the weapons, a guest's name Trade/Attack, a menu button the next menu screen — each right under
+  the finger. The private card pick and yes/no (`handoff.js`), every meeting panel (`meeting.js`) and the
+  menu screens (`menu.js`) ignore a pointer click in their first 300 ms; keyboard clicks (no pointer,
+  `e.detail` 0) always count. Tests that tap a screen the moment it opens wait 400 ms first.
+- **The Move bar names a guest waiting in the room the walk ends in** ("You will meet Clara there: a
+  meeting is forced."), not only one on the way (`offerMove`; the rules' `encountersIn`, so a safe zone or
+  a meeting already held this round says nothing).
+- **Shader warm-up** (`main.js warmUp`): a tile (the Fire Exit's, the smallest), the search tick, the
+  locked-door and barricade pieces and the player's own red eyes are drawn once out of sight behind the
+  black screen at the start of a game (behind "Tap to begin" on a direct link, without the eyes), so the
+  first door, search, barricade or possession no longer freezes the game while the iPad builds shaders.
+  Once per visit (programs are kept). `KHR_parallel_shader_compile` is used when there (no warning when not).
+- **Light maps at the size that shows**: the room tiles' two maps ship at 512 (baked at 1024, shrunk by
+  `tools/room-pipeline/shrink_maps.py`, which `build_all.sh` runs), the lobby's atlas at 1024. Side by side
+  at the iPad's 2x density they look the same; a fully explored hotel now holds ~118 MB of textures instead
+  of ~326 MB, and the downloads are ~4 MB smaller. Between games the room tiles' maps also leave the
+  graphics chip (`releaseTileTextures`; the pictures stay cached, a room seen again re-uploads its maps).
+- **The menu's picture first**: the hotel behind the menu (its starting room and the game's guest) loads
+  only after the menu's lobby scene has (or when a game is set up); before the lobby picture appears
+  ~11 MB downloads instead of ~15 MB. A game started before then waits up to 3 s behind the black screen
+  for its starting room, rather than open on the grey placeholder. Left for later: meshopt compression of the .glb files (gltfpack
+  `-cc -noq` shrinks a guest 1.18 → 0.44 MB) — it needs the decoder in every GLTFLoader, an extra step in
+  the character and room pipelines (their own tools read the .glb files), and it is only worth it if
+  GitHub Pages does not already gzip .glb (not checked: Pages is not reachable from here).
+- **Cheaper idle frames**: the turn clock touches the page only when its second changes (the bar is a
+  `scaleX` transform: no re-layout every frame); the 'Still' menu background is drawn again only on a new
+  size or pixel ratio, coming back from a game, or twice a second (its guests may still be arriving).

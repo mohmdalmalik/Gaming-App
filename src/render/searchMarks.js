@@ -54,6 +54,8 @@ export function createSearchMarks(floor, scene) {
   }
 
   return {
+    // A tick with the real material, for the warm-up at the start of a game (main.js warmUp).
+    warmObjects: () => [new THREE.Sprite(material)],
     // Show a tick in every discovered room that has been searched; hide the rest.
     update(state) {
       for (const id of state.searchedRooms) {

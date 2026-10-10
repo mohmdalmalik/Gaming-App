@@ -568,6 +568,16 @@ export function createDoorwayViews(floor, cfg, scene, { isLocked = () => false, 
       for (const v of views.values()) v.dispose();
       views.clear();
     },
+    // One of each thing a doorway can show later in a game (a locked door's leaf, padlocks and red
+    // glow, a barricade's boards and sign), with the real materials, for the warm-up at the start of a
+    // game (main.js warmUp): drawn once out of sight so their shaders are built before they are needed.
+    warmObjects() {
+      return [
+        new THREE.Mesh(unitBox, lockedMat), new THREE.Mesh(unitBox, leafJammedMat), new THREE.Mesh(padBodyGeo, padBodyMat),
+        new THREE.Mesh(padShackleGeo, padShackleMat), new THREE.Mesh(unitPlane, lockGlowMat), new THREE.Mesh(unitPlane, barGlowMat),
+        new THREE.Mesh(barricadeGeometry(1.2, t), plankMat), new THREE.Sprite(padlockMat), new THREE.Sprite(barSignMat),
+      ];
+    },
     // Breathe the threshold glows, swing opening doors, and keep leaves no taller than a lowered wall.
     update(time, dt, roomViews) {
       const p = 0.5 + 0.5 * Math.sin(time * 2.4);

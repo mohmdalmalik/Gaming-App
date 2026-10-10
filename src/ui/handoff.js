@@ -19,6 +19,7 @@ import { cardTile, bigCard, handLimitWarning } from './cards.js';
 import { roundLabel, finalRoundNote, isFinal } from './roundLabel.js';
 import { makePortrait } from './portrait.js';
 import { soulsHeld, soulsChip } from './souls.js';
+import { tooSoon } from './tapGuard.js';
 
 export function createHandoff(doc) {
   const el = {
@@ -40,9 +41,12 @@ export function createHandoff(doc) {
   };
   let onNext = null;
   let kind = null;
+  let openedAt = 0;   // when the current screen opened: a card or an answer is never chosen by the
+                     // second tap of the double tap that opened it (src/ui/tapGuard.js)
 
   function reset(which) {
     kind = which;
+    openedAt = performance.now();
     el.card.className = `card handoff-card ${which}`;
     el.role.hidden = true; el.role.className = 'role-badge'; el.role.innerHTML = '';
     el.notes.hidden = true; el.notes.innerHTML = '';
@@ -69,7 +73,7 @@ export function createHandoff(doc) {
     el.role.innerHTML = `<span class="role-word tell-pill">${player.possessed ? 'POSSESSED' : 'CLEAN GUEST'}</span>`
       + `<span class="role-line">${player.possessed
         ? 'In a trade, give a Possession card to possess the other guest — unless they hand you a Lantern: then both cards are used up and they learn you are possessed. You can never escape.'
-        : `Find Lanterns, pass them to one clean guest, and get that guest out through the fire exit with ${rules.lanternsToEscape}. Give a Lantern in a trade if you fear who you are trading with — it blocks possession, but is used up doing it.`}</span>`;
+        : `Find Lanterns, pass them to one clean guest, and get that guest out through the Fire Exit with ${rules.lanternsToEscape} Lanterns. Give a Lantern in a trade if you fear who you are trading with — it blocks possession, but is used up doing it.`}</span>`;
     if (!player.possessed) return;
     // The private tell (docs/GAME_RULES.md, Possession), as the crimson plate: their own possessed
     // portrait (the same face, red eyes), the POSSESSED badge with "Only you can see this" under it, and
@@ -181,7 +185,7 @@ export function createHandoff(doc) {
         return;
       }
       for (const c of cards) {
-        el.pickCards.appendChild(cardTile(doc, c, { hideDesc: true, selectable: true, onSelect: card => { api.close(); onPick(card.id); } }));
+        el.pickCards.appendChild(cardTile(doc, c, { hideDesc: true, selectable: true, onSelect: (card, _tile, e) => { if (tooSoon(e, openedAt)) return; api.close(); onPick(card.id); } }));
       }
       if (onCancel) show(cancelLabel || 'Cancel', onCancel); else el.next.hidden = true, el.overlay.hidden = false;
     },
@@ -199,7 +203,7 @@ export function createHandoff(doc) {
         const b = doc.createElement('button');
         b.type = 'button'; b.className = 'btn intent' + (o.primary ? ' on' : '');
         b.textContent = o.label;
-        b.addEventListener('click', e => { e.preventDefault(); api.close(); onPick(o.value); });
+        b.addEventListener('click', e => { e.preventDefault(); if (tooSoon(e, openedAt)) return; api.close(); onPick(o.value); });
         el.pickIntent.appendChild(b);
       }
       el.next.hidden = true; el.overlay.hidden = false;

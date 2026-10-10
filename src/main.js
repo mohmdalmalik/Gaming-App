@@ -15,7 +15,7 @@ import { buildGrid } from './game/grid.js';
 import {
   createState, resetState, endTurn, activePlayer, nextPlayer, checkWin, canEscape,
   openableDoors, pendingEncounters, lockEncounter, playersInRoom, isLocked,
-  isBarricaded, canTradeVoluntarily, doorBetween,
+  isBarricaded, canTradeVoluntarily, doorBetween, encountersIn,
 } from './game/state.js';
 import {
   search, canSearch, escape, useBandage, useUnlock, useBarricade, resolveTrade, resolveAttack,
@@ -26,6 +26,8 @@ import { CARDS, weaponsIn, countableCount } from './game/cards.js';
 import { createScene } from './render/scene.js';
 import { addRoomView, clearRoomViews, createDoorwayViews } from './render/roomView.js';
 import { dressRoom } from './render/roomDressing.js';
+import { warmTile, releaseTileTextures } from './render/bakedRoom.js';
+import { roomDressings } from './data/dressing.js';
 import { updateCutaway } from './render/cutaway.js';
 import { createMood } from './render/mood.js';
 import { createCharacterView } from './render/characterView.js';
@@ -164,7 +166,19 @@ function castCharacters() {
     characters.push(cv);
   }
 }
-castCharacters();
+// The hotel behind the main menu is not seen once the menu's own lobby scene is up, so its starting
+// room's model and the game's guest are loaded only after that scene has loaded (or failed to: then
+// the menu shows over the hotel), or when a game is set up — they no longer hold the menu's picture up.
+// A direct link (?mode=) needs them at once.
+let holdHotel = !DIRECT;
+function releaseHotel() {
+  if (!holdHotel) return;
+  holdHotel = false;
+  castCharacters();
+  for (const v of roomViews.values()) trackDressing(dressRoom(v, floor, cfg).then(done => { if (done) view.compile(); }));
+  syncViews(false);
+}
+if (!holdHotel) castCharacters();
 const searchMarks = createSearchMarks(floor, view.scene);
 const confirmBarEl = document.getElementById('confirm-bar');
 const pathPreview = createPathPreview(view.scene, view.camera, view.renderer.domElement, container,
@@ -264,7 +278,7 @@ function syncViews(animate) {
   for (const room of floor.roomList) {
     if (roomViews.has(room.id)) continue;
     const v = addRoomView(roomViews, room, cfg, view.scene, { animate });
-    trackDressing(dressRoom(v, floor, cfg).then(done => { if (done) view.compile(); }));
+    if (!holdHotel) trackDressing(dressRoom(v, floor, cfg).then(done => { if (done) view.compile(); }));
   }
   doorways.sync();
   // The camera may zoom out until every revealed room is in view, and pan over all of them.
@@ -484,8 +498,11 @@ function onArrive() {
   activeWalk = null;
   if (room?.isExit && !isBot(player.index)) {
     // The same words whoever you are, so they give nothing away about who is carrying what or who is
-    // possessed.
-    hud.toast(`The fire exit — a clean guest carrying ${rules.lanternsToEscape} Lanterns can escape here (${rules.actionCost.escape} action).`);
+    // possessed. (Practice has nothing to hide: it says plainly what to do.)
+    const cost = `${rules.actionCost.escape} action${rules.actionCost.escape === 1 ? '' : 's'}`;
+    hud.toast(!state.practice ? `The Fire Exit — a clean guest carrying ${rules.lanternsToEscape} Lanterns can escape here (${cost}).`
+      : canEscape(state, floor, player) ? `You carry ${rules.lanternsToEscape} Lanterns: tap Escape (${cost}).`
+        : `The Fire Exit — bring ${rules.lanternsToEscape} Lanterns here to escape (${cost}).`);
   }
   const candidates = pendingEncounters(state, floor, player);
   if (!candidates.length) { refresh(); return; }
@@ -1112,6 +1129,7 @@ function resetWorld() {
   resetState(state, floor, seed);          // a new random hotel
   state.viewerIndex = humanSeat;
   clearRoomViews(roomViews, view.scene);
+  releaseTileTextures();                   // (the old hotel's room light maps leave the graphics chip)
   doorways.reset();
   rebuildGrid();
   movers.forEach((m, i) => { m.reset(startSpot(i)[0], startSpot(i)[1]); m.speedScale = 1; });
@@ -1137,6 +1155,7 @@ function resetWorld() {
 // becomes a new match at a new table with the same choices (how many guests, your role).
 function restart() {
   if (PRACTICE) {
+    audio.stopStinger();          // (from the end screen: the win jingle stops, as in playAgain / backToMenu)
     resetWorld();
     if (running) hud.toast('Practice restarted.');
     return;
@@ -1200,6 +1219,7 @@ async function planGame(choice) {
 
 // Seat the table and deal a new game (no screens: the caller shows them).
 function setupGame(plan) {
+  holdHotel = false;                       // (this game's guests and rooms load now: castCharacters, resetWorld)
   PRACTICE = plan.practice;
   lastChoice = plan.choice || { practice: true };
   cast.length = 0; cast.push(...plan.cast);
@@ -1229,8 +1249,60 @@ function setupGame(plan) {
   refresh();
 }
 
+// --- Warm-up ---------------------------------------------------------------------------------------
+// The first time a door opens (a room tile), a room is searched (its tick), a door is locked or
+// barricaded, or the player is possessed (red eyes), the graphics chip has to build the shaders for it,
+// and the game froze for a moment right then. Instead, at the start of a game, behind the black screen
+// (or the "Tap to begin" card), one of each is drawn once out of sight, so those shaders are ready before
+// play begins. Once per visit: they are kept. What it needs (the smallest tile, the Fire Exit's) is
+// loaded early, so nothing waits for it.
+let warmGroup = null, warmPrep = null, warmDone = false;
+let warmEyes = -1, eyesWarm = false;            // (the seat whose guest wears red eyes for the warm-up)
+function prepareWarmUp() {
+  warmPrep ||= warmTile(roomDressings.exit).then(tile => {
+    const g = new THREE.Group();
+    g.name = 'warm-up';
+    g.add(tile, ...searchMarks.warmObjects(), ...doorways.warmObjects());
+    g.position.set(0, -500, 0);                 // far below the floor: out of sight, but still drawn
+    g.traverse(o => { o.frustumCulled = false; });
+    warmGroup = g;
+  }).catch(err => { console.warn('warm-up skipped:', err?.message || err); });
+  return warmPrep;
+}
+async function warmUp(maxWaitMs = 1500, { eyes = false } = {}) {
+  if (!warmDone) await warmScene(maxWaitMs);
+  // The red eyes of a guest who becomes possessed mid-match (src/render/possessedLook.js: one shader for
+  // every guest), worn for three frames by the player's own guest — only behind the black screen.
+  if (eyes && !eyesWarm) {
+    const cv = characters[humanSeat];
+    const until = performance.now() + maxWaitMs;
+    while (cv && !cv.debug().loaded && performance.now() < until) await wait(100);
+    if (cv?.debug().loaded) {
+      warmEyes = humanSeat;
+      await frame(); await frame(); await frame();
+      warmEyes = -1;
+      eyesWarm = true;
+    }
+  }
+}
+async function warmScene(maxWaitMs) {
+  await Promise.race([prepareWarmUp(), wait(maxWaitMs)]);
+  if (!warmGroup) return;                       // (not loaded in time: tried again at the next game)
+  view.scene.add(warmGroup);
+  // (with KHR_parallel_shader_compile the shaders build in the background first; without it they build
+  // during the draws below — behind the black screen either way)
+  try {
+    if (view.renderer.extensions.has('KHR_parallel_shader_compile')) await view.renderer.compileAsync(warmGroup, view.camera, view.scene);
+    else view.renderer.compile(warmGroup, view.camera, view.scene);
+  } catch { /* drawn below anyway */ }
+  await frame(); await frame(); await frame();  // (drawn: shaders linked, its textures uploaded)
+  view.scene.remove(warmGroup);
+  warmDone = true;
+}
+
 // From the menu into the game: the lift (unless switched off), black, the game, the lights come up.
 async function enterGame(plan, { guests = 3 } = {}) {
+  prepareWarmUp();
   menu.leave();
   phase = 'intro';
   audio.setScene('intro');
@@ -1246,6 +1318,10 @@ async function enterGame(plan, { guests = 3 } = {}) {
   setupGame(plan);
   phase = 'game';
   view.compile();
+  await warmUp(1500, { eyes: true });
+  // (a game started before the menu's lobby had loaded: its starting room may still be on its way —
+  // wait a little for it behind the black screen rather than show the grey placeholder)
+  await Promise.race([new Promise(r => { const t = () => (dressingDone ? r() : setTimeout(t, 100)); t(); }), wait(3000)]);
   await frame(); await frame();
   begin();
   if (PRACTICE) {
@@ -1286,6 +1362,7 @@ async function playAgain() {
   audio.stopStinger();
   await fade(true, 450);
   setupGame(plan);
+  await warmUp(1500, { eyes: true });
   begin();
   await frame();
   await fade(false, 700);
@@ -1307,10 +1384,12 @@ async function backToMenu() {
   movers.forEach(m => m.halt());
   meetingLive = false;
   bots = null;
+  if (lobbyReady) releaseTileTextures();  // (the menu shows the lobby scene: the hotel's maps are not drawn)
   lobby?.reset();
   applyPixelRatio();
   container.classList.add('blurred');
   menu.show('main');
+  document.title = 'Hotel Escape';
   await fade(false, 700);
 }
 
@@ -1432,7 +1511,8 @@ function moveRefusal(plan, dest, player) {
 // Offer the walk to room `destId`: the fewest-rooms route there (1 AP per room entered) to a free
 // standing spot in its middle, shown as a dotted path, an outline round the room the walk ends in and a
 // cost tag, with the Move / Cancel bar. If a meeting is forced in a room on the way, the walk ends there
-// (the rules plan it so: planRoomMove) and the bar says so.
+// (the rules plan it so: planRoomMove) and the bar says so; a meeting waiting in the room it ends in is
+// named on the bar too.
 function offerMove(destId) {
   const player = activePlayer(state);
   const dest = floor.rooms.get(destId);
@@ -1447,7 +1527,10 @@ function offerMove(destId) {
   plan.preview = { label: `Move · ${plan.cost} AP`, anchor: end, room: floor.rooms.get(plan.dest) };
   selectedMove = plan;
   const who = plan.meet.map(id => state.players.find(q => q.id === id)?.name).filter(Boolean);
-  const note = plan.stop ? ` You will stop in the ${floor.rooms.get(plan.stop).name} to meet ${andList(who)}.` : '';
+  // (a guest waiting in the room the walk ends in forces a meeting there too: say so before the tap)
+  const there = plan.stop ? [] : encountersIn(state, floor, player, plan.dest).map(q => q.name);
+  const note = plan.stop ? ` You will stop in the ${floor.rooms.get(plan.stop).name} to meet ${andList(who)}.`
+    : there.length ? ` You will meet ${andList(there)} there: a meeting is forced.` : '';
   hud.showConfirm(`Move to ${dest.name}?${note}`, `Move · ${plan.cost} AP`);
 }
 
@@ -1707,7 +1790,7 @@ if (DIRECT) {
   }
   overlays.showStart();
   const planned = planGame(DIRECT === 'practice' ? { practice: true } : { bots: n, role });
-  planned.then(plan => { setupGame(plan); startReady = true; maybeReady(); })
+  planned.then(async plan => { setupGame(plan); await warmUp(5000); startReady = true; maybeReady(); })
     .catch(err => { console.error(err); overlays.showError(`The game could not be set up. (${err?.message || err})`); });
   overlays.onBegin(() => { if (startReady) begin(); });
 } else {
@@ -1720,8 +1803,8 @@ if (DIRECT) {
       lobby.setSize(view.size.w, view.size.h);
       return lobby.ready;
     })
-    .then(() => { lobbyReady = !!lobby; })
-    .catch(err => { console.warn('The lobby behind the menu could not be loaded; the menu shows over the hotel instead.', err); lobby = null; });
+    .then(() => { lobbyReady = !!lobby; releaseHotel(); prepareWarmUp(); })
+    .catch(err => { console.warn('The lobby behind the menu could not be loaded; the menu shows over the hotel instead.', err); lobby = null; releaseHotel(); });
 }
 let startReady = !DIRECT;
 let framesReady = false;
@@ -1744,6 +1827,7 @@ let last = performance.now();
 let frames = 0;
 const lobbySize = { w: 0, h: 0 };
 let lastLobby = performance.now();
+let stillKey = '', stillAt = 0;     // what the 'Still' menu background last drew (size, pixel ratio), and when
 view.renderer.setAnimationLoop(now => {
   perfStats.frame(now - last);
   const dt = Math.min(0.05, Math.max(0, (now - last) / 1000));
@@ -1759,7 +1843,16 @@ view.renderer.setAnimationLoop(now => {
     }
     // (the lift keeps to the clock even when frames are slow: up to a quarter of a second per frame)
     const ldt = phase === 'intro' ? Math.min(0.25, Math.max(0, (now - prevLobby) / 1000)) : dt;
-    lobby.update(phase === 'menu' && settings.get('menuMotion') === 'off' ? 0 : ldt, time);
+    const still = phase === 'menu' && settings.get('menuMotion') === 'off';
+    lobby.update(still ? 0 : ldt, time);
+    // 'Still': the picture does not change, so it is drawn again only on a new size or pixel ratio (and
+    // the first frame after switching to Still or coming back from a game), otherwise at most twice a
+    // second (the lobby's guests may still be arriving); the canvas keeps the last picture meanwhile.
+    if (still) {
+      const key = `${view.size.w}x${view.size.h}@${view.renderer.getPixelRatio()}`;
+      if (framesReady && key === stillKey && now - stillAt < 500) return;
+      stillKey = key; stillAt = now;
+    } else stillKey = '';
     view.renderer.render(lobby.scene, lobby.camera);
     if (++frames >= 2 && !framesReady) { framesReady = true; maybeReady(); }
     return;
@@ -1783,7 +1876,8 @@ view.renderer.setAnimationLoop(now => {
   updateCutaway(roomViews, rig, state, cfg, dt);
   // Red eyes only on the player's own guest, on their own screen, while possessed; never in practice,
   // and not on the old game still drawn behind the menu (when the menu's lobby scene is not loaded).
-  characters.forEach((cv, i) => { cv.setPossessed(phase === 'game' && !PRACTICE && i === humanSeat && !!state.players[i]?.possessed); cv.update(movers[i], dt); });
+  // (warmEyes: three frames behind the black screen at the start of a game, see warmUp)
+  characters.forEach((cv, i) => { cv.setPossessed(i === warmEyes || (phase === 'game' && !PRACTICE && i === humanSeat && !!state.players[i]?.possessed)); cv.update(movers[i], dt); });
   view.render();
   syncHandFan();
   syncSearchSpot();     // after the render, so it reads this frame's camera

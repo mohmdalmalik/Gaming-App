@@ -264,7 +264,8 @@ Output: `assets/models/lobby/` (`lobby.glb`, `lobby-light.jpg`, `lobby-floor-lig
 Every other room is built the same way as the starting room, from the game's own tile data, and matched to
 the owner's reference image for it (`tools/room-pipeline/ref/`; see `tools/room-pipeline/README.md`):
 `node tools/room-pipeline/dump_rooms.mjs > tools/room-pipeline/rooms.json`, `python3 tools/room-pipeline/textures_rooms.py`,
-`tools/room-pipeline/build_all.sh 1024 48` (about an hour on 4 CPUs). Then
+`tools/room-pipeline/build_all.sh 1024 48` (about an hour on 4 CPUs; it ends by saving the light maps at the
+512 the game ships, `shrink_maps.py`). Then
 `node tools/room-pipeline/vsref.mjs` puts each room in the game next to its reference
 (`tools/room-pipeline/shots/<room>-vs-ref.png`, contact sheet `shots/rooms-vs-refs.png`),
 `node tools/room-pipeline/walkcheck.mjs` walks a guest through every doorway of every room, and
@@ -289,12 +290,13 @@ node tests/browser-practice.mjs   # practice mode in a real browser [--screens]
 node tests/browser-bots.mjs       # the main menu and matches against bots in a real browser: settings, the table filling up, the lift, bots' turns, privacy, meetings both ways, being attacked, the end screen, whole matches [--screens] [--matches 3]
 node tests/browser-lobby.mjs      # the baked starting room, fog rooms, tap to open / move, camera (big hotel), draw calls
 node tests/audio-check.mjs        # music and sound: unlock on the first tap, every file decodes, Settings, the menu -> lift -> game music, cues in a match and practice [--quick]
+node tests/trade-reveal-check.mjs # the trade scene: real trades for swap / possessed (two tries, then your role) / Lantern block / you possess them
 python3 tools/audio/build.py      # rebuild every sound, ~6 min (tools/audio/README.md); needs numpy, scipy, ffmpeg
 python3 tools/audio/build.py revolver lobby   # rebuild only these (effect or music names); updates library.js + report.json
 node tools/balance/hotseat-sim.mjs 400 6   # 400 six-player matches under the rules as they stand (--before: same bots on the rules before Part 2; --compare: Lantern variants; --cautious)
 node tools/balance/hotseat-sim.mjs --study  # six player personalities (tools/balance/personalities.mjs) + rule proposals, in memory only (tests/personality-report.md)
 node tests/autoplay.mjs --url http://127.0.0.1:8123/ --persona-study --matches 30   # the same personalities through the real UI
-node tests/bots-check.mjs                  # the computer guests: information honesty, 450 seeded matches, determinism (~5 s)
+node tests/bots-check.mjs                  # the computer guests: information honesty, 450 seeded matches, determinism, the feed's icons (~5 s)
 node tools/balance/bot-match.mjs --n 1000  # all-bot matches at 6, 5 and 4 players: who wins, trust-building, blocks, waits
                                            # (--players 6, --trace one match, --tune blockBias=-0.2,... to try a bot knob)
 ```

@@ -148,7 +148,7 @@ export function createHand(doc, cfg, { onUseBandage, onUnlock, onBarricade, onEs
       line('Give one in a trade to possess the other guest — unless they hand you a Lantern: then both cards are used up and they learn you are possessed. Never counts toward your hand limit.', 'd-desc');
       return;
     }
-    if (card.type === 'flashlight') { line('Kept in hand; lets you search a dark room. Never used up.', 'd-tag'); return; }
+    if (card.type === 'flashlight') return; // (its description above says it all: searches dark rooms, never used up)
     if (meta.weapon) { line(state.practice ? 'No one to attack on your own.' : 'Chosen when you attack during a meeting.', 'd-tag'); return; }
 
     if (card.type === 'bandage') {

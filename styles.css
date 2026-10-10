@@ -675,13 +675,19 @@ html, body {
 .map-legend .sw.here { background: rgba(201,162,78,0.3); border-color: var(--brass); }
 .map-legend .sw.searched { background: rgba(120,200,150,0.18); border-color: rgba(120,200,150,0.5); }
 .map-legend .sw.frontier { background: var(--brass-bright); border-color: var(--brass); height: 4px; margin-top: 5px; }
-.map-legend .sw.objective { background: rgba(201,162,78,0.35); border-color: var(--brass-bright); border-radius: 50%; }
+/* A guest on the plan: a round dot in their colour (src/map.js; the guest whose turn it is: an arrow).
+   The swatch is quartered in four of the guests' colours, so it reads as "a coloured dot", not one guest. */
+.map-legend .sw.guest {
+  width: 12px; height: 12px; border-radius: 50%; border: 1.5px solid #1d1509;
+  background: conic-gradient(#e6b45a 0 25%, #5ac8e6 0 50%, #a8e05a 0 75%, #e67ab8 0);
+}
 /* Rooms with jobs carry a small mark on the plan (drawn in src/map.js in the same colours). */
 .map-legend .mk-bar { width: 18px; height: 18px; flex: none; }
 .map-legend .mk { font-family: var(--serif); font-weight: 700; font-size: 14px; line-height: 1; }
 .map-legend .mk.infirmary { color: #f08c84; }
 .map-legend .mk.switchboard { color: #9fd0f0; }
 .map-legend .mk.linen { color: #efe7d6; }
+.map-legend .mk.drop { color: var(--brass-bright); }   /* the brass ◆ src/map.js draws in a room's corner */
 
 /* The one-off announcement when the exit opens, and the end-screen button pair. */
 .card.notice { max-width: 440px; }
@@ -749,7 +755,7 @@ html, body {
 }
 .turn-timer[hidden] { display: none; }
 .tt-track { width: 104px; height: 6px; border-radius: 999px; background: rgba(0,0,0,0.45); overflow: hidden; }
-.tt-fill { height: 100%; width: 100%; background: linear-gradient(90deg, var(--brass), var(--brass-bright)); transition: width 0.2s linear; }
+.tt-fill { height: 100%; width: 100%; background: linear-gradient(90deg, var(--brass), var(--brass-bright)); transform-origin: left center; }   /* (shrunk by hud.showTimer: transform: scaleX) */
 .tt-seconds { font-family: var(--serif); font-size: 14px; font-variant-numeric: tabular-nums; color: var(--ivory-dim); min-width: 3.2ch; text-align: right; }
 .turn-timer.low { border-color: rgba(207,74,64,0.6); }
 .turn-timer.low .tt-fill { background: linear-gradient(90deg, #8c3a34, var(--crimson)); }
@@ -1028,7 +1034,7 @@ html, body {
   margin-bottom: 8px;
 }
 .menu-title {
-  margin: 0; font-family: var(--serif); font-weight: 700; font-size: clamp(46px, 6.4vw, 76px); line-height: 0.98;
+  margin: 0; font-family: var(--serif); font-weight: 700; font-size: clamp(46px, 6.4vw, 64px); line-height: 0.98;
   letter-spacing: 0.01em; color: var(--brass-bright);
   background: linear-gradient(180deg, #f6e2a8 0%, #e2bd67 55%, #a8812f 100%); -webkit-background-clip: text; background-clip: text;
   -webkit-text-fill-color: transparent; text-shadow: none; filter: drop-shadow(0 3px 14px rgba(0, 0, 0, 0.55));
@@ -1129,7 +1135,8 @@ html, body {
 /* The end of a match: everyone's role, now that it is over. */
 .end-reveal { display: grid; gap: 6px; margin: 2px auto 22px; width: min(540px, 80vw); text-align: left; }
 .er-row {
-  display: grid; grid-template-columns: 12px minmax(0, 1fr) minmax(0, 1fr) auto 64px; gap: 10px; align-items: center;
+  /* (a fixed role column, wide enough for POSSESSED, so every row's columns line up) */
+  display: grid; grid-template-columns: 12px minmax(0, 1fr) minmax(0, 1fr) 92px 64px; gap: 10px; align-items: center;
   padding: 7px 12px; border-radius: 10px; background: rgba(255, 255, 255, 0.03); border: 1px solid var(--line-soft);
 }
 .er-row.you { border-color: var(--brass); }

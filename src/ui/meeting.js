@@ -10,6 +10,7 @@ import { cardTile, CARD_FACE } from './cards.js';
 import { makePortrait } from './portrait.js';
 import { rules } from '../data/rules.js';
 import { sfx } from '../audio/bus.js';
+import { tooSoon } from './tapGuard.js';
 
 const HEART = '<svg viewBox="0 0 24 22" aria-hidden="true"><path d="M12 20.5 3.6 12.4A5.2 5.2 0 0 1 11.3 5.4L12 6.2l.7-.8a5.2 5.2 0 0 1 7.7 7z"/></svg>';
 
@@ -29,10 +30,12 @@ export function createMeeting(doc, cfg, { isViewer = () => false } = {}) {
     b.type = 'button';
     b.innerHTML = label;
     if (opts.disabled) b.disabled = true;
-    b.addEventListener('click', e => { e.preventDefault(); onClick(); });
+    // (not the second tap of the double tap that opened this panel: src/ui/tapGuard.js)
+    b.addEventListener('click', e => { e.preventDefault(); if (tooSoon(e, shownAt)) return; onClick(); });
     return b;
   }
-  const show = () => { overlay.hidden = false; };
+  let shownAt = 0;   // when the current panel opened (every panel calls show())
+  const show = () => { overlay.hidden = false; shownAt = performance.now(); };
   let cues = [];     // the attack's sound cues still to come (dropped if the panel closes first)
   const hide = () => { overlay.hidden = true; for (const t of cues) clearTimeout(t); cues = []; };
   const el = (tag, cls, parent) => { const e = doc.createElement(tag); if (cls) e.className = cls; if (parent) parent.appendChild(e); return e; };
@@ -67,7 +70,7 @@ export function createMeeting(doc, cfg, { isViewer = () => false } = {}) {
       title.textContent = 'Attack';
       body.innerHTML = `<div class="modal-sub">${Name(P)} ${isViewer(P) ? 'attack' : 'attacks'} ${nameOf(Q)}. Choose a weapon:</div>`;
       const grid = doc.createElement('div'); grid.className = 'cards';
-      for (const w of weaponsIn(P.hand)) grid.appendChild(cardTile(doc, w, { selectable: true, onSelect: c => { hide(); onWeapon(c.id); } }));
+      for (const w of weaponsIn(P.hand)) grid.appendChild(cardTile(doc, w, { selectable: true, onSelect: (c, _tile, e) => { if (tooSoon(e, shownAt)) return; hide(); onWeapon(c.id); } }));
       body.appendChild(grid);
       actions.innerHTML = '';
       if (onBack) actions.appendChild(button('‹ Back', () => { hide(); onBack(); }));

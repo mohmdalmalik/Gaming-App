@@ -10,6 +10,7 @@
 // the reception bell (the sound cue bus, src/audio/bus.js).
 import { settings, SETTING_CHOICES } from '../settings.js';
 import { sfx } from '../audio/bus.js';
+import { tooSoon } from './tapGuard.js';
 
 const ROLE_CHOICES = [
   { value: 'random', label: 'Random', note: 'Like a real table: you are told your role when the game starts. Usually you are a clean guest.' },
@@ -26,9 +27,12 @@ export function createMenu(doc, { onPlayBots, onPractice, onSettingChanged } = {
   let current = 'main';
   let ready = false;
   let mmTimers = [];
+  let shownAt = 0;   // when the current screen opened: its buttons ignore the second tap of the double
+                     // tap that opened it (src/ui/tapGuard.js). Re-rendering after a pick does not reset it.
 
   function show(name = 'main') {
     current = name;
+    shownAt = performance.now();
     root.hidden = false;
     root.classList.remove('leaving');
     for (const [k, el] of Object.entries(screens)) el.hidden = k !== name;
@@ -47,7 +51,7 @@ export function createMenu(doc, { onPlayBots, onPractice, onSettingChanged } = {
       b.setAttribute('aria-checked', String(o.value === value));
       b.dataset.value = String(o.value);
       b.textContent = o.label;
-      b.addEventListener('click', e => { e.preventDefault(); onPick(o.value); });
+      b.addEventListener('click', e => { e.preventDefault(); if (tooSoon(e, shownAt)) return; onPick(o.value); });
       host.appendChild(b);
     }
   }
@@ -121,7 +125,7 @@ export function createMenu(doc, { onPlayBots, onPractice, onSettingChanged } = {
   let mmStarted = 0;
   function clearMatchmaking() { mmTimers.forEach(clearTimeout); mmTimers = []; }
 
-  const click = (el, fn) => el.addEventListener('click', e => { e.preventDefault(); fn(); });
+  const click = (el, fn) => el.addEventListener('click', e => { e.preventDefault(); if (tooSoon(e, shownAt)) return; fn(); });
   click(btn.bots, () => { if (ready) show('bots'); });
   click(btn.practice, () => { if (ready) onPractice?.(); });
   click(btn.settings, () => show('settings'));

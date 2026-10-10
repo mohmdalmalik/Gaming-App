@@ -107,7 +107,7 @@ export function cardTile(doc, card, opts = {}) {
     const d = doc.createElement('span'); d.className = 'cdesc'; d.textContent = opts.desc ?? (CARDS[card.type] ? cardDesc(card.type) : meta.desc); el.appendChild(d);
   }
 
-  if (opts.selectable && opts.onSelect) el.addEventListener('click', e => { e.preventDefault(); opts.onSelect(card, el); });
+  if (opts.selectable && opts.onSelect) el.addEventListener('click', e => { e.preventDefault(); opts.onSelect(card, el, e); });
   if (opts.action) {
     const btn = doc.createElement('button');
     btn.className = 'btn' + (opts.action.primary ? ' primary' : '');

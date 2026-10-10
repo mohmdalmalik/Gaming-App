@@ -59,7 +59,7 @@ export function createMap(doc, floor, cfg) {
       ctx.font = `bold 13px ${serif}`; ctx.textAlign = 'left'; ctx.textBaseline = 'top';
       ctx.fillStyle = held >= need ? '#9fe3b8' : BRASS_BRIGHT;
       ctx.fillText(`Lanterns ${held} / ${need}`, 14, 12);
-      if (held >= need) { ctx.font = `12px ${serif}`; ctx.fillStyle = '#9fe3b8'; ctx.fillText('Reach the fire exit', 14, 30); }
+      if (held >= need) { ctx.font = `12px ${serif}`; ctx.fillStyle = '#9fe3b8'; ctx.fillText('Reach the Fire Exit', 14, 30); }
       ctx.restore();
     }
 

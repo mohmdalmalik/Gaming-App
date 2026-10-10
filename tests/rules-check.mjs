@@ -904,7 +904,7 @@ console.log('\nhand limit: settled only at the end of your turn');
   check(countType(V.hand, 'possession') === NP && overHandLimit(V) === 2, `8 ordinary cards + ${NP} Possession cards: 2 over (Possession cards do not count)`);
   const pc = V.hand.find(c => c.type === 'possession');
   check(!discardCard(s, V, pc.id).ok && countType(V.hand, 'possession') === NP, 'a Possession card can never be discarded');
-  // Ending the turn: refused at 8 ordinary cards; at 6 ordinary + 2 Possession cards it passes.
+  // Ending the turn: refused at 8 ordinary cards; at 6 ordinary + NP (rules.possessionSupply) Possession cards it passes.
   s.activeIndex = V.index;
   check(endTurn(s, floor).reason === 'overHandLimit' && s.activeIndex === V.index, 'the possessed guest with 8 ordinary cards cannot end the turn either');
   discardCard(s, V, 'v0'); discardCard(s, V, 'v1');

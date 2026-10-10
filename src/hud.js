@@ -209,7 +209,8 @@ export function createHud(doc, cfg) {
       // exactly what a clean guest short of Lanterns sees ("Clean + 3 Lanterns"), so the button never
       // says which of the two it is. (Enabled means "this guest can escape now" — and escaping ends the
       // match at once.) With no actions left it reads the same for everyone. Practice has nothing to
-      // hide, so it says plainly when Lanterns are missing.
+      // hide, so it says plainly when Lanterns are missing. When it is enabled (this guest can win now)
+      // it is the gold button: only this player sees their own screen.
       const job = ROOM_JOB[room?.job];
       el.roomJob.hidden = (!job && !room?.isExit) || !mine;
       if (room?.isExit) {
@@ -217,12 +218,14 @@ export function createHud(doc, cfg) {
         const barred = !canEscape(state, floor, p);
         el.roomJobMain.textContent = 'Escape';
         el.roomJob.disabled = state.finished || short || barred;
+        el.roomJob.classList.toggle('primary', !el.roomJob.disabled);
         el.roomJobSub.textContent = state.finished ? '—' : short ? 'No actions left'
           : barred ? (state.practice ? `Need ${rules.lanternsToEscape} Lanterns` : `Clean + ${rules.lanternsToEscape} Lanterns`)
             : plural(rules.actionCost.escape);
       } else if (job) {
         const use = canUseRoom(state, floor, p);
         el.roomJobMain.textContent = job.name;
+        el.roomJob.classList.remove('primary');
         el.roomJob.disabled = !use.ok;
         el.roomJobSub.textContent = use.ok ? job.does() : (ROOM_REASON[use.reason] || 'Unavailable');
       }
@@ -261,12 +264,17 @@ export function createHud(doc, cfg) {
     // --- Turn timer ---------------------------------------------------------------------------
     // Shown only while the active player's action phase is running. It is hidden (and not
     // counting) during every hand-over and role screen, so passing the device costs nobody time.
+    // Runs every frame of a turn, so it touches the page only where something changed, and the bar is
+    // drawn with a transform (no page re-layout).
     showTimer(left, total) {
-      el.timer.hidden = false;
+      if (el.timer.hidden) el.timer.hidden = false;
       const frac = Math.max(0, Math.min(1, total ? left / total : 0));
-      el.timerFill.style.width = `${(frac * 100).toFixed(1)}%`;
-      el.timerSeconds.textContent = `${Math.ceil(Math.max(0, left))}s`;
-      el.timer.classList.toggle('low', left <= 10);
+      const bar = `scaleX(${frac.toFixed(3)})`;
+      if (el.timerFill.style.transform !== bar) el.timerFill.style.transform = bar;
+      const secs = `${Math.ceil(Math.max(0, left))}s`;
+      if (el.timerSeconds.textContent !== secs) el.timerSeconds.textContent = secs;
+      const low = left <= 10;
+      if (el.timer.classList.contains('low') !== low) el.timer.classList.toggle('low', low);
     },
     // The player's own role on their own panel: possessed → the crimson plate, the POSSESSED badge
     // ("Only you can see this"), the souls count and the faint corner shadow over the hotel; clean, in a
@@ -289,7 +297,7 @@ export function createHud(doc, cfg) {
       if (el.role.hidden !== !on) el.role.hidden = !on;
       if (el.clean.hidden !== !clean) el.clean.hidden = !clean;
       if (el.tint.hidden !== !on) el.tint.hidden = !on;
-      el.souls.hidden = !on;
+      if (el.souls.hidden !== !on) el.souls.hidden = !on;
       const sk = on ? `${p.index}:${soulsHeld(p)}` : '';
       if (sk !== soulsKey) {
         soulsKey = sk;

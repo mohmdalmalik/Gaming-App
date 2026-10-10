@@ -376,8 +376,14 @@ export function createLobbyScene({ renderer, cfg, layout = lobbyLayout } = {}) {
   }
   function update(dt /* seconds */, time /* accepted, not needed */) {
     dt = Math.min(Math.max(+dt || 0, 0), 0.5);
-    const n = Math.max(1, Math.ceil(dt / 0.05 - 1e-9));
-    for (let i = 0; i < n; i++) stepOnce(dt / n);
+    // Frozen (the menu's "Still" background): nothing is stepped at all. (Stepping with dt = 0 is not
+    // a freeze: the animation mixer skips re-writing bones whose sampled value did not change, so the
+    // small head / arm gestures that are added on top each frame would pile up and spin heads round.)
+    // The shadows, the set and the camera below only read the clock, so they stay still too.
+    if (dt > 0) {
+      const n = Math.ceil(dt / 0.05 - 1e-9);
+      for (let i = 0; i < n; i++) stepOnce(dt / n);
+    }
     if (loaded) {
       // contact shadows: under the feet when standing, under the seat when sitting (hidden)
       let i = firstActorShadow;

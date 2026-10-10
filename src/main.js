@@ -1256,7 +1256,7 @@ function setupGame(plan) {
 // (or the "Tap to begin" card), one of each is drawn once out of sight, so those shaders are ready before
 // play begins. Once per visit: they are kept. What it needs (the smallest tile, the Fire Exit's) is
 // loaded early, so nothing waits for it.
-let warmGroup = null, warmPrep = null, warmDone = false;
+let warmGroup = null, warmPrep = null, warmDone = false, warmSettled = false;
 let warmEyes = -1, eyesWarm = false;            // (the seat whose guest wears red eyes for the warm-up)
 function prepareWarmUp() {
   warmPrep ||= warmTile(roomDressings.exit).then(tile => {
@@ -1266,7 +1266,7 @@ function prepareWarmUp() {
     g.position.set(0, -500, 0);                 // far below the floor: out of sight, but still drawn
     g.traverse(o => { o.frustumCulled = false; });
     warmGroup = g;
-  }).catch(err => { console.warn('warm-up skipped:', err?.message || err); });
+  }).catch(err => { console.warn('warm-up skipped:', err?.message || err); }).finally(() => { warmSettled = true; });
   return warmPrep;
 }
 async function warmUp(maxWaitMs = 1500, { eyes = false } = {}) {
@@ -1967,6 +1967,10 @@ window.__game = {
   setTimeLeft: secs => { if (timerLeft > 0) timerLeft = secs; },     // (tests: the clock's last seconds)
   inActionPhase: () => inActionPhase,
   dressingDone: () => dressingDone,
+  // (tests: nothing of the page is still downloading — the hotel behind the menu, its guests, the warm-up
+  // tile — so leaving the page cuts no download off)
+  settled: () => !holdHotel && dressingDone && (!warmPrep || warmSettled)
+    && characters.every(cv => { const d = cv.debug(); return !d.model || d.loaded; }),
   publicLog: () => state.log.map(l => l.text),
   notesOf: i => [...(state.players[i].notes || [])],
   possessedIndexes: () => state.players.filter(p => p.possessed).map(p => p.index),

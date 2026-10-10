@@ -726,6 +726,7 @@ console.log('\n7b. playtest fixes');
     check(g8.inView && g8.guest, 'the view eases so the room just opened is wholly in view, with the guest still in view');
     check(g8.go.includes(`go:${nr}|Go · 1 AP`), `and the new room carries a quiet "Go · 1 AP" tag (${g8.go.join(', ')})`);
     await tapAt({ room: nr });
+    await frames(2);      // (the tags are laid out each frame: they step aside on the next one)
     check((await confirmBar()).open && (await game(() => window.__game.tags('go:'))).length === 0, 'the Go tags step aside while the Move/Cancel bar is up');
     await tap('#btn-confirm-cancel');
   }

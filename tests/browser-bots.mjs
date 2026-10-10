@@ -101,7 +101,7 @@ async function answerScreens() {
 console.log('\n1. main menu');
 await page.goto(`${baseUrl}?seed=31337&botpace=0.15`, { waitUntil: 'load' });
 await page.evaluate(() => { try { localStorage.clear(); } catch { /* fine */ } });
-await waitFor(() => window.__game && !document.getElementById('btn-menu-bots').disabled && window.__game.lobbyReady(), null, 90000);
+await waitFor(() => window.__game && !document.getElementById('btn-menu-bots').disabled && window.__game.lobbyReady() && window.__game.settled(), null, 90000);
 await page.goto(`${baseUrl}?seed=31337&botpace=0.15`, { waitUntil: 'domcontentloaded' });
 await waitFor(() => window.__game && !document.getElementById('btn-menu-bots').disabled, null, 60000);
 check(await visible('#menu-main'), 'the page opens on the main menu');
@@ -117,8 +117,9 @@ await page.click('#set-botSpeed .seg-btn[data-value="fast"]');
 await page.click('#set-follow .seg-btn[data-value="stay"]');
 await shot('02-settings');
 await tap('#btn-settings-done');
-// (let the lobby finish loading its guests first: leaving mid-download cuts the downloads off)
-await waitFor(() => window.__game.lobbyReady(), null, 90000);
+// (let the lobby finish loading its guests first, and the hotel behind it, which loads after the lobby:
+// leaving mid-download cuts the downloads off)
+await waitFor(() => window.__game.lobbyReady() && window.__game.settled(), null, 90000);
 await page.reload({ waitUntil: 'domcontentloaded' });
 await waitFor(() => window.__game && !document.getElementById('btn-menu-bots').disabled, null, 60000);
 await tap('#btn-menu-settings');

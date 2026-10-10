@@ -2,7 +2,7 @@
 // forced meeting resolves — trade or attack. Pure logic; the interface calls these and shows
 // whatever they return. Implements docs/GAME_RULES.md (the owner's design — see CLAUDE.md).
 import { rules } from '../data/rules.js';
-import { CARDS, takeCard, isWeapon, countableCount, shuffle } from './cards.js';
+import { CARDS, takeCard, isWeapon, countableCount, shuffle, makeCard } from './cards.js';
 import {
   checkWin, canEscape, logPublic, convertToPossessed, isLocked, unlockRoom, placeBarricade, isBarricaded,
   adjacentLockedRooms, doorBetween, emitPublic, emitPrivate,
@@ -348,8 +348,9 @@ export function skipTrade(state, floor, P, Q) {
 // side gets to see, and `notes` carries the two private consequences (a block, a conversion).
 //
 //   An ordinary trade: a Lantern changes hands like any other card.
-//   Receive a Possession card without giving a Lantern -> possessed; you keep the card (the chain,
-//     docs/GAME_RULES.md > Possession: one try with it; if that works, your victim keeps it in turn).
+//   Receive a Possession card without giving a Lantern -> possessed; you keep the card AND receive
+//     rules.possessionOnConvert (1) extra Possession cards (the chain, docs/GAME_RULES.md > Possession:
+//     two tries; every guest you possess gets two tries the same way).
 //   Receive a Possession card while giving a Lantern  -> the attempt fails and the Lantern is used
 //     up: the Lantern and the Possession card are both discarded, and you learn who tried.
 //     (rules.lanternBlock 'attacker' is a comparison variant for the simulator only: the Lantern
@@ -395,9 +396,13 @@ export function resolveTrade(state, floor, P, Q, cardIdP, cardIdQ) {
       R.hand.push(pc);                                // R keeps the Possession card
       if (!R.possessed) {
         convertToPossessed(state, R, G.id);
-        events.possessed.push({ newly: R.id, by: G.id });
-        privately.push([R, { type: 'possessed', by: G.index }], [G, { type: 'converted', who: R.index }]);
-        note(R.id, `You received a Possession card from ${G.name}. You are now POSSESSED — and you keep that card: one try to possess someone else in a trade.`);
+        // ...and receives the extra ones (approved rule): two tries in all, new cards from outside the deck
+        const extra = Math.max(0, rules.possessionOnConvert | 0);
+        for (let k = 0; k < extra; k++) R.hand.push(makeCard('possession'));
+        events.possessed.push({ newly: R.id, by: G.id, extra });
+        privately.push([R, { type: 'possessed', by: G.index, extra }], [G, { type: 'converted', who: R.index }]);
+        const tries = 1 + extra;
+        note(R.id, `You received a Possession card from ${G.name}. You are now POSSESSED — you keep that card${extra ? ` and get ${extra === 1 ? 'one more' : `${extra} more`}` : ''}: ${tries === 1 ? 'one try' : `${tries === 2 ? 'two' : tries} tries`} to possess others in a trade.`);
         note(G.id, `${R.name} is now possessed.`);
       } else {
         note(R.id, `${G.name} handed you a Possession card. You already belong to the hotel.`);

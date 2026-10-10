@@ -62,7 +62,8 @@ check(rules.actionCost.search === 1 && rules.actionCost.useCard === 1 && rules.a
 check(rules.turnTimerSeconds === 45 && rules.turnTimerEnabled === true, 'hot-seat has the 45-second timer');
 check(rules.maxHealth === 4 && rules.bandageHeal === 1, '4 health bars; a Bandage restores 1');
 check(rules.healthEnabled && rules.combatEnabled && rules.lockedDoorsEnabled && rules.darkRoomsRequireLight, 'health, combat, locked doors and dark rooms are ON');
-check(rules.possessionSupply === 2, 'the Possessed guest starts with 2 Possession cards');
+check(rules.possessionSupply === 3, 'the Possessed guest starts with 3 Possession cards (approved 10 Oct 2026)');
+check(rules.possessionOnConvert === 1, 'a guest who becomes possessed receives 1 extra Possession card: two tries (approved 10 Oct 2026)');
 check(rules.lanternsToEscape === 3, 'three Lanterns let a clean guest escape');
 check(!('keyPieces' in rules) && !['bow', 'shank', 'bit'].some(t => t in rules.cards), 'the key pieces are gone entirely');
 check(rules.lanternBlock === 'discard', 'the game uses the approved rule: a blocking Lantern is used up');
@@ -86,13 +87,13 @@ console.log('\nsetup');
   const s = hs(101);
   check(s.players.length === 6, 'six guests');
   check(s.players.filter(p => p.possessed).length === 1, 'exactly one is possessed');
-  check(countType(possessed(s).hand, 'possession') === 2, 'and holds 2 Possession cards');
+  check(countType(possessed(s).hand, 'possession') === 3, 'and holds 3 Possession cards');
   check(cleanOnes(s).every(p => countType(p.hand, 'possession') === 0), 'nobody else holds one');
   check(s.players.every(p => countableCount(p.hand) === 4), 'four ordinary cards each');
   check(s.players.every(p => lanternCount(p.hand) === 1 && countableCount(p.hand) - lanternCount(p.hand) === 3),
     'every guest starts with exactly 1 Lantern + 3 other cards');
-  check(lanternCount(possessed(s).hand) === 1 && countableCount(possessed(s).hand) === 4 && possessed(s).hand.length === 6,
-    'the possessed guest too: 1 Lantern + 3 other cards, with the 2 Possession cards on top');
+  check(lanternCount(possessed(s).hand) === 1 && countableCount(possessed(s).hand) === 4 && possessed(s).hand.length === 7,
+    'the possessed guest too: 1 Lantern + 3 other cards, with the 3 Possession cards on top');
   check(s.drawPile.length === deckTotal - 24, `${s.drawPile.length} cards left in the pile after dealing`);
   check(countType(s.drawPile, 'lantern') === rules.deck.lantern - 6, `the other ${rules.deck.lantern - 6} Lanterns are in the draw pile`);
   check(s.discardPile.length === 0, 'the discard pile starts empty');
@@ -114,8 +115,8 @@ console.log('\nsetup');
     const f = createState(floor, roster.slice(0, n), 3, { mode: 'hotseat' });
     const V = f.players.find(p => p.possessed);
     check(f.players.every(p => lanternCount(p.hand) === 1 && countableCount(p.hand) === 4)
-      && countType(f.drawPile, 'lantern') === rules.deck.lantern - n && V && countType(V.hand, 'possession') === 2,
-      `${n} players: 1 Lantern + 3 other cards each (the possessed guest also holds 2 Possession cards); ${rules.deck.lantern - n} Lanterns left in the pile`);
+      && countType(f.drawPile, 'lantern') === rules.deck.lantern - n && V && countType(V.hand, 'possession') === 3,
+      `${n} players: 1 Lantern + 3 other cards each (the possessed guest also holds 3 Possession cards); ${rules.deck.lantern - n} Lanterns left in the pile`);
   }
   applyMode('hotseat', 6);
   // The remaining Lanterns are shuffled into the remainder, not stacked at the bottom.
@@ -608,17 +609,20 @@ console.log('\ntrade and possession');
   const t2 = resolveTrade(s, floor, V, K, pc.id, 'k3');
   check(t2.ok && K.possessed && K.roleChangePending, 'receiving a Possession card without giving a Lantern possesses you');
   check(K.hand.some(c => c.id === pc.id), 'and you keep that Possession card');
+  check(countType(K.hand, 'possession') === 2 && t2.possessed[0].extra === 1, '...and receive one more: two Possession cards, two tries (approved rule)');
+  check(countType(V.hand, 'possession') === rules.possessionSupply - 1, 'the giver is down one card (the extra one is new, not taken from anyone)');
   check(V.hand.some(c => c.id === 'k3'), 'the possessed giver keeps what you gave');
   check(K.notes.some(n => /POSSESSED/.test(n)), 'you are told privately');
   check(!s.log.some(l => /POSSESS/i.test(l.text)), 'the public log says nothing about it');
-  // The chain (docs/GAME_RULES.md > Possession): the new possessed guest gets one try with that card;
-  // if it works, their victim keeps it in turn.
+  // The chain (docs/GAME_RULES.md > Possession): the new possessed guest has two tries (the card that
+  // possessed them + one more); a guest they possess gets two tries in turn.
   const L = cleanOnes(s).find(q => q !== K && !q.possessed);
   L.currentRoom = K.currentRoom; L.hand.push({ id: 'l3', type: 'bandage' });
   const t3 = resolveTrade(s, floor, K, L, pc.id, 'l3');
   check(t3.ok && L.possessed && L.hand.some(c => c.id === pc.id) && !K.hand.some(c => c.id === pc.id),
     'the chain: the newly possessed guest passes that same card on, and their victim keeps it in turn');
-  check(L.notes.some(n => /keep that card/.test(n)), 'and is told they keep it: one try to possess someone else');
+  check(L.notes.some(n => /keep that card and get one more: two tries/.test(n)), 'and is told they keep it and get one more: two tries');
+  check(countType(L.hand, 'possession') === 2 && countType(K.hand, 'possession') === 1, 'the victim holds two; the one who passed it still has their second try');
 }
 {
   // Possession blocked by a Lantern.
@@ -636,7 +640,7 @@ console.log('\ntrade and possession');
   check(t.lanternsBurned === 1, 'the trade reports one Lantern burned');
   check(K.knows.has(V.id), 'the defender privately learns who tried');
   check(t.received[K.id] === null && t.received[V.id] === null, 'neither side received anything');
-  check(countType(V.hand, 'possession') === 1, 'the possessed side is down to one Possession card');
+  check(countType(V.hand, 'possession') === rules.possessionSupply - 1, 'the possessed side is down one Possession card');
   check(K.notes.some(n => n.includes(V.name)), 'the defender’s private note names the attacker');
 }
 {
@@ -724,7 +728,7 @@ console.log('\ntrade and possession');
   // Possession cards never count and are hidden from the public count.
   const s = hs(19);
   const V = possessed(s);
-  check(countableCount(V.hand) === 4 && V.hand.length === 6, 'two Possession cards, public count still 4');
+  check(countableCount(V.hand) === 4 && V.hand.length === 4 + rules.possessionSupply, 'the Possession cards do not count: the count is still 4');
   check(overHandLimit(V) === 0, 'they never push a hand over the limit');
   V.hand.push({ id: 'x2', type: 'lantern' }, { id: 'x3', type: 'lantern' }, { id: 'x4', type: 'lantern' });
   check(countableCount(V.hand) === 7 && overHandLimit(V) === 1, 'seven ordinary cards (Lanterns included) must come down to 6');
@@ -896,15 +900,16 @@ console.log('\nhand limit: settled only at the end of your turn');
   // Possession cards are never discarded and never counted.
   const s = hs(26), V = possessed(s);
   V.hand = [...Array.from({ length: 8 }, (_, i) => ({ id: `v${i}`, type: 'bandage' })), ...V.hand.filter(c => c.type === 'possession')];
-  check(countType(V.hand, 'possession') === 2 && overHandLimit(V) === 2, '8 ordinary cards + 2 Possession cards: 2 over (Possession cards do not count)');
+  const NP = rules.possessionSupply;
+  check(countType(V.hand, 'possession') === NP && overHandLimit(V) === 2, `8 ordinary cards + ${NP} Possession cards: 2 over (Possession cards do not count)`);
   const pc = V.hand.find(c => c.type === 'possession');
-  check(!discardCard(s, V, pc.id).ok && countType(V.hand, 'possession') === 2, 'a Possession card can never be discarded');
+  check(!discardCard(s, V, pc.id).ok && countType(V.hand, 'possession') === NP, 'a Possession card can never be discarded');
   // Ending the turn: refused at 8 ordinary cards; at 6 ordinary + 2 Possession cards it passes.
   s.activeIndex = V.index;
   check(endTurn(s, floor).reason === 'overHandLimit' && s.activeIndex === V.index, 'the possessed guest with 8 ordinary cards cannot end the turn either');
   discardCard(s, V, 'v0'); discardCard(s, V, 'v1');
-  check(canEndTurn(s).ok && endTurn(s, floor).ok && s.activeIndex !== V.index && countType(V.hand, 'possession') === 2,
-    'with 6 ordinary cards + 2 Possession cards the turn passes (Possession cards never count)');
+  check(canEndTurn(s).ok && endTurn(s, floor).ok && s.activeIndex !== V.index && countType(V.hand, 'possession') === NP,
+    `with 6 ordinary cards + ${NP} Possession cards the turn passes (Possession cards never count)`);
 }
 
 // ================================================================================================

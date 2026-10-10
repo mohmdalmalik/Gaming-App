@@ -1189,3 +1189,13 @@ Target: `docs/art-reference.jpg` (style, palette and finish; not its layout or i
   is now a barely visible dark-plum corner shadow (red screen edges read as "you are hurt" in games).
   `--evil` (violet) is kept only for the Possession card itself. The reference's ring icon and split
   floor ring were deliberately left out (owner: ignore them for now).
+
+## Owner-approved (10 Oct 2026): 3 Possession cards; a newly possessed guest gets two tries
+- The possessed guest starts with **3** Possession cards again (`rules.possessionSupply`, was 2 from 7 Oct).
+- A guest who becomes possessed keeps the card that possessed them **and receives one extra** Possession
+  card (`rules.possessionOnConvert = 1`): two tries; each guest they possess gets two tries the same way. The
+  extra card is new (made in `resolveTrade`, src/game/actions.js — never taken from anyone, never from the
+  deck). A Lantern block still discards the card used and the Lantern. The trade events say how many extra
+  cards came (`events.possessed[].extra`, and the private `possessed` event), so the interface and the bots
+  can show / use them. Approved from a before/after list in the chat; docs/GAME_RULES.md updated with the
+  approved wording. Reason: in play against bots the possessed side felt very hard to win.

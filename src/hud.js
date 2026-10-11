@@ -3,8 +3,9 @@
 // buttons (with costs / reasons), a move-confirm bar and toasts. (The hand is src/ui/handFan.js;
 // searching is the icon over the room's search spot, src/ui/searchSpot.js.) Portraits are
 // illustrated placeholders (see ui/portrait.js) so real art can drop in later without changing
-// this logic. Possession is never revealed on the public strip, and neither is how many cards anyone
-// holds (docs/GAME_RULES.md > Possession: card counts are private).
+// this logic. Possession is never revealed on the public strip (only a possessed player sees red eyes
+// on the guests they KNOW are possessed: src/ui/allies.js), and neither is how many cards anyone holds
+// (docs/GAME_RULES.md > Possession: card counts are private).
 //
 // The panel, the hand and the buttons are the VIEWER's — the person looking at the screen
 // (state.viewerIndex: in practice the only guest; in a match the player, whose seat is random). On the
@@ -16,6 +17,7 @@ import { rules } from './data/rules.js';
 import { countableCount } from './game/cards.js';
 import { makePortrait } from './ui/portrait.js';
 import { soulsHeld, soulsChip } from './ui/souls.js';
+import { redEyedAllies } from './ui/allies.js';
 import { roundLabel, finalRoundShort, isFinal } from './ui/roundLabel.js';
 
 // The room-job button (Infirmary, Switchboard): its label, what it does for its cost, and a plain
@@ -94,7 +96,7 @@ export function createHud(doc, cfg) {
       cell.style.setProperty('--player-color', p.color);
       const flag = doc.createElement('div'); flag.className = 'mini-flag';
       const port = doc.createElement('div'); port.className = 'mini-portrait';
-      port.appendChild(makePortrait(doc, p, { possessed: false })); // never reveal roles here
+      port.appendChild(makePortrait(doc, p, { possessed: false })); // never reveal roles here (but see `red` below)
       const name = doc.createElement('div'); name.className = 'mini-name'; name.textContent = p.name;
       // A match: who is playing that guest — "You", or the computer guest's online-style name.
       if (p.handle) { name.title = p.handle; const h = doc.createElement('span'); h.className = 'mini-user'; h.textContent = p.handle; name.appendChild(h); }
@@ -108,7 +110,7 @@ export function createHud(doc, cfg) {
       where.append(room, stats);
       cell.append(flag, port, name, where);
       el.strip.appendChild(cell);
-      return { cell, flag, where, room, stats };
+      return { cell, flag, where, room, stats, port, red: false };
     });
   }
 
@@ -237,7 +239,12 @@ export function createHud(doc, cfg) {
       // Top strip: current-turn + next-player indicators.
       if (!mini || mini.length !== state.players.length) buildStrip(state);
       const nextIdx = !state.finished && next ? next.index : -1;
+      // Red eyes on the guests the player KNOWS are possessed, while possessed themselves (approved;
+      // src/ui/allies.js): the player's own screen only, from what they know, never from a real role.
+      const allies = redEyedAllies(state, p);
       state.players.forEach((q, i) => {
+        const red = allies.has(q.id);
+        if (mini[i].red !== red) { mini[i].red = red; mini[i].port.replaceChildren(makePortrait(doc, q, { possessed: red })); mini[i].cell.classList.toggle('ally', red); }
         const active = i === state.activeIndex && !state.finished;
         const out = !!state.escaped?.has(q.id);
         mini[i].cell.classList.toggle('active', active);
@@ -301,7 +308,7 @@ export function createHud(doc, cfg) {
       const sk = on ? `${p.index}:${soulsHeld(p)}` : '';
       if (sk !== soulsKey) {
         soulsKey = sk;
-        el.souls.replaceChildren(...(on ? [soulsChip(doc, soulsHeld(p), { compact: true })] : []));
+        el.souls.replaceChildren(...(on ? [soulsChip(doc, soulsHeld(p), { compact: true, owner: p.id })] : []));
       }
     },
     // End turn's second line: "Discard N first" (the player's own card count), or who is next. Cheap

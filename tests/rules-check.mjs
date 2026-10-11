@@ -19,6 +19,7 @@ import {
 } from '../src/game/actions.js';
 import { buildGrid, nearestWalkable } from '../src/game/grid.js';
 import { buildAllowed, planMove } from '../src/game/moves.js';
+import { knownPossessed, knowsIsPossessed } from '../src/game/knowledge.js';
 
 let failures = 0;
 const check = (cond, msg) => { console.log((cond ? '  ok   ' : '  FAIL ') + msg); if (!cond) failures++; };
@@ -52,6 +53,10 @@ const S_active = s => activePlayer(s);
 // Make one guest (not `keep`) the only possessed guest, so nobody else converts anyone in a staging.
 const possessedFix = (s, keep) => { s.players.forEach(p => { p.possessed = false; }); s.players.find(p => p !== keep).possessed = true; };
 const cleanOnes = s => s.players.filter(p => !p.possessed);
+// Soul cards: every Possession card a guest holds is their own; a used-up one is nowhere in the game.
+const ownsAll = p => p.hand.every(c => c.type !== 'possession' || c.owner === p.id);
+const inGame = (s, cardId) => s.players.some(p => p.hand.some(c => c.id === cardId)) || s.drawPile.some(c => c.id === cardId)
+  || s.discardPile.some(c => c.id === cardId) || [...s.roomDrops.values()].some(d => d.some(c => c.id === cardId));
 const deckTotal = Object.values(rules.deck).reduce((a, b) => a + b, 0);
 
 console.log('configuration (docs/GAME_RULES.md)');
@@ -63,7 +68,8 @@ check(rules.turnTimerSeconds === 45 && rules.turnTimerEnabled === true, 'hot-sea
 check(rules.maxHealth === 4 && rules.bandageHeal === 1, '4 health bars; a Bandage restores 1');
 check(rules.healthEnabled && rules.combatEnabled && rules.lockedDoorsEnabled && rules.darkRoomsRequireLight, 'health, combat, locked doors and dark rooms are ON');
 check(rules.possessionSupply === 3, 'the Possessed guest starts with 3 Possession cards (approved 10 Oct 2026)');
-check(rules.possessionOnConvert === 1, 'a guest who becomes possessed receives 1 extra Possession card: two tries (approved 10 Oct 2026)');
+check(rules.soulsOnConvert === 2 && !('possessionOnConvert' in rules),
+  'a guest who becomes possessed gets 2 souls of their own: two tries (soul cards, approved 10 Oct 2026)');
 check(rules.lanternsToEscape === 3, 'three Lanterns let a clean guest escape');
 check(!('keyPieces' in rules) && !['bow', 'shank', 'bit'].some(t => t in rules.cards), 'the key pieces are gone entirely');
 check(rules.lanternBlock === 'discard', 'the game uses the approved rule: a blocking Lantern is used up');
@@ -89,6 +95,8 @@ console.log('\nsetup');
   check(s.players.filter(p => p.possessed).length === 1, 'exactly one is possessed');
   check(countType(possessed(s).hand, 'possession') === 3, 'and holds 3 Possession cards');
   check(cleanOnes(s).every(p => countType(p.hand, 'possession') === 0), 'nobody else holds one');
+  check(possessed(s).hand.filter(c => c.type === 'possession').every(c => c.owner === possessed(s).id),
+    'all three are their own souls: each Possession card carries its owner (soul cards)');
   check(s.players.every(p => countableCount(p.hand) === 4), 'four ordinary cards each');
   check(s.players.every(p => lanternCount(p.hand) === 1 && countableCount(p.hand) - lanternCount(p.hand) === 3),
     'every guest starts with exactly 1 Lantern + 3 other cards');
@@ -603,26 +611,41 @@ console.log('\ntrade and possession');
   check(t.ok && t.swap && K.hand.some(c => c.id === 'v1') && V.hand.some(c => c.id === 'k2'), 'the two cards swap at the same time');
   check(t.received[K.id] === 'knife' && t.received[V.id] === 'bandage', 'each side is told only what THEY received');
   check(!K.possessed, 'an ordinary trade possesses nobody');
-  // Possession without a Lantern.
+  // Possession without a Lantern (soul cards, approved 10 Oct 2026): the card that possessed you is used
+  // up, and you get two souls of your own.
   const pc = V.hand.find(c => c.type === 'possession');
+  check(pc.owner === V.id, "the Possession card given is the giver's own soul");
   K.hand.push({ id: 'k3', type: 'bandage' });
+  const pileBefore = s.discardPile.length + s.drawPile.length;
   const t2 = resolveTrade(s, floor, V, K, pc.id, 'k3');
-  check(t2.ok && K.possessed && K.roleChangePending, 'receiving a Possession card without giving a Lantern possesses you');
-  check(K.hand.some(c => c.id === pc.id), 'and you keep that Possession card');
-  check(countType(K.hand, 'possession') === 2 && t2.possessed[0].extra === 1, '...and receive one more: two Possession cards, two tries (approved rule)');
-  check(countType(V.hand, 'possession') === rules.possessionSupply - 1, 'the giver is down one card (the extra one is new, not taken from anyone)');
+  check(t2.ok && K.possessed && K.roleChangePending && K.convertedBy === V.id, 'receiving a Possession card without giving a Lantern possesses you');
+  check(!K.hand.some(c => c.id === pc.id) && !V.hand.some(c => c.id === pc.id) && !inGame(s, pc.id)
+    && s.discardPile.length + s.drawPile.length === pileBefore, 'the card that possessed you is used up: it leaves the game (not the discard pile, not the deck)');
+  const kSouls = K.hand.filter(c => c.type === 'possession');
+  check(kSouls.length === rules.soulsOnConvert && kSouls.length === 2 && kSouls.every(c => c.owner === K.id) && t2.possessed[0].souls === 2
+    && t2.possessed[0].newly === K.id && t2.possessed[0].by === V.id, 'you get exactly two souls, both your own (owner: you): two tries');
+  check(countType(V.hand, 'possession') === rules.possessionSupply - 1 && ownsAll(V), 'the giver is down one try (the new souls are new cards, not taken from anyone)');
   check(V.hand.some(c => c.id === 'k3'), 'the possessed giver keeps what you gave');
-  check(K.notes.some(n => /POSSESSED/.test(n)), 'you are told privately');
-  check(!s.log.some(l => /POSSESS/i.test(l.text)), 'the public log says nothing about it');
-  // The chain (docs/GAME_RULES.md > Possession): the new possessed guest has two tries (the card that
-  // possessed them + one more); a guest they possess gets two tries in turn.
+  check(t2.received[K.id] === 'possession' && t2.received[V.id] === 'bandage' && !t2.spent.length && !t2.blocks.length && !t2.swap,
+    "the result: the receiver was reached by a Possession card, the giver got the receiver's card; nothing spent, nothing blocked");
+  check(K.inbox.some(e => e.type === 'possessed' && e.by === V.index && e.souls === 2) && V.inbox.some(e => e.type === 'converted' && e.who === K.index)
+    && K.inbox.findLast(e => e.type === 'traded')?.got === 'possession' && V.inbox.findLast(e => e.type === 'traded')?.got === 'bandage',
+    'privately: "possessed" { by, souls } to you, "converted" { who } to the giver, each "traded" with what they got');
+  check(K.notes.includes(`You received a Possession card from ${V.name}. You are now POSSESSED: their card is used up, and you get two souls of your own: two tries to possess others in a trade.`),
+    'you are told privately, in plain words');
+  check(V.notes.includes(`${K.name} is now possessed.`), 'the giver is told too');
+  check(!s.log.some(l => /POSSESS|soul|spent/i.test(l.text)) && s.log.at(-1).text === `${V.name} and ${K.name} traded.`, 'the public log says only that they traded');
+  // The chain (docs/GAME_RULES.md > Possession): the new possessed guest possesses with their own souls; a
+  // guest they possess gets two souls of their own in turn.
   const L = cleanOnes(s).find(q => q !== K && !q.possessed);
   L.currentRoom = K.currentRoom; L.hand.push({ id: 'l3', type: 'bandage' });
-  const t3 = resolveTrade(s, floor, K, L, pc.id, 'l3');
-  check(t3.ok && L.possessed && L.hand.some(c => c.id === pc.id) && !K.hand.some(c => c.id === pc.id),
-    'the chain: the newly possessed guest passes that same card on, and their victim keeps it in turn');
-  check(L.notes.some(n => /keep that card and get one more: two tries/.test(n)), 'and is told they keep it and get one more: two tries');
-  check(countType(L.hand, 'possession') === 2 && countType(K.hand, 'possession') === 1, 'the victim holds two; the one who passed it still has their second try');
+  const ks = kSouls[0];
+  const t3 = resolveTrade(s, floor, K, L, ks.id, 'l3');
+  check(t3.ok && L.possessed && L.convertedBy === K.id && !inGame(s, ks.id), 'the chain: the newly possessed guest possesses someone with one of their own souls, which is used up');
+  check(countType(L.hand, 'possession') === 2 && ownsAll(L) && L.notes.some(n => /their card is used up, and you get two souls of your own: two tries/.test(n)),
+    'their victim gets two souls of their own, and is told so');
+  check(countType(K.hand, 'possession') === 1 && ownsAll(K), 'the one who passed it still has their second try');
+  check(s.players.every(ownsAll), "nobody ever holds anyone else's soul");
 }
 {
   // Possession blocked by a Lantern.
@@ -642,6 +665,161 @@ console.log('\ntrade and possession');
   check(t.received[K.id] === null && t.received[V.id] === null, 'neither side received anything');
   check(countType(V.hand, 'possession') === rules.possessionSupply - 1, 'the possessed side is down one Possession card');
   check(K.notes.some(n => n.includes(V.name)), 'the defender’s private note names the attacker');
+  check(knownPossessed(s, K).has(V.id) && !knownPossessed(s, V).has(K.id), 'knownPossessed: the blocker knows who tried; the one blocked learns nothing about the blocker');
+}
+// Soul cards (approved 10 Oct 2026): a staged chain for the checks below. V (the first possessed guest)
+// possesses K, then K possesses L; M stays clean. All four stand in corridorE with a few ordinary cards.
+function soulChain(seed) {
+  const s = hs(seed);
+  const V = possessed(s), [K, L, M] = cleanOnes(s);
+  for (const X of [V, K, L, M]) {
+    X.currentRoom = 'corridorE';
+    X.hand = [...X.hand.filter(c => c.type === 'possession'), ...['bandage', 'knife', 'flashlight', 'espresso'].map(type => ({ id: `${X.index}-${type}`, type }))];
+  }
+  const soul = X => X.hand.find(c => c.type === 'possession');
+  resolveTrade(s, floor, V, K, soul(V).id, `${K.index}-bandage`);
+  resolveTrade(s, floor, K, L, soul(K).id, `${L.index}-bandage`);
+  return { s, V, K, L, M, soul };
+}
+const noPronoun = texts => texts.every(t => !/\b(he|she|his|her|him|hers)\b/i.test(t));
+{
+  // A Possession card handed to a guest who is already possessed (they gave an ordinary card): the card is
+  // used up. The giver loses that try but still gets the card they were given; the other gains nothing.
+  const { s, V, L, soul } = soulChain(33);
+  check(V.possessed && L.possessed && !V.knows.has(L.id) && !L.knows.has(V.id) && !knownPossessed(s, V).has(L.id) && !knownPossessed(s, L).has(V.id),
+    '(staged: V possessed K, K possessed L; V and L know nothing of each other)');
+  const p2 = soul(V), vSouls = countType(V.hand, 'possession');
+  const lHand = L.hand.map(c => c.id).filter(id => id !== `${L.index}-knife`).sort().join();
+  const [vn, ln, vi, li] = [V.notes.length, L.notes.length, V.inbox.length, L.inbox.length];
+  const t = resolveTrade(s, floor, V, L, p2.id, `${L.index}-knife`);
+  check(t.ok && t.spent.length === 1 && t.spent[0].by === V.id && t.spent[0].at === L.id && !t.possessed.length && !t.blocks.length && !t.swap,
+    'a soul handed to a guest already possessed is spent (the result lists it: spent [{ by, at }])');
+  check(!inGame(s, p2.id), 'the card is used up: it leaves the game');
+  check(countType(V.hand, 'possession') === vSouls - 1 && ownsAll(V), 'the giver loses that try');
+  check(V.hand.some(c => c.id === `${L.index}-knife`) && t.received[V.id] === 'knife', 'but still gets the card they were given');
+  check(t.received[L.id] === null && L.hand.map(c => c.id).sort().join() === lHand && countType(L.hand, 'possession') === 2 && ownsAll(L),
+    'the other guest gains nothing: no card arrives, and they still hold their own two souls');
+  check(V.knows.has(L.id) && L.knows.has(V.id), 'each now knows the other is possessed');
+  check(knownPossessed(s, V).has(L.id) && knownPossessed(s, L).has(V.id), 'knownPossessed: each now knows the other');
+  check(L.inbox.slice(li).some(e => e.type === 'soulSpent' && e.by === V.index) && V.inbox.slice(vi).some(e => e.type === 'alreadyPossessed' && e.who === L.index),
+    'privately: "soulSpent" { by } to the receiver, "alreadyPossessed" { who } to the giver');
+  check(L.inbox.slice(li).find(e => e.type === 'traded')?.got === null && V.inbox.slice(vi).find(e => e.type === 'traded')?.got === 'knife',
+    "the receiver's trade record says they got nothing; the giver's says what they got");
+  const lNote = L.notes.slice(ln), vNote = V.notes.slice(vn);
+  check(lNote.join('|') === `${V.name} handed you their soul, but you already belong to the hotel: it is spent. ${V.name} is possessed too.`, `the receiver's note: "${lNote.join('|')}"`);
+  check(vNote.join('|') === `${L.name} already belongs to the hotel: your soul is spent. ${L.name} is possessed too.`, `the giver's note: "${vNote.join('|')}"`);
+  check(noPronoun([...lNote, ...vNote]), 'the notes use names, never he or she');
+  check(s.log.at(-1).text === `${V.name} and ${L.name} traded.`, 'the public log: only that they traded');
+}
+{
+  // Two possessed guests both hand over a Possession card: both are used up, each loses one try, and each
+  // now knows the other is possessed.
+  const { s, V, L, soul } = soulChain(34);
+  const vs = soul(V), ls = soul(L);
+  const vN = countType(V.hand, 'possession'), lN = countType(L.hand, 'possession');
+  const vHand = V.hand.filter(c => c.id !== vs.id).map(c => c.id).sort().join(), lHand = L.hand.filter(c => c.id !== ls.id).map(c => c.id).sort().join();
+  const [vn, ln, vi, li] = [V.notes.length, L.notes.length, V.inbox.length, L.inbox.length];
+  const t = resolveTrade(s, floor, L, V, ls.id, vs.id);
+  check(t.ok && t.spent.length === 2 && t.spent.some(x => x.by === L.id && x.at === V.id) && t.spent.some(x => x.by === V.id && x.at === L.id)
+    && !t.possessed.length && !t.blocks.length && !t.swap, 'both hand over a soul: both are spent');
+  check(!inGame(s, vs.id) && !inGame(s, ls.id), 'both cards are used up: they leave the game');
+  check(countType(V.hand, 'possession') === vN - 1 && countType(L.hand, 'possession') === lN - 1, 'each loses one try');
+  check(t.received[V.id] === null && t.received[L.id] === null && V.hand.map(c => c.id).sort().join() === vHand && L.hand.map(c => c.id).sort().join() === lHand,
+    'nobody receives anything');
+  check(V.knows.has(L.id) && L.knows.has(V.id) && knownPossessed(s, V).has(L.id) && knownPossessed(s, L).has(V.id), 'each now knows the other is possessed');
+  check(V.inbox.slice(vi).some(e => e.type === 'soulsCrossed' && e.with === L.index) && L.inbox.slice(li).some(e => e.type === 'soulsCrossed' && e.with === V.index)
+    && [V, L].every((X, k) => X.inbox.slice(k ? li : vi).find(e => e.type === 'traded')?.got === null), 'privately: "soulsCrossed" { with } to each; each trade record says nothing arrived');
+  const lNote = L.notes.slice(ln), vNote = V.notes.slice(vn);
+  check(lNote.join('|') === `You both handed over a soul: both are spent. ${V.name} is possessed too.`
+    && vNote.join('|') === `You both handed over a soul: both are spent. ${L.name} is possessed too.`, `each is told: "${lNote.join('|')}"`);
+  check(noPronoun([...lNote, ...vNote]) && s.log.at(-1).text === `${L.name} and ${V.name} traded.`, 'names, not he or she; the public log says only that they traded');
+}
+{
+  // A Lantern blocks whatever the blocker's own role, and the blocker learns who tried.
+  const { s, V, L, soul } = soulChain(35);
+  L.hand.push({ id: 'll', type: 'lantern' });
+  const vs = soul(V);
+  const t = resolveTrade(s, floor, V, L, vs.id, 'll');
+  check(t.ok && t.blocks.length === 1 && t.blocks[0].blocker === L.id && t.blocks[0].revealed === V.id && !t.spent.length && !t.possessed.length,
+    'a possessed guest who hands over a Lantern blocks a Possession card too');
+  check(!inGame(s, vs.id) && s.discardPile.some(c => c.id === 'll') && t.received[V.id] === null && t.received[L.id] === null,
+    'both cards burn: the soul leaves the game, the Lantern goes to the discard pile, nobody receives anything');
+  check(L.knows.has(V.id) && knownPossessed(s, L).has(V.id), 'the blocker learns who tried');
+  check(!V.knows.has(L.id) && !knownPossessed(s, V).has(L.id), "the one blocked learns nothing about the blocker's role");
+  check(L.inbox.some(e => e.type === 'blockedThem' && e.who === V.index) && V.inbox.some(e => e.type === 'blocked' && e.by === L.index), 'privately: blockedThem / blocked, as before');
+}
+{
+  // Only a soul's owner can give it.
+  const { s, V, K, M, soul } = soulChain(36);
+  const vs = soul(V);
+  // (impossible in play — a guest never holds another guest's soul — staged to show the rules refuse it)
+  V.hand.splice(V.hand.indexOf(vs), 1); K.hand.push(vs);
+  check(!tradeableCards(K).some(c => c.id === vs.id) && tradeableCards(K).some(c => c.type === 'possession' && c.owner === K.id),
+    'a possessed guest may give only their own souls');
+  const before = JSON.stringify([K.hand, M.hand]);
+  check(resolveTrade(s, floor, K, M, vs.id, `${M.index}-knife`).reason === 'illegal' && JSON.stringify([K.hand, M.hand]) === before,
+    "the rules refuse someone else's soul, and nothing changes");
+  M.hand.push({ id: 'mx', type: 'possession', owner: M.id });
+  check(!tradeableCards(M).some(c => c.id === 'mx') && resolveTrade(s, floor, M, K, 'mx', `${K.index}-knife`).reason === 'illegal' && !M.possessed,
+    'a clean guest can never give a Possession card, whoever it belongs to');
+  K.hand.push({ id: 'kx', type: 'possession' });
+  check(!tradeableCards(K).some(c => c.id === 'kx') && resolveTrade(s, floor, K, M, 'kx', `${M.index}-knife`).reason === 'illegal',
+    'a Possession card with no owner is nobody\'s to give');
+}
+{
+  // Souls never count toward the hand limit and can't be discarded: a newly possessed guest's too.
+  const { s, L } = soulChain(37);
+  const souls = L.hand.filter(c => c.type === 'possession');
+  L.hand = [...souls, ...Array.from({ length: 6 }, (_, i) => ({ id: `lf${i}`, type: 'bandage' }))];
+  check(souls.length === 2 && overHandLimit(L) === 0, '6 ordinary cards + 2 souls of their own: not over the limit (souls never count)');
+  L.hand.push({ id: 'lf6', type: 'bandage' });
+  check(overHandLimit(L) === 1, 'a seventh ordinary card: one over');
+  check(discardCard(s, L, souls[0].id).reason === 'undroppable' && countType(L.hand, 'possession') === 2, 'a soul can never be discarded');
+}
+{
+  // A guest who dies takes their souls out of the game.
+  const { s, L, M } = soulChain(38);
+  L.currentRoom = M.currentRoom = 'kitchen'; M.actionPoints = 4; M.hand.push({ id: 'mr', type: 'revolver', shots: 2 }); L.health = 2;
+  const souls = L.hand.filter(c => c.type === 'possession').map(c => c.id);
+  const r = resolveAttack(s, floor, M, L, 'mr');
+  const drops = s.roomDrops.get('kitchen') || [];
+  check(r.killed && souls.length === 2 && souls.every(id => !inGame(s, id)), 'a possessed guest who dies takes their souls out of the game: not on the floor, not in any pile');
+  check(drops.length > 0 && !drops.some(c => c.type === 'possession'), 'their ordinary cards drop in the room as usual');
+}
+{
+  // knownPossessed (src/game/knowledge.js): what a guest certainly knows about who is possessed, from their
+  // own record and private events only.
+  const { s, V, K, L, M } = soulChain(39);
+  const ids = X => [...knownPossessed(s, X)].sort().join();
+  check(knownPossessed(s, M).size === 0, 'a clean guest who has seen nothing knows nobody');
+  check(knownPossessed(s, V).has(K.id) && !knownPossessed(s, V).has(L.id), 'the first possessed guest knows whom they possessed, not whom that guest possessed');
+  check(knownPossessed(s, K).has(V.id) && knownPossessed(s, K).has(L.id) && knownPossessed(s, K).size === 2, 'K knows who possessed them and whom they possessed');
+  check(knownPossessed(s, L).has(K.id) && knownPossessed(s, L).size === 1, 'L knows only who possessed them');
+  check(![V, K, L, M].some(X => knownPossessed(s, X).has(X.id)), 'never yourself');
+  check(knowsIsPossessed(s, K, V) && !knowsIsPossessed(s, L, V), 'knowsIsPossessed answers the same for one guest');
+  // A Hand Mirror that shows a Possession card: as a clean guest, and as a possessed guest (whose knows the
+  // engine does not fill in, so only the private event tells).
+  M.hand.push({ id: 'mm', type: 'handMirror' }); L.hand.push({ id: 'lm', type: 'handMirror' }); K.hand.push({ id: 'km', type: 'handMirror' });
+  M.actionPoints = L.actionPoints = K.actionPoints = 4;
+  useHandMirror(s, floor, M, 'mm', L.id);
+  useHandMirror(s, floor, L, 'lm', V.id);
+  useHandMirror(s, floor, K, 'km', M.id);
+  check(knownPossessed(s, M).has(L.id) && knownPossessed(s, L).has(V.id) && !L.knows.has(V.id), 'a Hand Mirror that showed a Possession card: known (clean or possessed)');
+  check(!knownPossessed(s, K).has(M.id), 'a Hand Mirror that showed none: not known');
+  check(!knownPossessed(s, L).has(M.id) && !knownPossessed(s, V).has(L.id), 'being looked at in a Hand Mirror tells nothing');
+  // It never reads another guest's secrets: change everything about the others and the answer is the same.
+  for (const X of [M, L]) {
+    const before = ids(X);
+    const others = s.players.filter(q => q !== X);
+    const saved = others.map(q => ({ knows: q.knows, inbox: q.inbox, convertedBy: q.convertedBy, possessed: q.possessed, notes: q.notes, hand: q.hand }));
+    for (const q of others) {
+      q.knows = new Set([X.id, ...s.players.map(p => p.id)]); q.inbox = [{ type: 'possessed', by: X.index }, { type: 'soulsCrossed', with: X.index }];
+      q.convertedBy = X.id; q.possessed = !q.possessed; q.notes = ['scrambled']; q.hand = [{ id: 'zz', type: 'possession', owner: q.id }];
+    }
+    const after = ids(X);
+    others.forEach((q, i) => Object.assign(q, saved[i]));
+    check(after === before, `it never reads another guest's secrets (${X === M ? 'a clean' : 'a possessed'} guest's answer is unchanged when everyone else's is scrambled)`);
+  }
 }
 {
   // An ORDINARY trade: a Lantern changes hands like any card, so teammates can pool them.
@@ -1042,7 +1220,7 @@ console.log('\nLinen Store');
   const s = hs(204); setRoles(s, 0);
   const V = s.players[0];
   standIn(s, V, 'linenStore1');
-  V.hand = [...filler(4), { id: 'pz1', type: 'possession' }, { id: 'pz2', type: 'possession' }];
+  V.hand = [...filler(4), { id: 'pz1', type: 'possession', owner: V.id }, { id: 'pz2', type: 'possession', owner: V.id }];
   const r = search(s, floor, V);
   check(r.ok && r.cards.length === 2 && r.over === 0 && r.cards.every(c => V.hand.includes(c)),
     'a possessed guest with 4 ordinary cards + 2 Possession cards keeps both (Possession cards do not count)');
@@ -1176,7 +1354,7 @@ console.log('\nHand Mirror');
   const s = hs(212); setRoles(s, 1);
   const A = s.players[0], V = s.players[1], K = s.players[2];
   for (const q of [A, V, K]) standIn(s, q, 'corridorE');
-  V.hand = [{ id: 'vk', type: 'knife' }, { id: 'vl', type: 'lantern' }, { id: 'vp1', type: 'possession' }, { id: 'vp2', type: 'possession' }];
+  V.hand = [{ id: 'vk', type: 'knife' }, { id: 'vl', type: 'lantern' }, { id: 'vp1', type: 'possession', owner: V.id }, { id: 'vp2', type: 'possession', owner: V.id }];
   A.hand = [{ id: 'hm1', type: 'handMirror' }, { id: 'hm2', type: 'handMirror' }, { id: 'hm3', type: 'handMirror' }];
   const vBefore = ids(V.hand);
   const r = useHandMirror(s, floor, A, 'hm1', V.id);

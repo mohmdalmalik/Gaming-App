@@ -72,7 +72,7 @@ export function createHandoff(doc) {
     // POSSESSED pill with its brass and crimson edge).
     el.role.innerHTML = `<span class="role-word tell-pill">${player.possessed ? 'POSSESSED' : 'CLEAN GUEST'}</span>`
       + `<span class="role-line">${player.possessed
-        ? 'In a trade, give a Possession card to possess the other guest — unless they hand you a Lantern: then both cards are used up and they learn you are possessed. You can never escape.'
+        ? 'Your Possession cards are your own souls. Give one in a trade to possess the other guest — unless they hand you a Lantern: then both cards are used up and they learn you are possessed. You can never escape.'
         : `Find Lanterns, pass them to one clean guest, and get that guest out through the Fire Exit with ${rules.lanternsToEscape} Lanterns. Give a Lantern in a trade if you fear who you are trading with — it blocks possession, but is used up doing it.`}</span>`;
     if (!player.possessed) return;
     // The private tell (docs/GAME_RULES.md, Possession), as the crimson plate: their own possessed
@@ -89,7 +89,7 @@ export function createHandoff(doc) {
     const badge = doc.createElement('div'); badge.className = 'tell-badge possessed';
     const caption = doc.createElement('span'); caption.className = 'tell-note'; caption.textContent = 'Only you can see this';
     badge.append(word, caption);
-    head.append(badge, soulsChip(doc, soulsHeld(player)));
+    head.append(badge, soulsChip(doc, soulsHeld(player), { owner: player.id }));
     text.append(head, ...rest);
     const port = doc.createElement('div'); port.className = 'role-portrait';
     port.appendChild(makePortrait(doc, player, { possessed: true }));
@@ -109,8 +109,8 @@ export function createHandoff(doc) {
 
   function renderHand(player) {
     el.hand.hidden = false;
-    // Possession cards are one stack with a ×N badge (all the same card; the count is what matters,
-    // and it keeps a full hand on one screen with the Start button).
+    // Possession cards are one stack with a ×N badge (all your own souls, with your face; the count is
+    // what matters, and it keeps a full hand on one screen with the Start button).
     const souls = player.hand.filter(c => c.type === 'possession');
     const cards = [...souls.slice(0, 1), ...countableCards(player.hand)];
     if (!cards.length) { el.hand.innerHTML = '<div class="panel-note">No cards.</div>'; return; }
@@ -146,7 +146,9 @@ export function createHandoff(doc) {
       reset('role');
       el.kicker.textContent = opts?.changed ? 'Something has changed' : 'Your secret role';
       el.title.textContent = opts?.changed ? 'You have been possessed' : player.name;
-      el.sub.textContent = opts?.changed ? 'Nobody else knows. From now on you play for the hotel.' : 'Only you know this. Nobody else at the table can see it.';
+      // (after a conversion, the guest whose soul did it knows too: their screen shows the player's red eyes)
+      el.sub.textContent = !opts?.changed ? 'Only you know this. Nobody else at the table can see it.'
+        : opts.by ? `Only ${opts.by}, whose soul possessed you, knows. From now on you play for the hotel.` : 'From now on you play for the hotel.';
       renderRole(player);
       renderNotes(player);
       show('I understand', onContinue);
@@ -184,8 +186,17 @@ export function createHandoff(doc) {
         show(onCancel ? (cancelLabel || 'Continue') : 'Continue', onCancel || (() => onPick(null)));
         return;
       }
-      for (const c of cards) {
-        el.pickCards.appendChild(cardTile(doc, c, { hideDesc: true, selectable: true, onSelect: (card, _tile, e) => { if (tooSoon(e, openedAt)) return; api.close(); onPick(card.id); } }));
+      // Your souls are one tile with a ×N badge, as in your hand (they are all yours, with your face, and
+      // any one of them does the same): a tap gives one. A full hand stays on one row.
+      const souls = cards.filter(c => c.type === 'possession');
+      for (const c of cards.filter(c => c.type !== 'possession' || c === souls[0])) {
+        const tile = cardTile(doc, c, { hideDesc: true, selectable: true, onSelect: (card, _tile, e) => { if (tooSoon(e, openedAt)) return; api.close(); onPick(card.id); } });
+        if (c.type === 'possession' && souls.length > 1) {
+          const b = doc.createElement('span'); b.className = 'face-badge souls'; b.textContent = `×${souls.length}`;
+          b.setAttribute('aria-label', `${souls.length} Possession cards`);
+          tile.querySelector('.face-img')?.appendChild(b);
+        }
+        el.pickCards.appendChild(tile);
       }
       if (onCancel) show(cancelLabel || 'Cancel', onCancel); else el.next.hidden = true, el.overlay.hidden = false;
     },

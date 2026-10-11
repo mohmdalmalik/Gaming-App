@@ -305,10 +305,12 @@ export function useSwitchboard(state, floor, player) {
 }
 
 // --- Trade ------------------------------------------------------------------------------------
-// Which cards a guest may give: a clean guest can never give a Possession card; the possessed
-// side may give anything.
+// Which cards a guest may give: a clean guest can never give a Possession card; a possessed guest
+// may give anything, but a Possession card only if it is their own soul (card.owner: soul cards,
+// approved 10 Oct 2026 — and they never hold anyone else's).
+export const mayGive = (player, card) => card.type !== 'possession' || (player.possessed && card.owner === player.id);
 export function tradeableCards(player) {
-  return player.hand.filter(c => player.possessed || c.type !== 'possession');
+  return player.hand.filter(c => mayGive(player, c));
 }
 
 // Whether P and Q can trade at all. GAME_RULES (Trade), owner-approved: "If either guest has no
@@ -343,38 +345,62 @@ export function skipTrade(state, floor, P, Q) {
   return { ok: true, skipped: true, empty: gate.empty, notes };
 }
 
+// The end of a newly possessed guest's private note: "two souls of your own: two tries to possess
+// others in a trade." (the number from rules.soulsOnConvert).
+const WORD = ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine'];
+function soulsOfYourOwn(n) {
+  const w = WORD[n] ?? String(n);
+  if (!n) return 'no souls of your own.';
+  return `${w} soul${n === 1 ? '' : 's'} of your own: ${w} ${n === 1 ? 'try' : 'tries'} to possess others in a trade.`;
+}
+
 // Both guests chose secretly; the cards swap at the same time. P entered the room and gives
 // cardIdP; Q gives cardIdQ. Results are PRIVATE — the returned `received` map says what each
-// side gets to see, and `notes` carries the two private consequences (a block, a conversion).
+// side gets to see, and `notes` carries the private consequences (a block, a conversion, a spent soul).
 //
-//   An ordinary trade: a Lantern changes hands like any other card.
-//   Receive a Possession card without giving a Lantern -> possessed; you keep the card AND receive
-//     rules.possessionOnConvert (1) extra Possession cards (the chain, docs/GAME_RULES.md > Possession:
-//     two tries; every guest you possess gets two tries the same way).
-//   Receive a Possession card while giving a Lantern  -> the attempt fails and the Lantern is used
-//     up: the Lantern and the Possession card are both discarded, and you learn who tried.
-//     (rules.lanternBlock 'attacker' is a comparison variant for the simulator only: the Lantern
-//     goes to the possessed guest instead.)
+// Soul cards (approved 10 Oct 2026, docs/GAME_RULES.md > Trade and Possession): every Possession card is
+// its holder's own soul (card.owner), and only its owner can give it. A Possession card that has done its
+// work is USED UP: it leaves the game (never the discard pile, never the deck).
+//   An ordinary trade: the cards swap; a Lantern changes hands like any other card.
+//   Receive a Possession card without giving a Lantern, while clean -> possessed: the card that possessed
+//     you is used up and you get rules.soulsOnConvert (2) souls of your own: two tries (the chain: every
+//     guest you possess gets two tries the same way). The giver gets your card.
+//   Receive a Possession card while giving a Lantern, whatever your own role -> the attempt fails and the
+//     Lantern is used up: the Lantern and the Possession card are both discarded, and you learn who tried.
+//     (rules.lanternBlock 'attacker' is a comparison variant for the simulator only: the Lantern goes to
+//     the possessed guest instead.)
+//   Receive a Possession card while already possessed, giving an ordinary card -> the soul is spent: the
+//     giver loses that try but still gets your card; you gain nothing. Each now knows the other is possessed.
+//   Both hand over a Possession card -> both souls are spent (each loses one try, nobody receives anything),
+//     and each now knows the other is possessed.
+//
+// Returns { ok, given, received, possessed: [{ newly, by, souls }], blocks: [{ blocker, revealed }],
+// spent: [{ by, at }] (a soul used up on a guest who is already possessed: `by` gave it, `at` got it),
+// notes: { playerId: [text] }, swap (an ordinary trade), lanternsBurned (a block), win }. `received` is
+// what actually reached each guest: the card they were given ('possession' for a guest it possessed: it
+// reached them, then was used up), or null where nothing arrived (a block, a spent soul).
 export function resolveTrade(state, floor, P, Q, cardIdP, cardIdQ) {
   if (state.finished) return { ok: false, reason: 'finished' };
   if (!canTrade(P, Q).ok) return { ok: false, reason: 'nothingToGive' };   // skipTrade() instead
   const cP = P.hand.find(c => c.id === cardIdP);
   const cQ = Q.hand.find(c => c.id === cardIdQ);
   if (!cP || !cQ) return { ok: false, reason: 'noCard' };
-  if (cP.type === 'possession' && !P.possessed) return { ok: false, reason: 'illegal' };
-  if (cQ.type === 'possession' && !Q.possessed) return { ok: false, reason: 'illegal' };
+  // (a clean guest's Possession card, or a soul that is not the giver's own)
+  if (!mayGive(P, cP) || !mayGive(Q, cQ)) return { ok: false, reason: 'illegal' };
 
   takeCard(P.hand, cardIdP);
   takeCard(Q.hand, cardIdQ);
   const events = {
     ok: true, given: { [P.id]: cP.type, [Q.id]: cQ.type },
     received: { [P.id]: cQ.type, [Q.id]: cP.type },
-    blocks: [], possessed: [], notes: {},
+    blocks: [], possessed: [], spent: [], notes: {},
   };
   const note = (id, text) => { (events.notes[id] ||= []).push(text); };
   const privately = [];      // [player, private event] — told after the trade's own 'traded' events
+  // Two possessed guests who have just shown each other what they are: each now knows the other.
+  const unmask = (X, Y) => { X.knows.add(Y.id); Y.knows.add(X.id); };
 
-  // One direction of possession: giver G hands `pc`, receiver R handed `rc`.
+  // One direction of possession: giver G hands their soul `pc`, receiver R handed `rc`.
   const passPossession = (G, R, pc, rc) => {
     if (rc.type === 'lantern') {
       // Blocked. The Possession card leaves the game; the Lantern is used up (approved rule) —
@@ -388,31 +414,47 @@ export function resolveTrade(state, floor, P, Q, cardIdP, cardIdQ) {
       events.blocks.push({ blocker: R.id, revealed: G.id });
       privately.push([R, { type: 'blockedThem', who: G.index }], [G, { type: 'blocked', by: R.index }]);
       note(R.id, toAttacker
-        ? `Your Lantern burned away a Possession card. ${G.name} is POSSESSED — only you know.`
-        : `Your Lantern burned away a Possession card and was used up. ${G.name} is POSSESSED — only you know.`);
+        ? `Your Lantern burned away a Possession card. ${G.name} is POSSESSED — now you know.`
+        : `Your Lantern burned away a Possession card and was used up. ${G.name} is POSSESSED — now you know.`);
       note(G.id, `${R.name} blocked you with a Lantern. They now know what you are.`);
+    } else if (!R.possessed) {
+      // Possessed. G keeps whatever R gave; the card that did it is used up (`pc` goes nowhere: it
+      // leaves the game), and R gets souls of their own (approved rule): two tries, new cards from
+      // outside the deck, each with R's own face.
+      G.hand.push(rc);
+      convertToPossessed(state, R, G.id);
+      const souls = Math.max(0, rules.soulsOnConvert | 0);
+      for (let k = 0; k < souls; k++) R.hand.push(makeCard('possession', { owner: R.id }));
+      events.possessed.push({ newly: R.id, by: G.id, souls });
+      privately.push([R, { type: 'possessed', by: G.index, souls }], [G, { type: 'converted', who: R.index }]);
+      note(R.id, `You received a Possession card from ${G.name}. You are now POSSESSED: their card is used up, and you get ${soulsOfYourOwn(souls)}`);
+      note(G.id, `${R.name} is now possessed.`);
     } else {
-      G.hand.push(rc);                                // whatever R gave, G keeps
-      R.hand.push(pc);                                // R keeps the Possession card
-      if (!R.possessed) {
-        convertToPossessed(state, R, G.id);
-        // ...and receives the extra ones (approved rule): two tries in all, new cards from outside the deck
-        const extra = Math.max(0, rules.possessionOnConvert | 0);
-        for (let k = 0; k < extra; k++) R.hand.push(makeCard('possession'));
-        events.possessed.push({ newly: R.id, by: G.id, extra });
-        privately.push([R, { type: 'possessed', by: G.index, extra }], [G, { type: 'converted', who: R.index }]);
-        const tries = 1 + extra;
-        note(R.id, `You received a Possession card from ${G.name}. You are now POSSESSED — you keep that card${extra ? ` and get ${extra === 1 ? 'one more' : `${extra} more`}` : ''}: ${tries === 1 ? 'one try' : `${tries === 2 ? 'two' : tries} tries`} to possess others in a trade.`);
-        note(G.id, `${R.name} is now possessed.`);
-      } else {
-        note(R.id, `${G.name} handed you a Possession card. You already belong to the hotel.`);
-      }
+      // R already belongs to the hotel: the soul is spent on them (it leaves the game). G loses that try
+      // but still gets R's card; R gains nothing. Each now knows the other is possessed.
+      G.hand.push(rc);
+      events.received[R.id] = null;
+      events.spent.push({ by: G.id, at: R.id });
+      unmask(G, R);
+      privately.push([R, { type: 'soulSpent', by: G.index }], [G, { type: 'alreadyPossessed', who: R.index }]);
+      note(R.id, `${G.name} handed you their soul, but you already belong to the hotel: it is spent. ${G.name} is possessed too.`);
+      note(G.id, `${R.name} already belongs to the hotel: your soul is spent. ${R.name} is possessed too.`);
     }
   };
 
-  if (cP.type === 'possession' && cQ.type !== 'possession') passPossession(P, Q, cP, cQ);
-  else if (cQ.type === 'possession' && cP.type !== 'possession') passPossession(Q, P, cQ, cP);
-  else { P.hand.push(cQ); Q.hand.push(cP); events.swap = true; }   // plain swap (or both possessed)
+  const soulP = cP.type === 'possession', soulQ = cQ.type === 'possession';
+  if (soulP && soulQ) {
+    // Two possessed guests both handed over a soul: both are used up (they leave the game), each loses
+    // one try, nobody receives anything, and each now knows the other is possessed.
+    events.received[P.id] = null; events.received[Q.id] = null;
+    events.spent.push({ by: P.id, at: Q.id }, { by: Q.id, at: P.id });
+    unmask(P, Q);
+    privately.push([P, { type: 'soulsCrossed', with: Q.index }], [Q, { type: 'soulsCrossed', with: P.index }]);
+    note(P.id, `You both handed over a soul: both are spent. ${Q.name} is possessed too.`);
+    note(Q.id, `You both handed over a soul: both are spent. ${P.name} is possessed too.`);
+  } else if (soulP) passPossession(P, Q, cP, cQ);
+  else if (soulQ) passPossession(Q, P, cQ, cP);
+  else { P.hand.push(cQ); Q.hand.push(cP); events.swap = true; }   // an ordinary trade
 
   for (const [pid, lines] of Object.entries(events.notes)) {
     const p = state.players.find(q => q.id === pid);
@@ -429,7 +471,7 @@ export function resolveTrade(state, floor, P, Q, cardIdP, cardIdQ) {
 
 // --- Attack ------------------------------------------------------------------------------------
 // Everything a dead guest carried lands on the floor of that room, except their Possession
-// cards, which leave the game with them. Searching the room picks it all up.
+// cards (their own souls), which leave the game with them. Searching the room picks it all up.
 function dropEverything(state, player) {
   const dropped = player.hand.filter(c => c.type !== 'possession');
   player.hand = [];

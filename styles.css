@@ -469,6 +469,7 @@ html, body {
 }
 .confirm-bar[hidden] { display: none; }
 #confirm-text { font-family: var(--serif); font-size: 16px; color: var(--ivory); }
+.confirm-actions { display: flex; gap: 12px; flex: none; }   /* Move and Cancel never part */
 
 /* Toast */
 .toast {
@@ -1465,3 +1466,288 @@ html, body {
 .handoff-card.trade-reveal .modal-actions { transition: opacity 0.35s ease 0.25s, visibility 0s linear 0.25s; }
 .handoff-card.trade-reveal.tr-playing .modal-actions { transition: none; }
 .tr-empty svg { width: 58%; }
+
+/* === Quick chat (src/ui/chat.js) ======================================================================
+   The Chat button beside the Menu button (a match only), its panel of preset lines and emotes under the
+   top-right corner, the speech bubbles over the guests (in the tag layer, under the interface), the chat
+   lines in the feed, and the end screen's row. Brass line drawings, never emoji. */
+.ctl.chat {
+  position: relative; overflow: hidden; height: 44px; min-width: 0; padding: 0 13px 0 10px; gap: 6px;
+  font-family: var(--serif); font-size: 13px; font-weight: 600; letter-spacing: 0.02em; color: var(--ivory-dim);
+  border-radius: 10px; border-color: var(--line);
+}
+.ctl.chat svg { width: 18px; height: 18px; flex: none; color: var(--brass); }
+.ctl.chat[aria-expanded="true"] { background: rgba(40, 32, 14, 0.9); border-color: var(--brass); color: var(--ivory); }
+.ctl.chat:disabled { cursor: default; color: var(--muted); }
+.ctl.chat:disabled svg { color: var(--brass-dim); }
+/* after sending: a thin brass line runs down under the label for the cooldown */
+.ctl.chat.cooling::after {
+  content: ""; position: absolute; left: 10px; right: 10px; bottom: 6px; height: 1.5px; border-radius: 1px;
+  background: var(--brass); transform-origin: left center; animation: chatCool var(--chat-cool, 3000ms) linear forwards;
+}
+@keyframes chatCool { from { transform: scaleX(1); } to { transform: scaleX(0); } }
+
+#hud > .chat-panel { pointer-events: auto; }
+.chat-panel {
+  position: absolute; top: calc(var(--safe-top) + 110px); right: calc(var(--safe-right) + 14px);
+  width: 300px; max-width: calc(100vw - 28px); padding: 10px 10px 11px; border-radius: 14px;
+  background: var(--panel); border: 1px solid var(--line);
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.55), inset 0 0 0 2px var(--line-soft), 0 10px 26px rgba(0, 0, 0, 0.5);
+  -webkit-backdrop-filter: blur(7px); backdrop-filter: blur(7px); animation: chatIn 0.14s ease-out;
+}
+@keyframes chatIn { from { opacity: 0; } to { opacity: 1; } }
+.chat-kicker {
+  display: flex; align-items: center; gap: 8px; margin: 1px 2px 8px;
+  font-size: 10px; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; color: var(--brass);
+}
+.chat-kicker::before, .chat-kicker::after { content: ""; flex: 1; height: 1px; background: linear-gradient(90deg, transparent, var(--line)); }
+.chat-kicker::after { background: linear-gradient(90deg, var(--line), transparent); }
+.chat-phrases { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.chat-phrase {
+  appearance: none; min-height: 44px; padding: 6px 10px; border-radius: 9px; text-align: left; cursor: pointer;
+  background: rgba(255, 255, 255, 0.035); border: 1px solid var(--line-soft); color: var(--ivory);
+  font: 600 14px/1.2 var(--serif); letter-spacing: 0.01em; touch-action: manipulation;
+}
+.chat-phrase:last-child { grid-column: 1 / -1; text-align: center; }
+.chat-phrase:active, .chat-emote:active { background: rgba(201, 162, 78, 0.22); border-color: var(--brass); }
+.chat-emotes { display: flex; justify-content: space-between; margin-top: 9px; padding-top: 9px; border-top: 1px solid var(--line-soft); }
+.chat-emote {
+  appearance: none; width: 44px; height: 44px; padding: 0; border-radius: 50%; cursor: pointer; touch-action: manipulation;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: radial-gradient(circle at 50% 35%, #22252f, #12141b); border: 1px solid var(--line); color: var(--brass-bright);
+}
+.chat-emote svg { width: 27px; height: 27px; display: block; }
+
+/* A speech bubble over the speaker: its tail points down at their head. (Placed by its top-left corner
+   through a transform the script writes, so only opacity is animated here.) */
+.chat-bubble {
+  display: inline-flex; align-items: center; gap: 6px; margin-top: -8px; padding: 5px 11px 5px 8px; border-radius: 12px;
+  background: rgba(16, 18, 26, 0.94); border: 1px solid var(--brass); color: var(--ivory);
+  font: 600 14px/1.25 var(--serif); letter-spacing: 0.01em; box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5);
+  animation: chatIn 0.18s ease-out; transition: opacity 0.3s ease;
+}
+.chat-bubble::after {
+  content: ""; position: absolute; left: 50%; bottom: -6px; width: 10px; height: 10px; margin-left: -5px; transform: rotate(45deg);
+  background: rgba(16, 18, 26, 0.94); border-right: 1px solid var(--brass); border-bottom: 1px solid var(--brass);
+}
+.chat-bubble.mine { border-color: var(--brass-bright); background: rgba(40, 32, 14, 0.94); }
+.chat-bubble.mine::after { border-color: var(--brass-bright); background: rgba(40, 32, 14, 0.94); }
+.chat-bubble.emote { padding: 3px 9px 3px 7px; }
+.chat-bubble.leaving { opacity: 0; }
+.chat-bubble .cb-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.5); }
+.chat-bubble .cb-icon { display: block; color: var(--brass-bright); }
+.chat-bubble .cb-icon svg { width: 26px; height: 26px; display: block; }
+
+/* In the feed: "Henry: Good evening!", the name in brass. */
+.feed-line.chat .feed-who { color: var(--brass-bright); font-weight: 700; }
+.feed-line.chat .feed-icon svg { width: 17px; height: 17px; }
+
+/* The end screen: a one-tap "Good game!" on its own row, and what is said there in the row under it
+   (its height kept from the start, so neither the button nor Main menu / Play again moves as lines come). */
+.end-chat { display: flex; flex-direction: column; align-items: center; gap: 8px; margin: -8px auto 18px; max-width: min(540px, 80vw); }
+.ec-lines { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; min-height: 30px; }
+.ec-say {
+  appearance: none; position: relative; overflow: hidden; display: inline-flex; align-items: center; gap: 7px; height: 44px; padding: 0 16px 0 12px;
+  border-radius: 999px; border: 1px solid var(--line); background: rgba(255, 255, 255, 0.04); color: var(--ivory); cursor: pointer;
+  touch-action: manipulation; font: 600 14px/1 var(--serif); letter-spacing: 0.01em;
+}
+.ec-say:disabled { opacity: 0.5; cursor: default; }
+.ec-say.cooling { opacity: 0.75; }
+.ec-say.cooling::after {
+  content: ""; position: absolute; left: 14px; right: 14px; bottom: 6px; height: 1.5px; border-radius: 1px;
+  background: var(--brass); transform-origin: left center; animation: chatCool var(--chat-cool, 3000ms) linear forwards;
+}
+.ec-line {
+  display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 11px 0 7px; border-radius: 999px;
+  background: rgba(14, 16, 22, 0.8); border: 1px solid var(--line-soft); color: var(--ivory-dim); font-size: 13px;
+  animation: feedIn 0.35s ease both;
+}
+.ec-icon { display: inline-flex; color: var(--brass-bright); }
+.ec-icon svg { width: 16px; height: 16px; display: block; }
+.ec-who { color: var(--brass-bright); font-weight: 700; }
+
+/* Seven Settings rows with Quick chat: the tighter spacing of the Music / Sound block above now applies
+   up to 860 px tall (Done stays on screen on a 1024 x 768 iPad); see also the Tips row below. */
+@media (max-height: 860px) {
+  #menu-settings .menu-h2 { margin-bottom: 10px; font-size: 28px; }
+  #menu-settings .menu-field { margin-bottom: 11px; }
+  #menu-settings .mf-label { margin-bottom: 6px; }
+  #menu-settings .seg-btn { min-height: 44px; }
+  #menu-settings .menu-actions { margin-top: 14px; }
+}
+
+/* ==== Your guest and your record (src/ui/guestPicker.js, src/ui/record.js) ========================
+   The Play with bots screen's "Your guest" row, the main menu's fourth, smaller button, the Your record
+   screen and the quiet record line under the result on the end screen. */
+/* Random and the six guests in one row: the portrait over the name. */
+.seg.guest-row { flex-wrap: nowrap; gap: 5px; }
+.seg-btn.guest-btn {
+  flex: 1 1 0; min-width: 0; min-height: 0; padding: 5px 3px 6px; border-radius: 11px;
+  display: flex; flex-direction: column; align-items: center; gap: 5px; white-space: normal;
+}
+.guest-btn .gb-face {
+  display: block; width: 100%; max-width: 50px; aspect-ratio: 5 / 6; border-radius: 8px; overflow: hidden;
+  background: #1c2131; border: 1px solid var(--line-soft); box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.5);
+}
+.guest-btn .gb-face .portrait-img { object-position: 50% 28%; -webkit-user-drag: none; }
+.guest-btn:not(.on) .gb-face .portrait-img { filter: saturate(0.75) brightness(0.8); }
+.guest-btn .gb-random { display: block; width: 100%; height: 100%; color: var(--brass); }
+.guest-btn.on .gb-random { color: var(--brass-bright); }
+.guest-btn .gb-name {
+  display: block; max-width: 100%; font-family: var(--serif); font-size: 12px; font-weight: 700; line-height: 1.05;
+  letter-spacing: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.guest-btn.on .gb-face { border-color: var(--brass-bright); box-shadow: 0 0 0 1px rgba(232, 202, 128, 0.3), 0 0 12px rgba(232, 202, 128, 0.22); }
+
+/* Main menu: Your record, under Settings and a step smaller. */
+.menu-btn.minor { min-height: 48px; padding: 8px 22px; background: rgba(16, 18, 26, 0.74); border-color: var(--line-soft); }
+.menu-btn.minor .mb-main { font-size: 18px; color: var(--ivory-dim); }
+
+/* The Your record screen: played / won / lost in big brass numerals on a framed plate, the win rate
+   on a rule beneath them, then the split by side and the escapes as quiet rows. */
+.rec-plate {
+  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border-radius: 14px; padding-top: 14px;
+  background: rgba(16, 18, 26, 0.86); border: 1px solid var(--line);
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.55), inset 0 0 0 4px rgba(201, 162, 78, 0.07), 0 10px 28px rgba(0, 0, 0, 0.35);
+}
+.rec-big { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 0 6px 12px; }
+.rec-big + .rec-big { border-left: 1px solid var(--line-soft); }
+.rec-num {
+  font-family: var(--serif); font-size: 44px; font-weight: 700; line-height: 1; font-variant-numeric: lining-nums tabular-nums;
+  background: linear-gradient(180deg, #f6e2a8 0%, #e2bd67 55%, #a8812f 100%); -webkit-background-clip: text; background-clip: text;
+  -webkit-text-fill-color: transparent; color: var(--brass-bright);
+}
+.rec-cap { font-size: 11px; font-weight: 700; letter-spacing: 0.2em; text-transform: uppercase; color: var(--ivory-dim); }
+.rec-rate {
+  grid-column: 1 / -1; display: flex; align-items: center; justify-content: center; gap: 12px;
+  padding: 9px 12px 11px; border-top: 1px solid var(--line-soft);
+}
+.rec-rate::before, .rec-rate::after { content: ""; flex: 0 1 56px; height: 1px; background: linear-gradient(90deg, transparent, var(--brass)); }
+.rec-rate::after { background: linear-gradient(90deg, var(--brass), transparent); }
+.rec-rate-label { font-size: 11px; font-weight: 700; letter-spacing: 0.2em; text-transform: uppercase; color: var(--brass); }
+.rec-rate-num { font-family: var(--serif); font-size: 24px; font-weight: 700; line-height: 1; color: var(--brass-bright); }
+.rec-rows { margin-top: 10px; }
+.rec-row {
+  display: flex; justify-content: space-between; align-items: baseline; gap: 14px; padding: 8px 4px;
+  border-bottom: 1px solid var(--line-soft);
+}
+.rec-label { font-size: 11px; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; color: var(--ivory-dim); white-space: nowrap; }
+.rec-val { font-family: var(--serif); font-size: 16px; font-weight: 700; color: var(--ivory); text-align: right; white-space: nowrap; }
+#rec-note { margin-top: 10px; }
+#menu-record .menu-actions { margin-top: 16px; }
+.rec-confirm-text { margin: 16px 0 0; font-family: var(--serif); font-size: 17px; line-height: 1.4; color: var(--ivory); text-wrap: pretty; }
+.menu-btn.rec-danger { background: linear-gradient(180deg, #4a1220, #2b0a13); border-color: var(--poss-line); color: var(--ivory); }
+
+/* The end screen: your record after this game, one quiet line under the result. */
+#end-overlay .card p.end-record { margin: -12px 0 18px; font-family: var(--serif); font-style: italic; font-size: 15px; letter-spacing: 0.02em; color: var(--brass); }
+
+/* === Soul cards and known allies (src/ui/soulFace.js, tradeReveal.js, allies.js) =====================
+   Every Possession card is its owner's own soul, with their face in its mirror (one drawn image, so the
+   card surfaces need nothing new). In the trade scenes a SPENT soul burns out in crimson (no grey ash),
+   two souls of your own rise when you are possessed, and two souls handed over at once meet in the
+   middle. Known allies' red eyes are the possessed portrait itself; nothing else changes on the strip. */
+.tr-rail.go-meet-r { animation: tr-meet-r 0.75s cubic-bezier(0.45, 0, 0.3, 1) both; }
+.tr-rail.go-meet-l { animation: tr-meet-l 0.75s cubic-bezier(0.45, 0, 0.3, 1) both; }
+.tr-tilt.lean-a { animation: tr-lean-a 0.75s ease-in-out both; }
+.tr-tilt.lean-b { animation: tr-lean-b 0.75s ease-in-out both; }
+@keyframes tr-meet-r { 0% { transform: translate(0, 0); } 60% { transform: translate(11%, -5%); } 100% { transform: translate(13.5%, 0); } }
+@keyframes tr-meet-l { 0% { transform: translate(0, 0); } 60% { transform: translate(-11%, -5%); } 100% { transform: translate(-13.5%, 0); } }
+@keyframes tr-lean-a { from { transform: rotate(0deg); } to { transform: rotate(-7deg); } }
+@keyframes tr-lean-b { from { transform: rotate(0deg); } to { transform: rotate(7deg); } }
+/* A spent soul: no ash pile, only a faint crimson glow where it was; without particles it fades crimson. */
+.tr-card.soul-burn .tr-ash { background: radial-gradient(50% 50% at 50% 55%, rgba(163,38,58,0.3), rgba(96,14,34,0.14) 55%, rgba(60,8,20,0) 100%); }
+.tr-card.soul-burn.burnt .tr-ash { opacity: 0; transition: opacity 1.4s ease 0.4s; }
+.tr-card.fade-burn.soul-burn .tr-front { animation: tr-fade-soul 0.5s ease-in forwards; }
+@keyframes tr-fade-soul { 0% { opacity: 1; filter: none; } 40% { opacity: 1; filter: brightness(1.3) saturate(1.6) hue-rotate(-30deg); } 100% { opacity: 0; filter: brightness(0.4) saturate(2); } }
+/* Your two new souls rise out of the smoke, a little apart (their places are set by the script). */
+.tr-card.tr-extra {
+  transform: translate(var(--fan-x), 12%) scale(0.86); transform-origin: 50% 88%;
+  transition: transform 0.6s cubic-bezier(0.2, 0.8, 0.25, 1), opacity 0.45s ease;
+}
+.tr-card.tr-extra.fanned { transform: translate(var(--fan-x), -2%) rotate(var(--fan-r)); }
+
+/* === First-match tips (src/ui/tips.js; the words: src/data/tips.js) ===================================
+   A small Art Deco card beside the thing it explains: deep navy, a brass edge with a fine inner rule, a
+   serif title, ivory words, a quiet "Hide tips" and "Got it", a little brass arrow towards what it
+   explains, and a thin brass line that runs down while it waits. Over the interface, and beside an open
+   meeting (z-index 20: above the overlays' scrim at 10, under the main menu at 40 and the black fade at
+   90). Only the card itself takes taps. No sound, no glow, nothing that blinks. */
+.tip {
+  position: fixed; left: 0; top: 0; z-index: 20;
+  width: 262px; max-width: calc(100vw - 20px); padding: 9px 14px 13px; border-radius: 12px;
+  background: linear-gradient(180deg, #1a1e2d 0%, #11141e 100%);
+  border: 1px solid var(--brass);
+  box-shadow: inset 0 0 0 3px #141824, inset 0 0 0 4px var(--line-soft), 0 12px 28px rgba(0, 0, 0, 0.55);
+  color: var(--ivory); text-align: left; pointer-events: auto; touch-action: manipulation;
+}
+.tip[hidden] { display: none; }
+.tip.moving { transition: translate 0.25s ease; }   /* (placed by translate: src/ui/tips.js setAt) */
+.tip.in { animation: tipIn 0.24s ease-out; }
+@keyframes tipIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: none; } }
+.tip-kicker {
+  display: flex; align-items: center; gap: 8px; margin: 0 0 3px;
+  font-size: 10px; font-weight: 700; letter-spacing: 0.24em; text-transform: uppercase; color: var(--brass);
+}
+.tip-kicker::before, .tip-kicker::after { content: ""; flex: 1; height: 1px; background: linear-gradient(90deg, transparent, var(--line)); }
+.tip-kicker::after { background: linear-gradient(90deg, var(--line), transparent); }
+.tip-title { font-family: var(--serif); font-size: 17px; font-weight: 700; line-height: 1.2; letter-spacing: 0.01em; color: var(--brass-bright); }
+.tip-text { margin: 4px 0 9px; font-size: 14px; line-height: 1.42; color: var(--ivory); text-wrap: pretty; }
+.tip-actions { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.tip-actions[hidden] { display: none; }
+.tip-ok {
+  appearance: none; min-height: 44px; min-width: 88px; padding: 6px 16px; border-radius: 9px; cursor: pointer;
+  background: rgba(201, 162, 78, 0.16); border: 1px solid var(--brass); color: var(--brass-bright);
+  font: 700 14px/1 var(--serif); letter-spacing: 0.02em;
+}
+.tip-ok:active { background: rgba(201, 162, 78, 0.32); }
+.tip-hide {
+  appearance: none; min-height: 44px; padding: 6px 4px 6px 2px; border: 0; background: none; cursor: pointer;
+  color: var(--muted); font: 600 12.5px/1 var(--sans); letter-spacing: 0.02em;
+  text-decoration: underline; text-decoration-color: rgba(168, 158, 138, 0.45); text-underline-offset: 3px;
+}
+.tip-hide:active { color: var(--ivory-dim); }
+/* the arrow: a small brass-edged diamond on the side facing what the tip explains (--tip-arrow: where) */
+.tip-arrow { position: absolute; width: 11px; height: 11px; border: 1px solid var(--brass); transform: rotate(45deg); pointer-events: none; }
+.tip[data-side="above"] .tip-arrow { left: calc(var(--tip-arrow, 50%) - 6px); bottom: -7px; background: #11141e; border-left: 0; border-top: 0; }
+.tip[data-side="below"] .tip-arrow { left: calc(var(--tip-arrow, 50%) - 6px); top: -7px; background: #1a1e2d; border-right: 0; border-bottom: 0; }
+.tip[data-side="left"] .tip-arrow { top: calc(var(--tip-arrow, 50%) - 6px); right: -7px; background: #161a26; border-left: 0; border-bottom: 0; }
+.tip[data-side="right"] .tip-arrow { top: calc(var(--tip-arrow, 50%) - 6px); left: -7px; background: #161a26; border-right: 0; border-top: 0; }
+/* the time it has left on screen */
+.tip-time {
+  position: absolute; left: 16px; right: 16px; bottom: 5px; height: 1.5px; border-radius: 1px;
+  background: var(--brass-dim); transform-origin: left center; pointer-events: none;
+}
+.tip.in .tip-time { animation: tipTime var(--tip-ms, 9000ms) linear forwards; }
+@keyframes tipTime { from { transform: scaleX(1); } to { transform: scaleX(0); } }
+/* after Hide tips: a moment of "Tips are off" */
+.tip.bye .tip-title { color: var(--ivory-dim); }
+.tip.bye .tip-text { margin-bottom: 2px; color: var(--ivory-dim); }
+.tip.bye .tip-time { display: none; }
+@media (prefers-reduced-motion: reduce) { .tip.in { animation: none; } .tip.moving { transition: none; } }
+
+/* Settings > Tips: On / Off and "Show tips again" share one row. */
+.tips-row { display: flex; gap: 6px; }
+.tips-row #set-tips { flex: 2 1 0; min-width: 0; }
+.tips-row .tips-again { flex: 1.3 1 0; color: var(--brass); font-size: 15px; }
+.tips-row .tips-again:disabled { color: var(--muted); opacity: 0.6; cursor: default; }
+/* Eight Settings rows with Tips: the spacing between them tightens a little more on a short screen, so
+   the panel keeps clear of the screen's edges (1024 x 768, and 1024 x 690 with Safari's bars). The
+   buttons keep their size. */
+@media (max-height: 860px) {
+  #menu-settings .menu-h2 { margin-bottom: 8px; }
+  #menu-settings .menu-field { margin-bottom: 8px; }
+  #menu-settings .mf-label { margin-bottom: 5px; }
+  #menu-settings .menu-actions { margin-top: 12px; }
+}
+@media (max-height: 720px) {
+  #menu-settings .menu-kicker { margin-bottom: 4px; }
+  #menu-settings .menu-h2 { margin-bottom: 6px; font-size: 26px; }
+  #menu-settings .menu-field { margin-bottom: 6px; }
+  #menu-settings .mf-label { margin-bottom: 4px; }
+  #menu-settings .menu-actions { margin-top: 10px; }
+  #menu-settings .menu-btn.small { min-height: 50px; }
+}
+@media (max-height: 700px) {   /* (Safari with its bars: the buttons stay 44 px tall, the spacing gives instead) */
+  #menu-settings .menu-field { margin-bottom: 5px; }
+  #menu-settings .mf-label { margin-bottom: 3px; }
+}

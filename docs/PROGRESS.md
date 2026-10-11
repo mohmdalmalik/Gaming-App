@@ -1,9 +1,32 @@
 # PROGRESS
 
+## Soul cards, quick chat, choose your guest, your record, tips (2026-10-10 / 11)
+
+- **Owner-approved rules** (docs/GAME_RULES.md updated with the approved wording, including the hot-seat
+  wording, now gone): the possessed guest starts with 3 Possession cards; **soul cards** — each possessed
+  guest's Possession cards are their own souls, with their face; a newly possessed guest's card is used up
+  and they get two souls of their own; two souls crossing, or a soul handed to a guest already possessed,
+  are used up and both learn the other is possessed.
+- **On screen**: trades shown as card scenes (a Lantern burns a soul away, possession smoke, swaps, spent
+  souls in crimson), red eyes on the guests a possessed player knows for certain are possessed, music and
+  sound effects (Settings: Music, Sound effects).
+- **Owner-approved ideas**: quick chat and emotes (bots chat too; Settings: Quick chat), choose your guest
+  (Play with bots and practice), your record (main menu: Your record; a line on the end screen), tips
+  during your first matches (Settings: Tips, Show tips again).
+- **Quality round 3** (11 Oct): no double tap reaches the hotel from the chat panel or a tip, Good game!
+  waits out the chat pause, tips that point at the right thing and never come back once obeyed, 44 px
+  buttons, a sturdier record, soul faces drawn without hitches, Clara walks round Victor to the lift in
+  practice; details in docs/DECISIONS.md 'Quality round 3'.
+- **Waiting for the owner** (nothing changed until approved): a guest already possessed who gives a Lantern
+  for a soul (GAME_RULES 'Trade' allows two readings); wording in GAME_RULES.md ('Possession ×3 … supply',
+  'Results are private', red eyes on known allies, the lobby / Fire Exit safe zones); whether a match left
+  early counts in Your record; the always-on test hooks (`window.__game`).
+- **Tests**: rules-check, logic-check, bots-check, chat-check, tips-check, trade-reveal-check, audio-check,
+  browser-practice, browser-lobby, browser-bots, menu-scene-shots.
+
 ## Main menu, play with bots, hot-seat removed (2026-10-09)
 
-At the owner's request; no rule or rule number changed (docs/GAME_RULES.md still mentions hot-seat in four
-places — a before/after list waits for the owner's approval).
+At the owner's request; no rule or rule number changed.
 - **Main menu** over an animated lobby (reception + concierge, guests seated, chatting and strolling, the
   manager walking by), blurred: Play with bots · Practice alone · Settings. Play: the guests rise and take
   the lift with the manager, the doors close, the screen fades to black, the game opens.

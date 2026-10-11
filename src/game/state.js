@@ -60,7 +60,8 @@ export function resetState(state, floor, seed) {
     notes: [],                 // private messages waiting for this guest's own screen
     inbox: [],                 // PRIVATE structured events for this guest only (emitPrivate below)
   }));
-  if (possessedIndex >= 0) state.players[possessedIndex].hand.push(...buildPossessionSupply());
+  // (their own souls: every Possession card carries its owner, src/game/cards.js)
+  if (possessedIndex >= 0) state.players[possessedIndex].hand.push(...buildPossessionSupply(state.players[possessedIndex].id));
 
   state.roomDrops = new Map();           // roomId -> cards lying on the floor (a dead guest's hand)
   state.lockedRooms = new Set();         // locked rooms whose (single) door is locked right now
@@ -97,7 +98,9 @@ export function logPublic(state, text) {
 //           mirror, switchboard, unlock, barricade, infirmary, escape, relock. Never a role, a hand, a
 //           card count or a private result.
 //   PRIVATE player.inbox — what only that guest learns: traded (what they gave and got), blocked /
-//           blockedThem (a Lantern block), possessed / converted, mirrorSaw / mirroredBy.
+//           blockedThem (a Lantern block), possessed / converted, soulSpent / alreadyPossessed (a soul
+//           handed to a guest already possessed), soulsCrossed (two possessed guests both handed over a
+//           soul), mirrorSaw / mirroredBy. What a guest can be sure of from these: src/game/knowledge.js.
 // Every event carries `seq` (one counter for both kinds, so they can be put in order), `round` and
 // `turn`. Emitting an event changes nothing else in the game.
 const stamp = (state, ev) => ({ seq: (state.eventSeq = (state.eventSeq || 0) + 1), round: state.round, turn: state.turn, ...ev });

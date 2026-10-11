@@ -30,11 +30,13 @@
 //     sometimes a Knife, rarely a Lantern) before trying a Possession card on the same guest; prefers
 //     targets who gave it something other than a Lantern before (they did not block it); grows
 //     impatient as dawn (round 8) nears, once the Fire Exit is found, and as its chances run out; never
-//     tries on a guest who knows it or on a possessed guest it knows of; keeps Lanterns away from the
+//     tries on a guest who knows it or on a possessed guest it knows of (a soul handed to a guest who is
+//     already possessed is only used up: soul cards, approved 10 Oct 2026); keeps Lanterns away from the
 //     clean side and searches hard (every Lantern it holds is one the clean side lacks); opens few
 //     doors; once the Fire Exit is found some stand guard in the room before it (anyone walking out
 //     has to pass) and may seal its doorway with a Barricade. It knows only the possessed guests it is
-//     linked to through conversions (and any it worked out), never the whole team.
+//     linked to through conversions, the ones a spent soul showed it (its own handed to one, or one
+//     handed to it) and any it worked out, never the whole team.
 import { makeRng } from '../game/cards.js';
 
 const clamp = (x, lo, hi) => Math.max(lo, Math.min(hi, x));
@@ -102,7 +104,6 @@ export class Mind {
       gotFrom: new Map(),      // seat -> { lantern, other } what they handed me in trades
       friendly: new Map(),     // (as possessed) seat -> friendly gifts I gave them
       attempts: new Map(),     // seat -> Possession cards I gave them
-      pendingAttempt: null,    // { with } a Possession card given; settled by 'converted' / 'blocked'
       mirrored: new Set(),     // guests I have used a Hand Mirror on
     };
     this.turnState = null;
@@ -115,9 +116,6 @@ export class Mind {
     for (const { e, pub } of evs) (pub ? this.onPublic(e, view) : this.onPrivate(e, view));
     if (view.events.length) this.cursor.pub = view.events[view.events.length - 1].seq;
     this.cursor.inbox += view.inbox.length;
-    // A Possession card handed to a guest who was neither converted nor blocked: they already were possessed.
-    const pa = this.mem.pendingAttempt;
-    if (pa) { this.mem.allies.add(pa.with); this.mem.pendingAttempt = null; }
     this.mem.round = view.round;
   }
 
@@ -164,17 +162,21 @@ export class Mind {
         if (got === 'lantern') { this.bump(m.trust, e.with, 1.0); this.bump(m.susp, e.with, -0.15); }
         else if (got && USEFUL_GIFTS.includes(got)) { this.bump(m.trust, e.with, 0.55); this.bump(m.susp, e.with, -0.05); }
         else if (got && got !== 'possession') this.bump(m.trust, e.with, 0.1);
-        if (e.gave === 'possession' && got !== null) m.pendingAttempt = { with: e.with };
         if (got === 'possession') m.allies.add(e.with);        // only the possessed can give one
         break;
       }
-      case 'blocked': m.knowsMe.add(e.by); m.pendingAttempt = null; break;
+      // (a Lantern blocks whatever the blocker's own role: being blocked says nothing about theirs)
+      case 'blocked': m.knowsMe.add(e.by); break;
       case 'blockedThem': m.known.add(e.who); m.allies.add(e.who); break;
       case 'possessed':
         m.allies.add(e.by);
         for (const k of m.known) m.allies.add(k);
         break;
-      case 'converted': m.allies.add(e.who); m.pendingAttempt = null; break;
+      case 'converted': m.allies.add(e.who); break;
+      // A soul spent between two possessed guests: each now knows the other.
+      case 'soulSpent': m.allies.add(e.by); break;            // they handed me a soul; I already was possessed
+      case 'alreadyPossessed': m.allies.add(e.who); break;    // I handed them a soul; they already were
+      case 'soulsCrossed': m.allies.add(e.with); break;       // we both handed over a soul
       case 'mirrorSaw': {
         m.mirrored.add(e.target);
         const tc = m.tradeCount.get(e.target) || 0;

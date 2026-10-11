@@ -44,6 +44,8 @@
         </div>
         <div class="top-buttons">
           <button id="btn-restart-practice" class="ctl restart" type="button">&#x21BB; Restart practice</button>
+          <!-- Quick chat (a match only; src/ui/chat.js): opens the panel of preset lines and emotes. -->
+          <button id="btn-chat" class="ctl chat" type="button" data-sfx="open" aria-label="Quick chat" aria-controls="chat-panel" aria-expanded="false" hidden><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5.2 5h13.6c.9 0 1.7.8 1.7 1.7v7.6c0 .9-.8 1.7-1.7 1.7h-7.9l-4.4 3.5V16H5.2c-.9 0-1.7-.8-1.7-1.7V6.7C3.5 5.8 4.3 5 5.2 5z"/><path d="M8.4 10.5h.01M12 10.5h.01M15.6 10.5h.01" stroke-width="2.2"/></svg>Chat</button>
           <!-- Back to the main menu (asks first). -->
           <button id="btn-leave" class="ctl leave" type="button" aria-label="Main menu">&#x2302;&#xFE0E; Menu</button>
         </div>
@@ -92,11 +94,17 @@
 
       <div id="confirm-bar" class="confirm-bar" hidden>
         <span id="confirm-text">Move?</span>
-        <button id="btn-confirm-move" class="btn primary" type="button">Move &#183; 1 AP</button>
-        <button id="btn-confirm-cancel" class="btn" type="button">Cancel</button>
+        <!-- (Move and Cancel stay together: beside a short sentence, or both on the next line) -->
+        <span class="confirm-actions">
+          <button id="btn-confirm-move" class="btn primary" type="button">Move &#183; 1 AP</button>
+          <button id="btn-confirm-cancel" class="btn" type="button">Cancel</button>
+        </span>
       </div>
 
       <div id="toast" class="toast" hidden></div>
+
+      <!-- The quick-chat panel (filled from src/data/chat.js by src/ui/chat.js): one tap sends and closes. -->
+      <div id="chat-panel" class="chat-panel" role="dialog" aria-label="Quick chat" hidden></div>
     </div>
 
     <!-- Discard-down-to-the-hand-limit modal: the ONLY place the hand limit is settled, when a guest
@@ -205,6 +213,7 @@
             <button id="btn-menu-bots" class="menu-btn primary" type="button" disabled><span class="mb-main">Play with bots</span><span class="mb-sub">Join a table of 4&#8211;6 guests</span></button>
             <button id="btn-menu-practice" class="menu-btn" type="button" disabled><span class="mb-main">Practice alone</span><span class="mb-sub">Explore the hotel and find the way out</span></button>
             <button id="btn-menu-settings" class="menu-btn" type="button"><span class="mb-main">Settings</span></button>
+            <button id="btn-menu-record" class="menu-btn minor" type="button"><span class="mb-main">Your record</span></button>
           </div>
           <div id="menu-loading" class="menu-loading">Opening the hotel&#8230;</div>
         </section>
@@ -212,6 +221,12 @@
         <section id="menu-bots" class="menu-screen" hidden>
           <div class="menu-kicker">Play with bots</div>
           <h2 class="menu-h2">Your table</h2>
+          <!-- Who you play, here and in practice (src/ui/guestPicker.js). -->
+          <div class="menu-field">
+            <div class="mf-label">Your guest</div>
+            <div id="opt-guest" class="seg guest-row" role="radiogroup" aria-label="Your guest"></div>
+            <div id="opt-guest-note" class="mf-note"></div>
+          </div>
           <div class="menu-field">
             <div class="mf-label">Other guests</div>
             <div id="opt-bots" class="seg" role="radiogroup" aria-label="How many other guests"></div>
@@ -247,8 +262,43 @@
           <div class="menu-field"><div class="mf-label">Menu background</div><div id="set-menuMotion" class="seg" role="radiogroup" aria-label="Menu background"></div></div>
           <div class="menu-field"><div class="mf-label">Music</div><div id="set-music" class="seg" role="radiogroup" aria-label="Music"></div></div>
           <div class="menu-field"><div class="mf-label">Sound effects</div><div id="set-sound" class="seg" role="radiogroup" aria-label="Sound effects"></div></div>
+          <div class="menu-field"><div class="mf-label">Quick chat</div><div id="set-chat" class="seg" role="radiogroup" aria-label="Quick chat"></div></div>
+          <!-- First-match tips (src/ui/tips.js): On / Off, and bring back the ones already seen. -->
+          <div class="menu-field"><div class="mf-label">Tips</div><div class="tips-row"><div id="set-tips" class="seg" role="radiogroup" aria-label="Tips"></div><button id="btn-tips-again" class="seg-btn tips-again" type="button">Show tips again</button></div></div>
           <div class="menu-actions">
             <button id="btn-settings-done" class="menu-btn primary small" type="button">Done</button>
+          </div>
+        </section>
+
+        <!-- Your record on this device (numbers: src/record.js; filled by src/ui/record.js). -->
+        <section id="menu-record" class="menu-screen" hidden>
+          <div class="menu-kicker">Your record</div>
+          <h2 class="menu-h2">On this device</h2>
+          <div class="rec-plate">
+            <div class="rec-big"><span id="rec-played" class="rec-num">0</span><span class="rec-cap">Played</span></div>
+            <div class="rec-big"><span id="rec-won" class="rec-num">0</span><span class="rec-cap">Won</span></div>
+            <div class="rec-big"><span id="rec-lost" class="rec-num">0</span><span class="rec-cap">Lost</span></div>
+            <div class="rec-rate"><span class="rec-rate-label">Win rate</span><span id="rec-rate" class="rec-rate-num">&#8211;</span></div>
+          </div>
+          <div class="rec-rows">
+            <div class="rec-row"><span class="rec-label">As a clean guest</span><span id="rec-clean" class="rec-val"></span></div>
+            <div class="rec-row"><span class="rec-label">As the possessed</span><span id="rec-possessed" class="rec-val"></span></div>
+            <div class="rec-row"><span class="rec-label">You escaped</span><span id="rec-escaped" class="rec-val"></span></div>
+            <div class="rec-row"><span class="rec-label">Practice escapes</span><span id="rec-practice" class="rec-val"></span></div>
+            <div class="rec-row"><span class="rec-label">Left early</span><span id="rec-left" class="rec-val"></span></div>
+          </div>
+          <div id="rec-note" class="mf-note"></div>
+          <div id="record-actions" class="menu-actions">
+            <button id="btn-record-back" class="menu-btn small" type="button">&#x2039; Back</button>
+            <button id="btn-record-reset" class="menu-btn small" type="button">Reset record</button>
+          </div>
+          <!-- Reset asks first, in place of the row above. -->
+          <div id="record-confirm" class="rec-confirm" hidden>
+            <p id="rec-confirm-text" class="rec-confirm-text"></p>
+            <div class="menu-actions">
+              <button id="btn-record-keep" class="menu-btn small" type="button">Keep it</button>
+              <button id="btn-record-yes" class="menu-btn small rec-danger" type="button">Reset</button>
+            </div>
           </div>
         </section>
       </div>
@@ -294,6 +344,8 @@
       <div class="card">
         <h1 id="end-title">Game over</h1>
         <p id="end-summary" class="muted"></p>
+        <!-- Your record after this game, one quiet line (src/ui/record.js). -->
+        <p id="end-record" class="end-record" hidden></p>
         <div id="end-reveal" class="end-reveal" hidden></div>
         <div class="end-actions">
           <button id="btn-keep-exploring" class="btn big" type="button" hidden>Keep exploring</button>

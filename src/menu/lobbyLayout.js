@@ -138,6 +138,13 @@ export const lobbyLayout = {
     clara: [[3.28, -2.72], [3.15, -4.3]],
     henry: [[3.2, -2.7], [3.15, -4.3]],
   },
+  // ...and when fewer board (practice: only your own guest), a guest whose way out passes someone who
+  // stays seated goes round them: Clara cannot pass in front of Victor (his knees, the tea table and
+  // Henry close the way), so she goes round the sofa's right end, outside the floor lamp, and along
+  // behind it to the lift.
+  soloBoardingPaths: {
+    clara: [[5.3, -2.4], [6.1, -3.3], [5.9, -4.05], [4.2, -4.3]],
+  },
 
   camera: {
     fov: 36,                    // vertical, at 16:9; narrower screens widen it to keep the sides

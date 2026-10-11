@@ -49,11 +49,16 @@ export const rules = {
   // --- Possession ----------------------------------------------------------------------------
   possessionSupply: 3,      // APPROVED (10 Oct 2026): the Possessed guest starts with 3 Possession cards (was 2
                             // from 7 Oct; 3 before that).
-  possessionOnConvert: 1,   // APPROVED (10 Oct 2026): a guest who becomes possessed keeps the card that
-                            // possessed them AND receives this many extra Possession cards: two tries. Each
-                            // guest they possess gets two tries the same way (docs/GAME_RULES.md > Possession).
-                            // A Lantern block still discards the card used (and the Lantern); a guest who dies
-                            // takes theirs out of the game
+  soulsOnConvert: 2,        // APPROVED (10 Oct 2026, "soul cards"): every Possession card is its owner's own
+                            // soul, with their face on it; you only ever hold and give your own. A guest who
+                            // becomes possessed: the card that possessed them is used up, and they get this
+                            // many souls of their own: two tries. Each guest they possess gets two tries the
+                            // same way (docs/GAME_RULES.md > Possession). A soul handed to a guest who is
+                            // already possessed is used up (the giver still gets their card; the other gains
+                            // nothing); two souls handed over at once are both used up; either way each now
+                            // knows the other. A Lantern block still discards the card used (and the Lantern);
+                            // a guest who dies takes their souls out of the game. (Was possessionOnConvert: 1
+                            // — keep the card AND get one more.)
 
   // --- Lanterns and escape ------------------------------------------------------------------
   // A clean guest holding this many Lanterns, standing in the Fire Exit, may escape (escapeCost). Every
@@ -112,9 +117,10 @@ export const rules = {
                   desc: 'Choose a guest in your room: they show you their whole hand, in private. Used up. 1 action.' },
     espresso:   { name: 'Espresso',   glyph: '☕', tint: '#c08a5a', active: true, extraActions: 2,
                   desc: 'Free to use: gain 2 extra actions this turn. Used up.' },
-    // The possessed side's supply — never in the deck.
+    // The possessed side's souls — never in the deck. Each card belongs to the guest who holds it
+    // (card.owner, src/game/cards.js) and only they can give it.
     possession: { name: 'Possession', glyph: '☠', tint: '#b46bff', evil: true,
-                  desc: 'Give it in a trade to possess someone — unless they hand you a Lantern.' },
+                  desc: 'Your own soul. Give it in a trade to possess someone — unless they hand you a Lantern.' },
   },
 
   // --- The draw deck (48, tuned for 6 players) --------------------------------------------------

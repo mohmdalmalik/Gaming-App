@@ -9,6 +9,7 @@
 import { chromium } from 'playwright-core';
 import fs from 'node:fs';
 import path from 'node:path';
+import { tipsOff } from './smoke-lib.mjs';
 
 const args = process.argv.slice(2);
 const baseUrl = args.includes('--url') ? args[args.indexOf('--url') + 1] : 'http://127.0.0.1:8123/';
@@ -24,11 +25,20 @@ const failures = [];
 const check = (cond, msg) => { if (cond) console.log('  ok  ', msg); else { console.log('  FAIL', msg); failures.push(msg); } };
 
 const browser = await chromium.launch({ executablePath: chrome, headless: true, args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--no-sandbox'] });
-const page = await (await browser.newContext({ viewport: { width: 1180, height: 820 }, deviceScaleFactor: 1, hasTouch: true })).newPage();
+const lobbyContext = await browser.newContext({ viewport: { width: 1180, height: 820 }, deviceScaleFactor: 1, hasTouch: true });
+await lobbyContext.addInitScript(tipsOff);     // (first-match tips Off: none over what this suite looks at)
+const page = await lobbyContext.newPage();
 const consoleMessages = [];
 page.on('console', m => { if (['error', 'warning'].includes(m.type())) consoleMessages.push(`${m.type()}: ${m.text()}`); });
 page.on('pageerror', e => consoleMessages.push(`pageerror: ${e.message}`));
 page.on('requestfailed', r => consoleMessages.push(`requestfailed: ${r.url()} ${r.failure()?.errorText}`));
+// The sounds still downloading: the game music starts loading just after Begin, and leaving the page
+// at that moment cut it off (the test's doing, not the game's), so load() lets them finish first.
+const audioInFlight = new Set();
+page.on('request', r => { if (/assets\/audio\//.test(r.url())) audioInFlight.add(r); });
+page.on('requestfinished', r => audioInFlight.delete(r));
+page.on('requestfailed', r => audioInFlight.delete(r));
+async function audioSettled(ms = 30000) { const end = Date.now() + ms; while (audioInFlight.size && Date.now() < end) await page.waitForTimeout(100); }
 await page.route(`${CDN}**`, route => {
   const rel = route.request().url().slice(CDN.length).split('?')[0];
   const file = path.join(threeDir, rel);
@@ -38,7 +48,7 @@ const game = (fn, arg) => page.evaluate(fn, arg);
 const shot = async n => { if (shots) await page.screenshot({ path: path.join(outDir, `${n}.png`) }); };
 const dressed = () => page.waitForFunction(() => !window.__game || window.__game.dressingDone(), null, { timeout: 90000, polling: 200 });
 async function load(query) {
-  if (page.url().startsWith('http')) await dressed();
+  if (page.url().startsWith('http')) { await dressed(); await audioSettled(); }
   // (?mode=practice: the direct link to practice, past the main menu)
   await page.goto(`${baseUrl}?${['mode=practice', query].filter(Boolean).join('&')}`, { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__game && !document.getElementById('btn-begin').disabled, null, { timeout: 45000 });
@@ -59,6 +69,9 @@ async function tapDoor({ x, y }) {
   }
   return false;
 }
+// the view's glide back runs on game time too: with the big hotel in view software rendering can drop to
+// ~1 frame a second, and the glide then takes ~30 s of real time (the same before and after a change)
+const GLIDE_MS = 90000;
 // wait until a camera turn has finished (the eased turn runs on game time: slow headless)
 const turned = async () => { await page.waitForFunction(() => window.__game.rig.debug.yawT >= 1, null, { timeout: 30000 }); await frames(25); };
 const frames = n => page.evaluate(n => new Promise(r => { let k = 0; const f = () => (++k >= n ? r() : requestAnimationFrame(f)); requestAnimationFrame(f); }), n);
@@ -241,7 +254,7 @@ check(tag.w > 40 && tag.x > 0 && tag.x < tag.vw && tag.y > 0 && tag.y < tag.vh, 
   const crossed = at.x > bar.l && at.x < bar.r && at.y > bar.t - 10 && at.y < bar.b + 10;
   check(crossed && pts1.length < pts0.length && inBar === 0, `the path's dots never run under the Move/Cancel bar (dragged under it: ${pts0.length} → ${pts1.length} dots, ${inBar} under the bar)`);
   await game(() => window.__game.centreOnMe());
-  await page.waitForFunction(() => !window.__game.rig.returning, null, { timeout: 30000 });
+  await page.waitForFunction(() => !window.__game.rig.returning, null, { timeout: GLIDE_MS });
   await frames(4);
   check((await game(() => window.__game.pathPreview.dotCount)) === pts0.length, 'and they come back when the view moves off it');
 }
@@ -321,7 +334,7 @@ console.log('\n6b. looking round a big hotel');
     const ds = [];
     for (let k = 0; k < 4; k++) {
       await game(() => window.__game.rotate(1)); await turned();
-      await page.waitForFunction(() => !window.__game.rig.returning, null, { timeout: 30000 });
+      await page.waitForFunction(() => !window.__game.rig.returning, null, { timeout: GLIDE_MS });
       const r = await game(() => {
         const g = window.__game, cam = g.view.camera, V = cam.position.constructor;
         let off = 0;
@@ -394,7 +407,7 @@ console.log('\n6b. looking round a big hotel');
     check(!bad.length, `dragged as far as it goes in 8 directions at 3 zooms, the middle of the screen stays over the revealed hotel and a room stays in view (${res.length - bad.length}/${res.length})`);
   }
   await page.click('#btn-centre');
-  await page.waitForFunction(() => !window.__game.rig.returning, null, { timeout: 30000 });
+  await page.waitForFunction(() => !window.__game.rig.returning, null, { timeout: GLIDE_MS });
   const c4 = await cam();
   check(Math.hypot(c4.centre[0] - c4.guest[0], c4.centre[1] - c4.guest[1]) < 0.05 && Math.abs(c4.d - c0.d) < 0.01, 'the "centre on me" button brings the view back to the guest, at the standard zoom');
   const btn = await page.evaluate(() => { const r = document.getElementById('btn-centre').getBoundingClientRect(), a = document.getElementById('btn-rotate-right').getBoundingClientRect(); return { w: r.width, h: r.height, beside: Math.abs(r.top - a.top) < 2 && r.left > a.right }; });
@@ -413,7 +426,7 @@ console.log('\n6b. looking round a big hotel');
     await game(() => window.__game.rig.panByWorld(-12, -12));
     await frames(3);
     await game(d => window.__game.openDoor(d), spot.door);
-    await page.waitForFunction(() => !window.__game.rig.returning, null, { timeout: 30000 });
+    await page.waitForFunction(() => !window.__game.rig.returning, null, { timeout: GLIDE_MS });
     // The view eases so the guest's room AND the room just revealed are both on screen, guest included.
     const c5 = await game(({ room }) => {
       const g = window.__game, cam = g.view.camera, V = cam.position.constructor, W = innerWidth, H = innerHeight;
@@ -428,7 +441,7 @@ console.log('\n6b. looking round a big hotel');
     await game(() => window.__game.rig.panByWorld(12, -8));
     await frames(3);
     await game(n => window.__game.moveToRoom(n), spot.next);
-    await page.waitForFunction(() => !window.__game.activeMover().walking && window.__game.activeMover().path.length === 0 && !window.__game.rig.returning, null, { timeout: 40000 });
+    await page.waitForFunction(() => !window.__game.activeMover().walking && window.__game.activeMover().path.length === 0 && !window.__game.rig.returning, null, { timeout: GLIDE_MS });
     await frames(30);
     const c7 = await cam();
     check(Math.hypot(c7.centre[0] - c7.guest[0], c7.centre[1] - c7.guest[1]) < 0.3, 'and so does a move (the view follows the guest there)');
@@ -436,7 +449,7 @@ console.log('\n6b. looking round a big hotel');
   await game(() => { window.__game.rig.panByWorld(10, -10); window.__game.rig.zoomBy(0.5); });
   await frames(3);
   await game(() => window.__game.endTurn());
-  await page.waitForFunction(() => !window.__game.rig.returning, null, { timeout: 30000 });
+  await page.waitForFunction(() => !window.__game.rig.returning, null, { timeout: GLIDE_MS });
   const c6 = await cam();
   check(Math.hypot(c6.centre[0] - c6.guest[0], c6.centre[1] - c6.guest[1]) < 0.05 && Math.abs(c6.d - c0.d) < 0.01, 'and so does a new turn');
 }

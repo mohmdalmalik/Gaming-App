@@ -4,14 +4,15 @@
 Guests are trapped on a hotel floor. Lanterns are the way out: a clean guest carrying three of them can leave by the fire exit. Clean guests must find Lanterns, pass them to one guest, and get that guest out. One guest is secretly Possessed and spreads possession through trades.
 
 ## Players
-4–6, tuned for 6. Hot-seat on one iPad for testing; the real game will be online, one device each.
+4–6, tuned for 6. Until online play exists, you play against computer guests (bots) on your own device; the real game will be online, one device each.
+- Play with bots: you and 3–5 computer guests. Before the match you choose your role: random, clean guest or possessed.
 - Practice mode: one guest alone, in a random hotel like any other match, starts with one Lantern like every guest, finds two more and reaches the exit. No meetings, no possessed guest, no deadline.
 
 ## Turn
 - 4 action points (AP), never carried over.
 - Open a closed door of your room: 1 AP (see Doors and exploring). Move into an adjacent room through an open doorway: 1 AP. Escape from the Fire Exit: 1 AP. Search: 1 AP. Use a card: 1 AP (Espresso: free). Use a room's job (Infirmary, Switchboard): 1 AP.
 - Your guest always stands in the middle of the room they are in; there is no walking around inside a room. You act by tapping: tap a room to open or enter it, tap a room's furniture to search it (you don't walk to it).
-- 45-second timer for the active player's actions. It pauses during meetings and pass-the-device screens. When it runs out, the turn ends. ?timer=off disables it.
+- 45-second timer for the active player's actions. It pauses during meetings and while you read a private screen. The bots' turns use the same clock. When it runs out, the turn ends. ?timer=off disables it.
 - A round = every living guest takes one turn.
 - Dawn deadline: the match lasts at most 8 rounds. The round is shown as "Round 3 of 8", and the final round before dawn is clearly marked.
 
@@ -23,15 +24,17 @@ Guests are trapped on a hotel floor. Lanterns are the way out: a clean guest car
 - Entering a room that holds a guest you have not met in that room this round forces a meeting. If several are there, choose one.
 - The entering guest chooses TRADE or ATTACK.
 - The same two guests cannot be forced to meet again in the same room in the same round. Meeting in a different room triggers a new meeting.
-- The lobby is a safe zone: no meetings, no trades and no attacks.
+- The Fourth Floor Landing (where everyone starts) is a safe zone: no meetings, no trades and no attacks. The Fire Exit is also a safe zone: no meetings or attacks, but two guests there may agree to trade.
 
 ### Trade
-- Both guests secretly choose one card to give; the cards swap at the same time. In hot-seat the device is passed so the other guest chooses in private. Results are private: each guest sees only what they received.
+- Both guests secretly choose one card to give; the cards swap at the same time. Results are private: each guest sees only what they received and what the trade did to them.
 - A clean guest can never give a Possession card. A possessed guest may give a Possession card, or a normal card to look innocent.
 - If either guest has no ordinary card (Possession cards don't count), the trade is skipped and both are told why.
 - In an ordinary trade a Lantern goes to the other guest like any other card, so teammates can pass Lanterns to one guest.
-- Receive a Possession card without giving a Lantern: you become possessed, keep that Possession card and receive one extra Possession card (two tries).
+- Receive a Possession card without giving a Lantern: you become possessed. The card that possessed you is used up, and you get two souls of your own, with your face (two tries).
 - Receive a Possession card while giving a Lantern: the attempt fails and the Lantern is used up — the Lantern and the Possession card are both discarded — and you privately learn who tried.
+- Two possessed guests both hand over a Possession card: both cards are used up (each loses one try), and each now knows the other is possessed.
+- A Possession card handed to a guest who is already possessed (they gave an ordinary card, not a Lantern): the card is used up. The giver loses that try but still gets the card they were given; the other guest gains nothing. Each now knows the other is possessed.
 
 ### Attack
 - Needs a weapon; costs 1 AP; replaces the trade.
@@ -40,8 +43,9 @@ Guests are trapped on a hotel floor. Lanterns are the way out: a clean guest car
 
 ## Possession
 - One guest is secretly Possessed at setup and starts with 3 Possession cards.
-- The chain: a guest who becomes possessed keeps the card that possessed them AND receives one extra Possession card: two tries. Each guest they possess gets two tries the same way. A Lantern block still burns the card used (the Lantern and the Possession card are both thrown away); a guest who dies takes their Possession cards out of the game.
-- Possessed guests see a private tell (portrait + screen tint). In hot-seat it shows on that guest's private screens and, during their own turn, on the main screen too: a POSSESSED label, how many Possession cards they still hold ("souls to trade") and their Possession cards in the hand. It disappears before the iPad is passed on.
+- Each possessed guest's Possession cards are their own souls, with their own face on them. You can only possess with your own souls, and you never hold anyone else's.
+- The chain: a guest who becomes possessed gets two souls of their own (the card that possessed them is used up): two tries. Each guest they possess gets two tries the same way. A Lantern block still burns the card used (the Lantern and the Possession card are both thrown away); a guest who dies takes their souls out of the game.
+- Possessed guests see a private reminder on their own screen only: red eyes on their own guest and portrait, a crimson POSSESSED plate, souls to trade, their Possession cards in the hand, and red eyes on any guest they know for certain is possessed.
 - Possession cards never count toward the hand limit and can't be discarded.
 - How many cards a guest holds is private: the table never shows other guests' card counts (only a Hand Mirror reveals a hand). Your own count is shown only to you.
 
@@ -89,7 +93,7 @@ Guests are trapped on a hotel floor. Lanterns are the way out: a clean guest car
 - When the deck runs out, shuffle the discard pile into a new deck.
 
 ## Cards and deck (6 players)
-- Possession ×3 (the possessed guest's supply, not in the deck).
+- Possession: the first possessed guest's 3 souls; each guest possessed later gets 2 of their own. Never in the deck.
 - Draw deck (48): Lantern ×14, Bandage ×7, Flashlight ×5, Knife ×4, Barricade ×4, Lock Pick ×4, Hand Mirror ×3, Espresso ×3, Revolver ×2, Master Key ×2.
 - Lantern: give it in a trade to block a possession attempt; three of them let a clean guest escape.
 - Hand Mirror: 1 AP. Choose a guest in your room; they show you their whole hand in private. Used up.

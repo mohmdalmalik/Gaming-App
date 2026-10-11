@@ -12,7 +12,9 @@
 //   5. determinism: the same seed plays the same match
 //   6. behaviour: possessed bots make friendly trades before trying a Possession card on the same guest; clean
 //      bots block with a Lantern; bots escape; the possessed side wins sometimes; possessions are not all in
-//      round 1; profiles and thinking pauses look right
+//      round 1; a possessed bot learns its allies from its own private events (soul cards: a conversion, a
+//      soul spent on a guest already possessed, two souls crossed) and never hands a soul to a guest it
+//      knows is possessed; profiles and thinking pauses look right
 //   7. the table feed (src/ui/feed.js) gives every public line of those matches its icon
 import fs from 'node:fs';
 import { rules, applyMode } from '../src/data/rules.js';
@@ -24,6 +26,7 @@ import { makeRng, makeCard } from '../src/game/cards.js';
 import * as S from '../src/game/state.js';
 import * as A from '../src/game/actions.js';
 import { botView } from '../src/bots/view.js';
+import { knownPossessed } from '../src/game/knowledge.js';
 import { createMind } from '../src/bots/brain.js';
 import { createBotTable } from '../src/bots/index.js';
 import { rollProfiles, rollProfile, USERNAMES } from '../src/bots/profiles.js';
@@ -95,6 +98,21 @@ console.log('\nengine: events, inboxes, forced role');
   A.resolveTrade(state, floor, Q, R, qPoss.id, lan.id);
   check(R.inbox.some(e => e.type === 'blockedThem' && e.who === Q.index) && Q.inbox.some(e => e.type === 'blocked' && e.by === R.index), 'a Lantern block is private to the two of them');
   check(R.inbox.find(e => e.type === 'traded').got === null, '(the blocker received nothing: the card burned)');
+  // soul cards: a soul handed to a guest already possessed, and two souls crossed (P possessed Q above)
+  const S2 = state.players.find(q => !q.possessed && q !== R);
+  S2.currentRoom = into;
+  const qSoul = () => Q.hand.find(c => c.type === 'possession');
+  A.resolveTrade(state, floor, Q, S2, qSoul().id, S2.hand.find(c => c.type !== 'lantern').id);    // Q possesses S2
+  check(S2.possessed && S2.hand.filter(c => c.type === 'possession').every(c => c.owner === S2.id) && S2.hand.filter(c => c.type === 'possession').length === rules.soulsOnConvert,
+    `a guest possessed gets ${rules.soulsOnConvert} souls of their own (each card carries its owner)`);
+  const pub0 = state.events.length;
+  A.resolveTrade(state, floor, P, S2, P.hand.find(c => c.type === 'possession').id, S2.hand.find(c => c.type !== 'possession' && c.type !== 'lantern').id);
+  check(S2.inbox.some(e => e.type === 'soulSpent' && e.by === P.index) && P.inbox.some(e => e.type === 'alreadyPossessed' && e.who === S2.index),
+    'a soul handed to a guest already possessed: private to the two of them (soulSpent / alreadyPossessed)');
+  A.resolveTrade(state, floor, P, S2, P.hand.find(c => c.type === 'possession').id, S2.hand.find(c => c.type === 'possession').id);
+  check(S2.inbox.some(e => e.type === 'soulsCrossed' && e.with === P.index) && P.inbox.some(e => e.type === 'soulsCrossed' && e.with === S2.index),
+    'two souls crossed: private to the two of them (soulsCrossed)');
+  check(state.events.slice(pub0).every(e => e.type === 'trade' && Object.keys(e).sort().join() === 'a,b,round,seq,turn,type'), '...and in public only "they traded"');
 }
 {
   const seed = 4242;
@@ -107,7 +125,8 @@ console.log('\nengine: events, inboxes, forced role');
   const b = { roster: roster.slice(0, 6), mode: 'hotseat', practice: false, hotseat: true, setup: { possessedIndex: forced } };
   S.resetState(b, floor, seed);
   check(b.players[forced].possessed && b.players.filter(p => p.possessed).length === 1, 'state.setup.possessedIndex forces the possessed seat');
-  check(b.players[forced].hand.filter(c => c.type === 'possession').length === rules.possessionSupply, `...with the ${rules.possessionSupply} Possession cards`);
+  check(b.players[forced].hand.filter(c => c.type === 'possession').length === rules.possessionSupply
+    && b.players[forced].hand.filter(c => c.type === 'possession').every(c => c.owner === b.players[forced].id), `...with the ${rules.possessionSupply} Possession cards, all their own souls`);
   check(floor.deck.map(t => t.id).join() === deckA && b.drawPile.map(c => c.type).join() === drawA
     && b.players.every((p, i) => p.hand.filter(c => c.type !== 'possession').map(c => c.type).join() === handsA[i]),
   'the hotel, the deck and every hand are exactly as without forcing (the random pick is still drawn)');
@@ -123,11 +142,12 @@ function scramble(state, keepSeat, rng) {
     if (p.index === keepSeat) continue;
     const n = 1 + Math.floor(rng() * 7);
     p.hand = Array.from({ length: n }, () => makeCard(TYPES[Math.floor(rng() * TYPES.length)]));
-    if (rng() < 0.5) p.hand.push(makeCard('possession'));
+    if (rng() < 0.5) p.hand.push(makeCard('possession', { owner: state.players[Math.floor(rng() * state.players.length)].id }));
     p.possessed = rng() < 0.5;
     p.knows = new Set(rng() < 0.5 ? [state.players[keepSeat].id] : []);
     p.notes = ['scrambled'];
-    p.inbox = [{ seq: 999999, type: 'possessed', by: keepSeat }];
+    p.inbox = [{ seq: 999999, type: 'possessed', by: keepSeat, souls: 2 }, { seq: 1000000, type: 'soulSpent', by: keepSeat },
+      { seq: 1000001, type: 'alreadyPossessed', who: keepSeat }, { seq: 1000002, type: 'soulsCrossed', with: keepSeat }];
     p.convertedBy = 'x';
     p.roleChangePending = rng() < 0.5;
   }
@@ -212,10 +232,63 @@ function choices(state, seat, profile) {
   check(calls === 0, "bots' thinking never draws from the engine's random generator");
 }
 
+{
+  // A possessed bot learns its allies from its own private events (soul cards) and never hands them a soul.
+  const { state } = newMatch(4321, 6);
+  const V = state.players.find(q => q.possessed);
+  const [K, L, M] = state.players.filter(q => !q.possessed);
+  const soul = X => X.hand.find(c => c.type === 'possession');
+  const plain = X => X.hand.find(c => c.type !== 'possession' && c.type !== 'lantern');
+  const mindOf = (seat, seed = 7) => {
+    const mind = createMind(seat, rollProfile(makeRng(seat + seed)), seed);
+    mind.observe(botView(state, floor, seat, mind.cursor));
+    return mind;
+  };
+  A.resolveTrade(state, floor, V, K, soul(V).id, plain(K).id);      // V possesses K
+  A.resolveTrade(state, floor, K, L, soul(K).id, plain(L).id);      // K possesses L
+  check(mindOf(V.index).mem.allies.has(K.index) && mindOf(K.index).mem.allies.has(V.index) && mindOf(K.index).mem.allies.has(L.index)
+    && mindOf(L.index).mem.allies.has(K.index), 'a conversion: the two bots count each other as allies');
+  check(!mindOf(V.index).mem.allies.has(L.index) && !mindOf(L.index).mem.allies.has(V.index), '(V and L know nothing of each other yet)');
+  A.resolveTrade(state, floor, V, L, soul(V).id, plain(L).id);      // V hands L a soul: L already belongs to the hotel
+  check(mindOf(V.index).mem.allies.has(L.index) && mindOf(L.index).mem.allies.has(V.index), 'a soul spent on a guest already possessed: both now count the other as an ally');
+  A.resolveTrade(state, floor, K, M, soul(K).id, plain(M).id);      // K possesses M with their second soul
+  check(!mindOf(V.index).mem.allies.has(M.index) && !mindOf(M.index).mem.allies.has(V.index), '(V and M know nothing of each other yet)');
+  A.resolveTrade(state, floor, V, M, soul(V).id, soul(M).id);       // V and M both hand over a soul
+  check(mindOf(V.index).mem.allies.has(M.index) && mindOf(M.index).mem.allies.has(V.index), 'two souls crossed: both now count the other as an ally');
+  check([V, K, L, M].every(X => [...knownPossessed(state, X)].every(id => mindOf(X.index).mem.allies.has(state.players.find(q => q.id === id).index))),
+    'every guest the rules say a bot knows is possessed (knownPossessed) is one of its allies');
+  // Never a soul to an ally, whatever the bot's profile and seed.
+  let toAlly = 0, tries = 0;
+  for (let k = 0; k < 120; k++) {
+    for (const [X, Y] of [[L, V], [L, K], [M, V], [M, K]]) {
+      if (!X.hand.some(c => c.type === 'possession')) continue;
+      const mind = mindOf(X.index, 100 + k);
+      const id = mind.tradeCard(botView(state, floor, X.index, mind.cursor), Y.index, A.tradeableCards(X).map(c => c.id));
+      tries++; if (X.hand.find(c => c.id === id)?.type === 'possession') toAlly++;
+    }
+  }
+  check(tries > 200 && toAlly === 0, `a bot never chooses to hand a soul to a guest it knows is possessed (${toAlly} of ${tries} choices)`);
+}
+
 // --- 4. many matches ---------------------------------------------------------------------------------------
 console.log('\nall-bot matches');
 const stats = { matches: 0, unfinished: 0, crashes: 0, refusals: 0, maxRefusalsTurn: 0, jammed: 0, cleanWins: 0, escapes: 0, possessedWins: 0,
-  conv: [], firstFriendly: 0, friendlyThenAttempt: 0, blockDecisions: 0, blocks: 0, attacks: 0, voluntary: 0, byPlayers: {} };
+  conv: [], firstFriendly: 0, friendlyThenAttempt: 0, blockDecisions: 0, blocks: 0, attacks: 0, voluntary: 0, byPlayers: {},
+  soulsToKnown: 0, soulsSpent: 0, knownWrong: 0, knownTotal: 0 };
+// Souls a guest handed to someone it already KNEW was possessed: its own private events replayed in order,
+// with what they make certain (src/game/knowledge.js reads the same events).
+function soulsToKnownAllies(state, p) {
+  const knew = new Set();
+  let n = 0;
+  for (const e of p.inbox) {
+    if (e.type === 'traded' && e.gave === 'possession' && knew.has(e.with)) n++;
+    const seat = { possessed: e.by, converted: e.who, blockedThem: e.who, soulSpent: e.by, alreadyPossessed: e.who, soulsCrossed: e.with }[e.type];
+    if (seat != null) knew.add(seat);
+    if (e.type === 'traded' && e.got === 'possession') knew.add(e.with);
+    if (e.type === 'mirrorSaw' && e.hand.includes('possession')) knew.add(e.target);
+  }
+  return n;
+}
 const feedLines = new Map();      // every public log line of these matches -> its feed icon (section 7)
 for (let k = 0; k < 450; k++) {
   const players = 4 + (k % 3);
@@ -242,6 +315,14 @@ for (let k = 0; k < 450; k++) {
     for (const p of state.players) for (const e of p.inbox) {
       if (e.type === 'possessed') stats.conv.push(e.round);
       if (e.type === 'blockedThem') stats.blocks++;
+      if (e.type === 'alreadyPossessed') stats.soulsSpent++;
+      if (e.type === 'soulsCrossed') stats.soulsSpent += 0.5;      // (each of the two is told)
+    }
+    for (const p of state.players) stats.soulsToKnown += soulsToKnownAllies(state, p);
+    // What knownPossessed says a guest knows is always true (possession is never undone).
+    for (const p of state.players) for (const id of knownPossessed(state, p)) {
+      stats.knownTotal++;
+      if (!state.players.find(q => q.id === id)?.possessed) stats.knownWrong++;
     }
     stats.attacks += state.events.filter(e => e.type === 'attack').length;
     for (const p of state.players) {
@@ -271,6 +352,8 @@ check(stats.conv.length > n * 0.5 && r1 < stats.conv.length * 0.4, `possessions 
 check(stats.firstFriendly > n * 0.3 && stats.friendlyThenAttempt > n * 0.15, `possessed bots build trust first: ${stats.firstFriendly} friendly first trades, ${stats.friendlyThenAttempt} later followed by an attempt on the same guest`);
 check(stats.blockDecisions > n && stats.blocks > n * 0.3, `clean bots block with a Lantern: ${stats.blockDecisions} Lanterns handed over to block, ${stats.blocks} attempts actually blocked`);
 check(stats.attacks > 0, `bots attack now and then (${stats.attacks} attacks in ${n} matches)`);
+check(stats.knownWrong === 0 && stats.knownTotal > n, `everything knownPossessed says a guest knows is true (${stats.knownTotal} certainties at the ends of the matches, ${stats.knownWrong} wrong)`);
+check(stats.soulsToKnown === 0, `a possessed bot never hands a soul to a guest it knows is possessed (${stats.soulsToKnown}; souls spent on a guest not yet known to be possessed: ${(stats.soulsSpent / Math.max(1, n)).toFixed(2)} a match)`);
 
 // --- 7. the table feed's icons -------------------------------------------------------------------------------
 // Every line the rules wrote in those matches gets an icon in the feed; and the rarer lines, and the ones a

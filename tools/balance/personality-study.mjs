@@ -29,13 +29,15 @@
 // The '+fixedHeal' proposals rerun an owner proposal with the bots healing at the original fixed health numbers
 // (personalities.mjs, HEAL_AT_FIXED): a sensitivity row, since at 4 health WHEN a bot heals is a modelling choice.
 import { rules, applyMode } from '../../src/data/rules.js';
-import { makeRng, shuffle } from '../../src/game/cards.js';
+import { makeRng, shuffle, makeCard } from '../../src/game/cards.js';
 import * as S from '../../src/game/state.js';
 import * as A from '../../src/game/actions.js';
 import * as P from './personalities.mjs';
 
 let floor, roster;
 const MAX_TURNS = 600;
+// (a proposal's post-step: take every soul out of a guest's hand, in place; how many there were)
+function dropSouls(P) { let n = 0; for (let k = P.hand.length - 1; k >= 0; k--) if (P.hand[k].type === 'possession') { P.hand.splice(k, 1); n++; } return n; }
 let TRACE = false;          // --trace: print every action of the (single) match
 let MEASURES = false;       // the owner's health / possession-chain measures (see the header)
 const say = (...a) => { if (TRACE) console.log(...a); };
@@ -147,22 +149,25 @@ function playMatch(seed, players, assign, ov = {}) {
       const gGen = giver ? seats[giver.index].gen ?? 0 : 0;
       seats[X.index].gen = gGen + 1;
       m.convByGen[gGen] = (m.convByGen[gGen] || 0) + 1;
-      // Proposal: a Possession card is spent when it converts someone (it leaves the game).
-      if (ov.spendOnConvert) { const k = X.hand.findIndex(c => c.type === 'possession'); if (k >= 0) X.hand.splice(k, 1); }
-      // Proposal: only the original possessed guest spreads possession — the card goes back to the giver.
+      // (Soul cards, 10 Oct 2026: the card that possessed X is already used up by the engine, and X holds
+      // rules.soulsOnConvert new souls of their own. The proposals below are measured against that.)
+      // Proposal: a Possession card is spent when it converts someone (it leaves the game) — now the rule
+      // itself, so `spendOnConvert` changes nothing (kept so the old combinations still run, and still mean
+      // what their labels say).
+      // Proposal: only the original possessed guest spreads possession — the soul "goes back" to the giver:
+      // X gets no souls of their own, and the giver gets a new soul (their own face) for the one used up.
       if (ov.returnToGiver) {
         const G = st.players.find(x => x.id === e.by);
-        const k = X.hand.findIndex(c => c.type === 'possession');
-        if (k >= 0 && G) G.hand.push(X.hand.splice(k, 1)[0]);
+        dropSouls(X);
+        if (G) G.hand.push(makeCard('possession', { owner: G.id }));
       }
-      // Proposal "one generation" (the owner's idea, reading 2): only the first possessed guest's cards
-      // pass on. A guest HE possessed holds that one card (one chance); when such a converted guest
-      // possesses someone with it, the card is used up (it leaves the game), so their victim holds no
-      // Possession card and the chain stops there. A blocked attempt is unchanged (both cards discarded).
+      // Proposal "one generation" (the owner's idea, reading 2): only the first possessed guest's souls
+      // pass on. A guest HE possessed gets souls of their own as usual; when such a converted guest
+      // possesses someone, their victim gets no souls at all, so the chain stops there. A blocked attempt
+      // is unchanged (both cards burn).
       if (ov.oneGeneration && gGen > 0) {
-        const k = X.hand.findIndex(c => c.type === 'possession');
-        if (k >= 0) { X.hand.splice(k, 1); m.chainStops++; }
-        say(`    one generation: ${X.name}'s Possession card is used up (the chain stops)`);
+        if (dropSouls(X)) m.chainStops++;
+        say(`    one generation: ${X.name} gets no souls of their own (the chain stops)`);
       }
     }
     if (r.possessed.length) m.maxPossessed = Math.max(m.maxPossessed, st.players.filter(x => x.alive && x.possessed).length);

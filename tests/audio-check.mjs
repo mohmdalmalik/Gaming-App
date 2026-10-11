@@ -98,10 +98,10 @@ await waitFor(() => window.__audio.state().playing.includes('lobby'), null, 2000
 check(true, 'Music back on: the waltz again');
 await page.click('#set-sound .seg-btn[data-value="high"]');
 // the screenshot of the settings screen
-await page.screenshot({ path: 'shots/audio/settings.png' });
+await page.screenshot({ path: new URL('./shots/audio/settings.png', import.meta.url).pathname });   // (tests/shots, wherever it is run from)
 await page.setViewportSize({ width: 1024, height: 700 });
 await page.waitForTimeout(400);
-await page.screenshot({ path: 'shots/audio/settings-1024x700.png' });
+await page.screenshot({ path: new URL('./shots/audio/settings-1024x700.png', import.meta.url).pathname });
 const fit = await ev(() => { const r = document.querySelector('#menu-settings').getBoundingClientRect(); return { top: r.top, bottom: r.bottom, h: innerHeight }; });
 check(fit.top >= 0 && fit.bottom <= fit.h, `settings fit a 1024x700 screen (${Math.round(fit.top)}..${Math.round(fit.bottom)} of ${fit.h})`);
 await page.setViewportSize({ width: 1180, height: 820 });

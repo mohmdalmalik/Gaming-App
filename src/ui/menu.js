@@ -1,29 +1,37 @@
 // The main menu: the first thing on screen, over the lobby (src/menu/lobbyScene.js renders the lobby
-// behind it; main.js blurs it). Four small screens in one panel:
-//   main         Play with bots · Practice alone · Settings
-//   bots         how many other guests (3-5) and your role (random, clean, possessed)
+// behind it; main.js blurs it). Five small screens in one panel:
+//   main         Play with bots · Practice alone · Settings · Your record
+//   bots         your guest (src/ui/guestPicker.js: random or one of the six, practice too), how many
+//                other guests (3-5) and your role (random, clean, possessed)
 //   matchmaking  the table filling up, guest by guest, as in an online game
-//   settings     bot speed, the view on other guests' turns, graphics, the menu background, music
-//                and sound effects (each applied at once, through onSettingChanged)
+//   settings     bot speed, the view on other guests' turns, graphics, the menu background, music,
+//                sound effects, quick chat and tips (each applied at once, through onSettingChanged;
+//                "Show tips again" brings back the tips already seen: src/ui/tips.js)
+//   record       your record on this device (src/ui/record.js), with a reset that asks first
 // Choices are remembered on this device (src/settings.js). Nothing here touches the game itself:
 // main.js gets the choice through the callbacks and starts the match. A guest joining the table rings
 // the reception bell (the sound cue bus, src/audio/bus.js).
 import { settings, SETTING_CHOICES } from '../settings.js';
 import { sfx } from '../audio/bus.js';
 import { tooSoon } from './tapGuard.js';
+import { renderGuestPicker } from './guestPicker.js';
+import { createRecordScreen } from './record.js';
+import { record } from '../record.js';
+import { renderTipsAgain } from './tips.js';
 
 const ROLE_CHOICES = [
   { value: 'random', label: 'Random', note: 'Like a real table: you are told your role when the game starts. Usually you are a clean guest.' },
   { value: 'clean', label: 'Clean guest', note: 'Find Lanterns, trust carefully, and get one clean guest out through the Fire Exit before dawn.' },
-  { value: 'possessed', label: 'Possessed', note: 'You start possessed with the Possession cards. Win their trust, then pass a Possession card in a trade.' },
+  { value: 'possessed', label: 'Possessed', note: 'You start possessed, with souls of your own (your face on each). Win their trust, then give one in a trade.' },
 ];
 const BOT_CHOICES = [3, 4, 5];
 
 export function createMenu(doc, { onPlayBots, onPractice, onSettingChanged } = {}) {
   const $ = id => doc.getElementById(id);
   const root = $('menu');
-  const screens = { main: $('menu-main'), bots: $('menu-bots'), matchmaking: $('menu-matchmaking'), settings: $('menu-settings') };
-  const btn = { bots: $('btn-menu-bots'), practice: $('btn-menu-practice'), settings: $('btn-menu-settings') };
+  const screens = { main: $('menu-main'), bots: $('menu-bots'), matchmaking: $('menu-matchmaking'), settings: $('menu-settings'), record: $('menu-record') };
+  const btn = { bots: $('btn-menu-bots'), practice: $('btn-menu-practice'), settings: $('btn-menu-settings'), record: $('btn-menu-record') };
+  const recordView = createRecordScreen(doc);
   let current = 'main';
   let ready = false;
   let mmTimers = [];
@@ -38,6 +46,7 @@ export function createMenu(doc, { onPlayBots, onPractice, onSettingChanged } = {
     for (const [k, el] of Object.entries(screens)) el.hidden = k !== name;
     if (name === 'bots') renderBots();
     if (name === 'settings') renderSettings();
+    if (name === 'record') { recordView.confirm(false); recordView.render(); }
   }
 
   // A row of buttons where exactly one is chosen (radio buttons that look like a segmented control).
@@ -57,6 +66,10 @@ export function createMenu(doc, { onPlayBots, onPractice, onSettingChanged } = {
   }
 
   function renderBots() {
+    renderGuestPicker(doc, $('opt-guest'), $('opt-guest-note'), settings.get('guest'), {
+      onPick: v => { settings.set('guest', v); renderBots(); },
+      guard: e => tooSoon(e, shownAt),
+    });
     const n = BOT_CHOICES.includes(+settings.get('bots')) ? +settings.get('bots') : 5;
     segment($('opt-bots'), BOT_CHOICES.map(v => ({ value: v, label: String(v) })), n, v => { settings.set('bots', v); renderBots(); });
     $('opt-bots-note').textContent = `A table of ${n + 1} guests: you and ${n} others.`;
@@ -75,6 +88,10 @@ export function createMenu(doc, { onPlayBots, onPractice, onSettingChanged } = {
         onSettingChanged?.(name, v);
       });
     }
+    renderTipsAgain($('btn-tips-again'), settings, {
+      guard: e => tooSoon(e, shownAt),
+      after: () => { renderSettings(); onSettingChanged?.('tips', 'on'); },
+    });
   }
 
   // The table fills up like an online lobby: you first, then each other guest "joins" after a short,
@@ -127,13 +144,19 @@ export function createMenu(doc, { onPlayBots, onPractice, onSettingChanged } = {
 
   const click = (el, fn) => el.addEventListener('click', e => { e.preventDefault(); if (tooSoon(e, shownAt)) return; fn(); });
   click(btn.bots, () => { if (ready) show('bots'); });
-  click(btn.practice, () => { if (ready) onPractice?.(); });
+  click(btn.practice, () => { if (ready) onPractice?.({ guest: settings.get('guest') || 'random' }); });
   click(btn.settings, () => show('settings'));
+  click(btn.record, () => show('record'));
   click($('btn-bots-back'), () => show('main'));
   click($('btn-bots-find'), () => {
     const n = BOT_CHOICES.includes(+settings.get('bots')) ? +settings.get('bots') : 5;
-    onPlayBots?.({ bots: n, role: settings.get('role') || 'random' });
+    onPlayBots?.({ bots: n, role: settings.get('role') || 'random', guest: settings.get('guest') || 'random' });
   });
+  // Your record: Reset asks first, in place of the Back / Reset row (each step a fresh tap: shownAt).
+  click($('btn-record-back'), () => show('main'));
+  click($('btn-record-reset'), () => { shownAt = performance.now(); recordView.confirm(true); });
+  click($('btn-record-keep'), () => { shownAt = performance.now(); recordView.confirm(false); });
+  click($('btn-record-yes'), () => { shownAt = performance.now(); record.reset(); recordView.confirm(false); recordView.render(); });
   // (a second tap of "Find a table" lands where Cancel appears: ignore Cancel for a moment)
   click($('btn-mm-cancel'), () => {
     if (performance.now() - mmStarted < 700) return;

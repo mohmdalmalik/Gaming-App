@@ -1,7 +1,6 @@
 // The possessed guest's own reminder of what they can still do: how many Possession cards they hold
 // ("souls to trade"). Used ONLY on that guest's own surfaces — the role and turn hand-over screens,
-// the card view, and their player panel on the main screen (outside hot-seat always; in hot-seat during
-// their own action phase only, as docs/GAME_RULES.md > Possession says; src/main.js possessedTellOnMain).
+// the card view, and their own player panel on the main screen.
 // Never call it for the public strip, the pass screen, a meeting, the map or another guest.
 import { setCardFace } from './cards.js';
 

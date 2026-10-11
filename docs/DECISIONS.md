@@ -970,6 +970,7 @@ Target: `docs/art-reference.jpg` (style, palette and finish; not its layout or i
 - The chain needs no engine change: a guest who is possessed already keeps the card that possessed them
   (`resolveTrade`), a Lantern block discards both, a death takes the card out of the game. The private note
   now says so ("…and you keep that card: one try to possess someone else in a trade").
+- (Replaced on 10 Oct 2026 by soul cards: see 'Owner-approved (10 Oct 2026): soul cards'.)
 
 ## Tap a room, not a door; no walking about inside a room (Oct 2026)
 - **Rule (docs/GAME_RULES.md > Turn, Doors and exploring):** a guest always stands in the middle of their
@@ -1330,7 +1331,8 @@ which both possessed guests handed over a Possession card, nobody lost one and t
   nothing per frame. `main.js` draws the table's faces ahead at game set-up, one per tick; an image shown
   before its face was ready carries `data-soul` and is upgraded the moment it is. An unknown owner keeps the
   plain face. Chosen over a small medallion because the mirror is already the card's medallion and makes the
-  face legible at the hand-fan size (~70 px wide).
+  face legible at the hand-fan size (~70 px wide). (Since 11 Oct: the player's own face first, the others'
+  once the game has faded in, and the drawing canvas let go afterwards — see 'Quality round 3'.)
 - **Trade scenes** (`src/ui/tradeReveal.js`): three new outcomes from `events.spent` — `soulSpent`,
   `alreadyPossessed`, `soulsCrossed` — and `possessed` redrawn: a soul that is used up burns out in CRIMSON
   (the same dissolve as the Lantern burn with a rose-to-crimson rim, crimson sparks and a smoke puff instead
@@ -1393,6 +1395,8 @@ which both possessed guests handed over a Possession card, nobody lost one and t
   before (practice is Victor), so the test suites' direct links are unchanged. The lift
   (`lobbyScene.enter({ prefer })`) boards your guest when they are one of the three seated guests who can
   board (Victor, Clara, Henry); the other three have no boarding path, so then the lift is as before.
+  Boarding alone (practice), Clara goes round the sofa's right end (`soloBoardingPaths`), since Victor
+  stays seated in her way.
   The tiles are built once and only re-marked on a pick, so the portraits never reload.
 - **Your record** (`src/record.js`): played / won / lost (your side's result, alive or not), the same split
   by the side you ended on, your own escapes, and practice escapes apart — in localStorage, every read
@@ -1428,7 +1432,8 @@ which both possessed guests handed over a Possession card, nobody lost one and t
   been up 4 s. **The clock never stops for a tip**: a player's own tips must not hold up an online table.
   None shows over a private screen, the trade scene, the card view, a notice or question, the map, the
   chat panel, the black between screens or the "turn sideways" card; one cut off by them within 2 s comes
-  back later. The meeting tip is the one shown beside an open meeting panel (never over its buttons).
+  back later — unless the screen is the one it explains (the map, the chat panel, the card view: the
+  player did what it said). The map and quick-chat tips wait for the player's own first turn. The meeting tip is the one shown beside an open meeting panel (never over its buttons).
 - **Privacy**: main.js hands the tips only the player's own situation (their turn, room, own hand and
   role, where their own guest stands) and what the whole table sees (round, rooms found, a meeting they
   are in, when another guest last spoke) — never another guest's role, hand or private result, so no tip
@@ -1440,3 +1445,37 @@ which both possessed guests handed over a Possession card, nobody lost one and t
   opens a door, the clock runs on), once per device, Hide tips, Show tips again, practice, at any size.
 - **Settings screen**: eight rows now, so on short screens the gaps between rows tighten a little more
   (buttons keep their size): it fits 1024 x 768 (46..743) and 1024 x 690.
+
+## Quality round 3 (11 Oct 2026 — interface, tests and docs only; no rule or rule number changed)
+- **Double taps never reach the hotel**: the second tap of a double tap on a quick-chat line or emote, or on
+  a tip's Got it / Hide tips, used to land on the hotel (the panel or card had gone) and open a door for an
+  action. Both now swallow a hotel tap for a moment after (`chat.swallowTap`, `tips.swallowTap`, checked
+  first in `onTap`). A double tap on the Chat button leaves the panel open (`tooSoon`).
+- **Good game! during the chat pause**: tapped within 3 s of the player's last line, it rests with the Chat
+  button's brass line and is said when the pause ends (the cooldown is kept, as a server would keep it).
+  The end screen's chat is two rows: the button alone, then the lines (their row's height kept from the
+  start), so neither the button nor Main menu / Play again moves when lines arrive.
+- **Tips**: a spot from which the arrow cannot reach what the tip explains is used only when no other spot
+  can (no more arrows pointing past the panel after a "Go" tag slid under the card); "Tips are off" keeps
+  the card's edge (and arrow) where it was; the tag boxes come from the tag layer's own list
+  (`screenTags.list()`), the interface is measured once per look (and each element's style read once), a
+  tip with no clear place looks again after 1 s, and the card moves by `translate` (no layout while it
+  glides). Tip buttons, chat lines and Good game! are 44 px tall; Settings keeps 44 px buttons on a short
+  screen (the spacing gives).
+- **Wording**: a clean guest who unmasks someone (Lantern block, Hand Mirror) reads "Now you know", not
+  "Only you know" — with soul cards others may know too. The role screen after a conversion names the one
+  guest who knows ("Only Clara, whose soul possessed you, knows."), matching the red eyes the player sees.
+- **Your record** reads a damaged save safely: every count is held to 1,000,000 and played = won + lost.
+- **Soul faces**: the player's own is drawn first, behind the black screen (waited for at most 0.8 s); the
+  others' after the fade-in, a quarter of a second apart; the drawing canvas and the source pictures are let
+  go 5 s after the last face. The trade's card pick shows your souls as one tile with ×N, like the hand.
+- **Move bar**: Move and Cancel are one group, so they never part (beside a short sentence, or together on
+  the next line).
+- **Chat history** (`chat.recent`) starts empty in each game.
+- **Test hooks (owner's decision pending)**: `window.__game` is set on every page load, so anyone can read
+  every hidden role and hand from the browser's console (only against bots: the whole game is on the one
+  device). Options for the owner: leave it until online play (where the server sends each device only its
+  own view — the code is already shaped for that), or create it only with a test flag in the address.
+- **Balance tool**: `tools/balance/personality-study.mjs`'s 'return to giver' and 'one generation'
+  proposals now model soul cards (the newly possessed guest's own souls are taken away; the giver gets a
+  new soul of their own back); 'spent on conversion' is now the rule itself, so it changes nothing.

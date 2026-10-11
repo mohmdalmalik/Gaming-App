@@ -42,7 +42,7 @@ const PLAN = {
 };
 const CAPTION = {
   possessed: /^You are possessed — two souls of your own to pass on\.$/,
-  blocked: T => new RegExp(`^Your Lantern burned it away — ${T} is possessed\\. Only you know\\.$`),
+  blocked: T => new RegExp(`^Your Lantern burned it away — ${T} is possessed\\. Now you know\\.$`),
   possessedThem: T => new RegExp(`^${T} is now possessed\\.$`),
   soulSpent: T => new RegExp(`^${T} is possessed too — their soul is spent\\.$`),
   alreadyPossessed: T => new RegExp(`^${T} is possessed too — your soul is spent\\.$`),
@@ -85,15 +85,17 @@ async function trade(mode) {
       g.refresh();
       return T.index;
     }, plan);
-    // (the guest in the hotel: its model has to be in for its eyes to be read)
-    await waitFor(T => window.__game.characters[T]?.debug().loaded, T, 90000).catch(() => {});
+    // (the guest in the hotel: its model has to be in for its eyes to be read — else the 3D half of the
+    // red-eye checks below would pass without looking)
+    const modelIn = await waitFor(T => window.__game.characters[T]?.debug().loaded, T, 120000).then(() => true, () => false);
+    check(modelIn, "the partner's model has loaded, so the eyes of the guest in the hotel can be read");
     await page.waitForTimeout(600);
     const eyes = () => ev(T => {
       const g = window.__game, img = document.querySelectorAll('#players-strip .mini-player')[T]?.querySelector('.mini-portrait img');
       return { strip: !!img && /-possessed\./.test(img.getAttribute('src') || ''), hotel: !!g.characters[T].debug().possessedEyes, loaded: !!g.characters[T].debug().loaded };
     }, T);
     const pre = await eyes();
-    check(!pre.strip && !pre.hotel, `before the trade: no red eyes on the partner (strip ${pre.strip}, hotel ${pre.hotel}${pre.loaded ? '' : ', model not loaded'})`);
+    check(!pre.strip && !pre.hotel, `before the trade: no red eyes on the partner (strip ${pre.strip}, hotel ${pre.hotel})`);
     const before = await ev(T => { const g = window.__game, me = g.state.players[g.humanSeat()], t = g.state.players[T];
       return { me: me.hand.map(c => c.id), them: t.hand.map(c => c.id), lanterns: me.hand.filter(c => c.type === 'lantern').length, souls: me.hand.filter(c => c.type === 'possession').length,
         theirSouls: t.hand.filter(c => c.type === 'possession').map(c => c.id), meId: me.id, tId: t.id, tName: t.name }; }, T);
@@ -101,15 +103,17 @@ async function trade(mode) {
     await ev(() => window.__game.trade());
     await waitFor(() => window.__game.handoffKind() === 'pick');
     // The pick screen: your souls carry your own face.
-    const pick = await ev(() => [...document.querySelectorAll('#offer-cards .card-tile')].map(t => ({ id: t.dataset.cardId, soul: t.querySelector('img')?.dataset.soul ?? null })));
+    const pick = await ev(() => [...document.querySelectorAll('#offer-cards .card-tile')].map(t => ({ id: t.dataset.cardId, soul: t.querySelector('img')?.dataset.soul ?? null, badge: t.querySelector('.face-badge.souls')?.textContent ?? null })));
     const give = await ev(plan => {
       const me = window.__game.state.players[window.__game.humanSeat()];
       const want = plan.iGive === 'lantern' ? c => c.type === 'lantern' : plan.iGive === 'soul' ? c => c.type === 'possession' : c => c.type !== 'lantern' && c.type !== 'possession';
       return me.hand.find(want).id;
     }, plan);
     if (plan.role === 'possessed') {
+      // (your souls are one tile with a ×N badge, as in your hand: a tap gives one)
       const souls = pick.filter(p => p.soul != null);
-      check(souls.length === before.souls && souls.every(p => p.soul === before.meId), `the pick screen shows your ${before.souls} souls, each with your own face (${JSON.stringify(souls.map(p => p.soul))})`);
+      check(souls.length === 1 && souls[0].soul === before.meId && souls[0].badge === (before.souls > 1 ? `×${before.souls}` : null),
+        `the pick screen shows your ${before.souls} soul${before.souls === 1 ? '' : 's'} as one card with your own face (${JSON.stringify(souls)})`);
     } else check(pick.every(p => p.soul == null), 'a clean guest has no souls to pick');
     await page.waitForTimeout(400);          // (a screen ignores taps in its first moments: src/ui/tapGuard.js)
     await page.click(`#offer-cards .card-tile[data-card-id="${give}"]`);
@@ -195,8 +199,8 @@ async function trade(mode) {
     // Back in the game: red eyes on a guest the player now knows is possessed (and only while possessed).
     await page.waitForTimeout(1200);
     const post = await eyes();
-    check(post.strip === plan.reveals && (post.hotel === plan.reveals || !post.loaded),
-      `after it: red eyes on ${before.tName} ${plan.reveals ? 'in the strip and in the hotel' : 'nowhere (a clean player never sees them)'} (strip ${post.strip}, hotel ${post.hotel}${post.loaded ? '' : ', model not loaded'})`);
+    check(post.loaded && post.strip === plan.reveals && post.hotel === plan.reveals,
+      `after it: red eyes on ${before.tName} ${plan.reveals ? 'in the strip and in the hotel' : 'nowhere (a clean player never sees them)'} (strip ${post.strip}, hotel ${post.hotel}, model loaded ${post.loaded})`);
     if (plan.reveals || plan.role === 'possessed') {
       // Your own souls on the hand fan: one stack, your own face, the drawn picture.
       const fan = await ev(() => { const i = document.querySelector('#hand-fan .fan-card[data-type="possession"] img'); return i ? { soul: i.dataset.soul ?? null, drawn: /^data:image\//.test(i.getAttribute('src') || '') } : null; });

@@ -6,13 +6,15 @@
 //   a match     no tip over the "Tap to begin" card or the role screen; then "Your turn" beside the player
 //               panel: inside the screen, over no part of the interface, End turn still under the finger,
 //               the screen round it still the game's (a tap on a fogged room opens its door), the turn clock
-//               still running; Got it puts it away and it is remembered. The next tip hides itself in time.
+//               still running; Got it puts it away and it is remembered (and the second tap of a double
+//               tap on it opens no door). The next tip hides itself in time.
 //               The Move bar's tip sits clear of Move and Cancel and goes when the bar does. A card that
 //               arrives while the card view (a private screen) is open waits for it to close. Only one tip
 //               at a time. A clean player never sees a possessed tip, and the tips are never handed the
 //               game state (only the player's own situation and public facts).
 //   once        a new match on the same device: "Your turn" does not come again.
-//   Hide tips   the card says tips are off, goes, the setting is saved, and nothing more shows.
+//   Hide tips   the card says tips are off (a double tap opens no door; the shorter card keeps its edge
+//               toward what it explained), goes, the setting is saved, and nothing more shows.
 //   Settings    Tips reads Off; "Show tips again" forgets the tips seen and turns tips on.
 //   practice    no tip while a question is up; then "Your turn" is back (it was forgotten).
 // And a clean console.
@@ -55,6 +57,22 @@ async function begin(query) {
   await ev(() => { window.__game.setPixelRatio(0.75); window.__game.cfg.player.speed = 16; });
   check(await tipHidden(), 'no tip over the "Tap to begin" card');
   await page.click('#btn-begin');
+}
+// A double tap on a tip's button (two clicks 140 ms apart at its middle): the card goes (or shrinks) at the
+// first, and the second must not reach the hotel under it and open a door. On a machine so slow that the
+// two taps arrive further apart than a double tap, the hotel check is skipped (said so).
+async function doubleTap(sel, what) {
+  const b = await ev(s => { const r = document.querySelector(s).getBoundingClientRect(); return { x: (r.left + r.right) / 2, y: (r.top + r.bottom) / 2 }; }, sel);
+  const state = () => ev(() => ({ rooms: window.__game.hotelRooms().length, ap: window.__game.activePlayer().actionPoints }));
+  const b0 = await state();
+  // (the times of the two presses, and the card's box at the first: what it looked like when it was tapped)
+  await ev(() => { window.__taps = []; window.__tipAtTap = null; document.addEventListener('pointerdown', () => { window.__taps.push(performance.now()); window.__tipAtTap ||= document.getElementById('tip').getBoundingClientRect().toJSON(); }, { capture: true }); });
+  await page.mouse.click(b.x, b.y); await page.waitForTimeout(140); await page.mouse.click(b.x, b.y);
+  await page.waitForTimeout(600);
+  const b1 = await state(), gap = await ev(() => (window.__taps.length > 1 ? window.__taps[1] - window.__taps[0] : Infinity));
+  if (gap < TIPS_TIMING.guardMs - 50) check(b1.rooms === b0.rooms && b1.ap === b0.ap, `...a double tap on ${what}: the second tap does nothing on the hotel (rooms ${b0.rooms} -> ${b1.rooms}, actions ${b0.ap} -> ${b1.ap})`);
+  else console.log(`  (skipped: the double tap on ${what} arrived ${Math.round(gap)} ms apart on this slow machine)`);
+  return ev(() => window.__tipAtTap);
 }
 const closeScreens = async () => { for (let i = 0; i < 4; i++) { if (await ev(() => window.__game.handoffOpen())) { await ev(() => window.__game.handoffNext()); await page.waitForTimeout(700); } } };
 
@@ -100,7 +118,7 @@ try {
   }
   if (gotIt) {
     await page.waitForTimeout(TIPS_TIMING.guardMs + 100);
-    await page.click('#tip .tip-ok');
+    await doubleTap('#tip .tip-ok', 'Got it');
     check(!!await poll(id => window.__game.tips().showing !== id, gotIt, 3000), `Got it puts it away ("${gotIt}")`);
     check((await saved()).seen.includes(gotIt), '...and it is remembered on this device');
   } else check(false, 'a tip to put away with Got it');
@@ -166,8 +184,11 @@ try {
   const any = await poll(() => window.__game.tips().showing, null, 20000);
   check(!!any, `a tip comes up (${any})`);
   await page.waitForTimeout(TIPS_TIMING.guardMs + 100);
-  await page.click('#tip .tip-hide');
-  await page.waitForTimeout(400);
+  const side = await ev(() => document.getElementById('tip').dataset.side);
+  const card0 = await doubleTap('#tip .tip-hide', 'Hide tips');
+  const card1 = await ev(() => document.getElementById('tip').getBoundingClientRect().toJSON());
+  const kept = side === 'above' ? Math.abs(card0.bottom - card1.bottom) < 2 : side === 'below' ? Math.abs(card0.top - card1.top) < 2 : Math.abs((card0.top + card0.bottom) - (card1.top + card1.bottom)) < 4;
+  check(kept, `...the shorter "Tips are off" card keeps its edge toward what it explained (${side}: ${Math.round(card0.top)}-${Math.round(card0.bottom)} -> ${Math.round(card1.top)}-${Math.round(card1.bottom)})`);
   check(/Settings can turn them back on/.test(await ev(() => document.querySelector('#tip .tip-text').textContent)) && !await tipHidden(), 'Hide tips: the card says tips are off');
   await shot('hidden');
   check(!!await poll(() => document.getElementById('tip').hidden, null, TIPS_TIMING.hiddenMs + 4000), '...then goes');

@@ -15,8 +15,11 @@ export const INTERFACE = ['.hud-top-left', '.hud-top-center', '.hud-top-right', 
   '#hand-fan .fan-limit', '.hud-bottom-right', '#confirm-bar', '#toast', '#search-spot', '.path-label', '#chat-panel',
   '#feed .feed-line'];
 
-const shown = el => !!el && !el.hidden && !el.closest('[hidden]') && el.getClientRects().length > 0
-  && getComputedStyle(el).visibility !== 'hidden' && getComputedStyle(el).display !== 'none';
+const shown = el => {
+  if (!el || el.hidden || el.closest('[hidden]') || !el.getClientRects().length) return false;
+  const cs = getComputedStyle(el);      // (read once for both)
+  return cs.visibility !== 'hidden' && cs.display !== 'none';
+};
 
 // The boxes of the visible interface, relative to `container`, each grown by `pad` px.
 export function interfaceRects(doc, container, selectors = INTERFACE, pad = 0) {

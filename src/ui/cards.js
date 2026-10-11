@@ -67,7 +67,7 @@ export function setCardFace(img, card) {
   return img;
 }
 // Draw these guests' soul faces ahead, one at a time (main.js, when a game is set up).
-export const prepareSoulCards = ids => prepareSoulFaces(ids, CARD_FACE.possession);
+export const prepareSoulCards = (ids, opts) => prepareSoulFaces(ids, CARD_FACE.possession, opts);
 
 // Practice is one guest alone — no trades, no possessed guest — so card words that talk about those
 // are swapped for these there (main.js switches it on in practice only). The rules' own words are in

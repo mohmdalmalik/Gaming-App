@@ -146,7 +146,9 @@ export function createHandoff(doc) {
       reset('role');
       el.kicker.textContent = opts?.changed ? 'Something has changed' : 'Your secret role';
       el.title.textContent = opts?.changed ? 'You have been possessed' : player.name;
-      el.sub.textContent = opts?.changed ? 'Nobody else knows. From now on you play for the hotel.' : 'Only you know this. Nobody else at the table can see it.';
+      // (after a conversion, the guest whose soul did it knows too: their screen shows the player's red eyes)
+      el.sub.textContent = !opts?.changed ? 'Only you know this. Nobody else at the table can see it.'
+        : opts.by ? `Only ${opts.by}, whose soul possessed you, knows. From now on you play for the hotel.` : 'From now on you play for the hotel.';
       renderRole(player);
       renderNotes(player);
       show('I understand', onContinue);
@@ -184,8 +186,17 @@ export function createHandoff(doc) {
         show(onCancel ? (cancelLabel || 'Continue') : 'Continue', onCancel || (() => onPick(null)));
         return;
       }
-      for (const c of cards) {
-        el.pickCards.appendChild(cardTile(doc, c, { hideDesc: true, selectable: true, onSelect: (card, _tile, e) => { if (tooSoon(e, openedAt)) return; api.close(); onPick(card.id); } }));
+      // Your souls are one tile with a ×N badge, as in your hand (they are all yours, with your face, and
+      // any one of them does the same): a tap gives one. A full hand stays on one row.
+      const souls = cards.filter(c => c.type === 'possession');
+      for (const c of cards.filter(c => c.type !== 'possession' || c === souls[0])) {
+        const tile = cardTile(doc, c, { hideDesc: true, selectable: true, onSelect: (card, _tile, e) => { if (tooSoon(e, openedAt)) return; api.close(); onPick(card.id); } });
+        if (c.type === 'possession' && souls.length > 1) {
+          const b = doc.createElement('span'); b.className = 'face-badge souls'; b.textContent = `×${souls.length}`;
+          b.setAttribute('aria-label', `${souls.length} Possession cards`);
+          tile.querySelector('.face-img')?.appendChild(b);
+        }
+        el.pickCards.appendChild(tile);
       }
       if (onCancel) show(cancelLabel || 'Cancel', onCancel); else el.next.hidden = true, el.overlay.hidden = false;
     },

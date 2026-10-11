@@ -414,8 +414,8 @@ export function resolveTrade(state, floor, P, Q, cardIdP, cardIdQ) {
       events.blocks.push({ blocker: R.id, revealed: G.id });
       privately.push([R, { type: 'blockedThem', who: G.index }], [G, { type: 'blocked', by: R.index }]);
       note(R.id, toAttacker
-        ? `Your Lantern burned away a Possession card. ${G.name} is POSSESSED — only you know.`
-        : `Your Lantern burned away a Possession card and was used up. ${G.name} is POSSESSED — only you know.`);
+        ? `Your Lantern burned away a Possession card. ${G.name} is POSSESSED — now you know.`
+        : `Your Lantern burned away a Possession card and was used up. ${G.name} is POSSESSED — now you know.`);
       note(G.id, `${R.name} blocked you with a Lantern. They now know what you are.`);
     } else if (!R.possessed) {
       // Possessed. G keeps whatever R gave; the card that did it is used up (`pc` goes nowhere: it

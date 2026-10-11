@@ -2,8 +2,8 @@
 
 A hidden-role social game set in a trapped hotel. Players explore room by room, collect
 items, and must trade whenever they meet. One player secretly starts **possessed** and
-spreads possession through trades; the clean players win by assembling an Exit Key from three
-Lanterns and escaping. Inspired by Panic Station, deliberately simplified.
+spreads possession through trades; the clean players win when one of them escapes by the Fire Exit
+carrying three Lanterns. Inspired by Panic Station, deliberately simplified.
 
 The authoritative rules are **[docs/GAME_RULES.md](docs/GAME_RULES.md)**. Working rules for
 coding agents are in **[CLAUDE.md](CLAUDE.md)** (see also [AGENTS.md](AGENTS.md)); key
@@ -15,7 +15,8 @@ technical choices are in **[docs/DECISIONS.md](docs/DECISIONS.md)**; status and 
 **The owner's restored ruleset is implemented and playable** (see `docs/GAME_RULES.md`, the product
 design; `CLAUDE.md` says no rule or number changes without the owner's approval of a before/after
 list). The page opens on a **main menu** over an animated, blurred hotel lobby (reception and concierge,
-guests seated and strolling, the manager walking by): **Play with bots**, **Practice alone**, **Settings**.
+guests seated and strolling, the manager walking by): **Play with bots**, **Practice alone**, **Settings**,
+**Your record**.
 
 - **Play with bots.** You and 3–5 computer guests (bots), like an online table filling up: choose how
   many others and your role (random, clean guest or possessed), watch the guests join with their online
@@ -323,13 +324,12 @@ node tests/browser-practice.mjs   # practice mode in a real browser [--screens]
 node tests/browser-bots.mjs       # the main menu and matches against bots in a real browser: settings, the table filling up, the lift, bots' turns, privacy, meetings both ways, being attacked, the end screen, whole matches [--screens] [--matches 3]
 node tests/browser-lobby.mjs      # the baked starting room, fog rooms, tap to open / move, camera (big hotel), draw calls
 node tests/audio-check.mjs        # music and sound: unlock on the first tap, every file decodes, Settings, the menu -> lift -> game music, cues in a match and practice [--quick]
-node tests/trade-reveal-check.mjs # the trade scene: real trades for swap / possessed (two tries, then your role) / Lantern block / you possess them
+node tests/trade-reveal-check.mjs # the trade scene: real trades for all seven outcomes (conversion with two new souls of your own, then your role; Lantern block; swap; you possess them; a soul spent on a guest already possessed; two souls crossed): soul faces, hands after, red eyes on known allies
 node tests/tips-check.mjs         # first-match tips ON: where they sit, never blocking, the clock runs on, once per device, Hide tips, Show tips again [--size 1024x768] [--shots DIR]
 python3 tools/audio/build.py      # rebuild every sound, ~6 min (tools/audio/README.md); needs numpy, scipy, ffmpeg
 python3 tools/audio/build.py revolver lobby   # rebuild only these (effect or music names); updates library.js + report.json
 node tools/balance/hotseat-sim.mjs 400 6   # 400 six-player matches under the rules as they stand (--before: same bots on the rules before Part 2; --compare: Lantern variants; --cautious)
 node tools/balance/hotseat-sim.mjs --study  # six player personalities (tools/balance/personalities.mjs) + rule proposals, in memory only (tests/personality-report.md)
-node tests/autoplay.mjs --url http://127.0.0.1:8123/ --persona-study --matches 30   # the same personalities through the real UI
 node tests/bots-check.mjs                  # the computer guests: information honesty, 450 seeded matches, determinism, the feed's icons (~5 s)
 node tests/chat-check.mjs                  # quick chat: the lines, the channel, the bots' chat honesty (scrambled hidden state, own role too), no effect on the game, pacing, answers (~5 s)
 node tools/balance/bot-match.mjs --n 1000  # all-bot matches at 6, 5 and 4 players: who wins, trust-building, blocks, waits

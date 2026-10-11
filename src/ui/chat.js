@@ -45,7 +45,7 @@ export function createChatUI(doc, { channel, feed, nameOf, colorOf, mySeat, sfx 
   };
   let on = false;               // this match has chat (a match, and Quick chat is On)
   let showing = false;          // the button may show now (nothing covers the game)
-  let openedAt = 0, pressedOutAt = -Infinity;   // (when a press outside the panel closed it)
+  let openedAt = 0, pressedOutAt = -Infinity;   // (when a press outside the panel, or a line sent, closed it)
   let coolTimer = 0;
   const bubbles = new Map();    // seat -> { html, cls, until }
   const recent = [];            // (tests) the last messages shown
@@ -75,6 +75,7 @@ export function createChatUI(doc, { channel, feed, nameOf, colorOf, mySeat, sfx 
     if (tooSoon(e, openedAt)) return;     // (the second tap of a double tap on Chat sends nothing)
     send(b.dataset.chat);
     close();
+    pressedOutAt = performance.now();     // (and the second tap of a double tap on a line, now on the hotel, does nothing)
   });
 
   // --- the end screen: what is said there, and a one-tap "Good game!" -------------------------------
@@ -87,12 +88,24 @@ export function createChatUI(doc, { channel, feed, nameOf, colorOf, mySeat, sfx 
   end.append(gg, endLines);
   const endCard = doc.querySelector('#end-overlay .card');
   if (endCard) endCard.insertBefore(end, endCard.querySelector('.end-actions'));
-  let endShown = false, endAt = 0;
+  let endShown = false, endAt = 0, ggTimer = 0;
   gg.addEventListener('click', e => {
     e.preventDefault();
     if (tooSoon(e, endAt) || gg.disabled) return;
-    if (send('gg')) gg.disabled = true;
+    gg.disabled = true;
+    // The player spoke a moment ago: it is said when their pause ends (the button resting till then,
+    // its thin brass line running down like the Chat button's).
+    const wait = on ? channel.waitFor(mySeat()) : 0;
+    if (wait > 0) {
+      gg.style.setProperty('--chat-cool', `${wait}ms`);
+      gg.classList.add('cooling');
+      clearTimeout(ggTimer);
+      ggTimer = setTimeout(() => { gg.classList.remove('cooling'); if (endShown && !send('gg')) gg.disabled = false; }, wait + 20);
+      return;
+    }
+    if (!send('gg')) gg.disabled = false;
   });
+  function ggReady() { clearTimeout(ggTimer); gg.classList.remove('cooling'); gg.disabled = false; }
 
   function open() {
     if (!on || !showing || el.button.disabled) return;
@@ -119,7 +132,7 @@ export function createChatUI(doc, { channel, feed, nameOf, colorOf, mySeat, sfx 
   }
   el.button.addEventListener('click', e => {
     e.preventDefault();
-    if (el.panel.hidden) open(); else close();
+    if (el.panel.hidden) open(); else if (!tooSoon(e, openedAt)) close();   // (a double tap on Chat leaves it open)
   });
   // A press anywhere else closes the panel (and main.js lets that press do nothing else: swallowTap).
   doc.addEventListener('pointerdown', e => {
@@ -184,12 +197,13 @@ export function createChatUI(doc, { channel, feed, nameOf, colorOf, mySeat, sfx 
       on = !!enabled;
       showing = false;
       bubbles.clear();
+      recent.length = 0;
       close();
       clearTimeout(coolTimer);
       el.button.disabled = false; el.button.classList.remove('cooling');
       el.button.hidden = true;
       channel.reset();
-      endLines.replaceChildren(); end.hidden = true; endShown = false; gg.disabled = false;
+      endLines.replaceChildren(); end.hidden = true; endShown = false; ggReady();
     },
     // Every frame. `clear`: nothing covers the game (no private screen, meeting, map, notice or end
     // screen). `ended`: the match's end screen is up.
@@ -200,7 +214,8 @@ export function createChatUI(doc, { channel, feed, nameOf, colorOf, mySeat, sfx 
       const e = on && !!ended;
       if (e !== endShown) {
         endShown = e; end.hidden = !e;
-        if (e) { endAt = performance.now(); endLines.replaceChildren(); gg.disabled = false; }
+        if (e) { endAt = performance.now(); endLines.replaceChildren(); }
+        ggReady();
       }
       if (bubbles.size) {
         const now = performance.now();

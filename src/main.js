@@ -252,7 +252,7 @@ const tradeReveal = createTradeReveal(document, { handoff });   // the player's 
 // table sees, never anything hidden from them; they never stop the clock or take a tap meant for the game,
 // and wait while anything private or a notice covers the game.
 const tips = createTips(document, {
-  settings, camera: view.camera,
+  settings, camera: view.camera, tagBoxes: () => screenTags.list(),
   situation: () => ({
     on: running && phase === 'game' && !state.finished, game: gameToken, practice: PRACTICE, me: me(),
     self: me()?.alive && !state.escaped?.has(me().id) ? movers[humanSeat] : null,   // (where the player's own guest stands)
@@ -264,6 +264,7 @@ const tips = createTips(document, {
     meeting: meeting.isOpen, heard: PRACTICE ? 0 : chat.recent().reduce((t, m) => (m.seat !== humanSeat ? Math.max(t, m.at) : t), 0),   // (when another guest last spoke)
     covered: handoff.isOpen || tradeReveal.isOpen || hand.isOpen || discard.isOpen || map.isOpen || chat.isOpen
       || overlays.endOpen || overlays.noticeOpen || overlays.askOpen || !fadeEl.hidden || !!sideways?.matches,
+    mapOpen: map.isOpen, chatOpen: chat.isOpen, cardOpen: hand.isOpen,   // (the player's own screens: a tip they obeyed is seen)
   }),
 });
 
@@ -407,7 +408,11 @@ function beginTurn() {
     sfx('yourTurn');
     lockNews = '';
   };
-  if (p.roleChangePending) { p.roleChangePending = false; handoff.revealRole(p, { changed: true }, go); return; }
+  if (p.roleChangePending) {
+    p.roleChangePending = false;
+    handoff.revealRole(p, { changed: true, by: state.players.find(q => q.id === p.convertedBy)?.name }, go);
+    return;
+  }
   if (p.notes.length) { handoff.privateNote(p, ['While the others played:'], go); return; }
   go();
 }
@@ -679,7 +684,7 @@ function runTrade(A, B, onDone = afterMeeting, { voluntary = false } = {}) {
         tradeReveal.show({
           outcome: tradeOutcome(events, human, other), me: human, other, mine, theirs: given,
           held, wasPossessed, allyBefore, allyAfter: redEyedAllies(state, human).has(other.id), notes: events.notes?.[human.id],
-        }, () => (newly ? handoff.revealRole(human, { changed: true }, onDone) : onDone()));
+        }, () => (newly ? handoff.revealRole(human, { changed: true, by: other.name }, onDone) : onDone()));
         refresh();   // (once the scene is up: a guest it shows to be possessed turns red only as it shows it)
       });
     },
@@ -1085,7 +1090,7 @@ function onHandMirror(cardId, targetId) {
   const lines = r.unmasked
     ? [player.possessed
       ? `${target.name} holds a Possession card — ${target.name} is possessed too.`
-      : `${target.name} holds a Possession card — ${target.name} is POSSESSED. Only you know.`]
+      : `${target.name} holds a Possession card — ${target.name} is POSSESSED. Now you know.`]
     : [];
   handoff.privateHand(player, {
     kicker: `Hand Mirror · private — ${player.name} only`,
@@ -1298,6 +1303,15 @@ async function planGame(choice) {
   return { practice: false, cast: guests, humanSeat: seat, profiles, possessedIndex, choice };
 }
 
+// Each guest's own soul-card face (src/ui/soulFace.js) is drawn ahead: the player's own first, behind the
+// black screen (setupGame, then waited for briefly before the game shows), the others' once the game has
+// faded in, a quarter of a second apart, so drawing them never lands on the fade or the role screen.
+let ownSoul = null;
+const ownSoulDrawn = () => Promise.race([ownSoul, wait(800)]);
+function soulsRest() {
+  if (!PRACTICE) prepareSoulCards(cast.filter((_, i) => i !== humanSeat).map(g => g.id), { gapMs: 250 });
+}
+
 // Seat the table and deal a new game (no screens: the caller shows them).
 function setupGame(plan) {
   holdHotel = false;                       // (this game's guests and rooms load now: castCharacters, resetWorld)
@@ -1314,7 +1328,7 @@ function setupGame(plan) {
   cast.forEach((_, i) => movers.push(createPlayer(cfg, startSpot(i))));
   castCharacters();
   usePracticeWording(PRACTICE);
-  if (!PRACTICE) prepareSoulCards(cast.map(g => g.id));   // (each guest's own soul-card face, drawn ahead)
+  ownSoul = PRACTICE ? null : prepareSoulCards([cast[humanSeat].id]);   // (the player's own soul-card face first: soulsRest)
   bots = null;
   chatter = null;
   hud.rebuild();
@@ -1409,6 +1423,7 @@ async function enterGame(plan, { guests = 3 } = {}) {
   // (a game started before the menu's lobby had loaded: its starting room may still be on its way —
   // wait a little for it behind the black screen rather than show the grey placeholder)
   await Promise.race([new Promise(r => { const t = () => (dressingDone ? r() : setTimeout(t, 100)); t(); }), wait(3000)]);
+  await ownSoulDrawn();
   await frame(); await frame();
   begin();
   if (PRACTICE) {
@@ -1417,6 +1432,7 @@ async function enterGame(plan, { guests = 3 } = {}) {
   }
   sfx('fadeIn');
   await fade(false, 900);
+  soulsRest();
 }
 
 async function startPractice(choice = {}) {
@@ -1450,9 +1466,11 @@ async function playAgain() {
   await fade(true, 450);
   setupGame(plan);
   await warmUp(1500, { eyes: true });
+  await ownSoulDrawn();
   begin();
   await frame();
   await fade(false, 700);
+  soulsRest();
 }
 
 // Back to the main menu (from the end screen or the Menu button).
@@ -1740,6 +1758,7 @@ function replayQueuedTap() {
 createInput(view.renderer.domElement, {
   onTap(x, y) {
     if (chat.swallowTap()) return;     // (a tap that closes the chat panel does nothing else)
+    if (tips.swallowTap()) return;     // (nor the second tap of a double tap on a tip's button)
     if (!running || state.finished || uiBusy()) return;
     if (!myTurn() || !inActionPhase) return;
     if (inDeadZone(x, y)) return;
@@ -1881,7 +1900,7 @@ if (DIRECT) {
   overlays.showStart();
   const guest = params.get('guest');      // (?guest=clara or random: the guest you play; none: as before)
   const planned = planGame(DIRECT === 'practice' ? { practice: true, guest } : { bots: n, role, guest });
-  planned.then(async plan => { setupGame(plan); await warmUp(5000); startReady = true; maybeReady(); })
+  planned.then(async plan => { setupGame(plan); await warmUp(5000); await ownSoulDrawn(); soulsRest(); startReady = true; maybeReady(); })
     .catch(err => { console.error(err); overlays.showError(`The game could not be set up. (${err?.message || err})`); });
   overlays.onBegin(() => { if (startReady) begin(); });
 } else {

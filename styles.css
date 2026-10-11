@@ -469,6 +469,7 @@ html, body {
 }
 .confirm-bar[hidden] { display: none; }
 #confirm-text { font-family: var(--serif); font-size: 16px; color: var(--ivory); }
+.confirm-actions { display: flex; gap: 12px; flex: none; }   /* Move and Cancel never part */
 
 /* Toast */
 .toast {
@@ -1503,7 +1504,7 @@ html, body {
 .chat-kicker::after { background: linear-gradient(90deg, var(--line), transparent); }
 .chat-phrases { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
 .chat-phrase {
-  appearance: none; min-height: 40px; padding: 6px 10px; border-radius: 9px; text-align: left; cursor: pointer;
+  appearance: none; min-height: 44px; padding: 6px 10px; border-radius: 9px; text-align: left; cursor: pointer;
   background: rgba(255, 255, 255, 0.035); border: 1px solid var(--line-soft); color: var(--ivory);
   font: 600 14px/1.2 var(--serif); letter-spacing: 0.01em; touch-action: manipulation;
 }
@@ -1541,15 +1542,21 @@ html, body {
 .feed-line.chat .feed-who { color: var(--brass-bright); font-weight: 700; }
 .feed-line.chat .feed-icon svg { width: 17px; height: 17px; }
 
-/* The end screen: what was said there, and a one-tap "Good game!". */
-.end-chat { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 8px; margin: -8px auto 18px; max-width: min(540px, 80vw); }
-.ec-lines { display: contents; }
+/* The end screen: a one-tap "Good game!" on its own row, and what is said there in the row under it
+   (its height kept from the start, so neither the button nor Main menu / Play again moves as lines come). */
+.end-chat { display: flex; flex-direction: column; align-items: center; gap: 8px; margin: -8px auto 18px; max-width: min(540px, 80vw); }
+.ec-lines { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; min-height: 30px; }
 .ec-say {
-  appearance: none; display: inline-flex; align-items: center; gap: 7px; height: 36px; padding: 0 14px 0 10px; border-radius: 999px;
-  border: 1px solid var(--line); background: rgba(255, 255, 255, 0.04); color: var(--ivory); cursor: pointer; touch-action: manipulation;
-  font: 600 14px/1 var(--serif); letter-spacing: 0.01em;
+  appearance: none; position: relative; overflow: hidden; display: inline-flex; align-items: center; gap: 7px; height: 44px; padding: 0 16px 0 12px;
+  border-radius: 999px; border: 1px solid var(--line); background: rgba(255, 255, 255, 0.04); color: var(--ivory); cursor: pointer;
+  touch-action: manipulation; font: 600 14px/1 var(--serif); letter-spacing: 0.01em;
 }
 .ec-say:disabled { opacity: 0.5; cursor: default; }
+.ec-say.cooling { opacity: 0.75; }
+.ec-say.cooling::after {
+  content: ""; position: absolute; left: 14px; right: 14px; bottom: 6px; height: 1.5px; border-radius: 1px;
+  background: var(--brass); transform-origin: left center; animation: chatCool var(--chat-cool, 3000ms) linear forwards;
+}
 .ec-line {
   display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 11px 0 7px; border-radius: 999px;
   background: rgba(14, 16, 22, 0.8); border: 1px solid var(--line-soft); color: var(--ivory-dim); font-size: 13px;
@@ -1560,18 +1567,13 @@ html, body {
 .ec-who { color: var(--brass-bright); font-weight: 700; }
 
 /* Seven Settings rows with Quick chat: the tighter spacing of the Music / Sound block above now applies
-   up to 860 px tall (Done stays on screen on a 1024 x 768 iPad), and tightens a little more below 700. */
+   up to 860 px tall (Done stays on screen on a 1024 x 768 iPad); see also the Tips row below. */
 @media (max-height: 860px) {
   #menu-settings .menu-h2 { margin-bottom: 10px; font-size: 28px; }
   #menu-settings .menu-field { margin-bottom: 11px; }
   #menu-settings .mf-label { margin-bottom: 6px; }
   #menu-settings .seg-btn { min-height: 44px; }
   #menu-settings .menu-actions { margin-top: 14px; }
-}
-@media (max-height: 700px) {
-  #menu-settings .menu-field { margin-bottom: 8px; }
-  #menu-settings .mf-label { margin-bottom: 5px; }
-  #menu-settings .seg-btn { min-height: 42px; }
 }
 
 /* ==== Your guest and your record (src/ui/guestPicker.js, src/ui/record.js) ========================
@@ -1679,7 +1681,7 @@ html, body {
   color: var(--ivory); text-align: left; pointer-events: auto; touch-action: manipulation;
 }
 .tip[hidden] { display: none; }
-.tip.moving { transition: left 0.25s ease, top 0.25s ease; }
+.tip.moving { transition: translate 0.25s ease; }   /* (placed by translate: src/ui/tips.js setAt) */
 .tip.in { animation: tipIn 0.24s ease-out; }
 @keyframes tipIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: none; } }
 .tip-kicker {
@@ -1693,13 +1695,13 @@ html, body {
 .tip-actions { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .tip-actions[hidden] { display: none; }
 .tip-ok {
-  appearance: none; min-height: 40px; min-width: 88px; padding: 6px 16px; border-radius: 9px; cursor: pointer;
+  appearance: none; min-height: 44px; min-width: 88px; padding: 6px 16px; border-radius: 9px; cursor: pointer;
   background: rgba(201, 162, 78, 0.16); border: 1px solid var(--brass); color: var(--brass-bright);
   font: 700 14px/1 var(--serif); letter-spacing: 0.02em;
 }
 .tip-ok:active { background: rgba(201, 162, 78, 0.32); }
 .tip-hide {
-  appearance: none; min-height: 40px; padding: 6px 4px 6px 2px; border: 0; background: none; cursor: pointer;
+  appearance: none; min-height: 44px; padding: 6px 4px 6px 2px; border: 0; background: none; cursor: pointer;
   color: var(--muted); font: 600 12.5px/1 var(--sans); letter-spacing: 0.02em;
   text-decoration: underline; text-decoration-color: rgba(168, 158, 138, 0.45); text-underline-offset: 3px;
 }
@@ -1744,4 +1746,8 @@ html, body {
   #menu-settings .mf-label { margin-bottom: 4px; }
   #menu-settings .menu-actions { margin-top: 10px; }
   #menu-settings .menu-btn.small { min-height: 50px; }
+}
+@media (max-height: 700px) {   /* (Safari with its bars: the buttons stay 44 px tall, the spacing gives instead) */
+  #menu-settings .menu-field { margin-bottom: 5px; }
+  #menu-settings .mf-label { margin-bottom: 3px; }
 }

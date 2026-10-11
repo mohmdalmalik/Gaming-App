@@ -157,7 +157,7 @@ export function createTradeReveal(doc, { handoff }) {
     switch (outcome) {
       case 'blocked': return spec.wasPossessed
         ? ['Your Lantern burned it away — ', who(other), ' is ', evil('possessed too'), '.']
-        : ['Your Lantern burned it away — ', who(other), ' is ', evil('possessed'), '. Only you know.'];
+        : ['Your Lantern burned it away — ', who(other), ' is ', evil('possessed'), '. Now you know.'];
       case 'blockedMe': return [who(other), ' blocked you — now they know.'];
       case 'possessed': return [evil('You are possessed'), ` — ${NUM[held] ?? held} soul${held === 1 ? '' : 's'} of your own to pass on.`];
       case 'possessedThem': return [who(other), ' is now ', evil('possessed'), '.'];

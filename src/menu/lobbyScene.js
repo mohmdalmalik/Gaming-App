@@ -277,7 +277,8 @@ export function createLobbyScene({ renderer, cfg, layout = lobbyLayout } = {}) {
     const b = a.board;
     b.started = true;
     a.standUp();
-    const toDoor = (L.boardingPaths[a.spec.name] || []).map(p => [...p]);
+    const solo = seq.boarders.length < 3 && L.soloBoardingPaths?.[a.spec.name];   // (someone stays seated in the way)
+    const toDoor = (solo || L.boardingPaths[a.spec.name] || []).map(p => [...p]);
     toDoor.push([lift.x + 0.1, lift.front[1] - 0.1], [lift.x + 0.05, L.room.z0 - 0.3]);
     const inside = b.via ? [[...b.via], [...b.slot]] : [[...b.slot]];
     // (standing up takes ~0.5 s and the walk eases in, hence the margin)

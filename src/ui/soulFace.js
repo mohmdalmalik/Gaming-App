@@ -9,8 +9,11 @@
 //   soulFaceSrc(ownerId, plain)    the drawn face if it is ready; else `plain`, the Possession card's own
 //                                  face (and it starts drawing it)
 //   markSoul(img, ownerId)         an <img> showing `plain` now gets the drawn face the moment it is ready
-//   prepareSoulFaces(ids, plain)   fetch the pictures for these guests and draw their faces ahead, one per
-//                                  tick (main.js, at the start of a game), so no screen waits for one
+//   prepareSoulFaces(ids, plain, { gapMs })   fetch the pictures for these guests and draw their faces
+//                                  ahead, one at a time, `gapMs` apart (main.js: the player's own at the
+//                                  start of a game, the others' once it is in view), so no screen waits
+// Once nothing is left to draw (for a few seconds), the drawing canvas and the pictures are let go: only
+// the drawn faces are kept. A face needed later simply draws them again.
 // (src/ui/cards.js wraps these with the card face it owns: cardFaceSrc, setCardFace, prepareSoulCards.)
 // A card whose owner is unknown, or whose owner has no portrait image, keeps the plain face.
 import { roster } from '../data/characters.js';
@@ -27,11 +30,14 @@ const FACE_Y = 0.47;        // the portrait's height above the mirror's middle, 
 const RING = 'rgba(178, 36, 56, 0.9)';   // the crimson line inside the brass (the possessed plates' line)
 
 const faces = new Map();    // ownerId -> { src: data URL | null, loading: Promise }
-const images = new Map();   // url -> Promise<HTMLImageElement>
-let frame = null;           // the card with the mirror opened (alpha), drawn once
-let queue = Promise.resolve();   // faces are drawn one at a time, a frame apart
+const images = new Map();   // url -> Promise<HTMLImageElement> (only while faces are being drawn)
+let frame = null;           // the card with the mirror opened (alpha), drawn once (while faces are drawn)
+let queue = Promise.resolve();   // faces are drawn one at a time, a little apart
+let pending = 0, releaseTimer = 0;   // faces still to draw; when none have been for a while, let go
 let warned = false;
-const nextTick = () => new Promise(resolve => setTimeout(resolve, 16));
+const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
+const RELEASE_MS = 5000;
+function release() { frame = null; images.clear(); }
 
 function load(url) {
   if (!images.has(url)) {
@@ -113,19 +119,21 @@ function draw(card, port) {
   return c.toDataURL('image/jpeg', 0.9);
 }
 
-function build(ownerId, plain) {
+function build(ownerId, plain, gapMs = 16) {
   let f = faces.get(ownerId);
   if (f) return f;
   const url = portraitOf(ownerId);
   f = { src: null, loading: null };
   faces.set(ownerId, f);
   if (!url || !plain) return f;
+  pending++; clearTimeout(releaseTimer);
   const pictures = Promise.all([load(plain), load(url)]);
   f.loading = queue = queue.then(() => pictures).then(async ([card, port]) => {
-    await nextTick();
+    await wait(gapMs);
     f.src = draw(card, port);
     for (const img of document.querySelectorAll(`img[data-soul="${ownerId}"]`)) img.src = f.src;
-  }).catch(err => { if (!warned) { warned = true; console.warn('soul card faces: the plain face is used:', err?.message || err); } });
+  }).catch(err => { if (!warned) { warned = true; console.warn('soul card faces: the plain face is used:', err?.message || err); } })
+    .finally(() => { if (--pending === 0) releaseTimer = setTimeout(release, RELEASE_MS); });
   return f;
 }
 
@@ -139,6 +147,6 @@ export function markSoul(img, ownerId) {
   img.dataset.soul = String(ownerId);
 }
 
-export function prepareSoulFaces(ids = [], plain) {
-  return Promise.all(ids.map(id => build(id, plain).loading).filter(Boolean));
+export function prepareSoulFaces(ids = [], plain, { gapMs = 16 } = {}) {
+  return Promise.all(ids.map(id => build(id, plain, gapMs).loading).filter(Boolean));
 }

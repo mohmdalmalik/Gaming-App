@@ -18,8 +18,9 @@ const empty = () => ({
   possessed: { played: 0, won: 0, lost: 0 },
   escaped: 0, practiceEscapes: 0,
 });
-// (a saved number that is missing or not a count reads as 0)
-const count = v => (Number.isFinite(+v) && +v > 0 ? Math.floor(+v) : 0);
+// (a saved number that is missing or not a count reads as 0; a damaged one is held to a sane size)
+const MAX = 1e6;
+const count = v => (Number.isFinite(+v) && +v > 0 ? Math.min(MAX, Math.floor(+v)) : 0);
 
 // The saved record, or null when storage cannot be read at all (then the copy in memory is kept).
 function read() {
@@ -32,6 +33,8 @@ function read() {
       for (const k of [...TOTALS, 'escaped', 'practiceEscapes']) r[k] = count(saved[k]);
       for (const side of SIDES) for (const k of TOTALS) r[side][k] = count(saved[side]?.[k]);
     }
+    // (every match counted is won or lost: a damaged save can never show more wins than matches)
+    for (const t of [r, r.clean, r.possessed]) t.played = t.won + t.lost;
     return r;
   } catch { return null; }
 }

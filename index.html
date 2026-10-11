@@ -94,8 +94,11 @@
 
       <div id="confirm-bar" class="confirm-bar" hidden>
         <span id="confirm-text">Move?</span>
-        <button id="btn-confirm-move" class="btn primary" type="button">Move &#183; 1 AP</button>
-        <button id="btn-confirm-cancel" class="btn" type="button">Cancel</button>
+        <!-- (Move and Cancel stay together: beside a short sentence, or both on the next line) -->
+        <span class="confirm-actions">
+          <button id="btn-confirm-move" class="btn primary" type="button">Move &#183; 1 AP</button>
+          <button id="btn-confirm-cancel" class="btn" type="button">Cancel</button>
+        </span>
       </div>
 
       <div id="toast" class="toast" hidden></div>

@@ -1189,7 +1189,7 @@ function showEnd() {
 }
 // Your record (src/record.js): each finished game is counted once, when its end screen shows (it can
 // show again for the same game; Play again and Restart practice deal a new one, a new gameToken). A
-// match left early never gets here. Then the quiet line under the result.
+// match left early is counted as left early instead (backToMenu). Then the quiet line under the result.
 let countedGame = -1;
 function countRecord(result) {
   if (countedGame !== gameToken) {
@@ -1475,6 +1475,8 @@ async function playAgain() {
 
 // Back to the main menu (from the end screen or the Menu button).
 async function backToMenu() {
+  // (a match left before its end: counted as left early, never as a win or a loss)
+  if (!PRACTICE && phase === 'game' && !state.finished && countedGame !== gameToken) { countedGame = gameToken; record.countLeft(); }
   audio.stopStinger();
   await fade(true, 450);
   gameToken++;

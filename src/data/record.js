@@ -11,8 +11,9 @@ export const RECORD_WORDS = {
   side: s => (s.played ? `${s.played} played · ${s.won} won · ${s.lost} lost` : 'None yet'),
   escaped: n => (n ? plural(n, 'time', 'times') : 'Not yet'),
   practice: n => (n ? plural(n, 'time', 'times') : 'Not yet'),
+  left: n => (n ? plural(n, 'match', 'matches') : 'None'),
   rate: pct => (pct == null ? '–' : `${pct}%`),
   none: 'No matches yet. Play with bots and every match you finish is counted here.',
-  some: 'Counted when a match ends. A match you leave early is not counted.',
+  some: 'Counted when a match ends. A match you leave early is counted as left early, not as a win or a loss.',
   confirm: 'Reset your record? Every number goes back to 0. This cannot be undone.',
 };

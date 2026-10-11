@@ -17,11 +17,12 @@ export function createRecordScreen(doc) {
     put('rec-possessed', W.side(r.possessed));
     put('rec-escaped', W.escaped(r.escaped));
     put('rec-practice', W.practice(r.practiceEscapes));
-    put('rec-note', r.played ? W.some : W.none);
+    put('rec-left', W.left(r.left));
+    put('rec-note', r.played || r.left ? W.some : W.none);
     put('rec-confirm-text', W.confirm);
     // (nothing to reset yet: the button rests)
     const reset = $('btn-record-reset');
-    if (reset) reset.disabled = !r.played && !r.practiceEscapes;
+    if (reset) reset.disabled = !r.played && !r.practiceEscapes && !r.left;
   }
 
   // The reset's confirm step, in place of the Back / Reset record row.

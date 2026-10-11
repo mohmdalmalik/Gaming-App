@@ -1,12 +1,14 @@
 // Your record: how your games ended, kept on this device only (localStorage). Like src/settings.js,
 // every read and write is guarded, so a private window or blocked storage simply starts from nothing
 // and keeps the count for this visit. src/main.js counts a game when its end screen shows (once per
-// game: Play again does not count it twice); a match left early is never counted. Nothing here is a
-// game rule, and nothing in src/game/ or src/bots/ reads it.
+// game: Play again does not count it twice); a match left early (Main menu before its end) is counted
+// as left early, never as a win or a loss (owner's choice, 11 Oct 2026). Nothing here is a game rule,
+// and nothing in src/game/ or src/bots/ reads it.
 //
 //   played / won / lost    every finished match with bots: did your side win? (alive or not)
 //   clean / possessed      the same three, by the side you ended the match on
 //   escaped                matches you got out of yourself, through the Fire Exit
+//   left                   matches left early, before their end (not in played)
 //   practiceEscapes        practice games finished (practice ends only at the Fire Exit)
 const KEY = 'hotelEscape.record.v1';
 const SIDES = ['clean', 'possessed'];
@@ -16,7 +18,7 @@ const empty = () => ({
   played: 0, won: 0, lost: 0,
   clean: { played: 0, won: 0, lost: 0 },
   possessed: { played: 0, won: 0, lost: 0 },
-  escaped: 0, practiceEscapes: 0,
+  escaped: 0, practiceEscapes: 0, left: 0,
 });
 // (a saved number that is missing or not a count reads as 0; a damaged one is held to a sane size)
 const MAX = 1e6;
@@ -30,7 +32,7 @@ function read() {
     const saved = raw ? JSON.parse(raw) : null;
     const r = empty();
     if (saved && typeof saved === 'object') {
-      for (const k of [...TOTALS, 'escaped', 'practiceEscapes']) r[k] = count(saved[k]);
+      for (const k of [...TOTALS, 'escaped', 'practiceEscapes', 'left']) r[k] = count(saved[k]);
       for (const side of SIDES) for (const k of TOTALS) r[side][k] = count(saved[side]?.[k]);
     }
     // (every match counted is won or lost: a damaged save can never show more wins than matches)
@@ -61,6 +63,8 @@ export const record = {
     if (escaped) current.escaped++;
     write();
   },
+  // A match left early: the player went back to the main menu before it ended.
+  countLeft() { fresh(); current.left++; write(); },
   // A practice game finished (the player reached the Fire Exit).
   countPractice() { fresh(); current.practiceEscapes++; write(); },
   // Everything back to nothing (the record screen asks first).

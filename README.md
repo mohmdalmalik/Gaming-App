@@ -80,7 +80,8 @@ Published with GitHub Pages from `main`: **https://mohmdalmalik.github.io/Gaming
    **Play again** starts a new table with the same choices, **Main menu** goes back. A quiet line under
    the result gives your record ("Your record: 7 wins · 4 losses"); **Your record** on the main menu
    shows it in full (played, won, lost, win rate, by side, your escapes, practice escapes), kept on this
-   device, with a Reset that asks first. A match left early is not counted.
+   device, with a Reset that asks first. A match left early (Main menu before its end) is shown as
+   "Left early", never as a win or a loss.
 
 Direct links (they skip the menu and show a "Tap to begin" card; the tests use them):
 `?mode=practice`, `?mode=bots&bots=5&role=clean` (`role`: random | clean | possessed; `&seat=2` puts you

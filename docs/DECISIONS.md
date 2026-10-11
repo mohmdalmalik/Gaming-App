@@ -1405,7 +1405,9 @@ which both possessed guests handed over a Possession card, nobody lost one and t
   newer and is kept for the visit. `main.js countRecord` counts once per game (`gameToken`), when the end
   screen shows — the end screen can show twice for one game (e.g. the role screen's Continue after Skip to
   the end), and Play again / Restart practice deal a new token. A match left early never reaches the end
-  screen, so it is never counted. Words in `src/data/record.js`.
+  screen; `backToMenu` counts it as `left` instead (shown as "Left early", never a win or a loss: the
+  owner's choice, 11 Oct 2026, so quitting after dying neither hides a loss nor counts one). Words in
+  `src/data/record.js`.
 - **On screen** (`src/ui/record.js`): a fourth, smaller main-menu button opens the record screen in the
   Settings panel style (big brass numerals, the win rate on a rule, quiet rows); Reset swaps the button row
   for a confirm step, and every step resets the menu's tap guard so a double tap cannot confirm it. The end

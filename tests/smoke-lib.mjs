@@ -20,10 +20,27 @@ export const tipsOff = () => {
   } catch { /* no storage on this page */ }
 };
 
-export async function launch({ width = 1180, height = 820, touch = true, tips = false } = {}) {
+// A player profile (src/account/account.js) in every check unless it asks for none (`profile: false`, as
+// tests/browser-profile.mjs does for the first-run register): before each page loads, a saved profile
+// 'tester' (a fixed free look: the Tuxedo in its own colours) is put in place if there is none yet, so the
+// menu opens on the main screen, never on "Sign the register". `profile: { username, avatar }` seeds that.
+export const TEST_PROFILE = {
+  version: 1, id: 'local-test', username: 'tester',
+  avatar: { v: 1, base: 'victor', skin: 'fair', hair: 'black', eyes: 'classic', glasses: 'none', frame: 'tortoise', main: 'midnight', accent: 'black', metal: 'gold' },
+  inventory: [], createdAt: '2026-10-12T00:00:00.000Z', updatedAt: '2026-10-12T00:00:00.000Z', nameChangedAt: '2026-10-12T00:00:00.000Z',
+};
+export const profileOn = (profile) => {
+  try {
+    const key = 'hotelEscape.profile.v1';
+    if (!localStorage.getItem(key)) localStorage.setItem(key, JSON.stringify(profile));
+  } catch { /* no storage on this page */ }
+};
+
+export async function launch({ width = 1180, height = 820, touch = true, tips = false, profile = true } = {}) {
   const browser = await chromium.launch({ executablePath: chrome, headless: true, args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--no-sandbox'] });
   const context = await browser.newContext({ viewport: { width, height }, deviceScaleFactor: 1, hasTouch: touch });
   if (!tips) await context.addInitScript(tipsOff);
+  if (profile) await context.addInitScript(profileOn, profile === true ? TEST_PROFILE : { ...TEST_PROFILE, ...profile });
   const page = await context.newPage();
   const messages = [];
   page.on('console', m => { if (['error', 'warning'].includes(m.type())) messages.push(`${m.type()}: ${m.text()}`); });

@@ -4,7 +4,8 @@
 // the brass. It is drawn ONCE per guest on a small canvas from the Possession card face and the
 // portrait, and kept as an image; every surface then shows that image like any other card face (one
 // <img>, so the hand fan, the tiles, the card view, the trade scenes and the burning dissolve all work
-// unchanged). Nothing is drawn per frame.
+// unchanged). Nothing is drawn per frame. The image is encoded off the main thread (canvas.toBlob, an
+// object URL, let go when the face is), so drawing one never holds up a frame.
 //
 //   soulFaceSrc(ownerId, plain)    the drawn face if it is ready; else `plain`, the Possession card's own
 //                                  face (and it starts drawing it)
@@ -16,8 +17,18 @@
 // the drawn faces are kept. A face needed later simply draws them again.
 // (src/ui/cards.js wraps these with the card face it owns: cardFaceSrc, setCardFace, prepareSoulCards.)
 // A card whose owner is unknown, or whose owner has no portrait image, keeps the plain face.
+//
+// Whose face: main.js hands in the table's portraits (setSoulPortraits): for an owner (a seat id, 'p3')
+// the key of the look they wear (src/data/wardrobe.js avatarKey) and their possessed portrait (the
+// runtime one, src/render/avatarPortrait.js). Faces are kept by that key, never by the seat id, so 'p3'
+// at the next table, in another look, never shows the last table's face. Without it (tools, old fixtures)
+// the roster's shipped pictures are used.
 import { roster } from '../data/characters.js';
 import { PORTRAIT_ART } from './portrait.js';
+
+let resolver = null;        // { key(ownerId) -> string | null, url(ownerId) -> URL | Promise<URL | null> | null }
+export function setSoulPortraits(r) { resolver = r || null; }
+const KEEP_FACES = 24;      // drawn faces kept (about 70 kB each); the least recently used go first
 
 // The mirror's opening on the card face, measured on the 512 x 768 image (tools/card-pipeline): its
 // middle and half-widths, and the painted silhouette's two glowing eyes (left out of the smoke, so
@@ -29,7 +40,7 @@ const ZOOM = 1.12;          // the portrait a little closer than "just covers th
 const FACE_Y = 0.47;        // the portrait's height above the mirror's middle, as a share of the portrait
 const RING = 'rgba(178, 36, 56, 0.9)';   // the crimson line inside the brass (the possessed plates' line)
 
-const faces = new Map();    // ownerId -> { src: data URL | null, loading: Promise }
+const faces = new Map();    // look key -> { src: data URL | null, loading: Promise }
 const images = new Map();   // url -> Promise<HTMLImageElement> (only while faces are being drawn)
 let frame = null;           // the card with the mirror opened (alpha), drawn once (while faces are drawn)
 let queue = Promise.resolve();   // faces are drawn one at a time, a little apart
@@ -52,8 +63,13 @@ function load(url) {
   return images.get(url);
 }
 
-// The owner's possessed portrait image, or null.
+// The look an owner wears now (the faces' key), and their possessed portrait image (or a promise of it).
+function keyOf(ownerId) {
+  if (resolver) { try { return resolver.key(ownerId) || null; } catch { return null; } }
+  return String(ownerId);
+}
 function portraitOf(ownerId) {
+  if (resolver) { try { return resolver.url(ownerId) || null; } catch { return null; } }
   const who = roster.find(r => r.id === ownerId);
   const art = who && PORTRAIT_ART[who.outfit];
   if (!art) return null;
@@ -116,25 +132,42 @@ function draw(card, port) {
   g.drawImage(frame, 0, 0);
   g.beginPath(); g.ellipse(cx, cy, rx - 1 * sx, ry - 1 * sy, 0, 0, Math.PI * 2);
   g.strokeStyle = RING; g.lineWidth = 3.5 * sx; g.stroke();
-  return c.toDataURL('image/jpeg', 0.9);
+  return new Promise(resolve => {
+    try { c.toBlob(b => resolve(b ? URL.createObjectURL(b) : c.toDataURL('image/jpeg', 0.9)), 'image/jpeg', 0.9); }
+    catch { resolve(c.toDataURL('image/jpeg', 0.9)); }
+  });
 }
+const letGo = f => { if (f?.src?.startsWith('blob:')) URL.revokeObjectURL(f.src); };
 
+const NONE = { src: null, loading: null };
 function build(ownerId, plain, gapMs = 16) {
-  let f = faces.get(ownerId);
-  if (f) return f;
+  const key = keyOf(ownerId);
+  if (!key) return NONE;
+  let f = faces.get(key);
+  if (f) { faces.delete(key); faces.set(key, f); return f; }   // (recently used: kept longest)
   const url = portraitOf(ownerId);
   f = { src: null, loading: null };
-  faces.set(ownerId, f);
+  faces.set(key, f);
+  trimFaces();
   if (!url || !plain) return f;
   pending++; clearTimeout(releaseTimer);
-  const pictures = Promise.all([load(plain), load(url)]);
+  const pictures = Promise.resolve(url).then(u => { if (!u) throw new Error('no portrait'); return Promise.all([load(plain), load(u)]); });
+  pictures.catch(() => {});
   f.loading = queue = queue.then(() => pictures).then(async ([card, port]) => {
     await wait(gapMs);
-    f.src = draw(card, port);
-    for (const img of document.querySelectorAll(`img[data-soul="${ownerId}"]`)) img.src = f.src;
+    f.src = await draw(card, port);
+    if (faces.get(key) !== f) { letGo(f); return; }      // (let go while it was drawn)
+    // (every card on screen whose owner wears this look now)
+    for (const img of document.querySelectorAll('img[data-soul]')) if (keyOf(img.dataset.soul) === key) img.src = f.src;
   }).catch(err => { if (!warned) { warned = true; console.warn('soul card faces: the plain face is used:', err?.message || err); } })
     .finally(() => { if (--pending === 0) releaseTimer = setTimeout(release, RELEASE_MS); });
   return f;
+}
+function trimFaces() {
+  for (const [k, f] of faces) {
+    if (faces.size <= KEEP_FACES) break;
+    if (f.src || !f.loading) { faces.delete(k); letGo(f); }
+  }
 }
 
 export function soulFaceSrc(ownerId, plain) {

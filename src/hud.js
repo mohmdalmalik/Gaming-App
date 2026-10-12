@@ -16,6 +16,7 @@ import { canUseRoom } from './game/actions.js';
 import { rules } from './data/rules.js';
 import { countableCount } from './game/cards.js';
 import { makePortrait } from './ui/portrait.js';
+import { avatarKey } from './data/wardrobe.js';
 import { soulsHeld, soulsChip } from './ui/souls.js';
 import { redEyedAllies } from './ui/allies.js';
 import { roundLabel, finalRoundShort, isFinal } from './ui/roundLabel.js';
@@ -97,9 +98,8 @@ export function createHud(doc, cfg) {
       const flag = doc.createElement('div'); flag.className = 'mini-flag';
       const port = doc.createElement('div'); port.className = 'mini-portrait';
       port.appendChild(makePortrait(doc, p, { possessed: false })); // never reveal roles here (but see `red` below)
-      const name = doc.createElement('div'); name.className = 'mini-name'; name.textContent = p.name;
-      // A match: who is playing that guest — "You", or the computer guest's online-style name.
-      if (p.handle) { name.title = p.handle; const h = doc.createElement('span'); h.className = 'mini-user'; h.textContent = p.handle; name.appendChild(h); }
+      // The guest's username, on one line (a long one ends in "…"; the full name on hover).
+      const name = doc.createElement('div'); name.className = 'mini-name u'; name.textContent = p.name; name.title = p.name;
       // PUBLIC information only: where they are and their health. A hidden role is never shown here,
       // and neither is how many cards anyone holds (approved rule, docs/GAME_RULES.md > Possession: a
       // Possession card or a Lantern block changes counts unevenly). Your own count is in your own hand.
@@ -191,7 +191,11 @@ export function createHud(doc, cfg) {
         endLine = { own: '', shared: 'You are out' };
         el.endTurn.disabled = false;
       } else if (!mine) {
-        el.endMain.textContent = `${active.name}’s turn`;
+        // ("nightowl’s turn": a long name ends in "…" before "’s turn", styles.css .end-name)
+        if (el.endMain.textContent !== `${active.name}’s turn`) {
+          const who = doc.createElement('span'); who.className = 'end-name'; who.textContent = active.name;
+          el.endMain.replaceChildren(who, '’s turn');
+        }
         endLine = { own: '', shared: next === p ? 'You are next' : 'Waiting…' };
         el.endTurn.disabled = true;
       } else {
@@ -295,7 +299,7 @@ export function createHud(doc, cfg) {
       const on = match && !!p.possessed;
       const clean = match && !on;
       // Their own portrait: the possessed one (the same face, red eyes) only while possessed.
-      const key = `${p.index}:${on}:${p.outfit}`;
+      const key = `${p.index}:${on}:${p.avatar ? avatarKey(p.avatar) : p.outfit}`;
       if (key !== portraitKey) {
         portraitKey = key;
         el.portrait.replaceChildren(makePortrait(doc, p, { possessed: on }));

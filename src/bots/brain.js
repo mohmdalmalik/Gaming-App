@@ -37,7 +37,18 @@
 //     has to pass) and may seal its doorway with a Barricade. It knows only the possessed guests it is
 //     linked to through conversions, the ones a spent soul showed it (its own handed to one, or one
 //     handed to it) and any it worked out, never the whole team.
+//   Every guest listens to the table (quick chat, src/data/chat.js BOT_HEAR; see "what was said" below)
+//     A line is public, so every guest hears the same words; each weighs them by what IT knows. A clean
+//     guest believes a speaker as far as it trusts them from what it saw itself (never from what was said
+//     about them); a claim the table can see is impossible ("<them> tried to possess me!" with no trade
+//     between the two, "<them> is possessed!" with no Hand Mirror on them) or a lie about the listener
+//     itself makes the speaker look possessed; two guests naming each other share the blame. What it
+//     heard moves its estimate of a guest by a capped amount, in full for whom it avoids, meets, trades
+//     with in the Fire Exit or pools with, in part for an attack (attackShare), and not at all for a
+//     Lantern block (blockShare 0: talk never makes a guest a Lantern magnet). A possessed guest holds back
+//     a soul from a guest the talk suggests is possessed too.
 import { makeRng } from '../game/cards.js';
+import { BOT_HEAR } from '../data/chat.js';
 
 const clamp = (x, lo, hi) => Math.max(lo, Math.min(hi, x));
 function hash32(...parts) {
@@ -81,7 +92,8 @@ export class Mind {
     this.seed = seed >>> 0;
     this.rng = makeRng(hash32(this.seed, seat, 'decide') || 1);
     this.paceRng = makeRng(hash32(this.seed, seat, 'pace') || 1);
-    this.cursor = { pub: 0, inbox: 0 };
+    this.cursor = { pub: 0, inbox: 0, chat: 0 };
+    this._hs = null;           // hearsay, worked out when first needed after anything new was seen or heard
     this.decisions = [];       // what this guest chose and why (its own record; the measuring tools read it)
     this.mem = {
       round: 1,
@@ -105,18 +117,36 @@ export class Mind {
       friendly: new Map(),     // (as possessed) seat -> friendly gifts I gave them
       attempts: new Map(),     // seat -> Possession cards I gave them
       mirrored: new Set(),     // guests I have used a Hand Mirror on
+      // what was said at the table (public) and what this guest makes of it
+      possessedNow: null,      // my own role as of the last thing read (a line is weighed as I was THEN)
+      mirrors: [],             // public: every Hand Mirror used { by, target, seq }
+      claims: [],              // lines about a guest (and "I am clean." / "I am possessed."): { by, id, about, trades }
+      liar: new Map(),         // seat -> how much what they said looked like a lie to me (as clean)
+      allyHint: new Map(),     // (as possessed) seat -> how much what was said makes me think they are possessed too
     };
     this.turnState = null;
   }
 
   // --- reading what happened ------------------------------------------------------------------------
-  observe(view) {
-    const evs = [...view.events.map(e => ({ e, pub: true })), ...view.inbox.map(e => ({ e, pub: false }))]
-      .sort((x, y) => x.e.seq - y.e.seq);
-    for (const { e, pub } of evs) (pub ? this.onPublic(e, view) : this.onPrivate(e, view));
+  // `heard`: the lines said at the table since it last looked, in order ({ seq, msg }: seq is the last
+  // event there was when the line was said). Each is read in its place among the events, just after it.
+  observe(view, heard = []) {
+    const m = this.mem;
+    // (my role as the reading starts: a conversion further on in this batch is read in its place)
+    if (m.possessedNow == null) m.possessedNow = !!view.me.possessed && !view.inbox.some(e => e.type === 'possessed');
+    const evs = [...view.events.map(e => ({ e, k: 'pub', at: e.seq, i: 0 })), ...view.inbox.map(e => ({ e, k: 'own', at: e.seq, i: 0 })),
+      ...heard.map((h, i) => ({ e: h.msg, k: 'chat', at: (h.seq || 0) + 0.5, i }))]
+      .sort((x, y) => x.at - y.at || x.i - y.i);
+    for (const { e, k } of evs) {
+      if (k === 'pub') this.onPublic(e, view);
+      else if (k === 'own') this.onPrivate(e, view);
+      else this.onChat(e, view);
+    }
     if (view.events.length) this.cursor.pub = view.events[view.events.length - 1].seq;
     this.cursor.inbox += view.inbox.length;
-    this.mem.round = view.round;
+    this.cursor.chat += heard.length;
+    if (evs.length) this._hs = null;
+    m.round = view.round;
   }
 
   bump(map, k, d) { map.set(k, (map.get(k) || 0) + d); }
@@ -146,6 +176,7 @@ export class Mind {
         break;
       }
       case 'switchboard': this.onSwitchboard(e, view); break;
+      case 'mirror': m.mirrors.push({ by: e.by, target: e.target, seq: e.seq }); break;
       default: break;
     }
   }
@@ -169,6 +200,7 @@ export class Mind {
       case 'blocked': m.knowsMe.add(e.by); break;
       case 'blockedThem': m.known.add(e.who); m.allies.add(e.who); break;
       case 'possessed':
+        m.possessedNow = true;
         m.allies.add(e.by);
         for (const k of m.known) m.allies.add(k);
         break;
@@ -231,8 +263,9 @@ export class Mind {
     return at != null && at === (this.mem.tradeCount.get(s) || 0);
   }
 
-  // How likely `s` is possessed, as a clean guest sees it (0 … 1).
-  pPoss(c, s) {
+  // How likely `s` is possessed, as a clean guest sees it (0 … 1). `hear`: how much of what was said at
+  // the table counts (1: all of it; 0: only what it saw itself; BOT_HEAR.blockShare / attackShare).
+  pPoss(c, s, hear = 1) {
     const m = this.mem;
     if (m.known.has(s)) return 1;
     if (this.isCleared(s)) return 0.04;
@@ -245,7 +278,88 @@ export class Mind {
     const base = clamp((est - knownAlive) / Math.max(1, pool), 0.03, 0.85);
     const wasCleared = m.cleared.has(s) ? -0.08 : 0;
     const trust = Math.min(m.trust.get(s) || 0, 2.5) * 0.06;
-    return clamp(base + (m.susp.get(s) || 0) + wasCleared - trust, 0.02, 0.97);
+    const heard = hear ? hear * this.hearsay(c, s) : 0;
+    return clamp(base + (m.susp.get(s) || 0) + wasCleared - trust + heard, 0.02, 0.97);
+  }
+
+  // --- what was said at the table ---------------------------------------------------------------------
+  // A line someone said (public: everyone heard it). Here it is only stored, with what it shows at once;
+  // what it is worth is worked out when needed (hearsay), from what this guest knows then.
+  onChat(msg, view) {
+    const m = this.mem, me = this.seat, H = BOT_HEAR;
+    if (!H.on || !msg || msg.seat === me) return;
+    const W = H.weight[msg.id];
+    if (W == null) return;
+    const S = msg.seat;
+    const self = msg.id === 'clean' || msg.id === 'iAmPossessed';       // (a claim about oneself)
+    const about = self ? S : msg.about;
+    if (!Number.isInteger(about)) return;
+    const strong = msg.id === 'triedPossess' || msg.id === 'isPossessed';
+    // Could it be true, from what everyone saw? (a soul only changes hands in a trade; a Hand Mirror is public)
+    const traded = m.trades.some(t => (t.a === S && t.b === about) || (t.b === S && t.a === about));
+    const mirroredIt = m.mirrors.some(x => x.by === S && x.target === about);
+    const possible = msg.id === 'triedPossess' ? traded : (msg.id === 'isPossessed' || msg.id === 'isClean') ? mirroredIt : true;
+    if (!possible) { this.bump(m.liar, S, H.baseless); return; }
+    if (m.possessedNow) {
+      // A possessed listener: does the talk suggest a guest is possessed too (no use handing them a soul)?
+      const A = H.allyHint;
+      const hint = (seat, d) => m.allyHint.set(seat, Math.min(A.cap, (m.allyHint.get(seat) || 0) + d));
+      if (msg.id === 'iAmPossessed') hint(S, A.iAmPossessed);
+      else if (strong && about === me) {
+        // Saying I tried to possess them when I never handed them a soul: they are lying, likely one of us.
+        if (!m.knowsMe.has(S) && !m.attempts.has(S) && !m.allies.has(S)) hint(S, A.liarAboutMe);
+      } else if (strong && !m.allies.has(about) && !m.allies.has(S)) hint(about, A.accused);
+      return;
+    }
+    // A clean listener.
+    if (about === me) {
+      // I know I am clean: a strong line about me is a lie; a weaker one a mistake (or a lie).
+      if (strong) this.bump(m.liar, S, H.lieAboutMe);
+      else if (W > 0) this.bump(m.liar, S, H.mistakeAboutMe);
+      return;
+    }
+    if (strong && m.known.has(about)) { this.bump(m.trust, S, H.confirmed); return; }   // true: I knew
+    if (strong && this.isCleared(about)) this.bump(m.liar, S, H.wrong);               // wrong: I know they are not
+    m.claims.push({ by: S, id: msg.id, about, trades: m.tradeCount.get(about) || 0 });
+  }
+
+  // How much what was said moves this clean guest's estimate that `s` is possessed (BOT_HEAR.floor … cap).
+  // Each line counts once per speaker, weighed by how far this guest believes the speaker (from what it
+  // saw, never from what was said about them); two guests naming each other share the blame by that.
+  hearsay(c, s) {
+    const H = BOT_HEAR;
+    if (!H.on) return 0;
+    const key = c.view.turn;
+    if (!this._hs || this._hs.key !== key) this._hs = { key, map: new Map() };
+    if (this._hs.map.has(s)) return this._hs.map.get(s);
+    const m = this.mem;
+    const cred = S => {
+      if (m.known.has(S)) return 0;
+      if (this.isCleared(S)) return 1;
+      const p = this.pPoss(c, S, 0) + Math.min(m.liar.get(S) || 0, 0.6);
+      return clamp((1 - 1.4 * p) * (1 + 0.1 * Math.min(m.trust.get(S) || 0, 2)), 0.05, 1);
+    };
+    const accuses = x => x.id === 'triedPossess' || x.id === 'isPossessed';
+    let v = m.liar.get(s) || 0;
+    const seen = new Set();
+    for (const x of m.claims) {
+      if (x.about !== s) continue;
+      const k = `${x.by}|${x.id}`;
+      if (seen.has(k)) continue;
+      seen.add(k);
+      if (x.id === 'isClean' && (m.tradeCount.get(s) || 0) !== x.trades) continue;   // they have traded since
+      const self = x.id === 'iAmPossessed' || x.id === 'clean';
+      let w = H.weight[x.id] * (self ? 1 : cred(x.by)) * (0.7 + 0.6 * this.t.trust);
+      // They named each other: whom do I believe more?
+      if (accuses(x) && m.claims.some(y => y.by === s && y.about === x.by && accuses(y))) {
+        const a = cred(x.by), b = cred(s);
+        w *= a / Math.max(1e-6, a + b);
+      }
+      v += w;
+    }
+    v = clamp(v, H.floor, H.cap);
+    this._hs.map.set(s, v);
+    return v;
   }
 
   // --- the board as this guest sees it ----------------------------------------------------------------
@@ -350,7 +464,7 @@ export class Mind {
     return (u - 0.5) * 2 * (1 - this.t.skill) * 1.6;
   }
 
-  record(d) { this.decisions.push({ round: this.mem.round, ...d }); }
+  record(d) { this.decisions.push({ round: this.mem.round, seq: this.cursor.pub, ...d }); }
 
   // --- the possessed side: whom to try a Possession card on ------------------------------------------
   isAlly(s) { return this.mem.allies.has(s); }
@@ -374,7 +488,9 @@ export class Mind {
     if (this.isCleared(s)) x += 0.05;           // certainly clean (the Switchboard): not wasted on an ally
     // Standing guard by the Fire Exit: whoever walks in here may be carrying their Lanterns out.
     if (c.exitKnown && c.me.room === this.campRoom(c)) x += 0.45 + 0.3 * t.skill;
-    return clamp(x + TUNING.attemptBias, 0.02, 0.95);
+    // What was said at the table suggests they may be possessed too (a soul on them would only be spent).
+    const hint = m.allyHint.get(s) || 0;
+    return clamp((x + TUNING.attemptBias) * (1 - hint), 0.02, 0.95);
   }
 
   // How attractive meeting `s` is for a possessed guest holding a Possession card.
@@ -770,7 +886,7 @@ export class Mind {
       else if (c.possCards > 0) p = q.health <= 2 && t.aggression > 0.6 ? 0.12 * t.aggression : 0;
       else p = 0.06 + 0.4 * t.aggression * (0.5 + c.urgency) + (q.health <= 2 ? 0.15 : 0);
     } else {
-      const pp = this.pPoss(c, target);
+      const pp = this.pPoss(c, target, BOT_HEAR.attackShare);
       if (m.known.has(target)) {
         const seen = m.seenNoPoss.get(target);
         p = seen != null && seen === (m.tradeCount.get(target) || 0) ? 0.85 : 0.35 + 0.55 * t.aggression;
@@ -780,11 +896,12 @@ export class Mind {
       else if (c.escaping && pp > 0.25) p = (pp - 0.15) * (0.5 + t.aggression);
       else p = 0.01 * t.aggression;
     }
-    if (!(this.rng() < p)) { this.record({ k: 'meet', with: target, attack: false, possessed: c.possessed }); return null; }
+    const hs = c.possessed ? 0 : this.hearsay(c, target);
+    if (!(this.rng() < p)) { this.record({ k: 'meet', with: target, attack: false, possessed: c.possessed, hs }); return null; }
     const knife = c.weapons.find(w => w.type === 'knife');
     const rev = c.weapons.find(w => w.type === 'revolver');
     const w = knife && q.health <= WEAPON_DAMAGE.knife ? knife : rev || knife;
-    this.record({ k: 'attack', with: target, weapon: w.type, possessed: c.possessed, reason: c.possessed ? 'possessed' : (m.known.has(target) ? 'known' : 'suspect') });
+    this.record({ k: 'attack', with: target, weapon: w.type, possessed: c.possessed, reason: c.possessed ? 'possessed' : (m.known.has(target) ? 'known' : 'suspect'), hs });
     return w.id;
   }
 
@@ -803,7 +920,8 @@ export class Mind {
       const chosen = card || this.leastValuable(c, cards) || cards[0];
       if (intent === 'attempt') this.bump(m.attempts, other, 1);
       if (intent === 'friendly' && c.possessed) this.bump(m.friendly, other, 1);
-      this.record({ k: 'give', with: other, card: chosen.type, intent, possessed: c.possessed, first, possCards: c.possCards });
+      this.record({ k: 'give', with: other, card: chosen.type, intent, possessed: c.possessed, first, possCards: c.possCards,
+        hs: c.possessed ? (m.allyHint.get(other) || 0) : this.hearsay(c, other) });
       return chosen.id;
     };
 
@@ -847,7 +965,7 @@ export class Mind {
       if (seen != null && seen === (m.tradeCount.get(s) || 0)) return false;   // nothing to block: don't feed them
       return this.rng() < 0.96;
     }
-    const pp = this.pPoss(c, s);
+    const pp = this.pPoss(c, s, BOT_HEAR.blockShare);
     const trust = Math.min(m.trust.get(s) || 0, 2.5);
     let x = -0.42 + TUNING.blockBias + 2.05 * pp + 0.62 * t.caution - 0.16 * trust * (0.5 + t.trust)
       + (c.lanterns >= 2 ? 0.14 : 0) + (c.lanterns >= 3 ? 0.3 : 0);
@@ -884,7 +1002,7 @@ export class Mind {
     else if (m.known.has(proposer)) p = c.lanterns && t.caution > 0.5 ? 0.3 : 0.05;
     else p = clamp(0.8 - 1.4 * this.pPoss(c, proposer) + 0.1 * (m.trust.get(proposer) || 0) - 0.3 * t.caution + (c.pressed ? 0.15 : 0), 0.05, 0.92);
     const yes = this.rng() < p;
-    this.record({ k: 'accept', with: proposer, yes, possessed: c.possessed });
+    this.record({ k: 'accept', with: proposer, yes, possessed: c.possessed, hs: c.possessed ? 0 : this.hearsay(c, proposer) });
     return yes;
   }
 

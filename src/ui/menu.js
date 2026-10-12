@@ -1,20 +1,26 @@
 // The main menu: the first thing on screen, over the lobby (src/menu/lobbyScene.js renders the lobby
-// behind it; main.js blurs it). Five small screens in one panel:
-//   main         Play with bots · Practice alone · Settings · Your record
-//   bots         your guest (src/ui/guestPicker.js: random or one of the six, practice too), how many
-//                other guests (3-5) and your role (random, clean, possessed)
+// behind it; main.js blurs it). Small screens in one panel:
+//   signup       "Sign the register": the first visit asks for a username (src/ui/register.js); the
+//                same screen changes it later ("Change name" on the avatar screen: showRename)
+//   main         your profile card ("Playing as <name> · Adjust avatar ›", src/ui/profileCard.js),
+//                Play with bots · Practice alone · Settings and Your record side by side
+//   avatar       your avatar (the wardrobe: #menu-avatar, built by the avatar screen's own module)
+//   bots         how many other guests (3-5) and your role (random, clean, possessed)
 //   matchmaking  the table filling up, guest by guest, as in an online game
 //   settings     bot speed, the view on other guests' turns, graphics, the menu background, music,
 //                sound effects, quick chat and tips (each applied at once, through onSettingChanged;
 //                "Show tips again" brings back the tips already seen: src/ui/tips.js)
 //   record       your record on this device (src/ui/record.js), with a reset that asks first
-// Choices are remembered on this device (src/settings.js). Nothing here touches the game itself:
-// main.js gets the choice through the callbacks and starts the match. A guest joining the table rings
-// the reception bell (the sound cue bus, src/audio/bus.js).
+// Choices are remembered on this device (src/settings.js); who you are is the account's
+// (src/account/account.js). Nothing here touches the game itself: main.js gets the choice through the
+// callbacks and starts the match. A guest joining the table rings the reception bell (the sound cue
+// bus, src/audio/bus.js). `onScreenChange(name, prev)` hears every change of screen (the lobby's camera
+// follows it: the wardrobe frames your avatar).
 import { settings, SETTING_CHOICES } from '../settings.js';
 import { sfx } from '../audio/bus.js';
 import { tooSoon } from './tapGuard.js';
-import { renderGuestPicker } from './guestPicker.js';
+import { createRegister } from './register.js';
+import { createProfileCard } from './profileCard.js';
 import { createRecordScreen } from './record.js';
 import { record } from '../record.js';
 import { renderTipsAgain } from './tips.js';
@@ -26,10 +32,12 @@ const ROLE_CHOICES = [
 ];
 const BOT_CHOICES = [3, 4, 5];
 
-export function createMenu(doc, { onPlayBots, onPractice, onSettingChanged } = {}) {
+export function createMenu(doc, { onPlayBots, onPractice, onSettingChanged, onScreenChange, account = null } = {}) {
   const $ = id => doc.getElementById(id);
   const root = $('menu');
-  const screens = { main: $('menu-main'), bots: $('menu-bots'), matchmaking: $('menu-matchmaking'), settings: $('menu-settings'), record: $('menu-record') };
+  // (looked up when shown: a screen another module adds to the page, #menu-avatar, is found too)
+  const SCREENS = ['signup', 'main', 'avatar', 'bots', 'matchmaking', 'settings', 'record'];
+  const screenEl = name => $(`menu-${name}`);
   const btn = { bots: $('btn-menu-bots'), practice: $('btn-menu-practice'), settings: $('btn-menu-settings'), record: $('btn-menu-record') };
   const recordView = createRecordScreen(doc);
   let current = 'main';
@@ -39,15 +47,39 @@ export function createMenu(doc, { onPlayBots, onPractice, onSettingChanged } = {
                      // tap that opened it (src/ui/tapGuard.js). Re-rendering after a pick does not reset it.
 
   function show(name = 'main') {
+    if (!SCREENS.includes(name) || !screenEl(name)) name = 'main';
+    // (no profile yet: the register comes first, whatever was asked for)
+    if (account && !account.profile && name !== 'signup') { register.open('signup'); name = 'signup'; }
+    const prev = root.hidden ? null : current;
     current = name;
     shownAt = performance.now();
     root.hidden = false;
     root.classList.remove('leaving');
-    for (const [k, el] of Object.entries(screens)) el.hidden = k !== name;
+    // (the register sits at the top, the other screens in the middle: the panel moves there at once, with
+    // no slide across the screen)
+    if (root.classList.contains('signup') !== (name === 'signup')) {
+      root.classList.add('snap');
+      root.classList.toggle('signup', name === 'signup');
+      void root.offsetWidth;
+      requestAnimationFrame(() => root.classList.remove('snap'));
+    }
+    for (const k of SCREENS) { const el = screenEl(k); if (el) el.hidden = k !== name; }
+    if (name === 'main') card.render();
     if (name === 'bots') renderBots();
     if (name === 'settings') renderSettings();
     if (name === 'record') { recordView.confirm(false); recordView.render(); }
+    if (name === 'signup') register.shown();
+    try { onScreenChange?.(name, prev); } catch (err) { console.error('menu screen change failed:', err); }
   }
+
+  // The register: first run (then the main menu), or Change name from the avatar screen (then back).
+  const register = createRegister(doc, {
+    account,
+    guard: e => tooSoon(e, shownAt),
+    onDone: (mode) => show(mode === 'rename' ? 'avatar' : 'main'),
+  });
+  // The profile card on the main menu: Adjust avatar opens the avatar screen.
+  const card = createProfileCard(doc, { account, onOpen: () => show('avatar'), guard: e => tooSoon(e, shownAt) });
 
   // A row of buttons where exactly one is chosen (radio buttons that look like a segmented control).
   function segment(host, options, value, onPick) {
@@ -66,10 +98,6 @@ export function createMenu(doc, { onPlayBots, onPractice, onSettingChanged } = {
   }
 
   function renderBots() {
-    renderGuestPicker(doc, $('opt-guest'), $('opt-guest-note'), settings.get('guest'), {
-      onPick: v => { settings.set('guest', v); renderBots(); },
-      guard: e => tooSoon(e, shownAt),
-    });
     const n = BOT_CHOICES.includes(+settings.get('bots')) ? +settings.get('bots') : 5;
     segment($('opt-bots'), BOT_CHOICES.map(v => ({ value: v, label: String(v) })), n, v => { settings.set('bots', v); renderBots(); });
     $('opt-bots-note').textContent = `A table of ${n + 1} guests: you and ${n} others.`;
@@ -95,8 +123,9 @@ export function createMenu(doc, { onPlayBots, onPractice, onSettingChanged } = {
   }
 
   // The table fills up like an online lobby: you first, then each other guest "joins" after a short,
-  // uneven wait. `seats`: [{ name, username, color, you }] in the order they arrive. `onFull` runs a
-  // moment after the last one is in; Cancel goes back to the bots screen.
+  // uneven wait. `seats`: [{ username, color, you }] in the order they arrive (every seat shows its
+  // username; yours is marked "You"). `onFull` runs a moment after the last one is in; Cancel goes back
+  // to the bots screen.
   function matchmake(seats, { onFull, onCancel }) {
     mmStarted = performance.now();
     show('matchmaking');
@@ -117,8 +146,8 @@ export function createMenu(doc, { onPlayBots, onPractice, onSettingChanged } = {
       const s = seats[i], li = rows[i];
       li.className = 'mm-seat joined' + (s.you ? ' you' : '');
       li.style.setProperty('--player-color', s.color);
-      li.querySelector('.mm-name').textContent = s.you ? 'You' : s.username;
-      li.querySelector('.mm-guest').textContent = s.you ? `playing ${s.name}` : s.name;
+      li.querySelector('.mm-name').textContent = s.username || s.name || 'Guest';
+      li.querySelector('.mm-guest').textContent = s.you ? 'You' : '';
     };
     fill(0);
     let t = 350;
@@ -144,13 +173,14 @@ export function createMenu(doc, { onPlayBots, onPractice, onSettingChanged } = {
 
   const click = (el, fn) => el.addEventListener('click', e => { e.preventDefault(); if (tooSoon(e, shownAt)) return; fn(); });
   click(btn.bots, () => { if (ready) show('bots'); });
-  click(btn.practice, () => { if (ready) onPractice?.({ guest: settings.get('guest') || 'random' }); });
+  // (no profile — another tab cleared it — : the register first, as for every screen)
+  click(btn.practice, () => { if (!ready) return; if (account && !account.profile) { show('main'); return; } onPractice?.({}); });
   click(btn.settings, () => show('settings'));
   click(btn.record, () => show('record'));
   click($('btn-bots-back'), () => show('main'));
   click($('btn-bots-find'), () => {
     const n = BOT_CHOICES.includes(+settings.get('bots')) ? +settings.get('bots') : 5;
-    onPlayBots?.({ bots: n, role: settings.get('role') || 'random', guest: settings.get('guest') || 'random' });
+    onPlayBots?.({ bots: n, role: settings.get('role') || 'random' });
   });
   // Your record: Reset asks first, in place of the Back / Reset row (each step a fresh tap: shownAt).
   click($('btn-record-back'), () => show('main'));
@@ -168,6 +198,8 @@ export function createMenu(doc, { onPlayBots, onPractice, onSettingChanged } = {
     get isOpen() { return !root.hidden; },
     get screen() { return root.hidden ? null : current; },
     show,
+    // Change name (the avatar screen's button): the register in rename mode, back to the avatar screen.
+    showRename() { register.open('rename'); show('signup'); },
     // Fade the panel away (the lift sequence plays behind it); hide() removes it at the end.
     leave() { root.classList.add('leaving'); },
     hide() { clearMatchmaking(); root.hidden = true; root.classList.remove('leaving'); },

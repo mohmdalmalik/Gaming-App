@@ -119,9 +119,11 @@ export function createInput(element, handlers, opts = {}) {
   element.addEventListener('gestureend', prevent, { passive: false });
 
   // Belt and braces for iOS Safari: a pinch whose second finger lands on the HUD must not
-  // zoom the page. touch-action in CSS covers most cases; these listeners cover the rest.
+  // zoom the page. touch-action in CSS covers most cases; these listeners cover the rest. One finger
+  // may still move on a button, or anywhere in a list that scrolls (`data-scrolls`: the wardrobe's), so a
+  // drag on its labels and gaps scrolls it as one on a swatch does.
   document.addEventListener('touchmove', e => {
-    if (e.touches.length > 1 || !(e.target.closest && e.target.closest('button'))) prevent(e);
+    if (e.touches.length > 1 || !(e.target.closest && e.target.closest('button, [data-scrolls]'))) prevent(e);
   }, { passive: false });
   for (const type of ['gesturestart', 'gesturechange', 'gestureend']) document.addEventListener(type, prevent, { passive: false });
   document.getElementById('app')?.addEventListener('contextmenu', prevent);

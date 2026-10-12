@@ -92,7 +92,8 @@ async function trade(mode) {
     await page.waitForTimeout(600);
     const eyes = () => ev(T => {
       const g = window.__game, img = document.querySelectorAll('#players-strip .mini-player')[T]?.querySelector('.mini-portrait img');
-      return { strip: !!img && /-possessed\./.test(img.getAttribute('src') || ''), hotel: !!g.characters[T].debug().possessedEyes, loaded: !!g.characters[T].debug().loaded };
+      // (the portrait's look: img.dataset.look, src/ui/portrait.js — a runtime portrait's address says nothing)
+      return { strip: !!img && img.dataset.look === 'possessed', hotel: !!g.characters[T].debug().possessedEyes, loaded: !!g.characters[T].debug().loaded };
     }, T);
     const pre = await eyes();
     check(!pre.strip && !pre.hotel, `before the trade: no red eyes on the partner (strip ${pre.strip}, hotel ${pre.hotel})`);
@@ -126,7 +127,7 @@ async function trade(mode) {
     const faces = await ev(() => ({
       mine: document.querySelector('.tr-rail.mine .tr-front img')?.dataset.soul ?? null,
       theirs: document.querySelector('.tr-rail.theirs .tr-front img')?.dataset.soul ?? null,
-      held: [...document.querySelectorAll('.tr-extra .tr-front img')].map(i => ({ soul: i.dataset.soul ?? null, drawn: /^data:image\//.test(i.getAttribute('src') || '') })),
+      held: [...document.querySelectorAll('.tr-extra .tr-front img')].map(i => ({ soul: i.dataset.soul ?? null, drawn: /^(data:image\/|blob:)/.test(i.getAttribute('src') || '') })),
     }));
     if (plan.iGive === 'soul') check(faces.mine === before.meId, `your soul in the scene shows your face (${faces.mine})`);
     if (plan.theyGive === 'soul') check(faces.theirs === before.tId, `their soul in the scene shows ${before.tName}'s face (${faces.theirs})`);
@@ -134,7 +135,7 @@ async function trade(mode) {
     await page.waitForTimeout(1500);
     // (their red eyes fade in; on a slow machine give the fade time to finish)
     if (plan.reveals) await waitFor(() => [...(document.querySelectorAll('.tr-seat.them .tr-port img'))]
-      .some(i => /-possessed\./.test(i.getAttribute('src') || '') && getComputedStyle(i).opacity === '1'), null, 10000).catch(() => {});
+      .some(i => i.dataset.look === 'possessed' && getComputedStyle(i).opacity === '1'), null, 10000).catch(() => {});
     if (shots) await page.screenshot({ path: `${shots}/trade-${mode}-${W}x${H}.png` });
     const after = await ev(T => {
       const g = window.__game, st = g.state, me = st.players[g.humanSeat()], t = st.players[T];
@@ -143,7 +144,7 @@ async function trade(mode) {
         souls: me.hand.filter(c => c.type === 'possession').map(c => ({ id: c.id, owner: c.owner })), possessed: me.possessed,
         themPossessed: t.possessed, them: t.hand.map(c => c.id), theirSouls: t.hand.filter(c => c.type === 'possession').map(c => ({ id: c.id, owner: c.owner })),
         everywhere: st.players.flatMap(p => p.hand.map(c => c.id)), notes: [...me.notes], knows: [...(me.knows || [])],
-        themRedSrc: [...(themSeat?.querySelectorAll('.tr-port img') || [])].some(i => /-possessed\./.test(i.getAttribute('src') || '') && getComputedStyle(i).opacity === '1') };
+        themRedSrc: [...(themSeat?.querySelectorAll('.tr-port img') || [])].some(i => i.dataset.look === 'possessed' && getComputedStyle(i).opacity === '1') };
     }, T);
     check(after.notes.length === 0, `the trade's own private note is not left waiting (the scene said it): ${JSON.stringify(after.notes)}`);
     const cap = CAPTION[mode];
@@ -203,7 +204,7 @@ async function trade(mode) {
       `after it: red eyes on ${before.tName} ${plan.reveals ? 'in the strip and in the hotel' : 'nowhere (a clean player never sees them)'} (strip ${post.strip}, hotel ${post.hotel}, model loaded ${post.loaded})`);
     if (plan.reveals || plan.role === 'possessed') {
       // Your own souls on the hand fan: one stack, your own face, the drawn picture.
-      const fan = await ev(() => { const i = document.querySelector('#hand-fan .fan-card[data-type="possession"] img'); return i ? { soul: i.dataset.soul ?? null, drawn: /^data:image\//.test(i.getAttribute('src') || '') } : null; });
+      const fan = await ev(() => { const i = document.querySelector('#hand-fan .fan-card[data-type="possession"] img'); return i ? { soul: i.dataset.soul ?? null, drawn: /^(data:image\/|blob:)/.test(i.getAttribute('src') || '') } : null; });
       const meNow = await ev(() => window.__game.state.players[window.__game.humanSeat()].hand.filter(c => c.type === 'possession').length);
       if (meNow > 0) check(fan && fan.soul === before.meId && fan.drawn, `the hand fan's souls show your own face (${JSON.stringify(fan)})`);
       if (shots && mode === 'possessed') await page.screenshot({ path: `${shots}/trade-${mode}-fan-${W}x${H}.png` });

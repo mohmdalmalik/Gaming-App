@@ -202,6 +202,12 @@ html, body {
 
 .portrait-svg { display: block; width: 100%; height: 100%; }
 .portrait-img { display: block; width: 100%; height: 100%; object-fit: cover; object-position: 50% 20%; }
+/* No picture (yet, or it failed to load): a plain navy plate with a brass silhouette, no face, no glasses
+   (src/ui/portrait.js); the alt text stays for screen readers but is never drawn over the tile. */
+.portrait-img.portrait-missing {
+  color: transparent; font-size: 0;
+  background: #161b2b url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 118'%3E%3Cg fill='%23b48a46' fill-opacity='.38'%3E%3Ccircle cx='50' cy='43' r='17'/%3E%3Cpath d='M14 118c2-27 17-41 36-41s34 14 36 41z'/%3E%3C/g%3E%3C/svg%3E") center / cover no-repeat;
+}
 /* A possessed portrait is its own image (the same face with red eyes, assets/portraits/*-possessed.jpg).
    If a guest ever has only a normal image, the private view shows it unchanged — no colour wash on
    the face; the crimson plate around it says the rest. The public strip always asks for normal. */
@@ -1136,13 +1142,14 @@ html, body {
 /* The end of a match: everyone's role, now that it is over. */
 .end-reveal { display: grid; gap: 6px; margin: 2px auto 22px; width: min(540px, 80vw); text-align: left; }
 .er-row {
-  /* (a fixed role column, wide enough for POSSESSED, so every row's columns line up) */
-  display: grid; grid-template-columns: 12px minmax(0, 1fr) minmax(0, 1fr) 92px 64px; gap: 10px; align-items: center;
+  /* (a fixed role column, wide enough for POSSESSED, so every row's columns line up; "You" takes only
+  its own width and the name the rest, cut short with "…" rather than run under "You") */
+  display: grid; grid-template-columns: 12px minmax(0, 1fr) auto 92px 64px; gap: 10px; align-items: center;
   padding: 7px 12px; border-radius: 10px; background: rgba(255, 255, 255, 0.03); border: 1px solid var(--line-soft);
 }
 .er-row.you { border-color: var(--brass); }
 .er-dot { width: 11px; height: 11px; border-radius: 50%; background: var(--player-color, var(--brass)); }
-.er-name { font-family: var(--serif); font-size: 17px; font-weight: 700; color: var(--ivory); }
+.er-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--serif); font-size: 17px; font-weight: 700; color: var(--ivory); }
 .er-who { font-size: 13px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .er-row.you .er-who { color: var(--brass-bright); font-weight: 700; }
 .er-role { font-size: 12px; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; }
@@ -1160,9 +1167,6 @@ html, body {
   .er-row { padding: 5px 10px; }
 }
 
-/* Who plays each guest (a match): "You", or the computer guest's name, small under the guest's name. */
-.mini-user { display: block; max-width: 72px; margin: 1px auto 0; font-family: var(--sans); font-size: 10px; font-weight: 600; letter-spacing: 0.02em; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-decoration: none; }
-.mini-player.me .mini-user { color: var(--brass); }
 
 /* ==== Trade reveal, attack result, feed icons (src/ui/tradeReveal.js, meeting.js, feed.js) ========
    A trade the player is in is SHOWN, not told: the two guests and the two cards, with an effect for
@@ -1576,29 +1580,8 @@ html, body {
   #menu-settings .menu-actions { margin-top: 14px; }
 }
 
-/* ==== Your guest and your record (src/ui/guestPicker.js, src/ui/record.js) ========================
-   The Play with bots screen's "Your guest" row, the main menu's fourth, smaller button, the Your record
-   screen and the quiet record line under the result on the end screen. */
-/* Random and the six guests in one row: the portrait over the name. */
-.seg.guest-row { flex-wrap: nowrap; gap: 5px; }
-.seg-btn.guest-btn {
-  flex: 1 1 0; min-width: 0; min-height: 0; padding: 5px 3px 6px; border-radius: 11px;
-  display: flex; flex-direction: column; align-items: center; gap: 5px; white-space: normal;
-}
-.guest-btn .gb-face {
-  display: block; width: 100%; max-width: 50px; aspect-ratio: 5 / 6; border-radius: 8px; overflow: hidden;
-  background: #1c2131; border: 1px solid var(--line-soft); box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.5);
-}
-.guest-btn .gb-face .portrait-img { object-position: 50% 28%; -webkit-user-drag: none; }
-.guest-btn:not(.on) .gb-face .portrait-img { filter: saturate(0.75) brightness(0.8); }
-.guest-btn .gb-random { display: block; width: 100%; height: 100%; color: var(--brass); }
-.guest-btn.on .gb-random { color: var(--brass-bright); }
-.guest-btn .gb-name {
-  display: block; max-width: 100%; font-family: var(--serif); font-size: 12px; font-weight: 700; line-height: 1.05;
-  letter-spacing: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-}
-.guest-btn.on .gb-face { border-color: var(--brass-bright); box-shadow: 0 0 0 1px rgba(232, 202, 128, 0.3), 0 0 12px rgba(232, 202, 128, 0.22); }
-
+/* ==== Your record (src/ui/record.js) ===========================================================
+   The Your record screen and the quiet record line under the result on the end screen. */
 /* Main menu: Your record, under Settings and a step smaller. */
 .menu-btn.minor { min-height: 48px; padding: 8px 22px; background: rgba(16, 18, 26, 0.74); border-color: var(--line-soft); }
 .menu-btn.minor .mb-main { font-size: 18px; color: var(--ivory-dim); }
@@ -1751,3 +1734,197 @@ html, body {
   #menu-settings .menu-field { margin-bottom: 5px; }
   #menu-settings .mf-label { margin-bottom: 3px; }
 }
+
+/* ==== Profiles: the register, the profile card and usernames at the table ========================
+   (src/ui/register.js, src/ui/profileCard.js, src/ui/menu.js; the caps on long usernames in the guest
+   strip, the player panel and End turn: src/hud.js) */
+/* The register (first run, and Change name): anchored to the TOP of the screen, not centred, so the name
+   field and both buttons stay above the iPad's on-screen keyboard (about 400 px in landscape). */
+.menu.signup .menu-panel { top: max(28px, calc(var(--safe-top) + 22px)); transform: none; }
+.menu.signup.leaving .menu-panel { transform: translateX(-24px); }
+.menu.snap .menu-panel { transition: none; }   /* (to and from the register: no slide across the screen) */
+#menu-signup .menu-h2 { margin-bottom: 14px; }
+.su-form { margin: 0; }
+.su-field { position: relative; }
+.su-input {
+  box-sizing: border-box; width: 100%; height: 56px; padding: 0 64px 0 16px; border-radius: 12px;
+  background: rgba(10, 12, 18, 0.9); border: 1.5px solid var(--line); color: var(--ivory);
+  font: 600 22px/1 var(--serif); letter-spacing: 0.02em;   /* 16 px or more: Safari does not zoom in on focus */
+  box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.5); outline: none; -webkit-appearance: none; appearance: none;
+}
+.su-input::placeholder { color: rgba(202, 191, 168, 0.38); font-style: italic; font-weight: 400; }
+.su-input:focus { border-color: var(--brass-bright); box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.5), 0 0 0 3px rgba(201, 162, 78, 0.22); }
+.su-input.bad { border-color: var(--poss-line); }
+.su-count { position: absolute; right: 14px; top: 50%; transform: translateY(-50%); font-size: 12px; color: var(--muted); pointer-events: none; }
+.su-hint { margin-top: 8px; min-height: 1.4em; font-size: 14px; line-height: 1.4; color: var(--muted); }
+.su-hint.bad { color: #eaa898; }
+#menu-signup .menu-actions { margin-top: 14px; }
+.su-device { margin-top: 12px; font-size: 13px; line-height: 1.45; color: var(--muted); text-wrap: pretty; }
+.su-device.su-private { color: var(--brass-bright); }
+
+/* The profile card: under the tagline; the whole card is one button that opens your avatar. Portrait 3:4
+   (the portraits' own shape), the username in the serif (a long one ends in "…"), a brass link line. */
+.profile-card {
+  appearance: none; display: flex; align-items: center; gap: 14px; width: 100%; box-sizing: border-box;
+  min-height: 84px; padding: 8px 16px 8px 8px; margin: 0 0 14px; border-radius: 14px; cursor: pointer; text-align: left;
+  background: rgba(16, 18, 26, 0.86); border: 1px solid var(--line); color: var(--ivory); font: inherit;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.5), 0 10px 28px rgba(0, 0, 0, 0.35);
+  transition: transform 0.12s ease, border-color 0.2s ease;
+}
+.profile-card[hidden] { display: none; }
+.profile-card:active { transform: scale(0.98); }
+.pc-portrait { flex: none; width: 54px; height: 72px; border-radius: 10px; overflow: hidden; border: 1px solid var(--brass); background: var(--panel-solid); }
+.pc-portrait img, .pc-portrait svg { width: 100%; height: 100%; object-fit: cover; display: block; -webkit-user-drag: none; }
+.pc-text { display: flex; flex-direction: column; gap: 3px; min-width: 0; flex: 1; }
+.pc-kicker { font-size: 10.5px; font-weight: 700; letter-spacing: 0.18em; text-transform: uppercase; color: var(--muted); }
+.pc-name { font-family: var(--serif); font-size: clamp(18px, 2.2vw, 24px); font-weight: 700; color: var(--ivory); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pc-edit { font-size: 13.5px; font-weight: 600; color: var(--brass); letter-spacing: 0.02em; }
+#menu-main .menu-tag { margin-bottom: 18px; }
+/* Settings and Your record share one row under the two ways to play. */
+.menu-row2 { display: flex; gap: 12px; }
+.menu-row2 .menu-btn { flex: 1 1 0; min-width: 0; min-height: 52px; align-items: center; }
+.menu-row2 .menu-btn .mb-main { font-size: 19px; }
+
+/* Usernames at the table: one line in the guest strip (a little smaller, in the sans), and caps so a
+   long name never stretches the bottom bar (the player panel, End turn's "nightowl's turn"). */
+.mini-name.u { font-family: var(--sans); font-size: 12px; font-weight: 700; letter-spacing: 0.01em; }
+.player-panel .player-name { max-width: 200px; }
+.btn.end .end-name { display: inline-block; max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; }
+/* The matchmaking list: every seat by username; yours marked "You". */
+.mm-seat.you .mm-guest { color: var(--brass-bright); font-weight: 700; letter-spacing: 0.04em; }
+/* The feed: a long username breaks onto the next line instead of running out of its box. */
+.feed-line, .feed-text { overflow-wrap: anywhere; }
+
+/* ==== The wardrobe: your avatar (src/ui/avatarEditor.js, #menu-avatar) ===========================
+   Over the lobby, sharp (not blurred), whose camera frames your avatar in the space right of the panel
+   (src/menu/lobbyScene.js setWardrobe). The panel is capped to the screen and its list scrolls inside it
+   (the page never scrolls); every swatch and chip is a 44 px tap; locked items carry a lock and
+   "Coming soon" and look dimmer. */
+.menu.avatar .menu-shade {
+  background:
+    linear-gradient(90deg, rgba(7, 8, 13, 0.92) 0%, rgba(7, 8, 13, 0.8) 36%, rgba(7, 8, 13, 0.25) 50%, rgba(7, 8, 13, 0) 60%),
+    radial-gradient(140% 120% at 72% 50%, rgba(0, 0, 0, 0) 60%, rgba(0, 0, 0, 0.45) 100%);
+}
+.menu.avatar .menu-panel {
+  display: flex; flex-direction: column;
+  max-height: calc(100% - max(28px, calc(var(--safe-top) + var(--safe-bottom) + 24px)));
+  /* anchored to the top (not centred): a row that comes or goes moves only the rows below it */
+  top: max(14px, calc(var(--safe-top) + 12px)); transform: none;
+}
+.menu.avatar.leaving .menu-panel { transform: translateX(-24px); }
+#menu-avatar:not([hidden]) { display: flex; flex-direction: column; min-height: 0; flex: 0 1 auto; }
+#menu-avatar .menu-kicker { margin-bottom: 2px; }
+.av-head { display: flex; align-items: center; gap: 12px; margin-bottom: 6px; }
+.av-name { margin: 0; min-width: 0; flex: 1; font-size: 30px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.av-rename {
+  appearance: none; flex: none; min-height: 44px; padding: 0 14px; border-radius: 11px; cursor: pointer;
+  background: rgba(16, 18, 26, 0.78); border: 1px solid var(--line-soft); color: var(--brass-bright);
+  font: 700 14px/1 var(--sans); letter-spacing: 0.02em;
+}
+.av-rename:active, .av-chip:active, .av-sw:active { transform: scale(0.96); }
+.av-body {
+  flex: 0 1 auto; min-height: 0; overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain; -webkit-overflow-scrolling: touch;
+  margin: 0 -10px; padding: 4px 10px 14px;
+  -webkit-mask-image: linear-gradient(180deg, #000 calc(100% - 18px), transparent); mask-image: linear-gradient(180deg, #000 calc(100% - 18px), transparent);
+}
+.av-row { margin-bottom: 10px; }
+.av-label { display: flex; align-items: baseline; gap: 10px; min-height: 18px; margin-bottom: 4px; }
+.av-slot { font-size: 12px; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; color: var(--ivory-dim); white-space: nowrap; }
+.av-caption { display: inline-flex; align-items: center; gap: 5px; min-width: 0; font-family: var(--serif); font-size: 15px; font-style: italic; color: var(--brass-bright); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.av-caption .av-lock { flex: none; color: var(--brass); }
+.av-opts { display: flex; flex-wrap: wrap; gap: 4px; }
+.av-opts.chips { gap: 6px; }
+/* a colour: a 44 px tap with a 34 px disc; the chosen one ringed in brass */
+.av-sw {
+  appearance: none; position: relative; width: 44px; height: 44px; padding: 0; margin: 0; border: 0; border-radius: 50%;
+  background: none; cursor: pointer; display: grid; place-items: center; -webkit-tap-highlight-color: transparent;
+}
+.av-dot { display: block; width: 34px; height: 34px; border-radius: 50%; box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.45), 0 0 0 1.5px rgba(201, 162, 78, 0.32); }
+.av-sw.on .av-dot { box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.45), 0 0 0 2px #0b0d13, 0 0 0 4px var(--brass-bright); }
+.av-sw.locked .av-dot { filter: saturate(0.55) brightness(0.6); }
+.av-badge {
+  position: absolute; right: 1px; bottom: 1px; width: 18px; height: 18px; border-radius: 50%; display: grid; place-items: center;
+  background: #0f1118; border: 1px solid var(--brass-dim); color: var(--brass);
+}
+.av-lock { display: block; width: 9px; height: 10.5px; }
+/* a word: Male / Female, the looks, the glasses */
+.av-chip {
+  appearance: none; flex: 1 1 auto; min-width: 0; min-height: 44px; padding: 5px 12px; border-radius: 11px; cursor: pointer;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px;
+  background: rgba(16, 18, 26, 0.78); border: 1px solid var(--line-soft); color: var(--ivory-dim);
+  font-family: var(--serif); font-size: 16px; font-weight: 700; white-space: nowrap; -webkit-tap-highlight-color: transparent;
+}
+.av-row[data-slot="body"] .av-chip, .av-row[data-slot="base"] .av-chip { flex: 1 1 0; }
+.av-row[data-slot="glasses"] .av-chip { flex: 0 1 auto; }
+.av-chip.on { background: rgba(201, 162, 78, 0.2); border-color: var(--brass); color: var(--brass-bright); box-shadow: inset 0 0 0 1px rgba(232, 202, 128, 0.25); }
+.av-chip-main { display: inline-flex; align-items: center; gap: 5px; }
+.av-chip.locked { border-style: dashed; color: var(--muted); }
+.av-chip.locked .av-lock { color: var(--brass); }
+.av-chip-soon { font: 700 9.5px/1 var(--sans); letter-spacing: 0.1em; text-transform: uppercase; color: var(--brass-dim); }
+.av-note { margin-top: 4px; font-size: 12.5px; line-height: 1.35; color: var(--muted); text-wrap: pretty; }
+#menu-avatar .av-actions { margin-top: 10px; }
+@media (max-height: 800px) {
+  .av-name { font-size: 26px; }
+  .av-row { margin-bottom: 7px; }
+}
+
+/* === Quick chat: two tabs of lines and "Choose a guest" (src/ui/chat.js) =================================
+   The panel (320 px) has two tabs, "Table" and "Suspicion", of ten lines each (two columns of five, 44 px
+   rows), the emotes under them. A line that names a guest shows a dotted brass blank where the name goes
+   and a chevron: tapping it turns the panel to the second step (Back, the line, "Choose a guest", a tile
+   for each guest still in the hotel), at the same height, so nothing jumps. In a bubble and in the feed the
+   guest a line names is in bright brass; a line that names YOU gets a doubled bright-brass edge (never
+   crimson: that is only ever your own possessed look, and a public line must not look like a role). */
+.chat-panel.cp { width: 320px; padding: 8px 10px 10px; }
+.cp-tabs { display: grid; grid-template-columns: 1fr 1fr; margin: 0 0 8px; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+.cp-tab {
+  appearance: none; height: 44px; border: 0; background: transparent; color: var(--ivory-dim); cursor: pointer;
+  font: 700 11px/1 var(--sans); letter-spacing: 0.16em; text-transform: uppercase; touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+.cp-tab + .cp-tab { border-left: 1px solid var(--line); }
+.cp-tab[aria-selected="true"] { background: rgba(201, 162, 78, 0.16); color: var(--brass-bright); box-shadow: inset 0 -2px 0 var(--brass); }
+.cp-page { display: grid; grid-template-columns: 1fr 1fr; grid-auto-rows: 44px; gap: 6px; min-height: calc(5 * 44px + 4 * 6px); align-content: start; }
+.cp-page[hidden], .cp-whom[hidden], .cp-main[hidden] { display: none; }
+.cp-page .chat-phrase { min-height: 0; height: 44px; padding: 4px 9px; font-size: 13.5px; line-height: 1.12; display: flex; align-items: center; }
+.cp-page .chat-phrase:last-child { grid-column: auto; text-align: left; }
+.cp-label { display: block; }
+.chat-phrase:disabled { opacity: 0.4; cursor: default; }
+/* a line about a guest: the blank where their name goes, and a chevron (a second step follows) */
+.chat-phrase.about { position: relative; padding-right: 20px; }
+.chat-phrase.about::after {
+  content: ""; position: absolute; right: 9px; top: 50%; width: 6px; height: 6px; margin-top: -4px;
+  border-right: 1.5px solid var(--brass); border-bottom: 1.5px solid var(--brass); transform: rotate(-45deg);
+}
+.cp-blank {
+  /* (no space after it: "I trust WHO." — the right margin also takes back the last letter's spacing) */
+  display: inline-block; min-width: 26px; margin: 0 -0.12em 0 1px; padding: 0 0 0 2px; border-bottom: 1.5px dotted var(--brass);
+  color: var(--brass-bright); font: 700 10px/1.5 var(--sans); letter-spacing: 0.12em; text-transform: uppercase; vertical-align: 1px;
+}
+/* the second step: Back, the line, "Choose a guest", the guests */
+.cp-whom-head { display: flex; align-items: center; gap: 8px; height: 44px; margin: 0 0 8px; }
+.cp-back {
+  appearance: none; flex: none; width: 44px; height: 44px; border-radius: 10px; border: 1px solid var(--line); cursor: pointer;
+  background: rgba(255, 255, 255, 0.035); color: var(--brass-bright); display: inline-flex; align-items: center; justify-content: center;
+  touch-action: manipulation; -webkit-tap-highlight-color: transparent;
+}
+.cp-back svg { width: 18px; height: 18px; }
+.cp-back:active { background: rgba(201, 162, 78, 0.22); border-color: var(--brass); }
+.cp-whom-line { font: 600 15px/1.2 var(--serif); color: var(--ivory); min-width: 0; }
+.cp-whom-hint { margin: 0 2px 8px; font-size: 10px; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; color: var(--brass); }
+.cp-guests { display: grid; grid-template-columns: repeat(3, 1fr); grid-auto-rows: 92px; gap: 6px; align-content: start; }
+.cp-guest {
+  appearance: none; min-width: 0; height: 92px; padding: 6px 4px; border-radius: 10px; cursor: pointer;
+  border: 1px solid var(--line-soft); background: rgba(255, 255, 255, 0.035);
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px;
+  touch-action: manipulation; -webkit-tap-highlight-color: transparent;
+}
+.cp-guest:active { background: rgba(201, 162, 78, 0.22); border-color: var(--brass); }
+.cp-guest .cp-portrait { width: 52px; height: 52px; border-radius: 10px; flex: none; }
+.cp-guest-name { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 600 13px/1.1 var(--serif); color: var(--ivory); }
+/* the guest a line names, in a bubble, the feed and the end screen */
+.chat-bubble .cb-name, .feed-line .feed-name, .ec-line .ec-name { color: var(--brass-bright); font-weight: 700; }
+.chat-bubble.about-me { border-color: var(--brass-bright); box-shadow: 0 0 0 1px var(--brass-bright), 0 4px 14px rgba(0, 0, 0, 0.5); }
+.chat-bubble.about-me::after { border-color: var(--brass-bright); }
+.feed-line .feed-name.you, .ec-line .ec-name.you { color: var(--ivory); text-decoration: underline; text-decoration-color: var(--brass-bright); text-underline-offset: 3px; }
+.ec-line.me { color: var(--ivory); border-color: var(--line); }

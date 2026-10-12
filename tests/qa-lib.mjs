@@ -2,7 +2,7 @@
 import { chromium } from 'playwright-core';
 import fs from 'node:fs';
 import path from 'node:path';
-import { tipsOff } from './smoke-lib.mjs';
+import { tipsOff, profileOn, TEST_PROFILE } from './smoke-lib.mjs';
 
 export const BASE = process.env.QA_URL || 'http://127.0.0.1:8125/';
 const here = path.dirname(new URL(import.meta.url).pathname);
@@ -26,6 +26,7 @@ export async function launch() {
 export async function newPage(browser, vp = 'air') {
   const context = await browser.newContext(VIEWPORTS[vp]);
   await context.addInitScript(tipsOff);     // (first-match tips Off: src/ui/tips.js)
+  await context.addInitScript(profileOn, TEST_PROFILE);   // (a saved profile 'tester': no register screen)
   const page = await context.newPage();
   const log = [];
   page.on('console', m => { if (['error', 'warning'].includes(m.type())) log.push(`${m.type()}: ${m.text()}`); });

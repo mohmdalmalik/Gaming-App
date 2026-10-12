@@ -1058,7 +1058,9 @@ Target: `docs/art-reference.jpg` (style, palette and finish; not its layout or i
   found — then Explore, Go, the other guests); a tag that would clash with another first tries one
   tag-height higher, then lower. Cheap: positions are written only when they
   change, a tag is measured only when its words change, the interface's boxes are re-read every 4th frame
-  and the view's size is cached until a resize.
+  and the view's size is cached until a resize. Back to the menu, the layer is emptied (`main.js
+  backToMenu`): the menu's frames do not place tags, and the last game's "Go · 1 AP" stayed over the menu
+  and the lift until 12 Oct 2026.
 - **The path preview** leaves out the dots that would run under the Move/Cancel bar.
 - **Cost**: a 19-room hotel seen whole is ≈370 draw calls / 440k triangles in the test browser (baked
   tiles are a handful of draws each, all the fog one); the lobby view is unchanged apart from the fog's one.
@@ -1354,6 +1356,9 @@ which both possessed guests handed over a Possession card, nobody lost one and t
   scene starts, present after (strip and the 3D guest), and never for a clean player.
 
 ## Quick chat and emotes (Oct 2026, owner-approved idea A — a social layer, no rule)
+(On 12 Oct 2026 the nine lines became twenty in two tabs, with lines that name a guest, and the bots
+began to talk about who is who and to listen: see "Quick chat: twenty lines; bots that talk and listen"
+below. What follows still holds for the small talk, the pacing, the bubbles and the end screen.)
 - **What**: in a match, a Chat button beside the Menu button opens a small panel: nine preset lines and six
   emotes (brass line drawings, no emoji), all in `src/data/chat.js`. One tap sends and closes it; a 3 s
   cooldown. A message shows as a speech bubble over the speaker's guest (3.5 s, through the shared tag layer,
@@ -1386,6 +1391,8 @@ which both possessed guests handed over a Possession card, nobody lost one and t
   untouched.
 
 ## Choose your guest; your record (Oct 2026, owner-approved ideas B and F — interface only, no rule)
+(The "Your guest" picker and `?guest=` were replaced on 12 Oct 2026 by your profile and avatar: see
+"Profiles: a username first, then a table of players" below. Your record is unchanged.)
 - **Your guest** (`src/ui/guestPicker.js`): a row on the Play with bots screen — Random and the six guests,
   each by portrait (`makePortrait`, the same images as the strip) and name — remembered as the `guest`
   setting (a roster id, default `random`). `planGame` (main.js) leaves the chosen guest out of the shuffle
@@ -1481,3 +1488,270 @@ which both possessed guests handed over a Possession card, nobody lost one and t
 - **Balance tool**: `tools/balance/personality-study.mjs`'s 'return to giver' and 'one generation'
   proposals now model soul cards (the newly possessed guest's own souls are taken away; the giver gets a
   new soul of their own back); 'spent on conversion' is now the rule itself, so it changes nothing.
+
+## Profiles: a username first, then a table of players (12 Oct 2026, owner's request — interface only, no rule)
+- **The profile lives on the device for now** (`src/account/account.js`, localStorage key
+  `hotelEscape.profile.v1`): `{ version: 1, id: 'local-<16 hex>', username, avatar, inventory: [],
+  createdAt, updatedAt, nameChangedAt }`. The interface is asynchronous from day one (`ready`, `profile`
+  (a frozen copy, or null), `persistent`, `signUp`, `rename`, `setAvatar`, `owns`, `onChange`), so a server
+  account (Sign in with Apple / Google) can replace the store later with the same calls; callers never
+  touch storage, and they wait for `account.ready` before they first read `account.profile` (main.js shows
+  the first menu screen, and plans a direct link's game, only then). Every read and write is guarded like `src/record.js`: blocked or full storage keeps the
+  profile in memory for the visit (`persistent` false; the register says "This device isn't keeping your
+  name"). A damaged save is repaired (a valid name kept, bad avatar slots back to the look's own); without a
+  valid name the register asks again. `id` is random so a server can claim it; `updatedAt` lets a later
+  merge keep the newer copy. `owns(itemId)` is true for the free items only: nothing can be unlocked yet,
+  and once it can, a server must check it (the device's inventory is editable).
+- **Usernames** (`src/account/username.js`, pure, so a server can run the same checks): 3–16 of A–Z a–z
+  0–9 _, starting with a letter; case kept for show, ignored when compared. Reserved: the hotel's own
+  words (you, guest, admin, possessed, clean …), every card and room name from the data (run together and
+  with _: "FireExit", "Fire_Exit"), and every word of the rules' public log ("searched", "traded", "the" …),
+  so no name can change how a log line reads; `tests/profile-check.mjs` plays bot matches and checks that
+  every log word is reserved. A light filter (`src/data/names.js`, base64 so the words are not in plain
+  text): leetspeak read as letters, stretched letters caught, long words anywhere, short ones only as a
+  whole part (split on _, digits and capitals), so "class" and "Sussex" pass. A real check belongs to a
+  server. Suggest a name: adjective_noun from hotel words, always valid.
+- **First run**: "Sign the register" (`src/ui/register.js`, `#menu-signup`), anchored to the TOP of the
+  screen so the field and buttons stay above the iPad's keyboard (measured: Continue ends at 254 px; the
+  keyboard starts about 370 px down at 1024×768). The field's text is 22 px (16 px or more: Safari does not
+  zoom). Checked on Continue / Enter, then live after a refusal; a typed space becomes _. The same screen
+  in rename mode is Change name (from the avatar screen). The panel snaps between the top (register) and
+  the middle (other screens), never sliding across. Then the main menu: the profile card
+  (`src/ui/profileCard.js`: "Playing as <name> · Adjust avatar ›", opens the avatar screen), Play with
+  bots, Practice alone, and Settings and Your record side by side. `menu.show()` sends anyone without a
+  profile to the register; `onScreenChange(name, prev)` tells main.js of every screen change.
+- **The table** (`src/table.js`): every seat is `{ id: 'p1'…'pN' (by seat), name: username, color:
+  SEAT_COLORS[seat], avatar }` (plus the matching `outfit` while views still read one), and
+  `state.players[i].avatar` is passed through by the rules (display only, never read by a rule or a bot).
+  Seat colours go by seat, as every player at an online table would see them. Bots' usernames never equal
+  yours (`rollProfiles(n, rng, { avoid })`, case ignored, the same number of random draws). Bots' avatars
+  come from `randomAvatar` (seeded by the bot's username: its own random numbers, never the match's), free
+  items only, never two in one look nor in yours. **Seeded tables keep their seats**: planGame still draws
+  the 5 random numbers that shuffled the six named guests, so a `?seed=` gives the same seat, bots and
+  possessed seat as before (profile-check compares them). The six named guests stay only in the menu's
+  lobby; `roster` remains as the Node tests' and tools' fixture. Practice seats you as your profile.
+- **Where names show**: the strip (one line, the username, "…" past 74 px), the player panel (capped at
+  200 px), End turn ("nightowl's turn", the name capped at 150 px before "’s turn"), the matchmaking list
+  (every seat by username, yours marked "You"), the end screen (usernames, yours marked "You"), the feed
+  and the meeting panel. The old strip "handle" line and "Your guest" picker are gone.
+- **The feed reads lines with names put aside** (`feedLine` in `src/ui/feed.js`): the hotel's room and card
+  names are held whole, every guest's name (longest first, whole words only) is masked, the line is
+  classified and "You"/"you" substituted on the masked text, then the names go back. Before, a guest
+  called "Kitchen" turned "nora searched Kitchen." into "nora searched you."; a guest called "Linen" now
+  never matches inside "Linen Store".
+- **Names are text, never markup**: meeting.js escapes every name (and the plain texts main.js hands it)
+  where it builds HTML. Safe today thanks to the name rules, but required once names come from other
+  devices (and a server must check names again: never trust the client).
+- **Direct links** (`?mode=`) never show the register: they play as the saved profile, or 'Guest' (reserved,
+  so nobody else can be called that); `?user=name` (checked, never saved) names you for the visit. The old
+  `?guest=` is ignored. The test launchers (`tests/smoke-lib.mjs`, `tests/qa-lib.mjs`, and
+  browser-lobby's own context) seed a profile 'tester' before each page load unless a test asks for none
+  (`launch({ profile: false })`, as `tests/browser-profile.mjs` does).
+- **An old player's first avatar**: a saved "Your guest" (`settings.guest`, no longer a default) seeds it
+  (Clara: her look in her colours); 'random' or nothing rolls one from the new name.
+- **Safari may erase a site's storage** after 7 days without a visit (home-screen apps are exempt), and
+  Safari and the home-screen app keep separate storage: the player may be asked for a name again (the
+  record and settings share this today). `navigator.storage.persist()` is asked once after sign-up (best
+  effort), only where the browser decides quietly (not Firefox, which asks the player in a pop-up); the
+  real fix is the server account.
+
+## Avatars: the wardrobe, runtime portraits, bots' looks (12 Oct 2026, owner's request — interface only, no rule)
+
+- **An avatar is ids only** (`src/data/wardrobe.js`): `{ v: 1, base, skin, hair, eyes, glasses, frame, main,
+  accent, metal }`, each a catalogue key; an item's global id is `slot.key` ('glasses.monocle'), the id an
+  inventory and later a store's products use. Never raw colours: the catalogue can be retuned and a server
+  can check ownership. `normaliseAvatar` makes any saved or received avatar safe (unknown, damaged or
+  not-owned values fall back to the look's own). Six items are locked "Coming soon" (Platinum hair, Monocle,
+  Gold frames, Champagne and Gatsby gold outfits, Rose gold jewellery); nothing can be owned yet, and a
+  server must grant paid items later (the device's list is never trusted).
+- **Six looks, recoloured at run time, no new model files.** Each look is one of the six guest models
+  (`src/render/avatar.js`): parsed once per look (shared geometry), cloned per guest with its own matte
+  materials painted by material name. The models' baked shading is neutral grey on every clothing part,
+  so one colour value reads the same on every look; seams, lapels and the sash follow the main colour,
+  darker. All parts of a clone share ONE skeleton (SkeletonUtils gives each part its own: 9-15 bone
+  textures per guest, updated every frame and, before this, never freed).
+- **Eye colours use the possessed eyes' own shader** (`possessedEyeMaterial` with other colours and no
+  glow): no new shader. The possessed switch is rebuilt whenever the eye material changes, so un-possessing
+  always gives the avatar's own eyes back. No red, amber, violet or pink irises, ever: red means possessed.
+- **Glasses are made in code** (`src/render/avatarGlasses.js`), fitted per look from the model's own
+  measurements (eye ovals, brows, face front, head width, ears) and fixed to the head bone: one extra draw
+  call, follows the walk, no rebuild of the approved .glb files. Henry keeps his own frames for "Round".
+- **Portraits are drawn with the game's own renderer** (`src/render/avatarPortrait.js`), never a second
+  WebGL context: an off-screen half-float target, a small tone-map pass matching the screen's, an
+  asynchronous read-back, the plate laid under it in plain JS (no canvas read-back), a JPEG object URL kept
+  by `avatarKey` + look (up to 80). One portrait per frame; the player's own are prewarmed in the menu, a
+  table's during matchmaking and behind the black screen, possessed ones when needed (soul faces, allies).
+  Until one is ready the look's shipped picture shows and is swapped in place (`src/ui/portrait.js`; src/ui
+  keeps no three.js import: main.js hands the service in). In the shipped colours they match the committed
+  pictures to a mean error of about 1-1.7 levels of 255 (tests/avatar-check.mjs). The 'screen' path
+  (draw into a corner of the game canvas) was rejected: the menu's Still background skips redraws.
+- **The shader warm-up wears the extra eyes and glasses only while it starts the compile**
+  (`src/render/avatar.js withAllShaders`): three.js picks and starts every shader inside `compile` and then
+  only waits, so they come off before the wait. Before (integration, 12 Oct), a new player signing up
+  after the lobby had loaded got a profile-card portrait with glasses they never chose (the portrait drawn
+  while the warm-up waited, on the same shared model), and the lobby could show red eyes for a moment.
+  A new player's portraits are warmed up at sign-up too (`main.js warmPortraits`).
+- **Soul faces are kept by the look, not the seat** (`src/ui/soulFace.js setSoulPortraits`): seat ids are
+  p1..pN at every table, so 'p3' must never show the last table's face.
+- **Character views from avatars** (`src/main.js castCharacters`): one view per seat; a view whose look
+  returns at the next table is reused with its new seat colour, the others are disposed. Measured over
+  four tables: the same draw calls as before avatars (~126-206 at the role screen), textures level, the
+  hotel's own room pieces the only geometry that grows (as before).
+- **The wardrobe previews on your avatar in the lobby**: it stands by the lift (layout `player`), boards
+  first (practice alone; a match with Victor and Clara; replaces `prefer`), and is the game's own avatar
+  model (iris eyes and glasses included), not the lobby's merged one-draw-call figure (~10-15 draw calls,
+  menu only). The wardrobe camera keeps a fixed vertical field of view and is shifted sideways with a view
+  offset so the avatar stands in the middle of the space right of the panel at every screen shape. The
+  avatar stands a step right of the reception desk's rounded end and back toward the wall (2.3, -4.55), and
+  the camera looks from 2.4 m in front and 0.3 m to its left: the desk ends left of a ballgown's skirt and
+  Henry in his armchair stays out of the picture (QA 12 Oct: from straight in front of the old spot the desk
+  covered the right arm; from the right, Henry filled the foreground). The manager waits at the windows
+  while it is open; the lobby is sharp (not blurred) and at the game's resolution, and stays so through
+  Change name (the register comes and goes without the camera flying out).
+- **Bots' looks** (`src/data/randomAvatar.js`): seeded from the username (its own random numbers, never the
+  match's), free items only; never a look already at the table (yours included) while one is free — the
+  look then comes from a second stream of the same name, so only the look moves and the colours stay that
+  bot's own.
+
+## Quick chat: twenty lines; bots that talk and listen (12 Oct 2026, owner's request — a social layer, no rule)
+- **Lines** (`src/data/chat.js`): twenty in two tabs of ten (the panel remembers the last tab on the device,
+  `hotelEscape.chatTab.v1`, guarded). **Table**: the nine from before less "Trust me.", plus "Who has a
+  Lantern?" and "Meet me at the Fire Exit.". **Suspicion**: the owner's five ("I am clean.", "I am
+  possessed.", "<name> tried to possess me!", "I trust <name>.", "I don't trust <name>."), "Trust me.",
+  "Ring the Switchboard!", "<name> is possessed!", "<name> is clean.", "Stay away from <name>!". The six
+  emotes are unchanged. The six extra lines and the tab names are the design's proposal (owner questions).
+- **A line that names a guest**: `{ seat, id, about, at }` (`about`: their seat). `cleanMessage`
+  (`src/social/chat.js`) refuses a missing, own-seat or out-of-range `about`, drops it from other lines and
+  drops anything else; the channel knows the table's size (`seats()`). A server would relay exactly this.
+- **The panel** (`src/ui/chat.js`, styles at the end of styles.css): 320 x 381 px at every iPad size
+  (measured at 1024x768, 1180x820, 1366x1024: every button 44 px or more, nothing clipped, 105 px above the
+  Map row at 1024x768). A line about a guest shows a dotted "WHO" blank and a chevron; tapping it turns the
+  panel to **Choose a guest** at the same height (Back 44 x 44, the line, a 3-column grid of 92 px tiles:
+  portrait as in the guest strip, red eyes there only where the strip shows them, and the username), the
+  other guests still in the hotel in seat order. The double-tap guard (`tooSoon`) covers the step change and
+  Back, so a double tap on a line never picks the guest under the finger. Closing (outside, Escape) goes
+  back to the lines. With nobody left to name, those lines are disabled.
+- **How it reads**: `chatWords(id, { you, about, aboutYou, nameOf })` gives the words in pieces, the guest
+  named in bright brass. A line naming you reads as said to you ("You tried to possess me!", "I trust
+  you."; "Stay away from" keeps your name) in a bubble with a doubled bright-brass edge — never crimson,
+  which is only ever your own possessed look. Feed: "nora: I don't trust felix." (`feed.chat` takes the
+  pieces); a line naming you gets the feed's `me` style, "You" underlined; the end screen's row the same.
+  Names are `state.players[seat].name` (usernames).
+- **Bots talk** (`src/bots/chatter.js`, rewritten): it now reads the bot's OWN private results (its trades,
+  a Lantern block it made or suffered, its Hand Mirror) and its own mind (`botTable.catchUp`, at the start
+  of its turn, after a block, when an ally is named), and every line said. A clean bot accuses only from its
+  own eyes ("<name> tried to possess me!" after its Lantern burned that soul; "<name> is possessed!" after
+  its Hand Mirror showed one): always true. A possessed bot counter-accuses the guest who burned its soul,
+  and at most once a match falsely accuses a guest right after a trade with them (most of all one who named
+  an ally), with the same timing as a true accusation. Named, a bot answers "I am clean." / "I don't trust
+  <you>." with the same chances whatever its role; nobody else takes sides (see 'Quality round 4').
+  Lines have priorities (an accusation is never lost behind a "Thank you."); caps a match: 3 accusations,
+  2 strong denials, one opinion per guest, one false accusation. "I am possessed." is never said in play;
+  a possessed bot may say it as its last word when its side won. The unused `deduced` moment of the
+  prototype was dropped (a known-possessed guest already shows in "Stay away", four times as likely), and
+  the answer to "Who has a Lantern?" is data (`answerLantern`).
+- **Bots listen** (`src/bots/brain.js` onChat / hearsay; `src/bots/index.js` hear): every line reaches every
+  bot (`main.js` hands each channel message to `bots.hear` and `chatter.hear`), read in its place among the
+  events. A clean bot believes a speaker as far as its own evidence about them allows (never from what was
+  said about them), counts each speaker's line once, and splits the blame when two guests accuse each other;
+  an impossible claim (no trade between them, no Hand Mirror on that guest) or a lie about itself counts
+  against the speaker; hearsay moves an estimate by at most +0.5 / -0.25 (`BOT_HEAR`), in full for avoiding,
+  meeting, Fire Exit trades and pooling, at 0.75 for an attack, and not at all for a Lantern block (so talk
+  never makes a guest a Lantern magnet; it was 0.75 until QA round 4 measured that it did). A possessed bot holds back a soul from a guest the talk suggests is
+  possessed too. A line is weighed by the listener's role when it was said, so when the chatter catches a
+  mind up never changes a choice.
+- **Talk alone never changes the game**; listening does. With Quick chat Off the table is silent and the
+  bots neither talk nor listen (today's balance). Measured (`tools/balance/bot-match.mjs`, seed 1):
+  3,000 matches per size, the clean side wins 45.2 / 38.7 / 31.0% at 6 / 5 / 4
+  players with no chat, exactly the same with talk only (1,000 per size: every figure equal), and 48.5 /
+  41.1 / 33.0% with talk and listen. Conversions 2.36 -> 2.18 a match at 6 players; Lantern blocks 1.60 ->
+  1.68; clean-on-clean attacks 0.35 either way; 0 refused actions and 0 unfinished matches in every run.
+  Clean bots' accusations are 100% true; possessed bots' 16% (6p), 11% (5p), 5% (4p): by accident.
+  About 31 / 24 / 18 lines a match on a 5.9 / 5.2 / 4.3 minute clock (small talk is never weighed, so it can
+  be trimmed freely). (Superseded by 'Quality round 4' below: the exploit the next lines measured is gone,
+  and the figures with listening are 45.2 / 38.7 / 33.5%.) Exploit tests (6 players, 1,500 matches, one
+  clean seat speaks at round 2): its escape chance was 10.7% after "Good evening!", 12.5% after "I am
+  possessed." (the bots handed a suspect a Lantern to block, and a clean guest keeps it), 14.1% after a
+  false "<name> tried to possess me!" about a trade partner.
+- **Tests**: tests/chat-check.mjs (rewritten: lines, channel, honesty with chat — the watched bot's lines
+  and choices identical in a scrambled world, its own role forced possessed in half the runs; named
+  answers the same for both roles; talk without listening = no chat, event for event; determinism; sense,
+  caps, pacing; the player's lines), tests/bots-check.mjs (brain.js may import data/chat.js; the scrambled
+  world hears the same lines), tests/browser-bots.mjs (the privacy scan skips what is said; 3b: tabs,
+  Choose a guest, Back, the double-tap guard, feed, bubbles, the end row).
+
+## Quality round 4 (12 Oct 2026 — bots' chat, profiles, the wardrobe, portraits; no rule or rule number changed)
+- **The bots' chat gives no role away** (`src/bots/chatter.js`, `src/data/chat.js`; measured with all-bot
+  matches on a clock, 500 per size at 6 and 4 players, before → after):
+  - *No third guest takes sides.* Only a possessed bot ever defended a guest just named ("I trust <them>." /
+    "I don't trust <the accuser>.", the `allyNamed` moment), so such a line was 99% possessed and so was the
+    guest it defended. Removed: only the guest named answers, the same way whatever its role (the design's
+    "a denial is never a tell"). A third-party line within 8 s of a naming line: 0.33 → 0.01 a match.
+  - *A lie comes when the truth would.* The false "<name> tried to possess me!" was said at the start of the
+    possessed bot's own turn, rounds after the trade (100% possessed when not right after their trade). Now
+    it comes right after a trade in which it handed over no soul, with the timing, priority and staleness of
+    a clean bot's true accusation after its Lantern burned a soul; the counter-accusation and the Hand Mirror
+    lie use the same timing too (the counter's quicker delay made the possessed one accuse first 72% of
+    the time: now 43-53%).
+  - *A line about its own turn is said in that turn.* Turn-start lines (nearby, suspects, vouches, gather,
+    checkCount, askLantern) waiting out the table's gap spilled into the next guest's turn, mostly from
+    possessed bots that end their turn at once with a soul in hand (91-95% possessed). They are dropped once
+    the turn is over: 357 → 0 such lines in 500 matches.
+  - *"I trust <name>." and "Who has a Lantern?" as often from either side.* A possessed bot vouches for an
+    ally or a guest it is winning over with gifts, at 0.15 of the chance (per 1,000 turns, clean / possessed:
+    5.4 / 31.5 → 4.0 / 3.8 at 6 players); it asks for a Lantern on the same condition as a clean guest
+    (short of Lanterns, little left to find): 3.0 / 8.8 → 2.2 / 2.2. Possessed share of own-turn "I trust
+    <name>." 76% → 36-50% (base about 40%).
+  - *No contradictions:* never "I trust <name>." after accusing them, nor (possessed) about a guest who
+    knows what it is (24 in 500 matches → 0). A bot that said "Good evening!" answers a greeting with a
+    wave or a smile (31% of the answers were a second "Good evening!" → 0).
+  - *Small talk is answered whoever says it* (a person or a bot alike), so at an online table an answer
+    never shows which seats are people: at most 2 answers to greetings in any 20 s from the whole table,
+    each bot once to a guest; at most 2 answers to one "Good game!" and 5 last words in all. Start of a
+    match: 4.6 → 5.0 lines in the first minute (6 players); end: about 3.4 "Good game!" lines instead of 2.
+  - Left as they are: "Meet me at the Fire Exit." comes from different plans on the two sides (a little more
+    often clean at 6 players, possessed at 4); "I don't trust <name>." at the start of a turn is mostly a
+    clean bot's (its suspicions; a possessed bot doubts only guests who know it).
+- **Talk never makes a Lantern magnet** (`BOT_HEAR.blockShare` 0, `allyHint.liarAboutMe` 0.6 → 0.2): a clean
+  bot's choice to hand a Lantern to block no longer counts what was said. Before, a clean player lying in
+  chat was handed more Lanterns (bot-match `--inject`, 6 players, the same matches: a false "tried to possess
+  me!" about a trade partner 1.31 Lanterns / 13.9% escape against 1.05 / 10.7% for "Good evening!"); now
+  1.01 / 8.9% against 1.03 / 10.4%, "I am possessed." 0.91 / 10.6% against 0.92 / 9.8% (4 players likewise).
+  The clean side with talk and listen (1,000 matches): 45.2 / 38.7 / 33.5% at 6 / 5 / 4 players, the same
+  as with chat off at 6 and 5 (45.2 / 38.7 / 31.0%, 3,000 matches, above) and a little above it at 4; it
+  was 48.5 / 41.1 / 33.0% while what was said moved Lantern blocks. 0 refused actions, 0 unfinished matches.
+- **tests/chat-check.mjs** checks all of it: every line says which moment it came from (`moment`, `free`;
+  the channel drops both), so the bot's own gap is checked per line; never more lines in 30 s than the gap
+  allows; a 200-match section for the tells above; the same 180 matches played three times (one clean seat
+  says "Good evening!", "I am possessed." or an impossible accusation) for the Lantern magnet; the honesty
+  section over 128 matches (110 lines about a guest).
+- **Profiles** (`src/account/`, `src/data/wardrobe.js`): a look id is an own key of BASES only (a saved or
+  received 'constructor' or '__proto__' crashed the page at start, on every reload); a store that throws
+  when read gives no profile instead of a crash; a saved name no longer allowed (a word reserved since)
+  keeps the id, avatar and dates for the new name the register asks for ("Your name can no longer be
+  used"); a profile saved by a newer version is read but never written over (`readOnly`: "please reload");
+  names that read like a role ("possess" anywhere, "clean" as a whole part) are refused like reserved ones;
+  real names the filter caught (Nazir, Shital, Pornchai, Scunthorpe…) pass (`FILTER_ALLOW`); one note at
+  most under the register about what the device keeps; a failed save says so; `?user=` names you for the
+  direct link's own game only; a profile cleared by another tab sends the menu to the register.
+- **The wardrobe**: one-finger drags scroll its list anywhere in it (`data-scrolls`; two-finger moves are
+  still cancelled); the panel is anchored to the top, so a row that comes or goes moves only the rows below
+  it; the Look row says "Loading…" while a new look downloads, and a look that cannot be shown says so; a
+  look that arrives mid-boarding takes the old one's place and walks on; no guest in your own look boards
+  beside you (a Tuxedo player boards with Clara and Henry).
+- **Portraits**: drawn only once the menu's lobby is up and the player's shaders are built (a model
+  download and a shader build no longer come before the lobby); the shaders are built for the off-screen
+  targets the portraits are drawn into (three.js picks the variant by the target bound); every seat's two
+  portraits are drawn during matchmaking and the lift; soul faces are encoded with `toBlob`; the buffers are
+  let go 5 s after the last draw; a shown portrait counts as used (the player's own possessed one is not
+  the first let go); a failed one is tried again after 30 s. The profile card shows the last portrait drawn
+  of that avatar (kept on the device, `hotelEscape.cardPortrait.v1`) or a plain plate, never another look's
+  face; a picture that fails to load shows that plate too. A guest whose model cannot be downloaded is the
+  box figure (tried once more after 4 s). Devices without float buffers draw into an sRGB 8-bit buffer (no
+  banding in dark cloth); three.js still warns once about EXT_color_buffer_float there (its own float bone
+  textures, not the portraits).
+- **Not a leak** (checked): renderer.info geometries rising over the first matches of a visit (329 → 613 in
+  5, the same pattern before this round) is the room tiles' models being drawn for the first time as new
+  random hotels show new tiles (24 tiles, 476 geometries in all, loaded once a page and kept): bounded by
+  the tile set, not a per-match leak.
+

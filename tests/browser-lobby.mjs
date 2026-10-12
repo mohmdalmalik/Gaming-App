@@ -9,7 +9,7 @@
 import { chromium } from 'playwright-core';
 import fs from 'node:fs';
 import path from 'node:path';
-import { tipsOff } from './smoke-lib.mjs';
+import { tipsOff, profileOn, TEST_PROFILE } from './smoke-lib.mjs';
 
 const args = process.argv.slice(2);
 const baseUrl = args.includes('--url') ? args[args.indexOf('--url') + 1] : 'http://127.0.0.1:8123/';
@@ -27,6 +27,7 @@ const check = (cond, msg) => { if (cond) console.log('  ok  ', msg); else { cons
 const browser = await chromium.launch({ executablePath: chrome, headless: true, args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--no-sandbox'] });
 const lobbyContext = await browser.newContext({ viewport: { width: 1180, height: 820 }, deviceScaleFactor: 1, hasTouch: true });
 await lobbyContext.addInitScript(tipsOff);     // (first-match tips Off: none over what this suite looks at)
+await lobbyContext.addInitScript(profileOn, TEST_PROFILE);   // (a saved profile: you play as 'tester')
 const page = await lobbyContext.newPage();
 const consoleMessages = [];
 page.on('console', m => { if (['error', 'warning'].includes(m.type())) consoleMessages.push(`${m.type()}: ${m.text()}`); });
@@ -98,8 +99,11 @@ const m = await game(() => {
     // every model wall part is either on show for this match's layout or hidden
     shown: [...names].filter(n => /^W_.*_lo$/.test(n)).map(n => { let o; v.group.traverse(x => { if (x.name === n) o = x; }); return o.visible; }).filter(Boolean).length,
     // every shown part really draws: all the meshes inside it are visible too (a part with several
-    // materials is a group of meshes; hiding those once left the lobby's upper walls missing)
-    partsDraw: v.walls.every(w => w.baked.every(p => [p.lo, p.up].every(n => { let ok = true; n.traverse(x => { if (x.isMesh && !x.visible) ok = false; }); return ok; }))),
+    // materials is a group of meshes; hiding those once left the lobby's upper walls missing). An upper
+    // part the cutaway has lowered to its stub (src/render/bakedRoom.js: scale ≤ 0.02 → hidden) is meant
+    // to be hidden: once the view has eased in, the wall nearest the camera is cut down, so that alone is
+    // not a missing piece.
+    partsDraw: v.walls.every(w => w.baked.every(p => [p.lo, p.up].every(n => { let ok = true; n.traverse(x => { if (x.isMesh && !x.visible && !(x === p.up && p.up.scale.y <= 0.02)) ok = false; }); return ok; }))),
     greyboxHidden: !v.floorMesh.visible && v.furniture.every(f => !f.mesh.visible),
     basic, lit, mats: [...mats],
     safe: (() => { const b = document.getElementById('safe-badge'); return !!b && b.offsetParent !== null && getComputedStyle(b).display !== 'none'; })(),
@@ -326,7 +330,7 @@ console.log('\n6b. looking round a big hotel');
   console.log(`       big hotel (${view.rooms} rooms) seen whole: ${view.calls} draw calls, ${view.tris} triangles`);
   await frames(2);
   const tags = await game(() => window.__game.tags('guest:'));
-  check(tags.length === 1 && /Victor/.test(tags[0].text), `zoomed far out, the guest carries a name tag so they can be found ("${tags[0]?.text}")`);
+  check(tags.length === 1 && /tester/.test(tags[0].text), `zoomed far out, the guest carries a name tag so they can be found ("${tags[0]?.text}")`);
   await shot('lobby-03-overview');
   // One zoom-out limit for all four turns of the view: turning it while zoomed right out never jolts
   // the zoom, and the whole hotel stays in view.

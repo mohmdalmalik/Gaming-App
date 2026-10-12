@@ -23,7 +23,9 @@ export function createMeeting(doc, cfg, { isViewer = () => false, redEyes = () =
 
   const nameOf = p => (isViewer(p) ? 'you' : p.name);
   const Name = p => (isViewer(p) ? 'You' : p.name);
-  const who = (p, cap = true) => `<span class="who"><span class="dot" style="--player-color:${p.color}"></span>${cap ? Name(p) : nameOf(p)}</span>`;
+  // (names are usernames: escaped wherever they go into HTML, so a name can never be markup)
+  const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const who = (p, cap = true) => `<span class="who"><span class="dot" style="--player-color:${esc(p.color)}"></span>${esc(cap ? Name(p) : nameOf(p))}</span>`;
 
   function button(label, onClick, opts = {}) {
     const b = doc.createElement('button');
@@ -58,7 +60,7 @@ export function createMeeting(doc, cfg, { isViewer = () => false, redEyes = () =
     chooseAction(P, Q, { canAttack, onTrade, onAttack }) {
       show();
       title.innerHTML = `${who(P)} ${isViewer(P) ? 'meet' : 'meets'} ${who(Q, false)}`;
-      body.innerHTML = `<div class="modal-sub">A meeting is forced. ${isViewer(P) ? 'Choose' : `${P.name} chooses`}:</div>`;
+      body.innerHTML = `<div class="modal-sub">A meeting is forced. ${isViewer(P) ? 'Choose' : `${esc(P.name)} chooses`}:</div>`;
       actions.innerHTML = '';
       actions.appendChild(button('Trade', () => { hide(); onTrade(); }, { primary: true }));
       actions.appendChild(button(canAttack ? 'Attack' : 'Attack (need a weapon)', () => { hide(); onAttack(); }, { disabled: !canAttack }));
@@ -69,7 +71,7 @@ export function createMeeting(doc, cfg, { isViewer = () => false, redEyes = () =
     attackPick(P, Q, onWeapon, onBack = null) {
       show();
       title.textContent = 'Attack';
-      body.innerHTML = `<div class="modal-sub">${Name(P)} ${isViewer(P) ? 'attack' : 'attacks'} ${nameOf(Q)}. Choose a weapon:</div>`;
+      body.innerHTML = `<div class="modal-sub">${esc(Name(P))} ${isViewer(P) ? 'attack' : 'attacks'} ${esc(nameOf(Q))}. Choose a weapon:</div>`;
       const grid = doc.createElement('div'); grid.className = 'cards';
       for (const w of weaponsIn(P.hand)) grid.appendChild(cardTile(doc, w, { selectable: true, onSelect: (c, _tile, e) => { if (tooSoon(e, shownAt)) return; hide(); onWeapon(c.id); } }));
       body.appendChild(grid);
@@ -86,7 +88,7 @@ export function createMeeting(doc, cfg, { isViewer = () => false, redEyes = () =
       for (const t of cues) clearTimeout(t);
       cues = [];
       title.textContent = 'Attack';
-      if (!events.ok) body.innerHTML = `<div class="result-line bad">Cannot attack (${events.reason}).</div>`;
+      if (!events.ok) body.innerHTML = `<div class="result-line bad">Cannot attack (${esc(events.reason)}).</div>`;
       else {
         body.innerHTML = '';
         const after = Math.max(0, Q.health ?? 0);
@@ -137,7 +139,7 @@ export function createMeeting(doc, cfg, { isViewer = () => false, redEyes = () =
     tradeDone(P, Q, onDone) {
       show();
       title.textContent = 'Trade complete';
-      body.innerHTML = `<div class="result-line">${P.name} and ${Q.name} exchanged one card each. What they received is theirs to know.</div>`;
+      body.innerHTML = `<div class="result-line">${esc(P.name)} and ${esc(Q.name)} exchanged one card each. What they received is theirs to know.</div>`;
       actions.innerHTML = '';
       actions.appendChild(button('Continue', () => { hide(); onDone?.(); }, { primary: true }));
     },
@@ -147,7 +149,7 @@ export function createMeeting(doc, cfg, { isViewer = () => false, redEyes = () =
     waiting(heading, text) {
       show();
       title.textContent = heading;
-      body.innerHTML = `<div class="result-line waiting"><span class="think-dots" aria-hidden="true"><i></i><i></i><i></i></span>${text}</div>`;
+      body.innerHTML = `<div class="result-line waiting"><span class="think-dots" aria-hidden="true"><i></i><i></i><i></i></span>${esc(text)}</div>`;
       actions.innerHTML = '';
     },
 
@@ -155,7 +157,7 @@ export function createMeeting(doc, cfg, { isViewer = () => false, redEyes = () =
     notice(text, onDone, heading = 'Meeting') {
       show();
       title.textContent = heading;
-      body.innerHTML = `<div class="result-line">${text}</div>`;
+      body.innerHTML = `<div class="result-line">${esc(text)}</div>`;
       actions.innerHTML = '';
       actions.appendChild(button('Continue', () => { hide(); onDone?.(); }, { primary: true }));
     },

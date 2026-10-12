@@ -9,7 +9,9 @@ import * as THREE from 'three';
 import { config as cfg } from './config.js';
 import { rules, applyMode } from './data/rules.js';
 import { hotel } from './data/hotel.js';
-import { roster } from './data/characters.js';
+import { account } from './account/account.js';
+import { checkUsername } from './account/username.js';
+import { seatTable, botAvatars, STAND_IN } from './table.js';
 import { createHotel, stackDeck, growTo, searchSpotOf, roomAt, cellOf, fogCells } from './game/hotel.js';
 import { buildGrid } from './game/grid.js';
 import {
@@ -58,14 +60,19 @@ import { standable } from './game/moves.js';
 import { usePracticeWording, prepareSoulCards } from './ui/cards.js';
 import { redEyedAllies } from './ui/allies.js';
 import { createMenu } from './ui/menu.js';
-import { findGuest } from './ui/guestPicker.js';
+// (avatars: the wardrobe screen, the runtime portraits and the soul cards' faces from each seat's avatar)
+import { createAvatarEditor } from './ui/avatarEditor.js';
+import { setPortraitService } from './ui/portrait.js';
+import { setSoulPortraits } from './ui/soulFace.js';
+import { createAvatarPortraits } from './render/avatarPortrait.js';
+import { avatarKey, shippedPortrait } from './data/wardrobe.js';
 import { record } from './record.js';
 import { showEndRecord } from './ui/record.js';
 import { createFeed } from './ui/feed.js';
 import { createChatUI } from './ui/chat.js';
 import { createChatChannel } from './social/chat.js';
 import { createTips } from './ui/tips.js';
-import { CHAT } from './data/chat.js';
+import { CHAT, BOT_CHAT } from './data/chat.js';
 import { settings } from './settings.js';
 import { createAudio } from './audio/index.js';
 import { createGameSounds } from './audio/gameSounds.js';
@@ -82,8 +89,9 @@ const floor = createHotel(hotel, cfg);
 //   ?mode=practice                       practice alone
 //   ?mode=bots&bots=5&role=clean         a match against 5 computer guests (role: random | clean |
 //                                        possessed); &seat=2 puts the player in that seat (testing)
-//   &guest=clara                         the guest you play (a name, or random; without it practice is
-//                                        Victor and a match deals you a random guest, as before)
+//   &user=nora                           the name you play under for this visit (checked like a username,
+//                                        never saved; without it, your profile's, or 'Guest' on a new
+//                                        device). A direct link never shows the register.
 //   ?seed=123                           force the deal, the hidden role and the hotel's room deck (testing)
 //   ?timer=off                           play without the 45-second turn clock
 //   ?intro=off                           no lift sequence between the menu and the game
@@ -102,6 +110,14 @@ if (params.get('mode') === 'hotseat') {
   if (!params.has('seat')) params.set('seat', '0');
 }
 const DIRECT = ['practice', 'bots'].includes(params.get('mode')) ? params.get('mode') : null;
+// Who the player is at the table (src/account/account.js): their profile's name and avatar; a direct link
+// may name them for its own game (?user=, checked, not saved; forgotten once the menu opens, where the
+// profile card shows who plays); a device with no profile plays as 'Guest'.
+let linkUser = (() => { const r = DIRECT && params.has('user') ? checkUsername(params.get('user')) : null; return r?.ok ? r.name : null; })();
+function myIdentity() {
+  const p = account.profile;
+  return { username: linkUser || p?.username || STAND_IN.username, avatar: p?.avatar || STAND_IN.avatar };
+}
 const TIMER_OFF = params.get('timer') === 'off';
 const INTRO = params.get('intro') !== 'off';
 const BOT_PACE = Math.max(0, parseFloat(params.get('botpace'))) || 1;
@@ -115,7 +131,7 @@ let PRACTICE = true;          // practice alone, or a match against bots
 let humanSeat = 0;            // the player's own seat (a match: random, like joining an online table)
 let bots = null;              // the computer guests' brains (src/bots/index.js), in a match
 let botProfiles = [];         // per seat: the bot's profile (username, style), or null for the player
-const cast = [roster[0]];     // the guests at the table, in seat order (filled in place by setupGame)
+const cast = seatTable({ me: myIdentity(), seat: 0 });   // the seats at the table, in seat order (src/table.js; filled in place by setupGame)
 applyMode('practice', 1);
 if (TIMER_OFF) rules.turnTimerEnabled = false;
 let seed = newSeed();
@@ -138,6 +154,19 @@ const myTurn = () => !state.finished && state.activeIndex === humanSeat;
 // --- Rendering -------------------------------------------------------------------------
 const container = document.getElementById('view');
 const view = createScene(container, cfg);
+// Every seat's portraits (the strip, the panel, the meeting, the trades, the profile card) are drawn from
+// their avatar with this renderer (src/render/avatarPortrait.js; never a second WebGL context), one per
+// frame, kept by look; the look's shipped picture shows until then. The soul cards' faces are the owners'
+// possessed portraits, found by seat id among this table's seats. From the menu they wait (paused) until
+// its lobby is up and the player's own portraits' shaders are built (warmPortraits), so neither a model
+// download nor a shader build comes before the lobby; a game set up before that starts them (planGame).
+const portraits = createAvatarPortraits(view.renderer, { paused: !DIRECT });
+setPortraitService(portraits);
+const seatAvatar = id => (cast.find(s => s.id === id) || state?.players?.find(p => p.id === id))?.avatar || null;
+setSoulPortraits({
+  key: id => { const av = seatAvatar(id); return av ? avatarKey(av) : null; },
+  url: id => { const av = seatAvatar(id); return av ? portraits.url(av, { possessed: true }).then(u => u || shippedPortrait(av.base, true)) : null; },
+});
 const roomViews = new Map();          // roomId -> view, added as rooms are revealed
 // Rooms with real art (the lobby) are dressed as their views appear. The greybox shows until the
 // files have loaded; if a piece fails, the room keeps its greybox. The tests wait on this before
@@ -159,22 +188,30 @@ const doorways = createDoorwayViews(floor, cfg, view.scene, {
   isBarricaded: id => !!state?.barricades?.has(id),
   camera: view.camera,      // the barricade sign hangs out on the side facing the camera
 });
-// One view per guest of the roster, made the first time that guest is at a table and kept (shown or
-// hidden) from game to game, so a new game never loads a model twice. `characters` holds this game's,
-// in seat order.
-const characterViews = new Map();
+// One view per seat, built from the seat's avatar (src/render/characterView.js: each look's model is
+// parsed once, src/render/avatar.js, and every guest in it is a clone with its own colours). A view whose
+// look comes back at the next table (your own, Play again) is reused with its new seat; the views not at
+// the table are let go, so memory stays the same however many tables are played. `characters` holds
+// this game's, in seat order.
+let characterViews = [];        // [{ key, cv }]
 const characters = [];
+const viewKey = def => (def.avatar ? `a:${avatarKey(def.avatar)}` : `o:${def.outfit}`);
 function castCharacters() {
-  for (const cv of characterViews.values()) cv.group.visible = false;
+  const old = characterViews;
+  characterViews = [];
   characters.length = 0;
   for (const def of cast) {
-    if (!characterViews.has(def.id)) characterViews.set(def.id, createCharacterView(def, cfg, view.scene));
-    const cv = characterViews.get(def.id);
+    const key = viewKey(def);
+    const i = old.findIndex(v => v.key === key);
+    const cv = i >= 0 ? old.splice(i, 1)[0].cv : createCharacterView(def, cfg, view.scene);
+    if (i >= 0) cv.setDef(def);
+    characterViews.push({ key, cv });
     cv.group.visible = true;
     cv.setDead(false);
     cv.setPossessed(false);   // (views are reused: no red eyes left over from the last game)
     characters.push(cv);
   }
+  for (const v of old) v.cv.dispose();   // (not at this table)
 }
 // The hotel behind the main menu is not seen once the menu's own lobby scene is up, so its starting
 // room's model and the game's guest are loaded only after that scene has loaded (or failed to: then
@@ -234,15 +271,28 @@ const discard = createDiscard(document, cfg, {
 const fan = createHandFan(document, { onOpen: cardId => { if (running && !uiBusy()) hand.open(state, floor, cardId); } });
 const feed = createFeed(document);     // what the other guests just did (a match)
 // Quick chat (a match, Settings > Quick chat On): the table's channel (src/social/chat.js: a message is
-// { seat, id, at }), the Chat button, panel, bubbles and feed lines (src/ui/chat.js), and the computer
-// guests' own chat (src/bots/chatter.js, set up with the bots: syncChat).
-const chatChannel = createChatChannel({ now: () => performance.now() });
+// { seat, id, at }, + `about` for a line that names a guest), the Chat button, panel, bubbles and feed
+// lines (src/ui/chat.js), and the computer guests' own chat (src/bots/chatter.js, set up with the bots:
+// syncChat). Every line said reaches every bot: their chatter (a bot it names may answer) and their minds
+// (src/bots/brain.js: they weigh what they hear). With Quick chat Off the table is silent: the bots
+// neither talk nor listen.
+const chatChannel = createChatChannel({ now: () => performance.now(), seats: () => state.players.length });
 const chat = createChatUI(document, {
   channel: chatChannel, feed, sfx, mySeat: () => humanSeat,
   nameOf: i => state.players[i]?.name ?? 'A guest', colorOf: i => state.players[i]?.color ?? '#c9a24e',
+  // the guests a line may name: the others still in the hotel, in seat order (red eyes as in the strip)
+  guests: () => {
+    const red = redEyedAllies(state, me());
+    return state.players.filter(p => p.index !== humanSeat && p.alive && !state.escaped?.has(p.id))
+      .map(p => ({ seat: p.index, player: p, red: red.has(p.id) }));
+  },
 });
 let chatter = null, chatPollAt = 0;
-chatChannel.onMessage(msg => { if (chatter && !chatter.has(msg.seat)) chatter.hear(msg, performance.now()); });
+chatChannel.onMessage(msg => {
+  if (!chatter) return;
+  bots?.hear(msg);
+  chatter.hear(msg, performance.now());
+});
 const topLeftEl = document.querySelector('.hud-top-left');
 const handoff = createHandoff(document);
 const meeting = createMeeting(document, cfg, { isViewer: p => !PRACTICE && p.index === humanSeat, redEyes: p => redEyedAllies(state, me()).has(p.id) });
@@ -473,7 +523,7 @@ function cutWalkShort() {
 
 function onTimeUp() {
   stopTimer();
-  if (myTurn()) { hud.toast(PRACTICE ? `Time is up — ${activePlayer(state).name}'s turn ends.` : 'Time is up — your turn ends.'); sfx('timeUp'); }
+  if (myTurn()) { hud.toast('Time is up — your turn ends.'); sfx('timeUp'); }
   endTurnNow();
 }
 
@@ -1177,8 +1227,8 @@ function showEnd() {
   const verdict = yourSideWon ? (you.possessed ? 'The possessed win — your side.' : 'The clean guests win — your side.')
     : (you.possessed ? 'The clean guests win. Your side lost.' : 'The possessed win. Your side lost.');
   const reveal = state.players.map(p => ({
-    name: p.name,
-    who: p.index === humanSeat ? 'You' : (botProfiles[p.index]?.username || ''),
+    name: p.name,                                   // (the username; your own row is marked "You")
+    who: p.index === humanSeat ? 'You' : '',
     color: p.color,
     possessed: p.possessed,
     status: state.escaped.has(p.id) ? 'Escaped' : !p.alive ? 'Dead' : '',
@@ -1275,32 +1325,36 @@ async function loadBots() {
 }
 
 // Who sits where, who the computer guests are, and who starts possessed — like joining a random online
-// table: a random seat, random guests, random bots. `choice`: { practice: true, guest } or
-// { bots: 3-5, role, guest }. `guest` (src/ui/guestPicker.js): the guest you play — a roster id, or
-// 'random'; none given (a direct link without ?guest=): practice is the first guest, a table random.
+// table: a random seat, random bots. `choice`: { practice: true } or { bots: 3-5, role }. Every seat is
+// a player (src/table.js): you as your profile (name and avatar), each bot as its username and its own
+// avatar (rolled from its name: src/data/randomAvatar.js, never the match's random numbers). The six
+// named guests (Victor, Clara …) stay in the menu's lobby. `seats` (also `cast`): in seat order.
 async function planGame(choice) {
-  const mine = findGuest(choice.guest);        // your chosen guest, or null
+  portraits.resume();                      // (a game is coming: its portraits must be drawn)
+  const mine = myIdentity();
   if (choice.practice) {
-    const def = mine || (choice.guest === 'random' ? roster[Math.floor(Math.random() * roster.length)] : roster[0]);
-    return { practice: true, cast: [def], humanSeat: 0, profiles: [null], possessedIndex: null, choice };
+    const seats = seatTable({ me: mine, seat: 0 });
+    return { practice: true, seats, cast: seats, humanSeat: 0, profiles: [null], possessedIndex: null, choice };
   }
   const mods = await loadBots();
   const n = Math.max(3, Math.min(5, Math.round(choice.bots) || 5)) + 1;
   const rng = makeRng(Number.isFinite(forcedSeed) && forcedSeed > 0 ? (forcedSeed * 7919 + 13) >>> 0 : ((Date.now() ^ Math.floor(Math.random() * 1e9)) >>> 0) || 1);
-  // (your chosen guest is left out of the shuffle and sits at your seat; the bots get the others)
-  const guests = mine ? shuffle(roster.filter(g => g !== mine), rng).slice(0, n - 1) : shuffle([...roster], rng).slice(0, n);
+  // (the 5 draws that shuffled the six named guests before are still drawn, so a ?seed= keeps its seat,
+  // its bots and its possessed seat)
+  for (let k = 0; k < 5; k++) rng();
   const askedSeat = parseInt(params.get('seat'), 10);
   const seat = Number.isFinite(askedSeat) ? Math.max(0, Math.min(n - 1, askedSeat)) : Math.floor(rng() * n);
-  if (mine) guests.splice(seat, 0, mine);
-  const rolled = mods.profiles.rollProfiles(n - 1, rng);
-  const profiles = guests.map((_, i) => (i === seat ? null : rolled.shift()));
+  const rolled = mods.profiles.rollProfiles(n - 1, rng, { avoid: [mine.username] });   // (never your name)
+  const looks = botAvatars(rolled.map(p => p.username), { avoid: [mine.avatar] });
+  const seats = seatTable({ me: mine, bots: rolled.map((p, k) => ({ username: p.username, avatar: looks[k] })), seat });
+  const profiles = seats.map((_, i) => (i === seat ? null : rolled.shift()));
   let possessedIndex = null;                                   // random, dealt by the rules
   if (choice.role === 'possessed') possessedIndex = seat;
   else if (choice.role === 'clean') {
-    const others = guests.map((_, i) => i).filter(i => i !== seat);
+    const others = seats.map((_, i) => i).filter(i => i !== seat);
     possessedIndex = others[Math.floor(rng() * others.length)];
   }
-  return { practice: false, cast: guests, humanSeat: seat, profiles, possessedIndex, choice };
+  return { practice: false, seats, cast: seats, humanSeat: seat, profiles, possessedIndex, choice };
 }
 
 // Each guest's own soul-card face (src/ui/soulFace.js) is drawn ahead: the player's own first, behind the
@@ -1336,11 +1390,9 @@ function setupGame(plan) {
   if (!PRACTICE) {
     const seats = botProfiles.map((profile, index) => (profile ? { index, profile } : null)).filter(Boolean);
     bots = botModules.index.createBotTable(state, floor, seats, ((seed * 2654435761) >>> 0) || 1);
-    // (their chat has its own random numbers: the match plays the same with it or without it)
-    if (settings.get('chat') !== 'off') chatter = botModules.chatter.createChatter(state, floor, seats, ((seed * 2246822519) >>> 0) || 1);
-    // (who plays each guest, for the strip: interface only, never read by the rules or the bots)
-    state.players.forEach((p, i) => { p.handle = i === humanSeat ? 'You' : botProfiles[i]?.username || ''; });
-    hud.rebuild();
+    // (their chat has its own random numbers; talking alone never changes the game, listening does:
+    // each bot weighs what it hears from what it knows, src/bots/brain.js)
+    if (settings.get('chat') !== 'off') chatter = botModules.chatter.createChatter(state, floor, seats, ((seed * 2246822519) >>> 0) || 1, BOT_CHAT, bots);
     botsAutoplay = botModules.autoplay;
     movers.forEach((m, i) => { m.speedScale = isBot(i) ? botWalkScale() : 1; });
   }
@@ -1409,9 +1461,8 @@ async function enterGame(plan, { guests = 3 } = {}) {
   container.classList.remove('blurred');
   if (INTRO && lobbyReady && lobby) {
     // (never longer than LIFT_MAX_MS: on a struggling device the scene runs slow, and the game must not wait)
-    // (`prefer`: your own guest boards, when they are one of the lobby guests who can)
-    const prefer = plan.cast[plan.humanSeat]?.name.toLowerCase();
-    try { await Promise.race([lobby.enter({ guests, prefer, onCue: name => sfx(name) }), wait(LIFT_MAX_MS)]); } catch (err) { console.warn('the lift sequence failed:', err); }
+    // (your own avatar, standing by the lift, boards first: alone in practice, with Victor and Clara in a match)
+    try { await Promise.race([lobby.enter({ guests, onCue: name => sfx(name) }), wait(LIFT_MAX_MS)]); } catch (err) { console.warn('the lift sequence failed:', err); }
   } else await wait(400);
   audio.setScene('none');          // (the lobby music goes with the picture)
   await fade(true, 650);
@@ -1435,33 +1486,39 @@ async function enterGame(plan, { guests = 3 } = {}) {
   soulsRest();
 }
 
-async function startPractice(choice = {}) {
-  const plan = await planGame({ practice: true, guest: choice.guest });
+async function startPractice() {
+  const plan = await planGame({ practice: true });
   enterGame(plan, { guests: 1 });
 }
 
 async function startBots(choice) {
   let plan;
-  try { plan = await planGame({ bots: choice.bots, role: choice.role, guest: choice.guest }); } catch (err) {
+  try { plan = await planGame({ bots: choice.bots, role: choice.role }); } catch (err) {
     console.error('could not load the computer guests:', err);
     overlays.showError('The computer guests could not be loaded. Check the internet connection and reload.');
     return;
   }
   // (the player went back, or started something else, while the computer guests were loading)
   if (phase !== 'menu' || menu.screen !== 'bots') return;
-  const seats = [humanSeatFirst(plan)].concat(plan.cast.map((def, i) => ({ i, def })).filter(x => x.i !== plan.humanSeat).map(x => ({
-    name: x.def.name, color: x.def.color, username: plan.profiles[x.i]?.username || 'guest', you: false,
+  // (the matchmaking list: you first, then the others as they "join", each by username and seat colour)
+  const seats = [humanSeatFirst(plan)].concat(plan.seats.map((s, i) => ({ i, s })).filter(x => x.i !== plan.humanSeat).map(x => ({
+    username: x.s.name, color: x.s.color, avatar: x.s.avatar, you: false,
   })));
+  portraits.prepare(tablePortraits(plan));     // (the table's portraits, drawn while it fills up)
   menu.matchmake(seats, { onFull: () => enterGame(plan, { guests: 3 }), onCancel: () => {} });
 }
+// Every seat's two portraits, normal and possessed (a soul card's face, an ally's red eyes): drawn ahead,
+// during matchmaking and the lift, never in the first seconds of play.
+const tablePortraits = plan => plan.seats.flatMap(s => [s.avatar, { avatar: s.avatar, possessed: true }]);
 function humanSeatFirst(plan) {
-  const def = plan.cast[plan.humanSeat];
-  return { name: def.name, color: def.color, username: 'You', you: true };
+  const s = plan.seats[plan.humanSeat];
+  return { username: s.name, color: s.color, avatar: s.avatar, you: true };
 }
 
 // Play again (a match): a new table with the same choices, straight in (no menu, no lift).
 async function playAgain() {
   const plan = await planGame(lastChoice.practice ? { practice: true } : lastChoice);
+  if (!plan.practice) portraits.prepare(tablePortraits(plan));
   audio.stopStinger();
   await fade(true, 450);
   setupGame(plan);
@@ -1489,12 +1546,16 @@ async function backToMenu() {
   hand.close(); map.close(); discard.close(); handoff.close(); meeting.close(); hud.hideConfirm();
   feed.reset(false);
   chat.reset(false);
+  // (the tags over the hotel — "Go · 1 AP", "Explore", names, speech bubbles — go too: the menu's frames
+  // no longer place them, so whatever showed last would stay over the menu and the lift)
+  screenTags.begin(); screenTags.end();
   movers.forEach(m => m.halt());
   meetingLive = false;
   bots = null;
   chatter = null;
   if (lobbyReady) releaseTileTextures();  // (the menu shows the lobby scene: the hotel's maps are not drawn)
   lobby?.reset();
+  linkUser = null;                       // (the menu plays as the profile its card shows)
   applyPixelRatio();
   container.classList.add('blurred');
   menu.show('main');
@@ -1862,15 +1923,61 @@ function endMusic() {
 
 // --- Start: the main menu, or a direct link --------------------------------------------------------
 const menu = createMenu(document, {
+  account,                         // (no profile yet: the menu opens on "Sign the register")
   onPlayBots: choice => startBots(choice),
   onPractice: choice => startPractice(choice),
   onSettingChanged: name => applySettings(name),
+  onScreenChange: (name, prev) => onMenuScreen(name, prev),
 });
+// The wardrobe (src/ui/avatarEditor.js, the menu's 'avatar' screen): every pick shows at once on your
+// avatar in the lobby, which the lobby's wardrobe camera frames in the space right of the panel, sharp
+// (not blurred); your choices are kept when you leave the screen (account.setAvatar).
+const avatarEditor = createAvatarEditor(document, {
+  account,
+  onPreview: av => lobby?.setPlayerAvatar(av),
+  onDone: () => menu.show('main'),
+  onRename: () => menu.showRename(),
+});
+let wardrobeOpen = false;
+function wardrobeCentre() {
+  const r = document.querySelector('#menu .menu-panel')?.getBoundingClientRect();
+  return r ? (Math.min(r.right, window.innerWidth * 0.6) + window.innerWidth) / 2 : window.innerWidth * 0.7;
+}
+function onMenuScreen(name, prev) {
+  const open = name === 'avatar';
+  if (open) avatarEditor.open();
+  else if (prev === 'avatar') avatarEditor.close().then(() => { if (!avatarEditor.isOpen) lobby?.setPlayerAvatar(account.profile?.avatar || null); });
+  // (Change name, from the wardrobe: the camera stays on your avatar and the lobby stays sharp, so the
+  // register comes and goes without the camera flying out to the lobby and back)
+  const framing = open || (name === 'signup' && (prev === 'avatar' || wardrobeOpen));
+  if (framing === wardrobeOpen) return;
+  wardrobeOpen = framing;
+  lobby?.setWardrobe(framing, { centreX: wardrobeCentre() });
+  if (phase === 'menu' && !DIRECT) { container.classList.toggle('blurred', !framing); applyPixelRatio(); }
+}
+window.addEventListener('resize', () => { if (wardrobeOpen) lobby?.setWardrobe(true, { centreX: wardrobeCentre() }); });
+// Your avatar in the lobby follows your profile (a new name or look, another tab), except while the
+// wardrobe shows the one being chosen.
+account.onChange?.(p => {
+  // (the profile gone — another tab cleared the site's data — while the menu shows: the register first)
+  if (!p && menu.screen && menu.screen !== 'signup') menu.show('main');
+  if (!avatarEditor.isOpen) lobby?.setPlayerAvatar(p?.avatar || null);
+  // (a new player, signed up after the lobby loaded: their portraits' shaders built now, as on a later
+  // visit; then, for any new look, both its portraits drawn ahead: the card shows one, a game needs both)
+  if (p?.avatar && lobbyReady) warmPortraits(p.avatar);
+});
+let portraitsWarm = false;
+function warmPortraits(av) {
+  const both = () => portraits.prepare([av, { avatar: av, possessed: true }]);
+  if (portraitsWarm) { both(); return; }
+  portraitsWarm = true;
+  portraits.prewarm(av).then(() => { portraits.resume(); both(); });
+}
 // The lobby behind the menu is drawn at a lower resolution (it is blurred anyway: cheaper on the iPad);
-// the lift sequence and the game use the Graphics setting.
+// the lift sequence and the game use the Graphics setting (and so does the wardrobe, sharp on your avatar).
 const MENU_PIXEL_RATIO = 0.75;
 function gamePixelRatio() { return settings.choice('graphics')?.pixelRatio ?? cfg.render.maxPixelRatio; }
-function applyPixelRatio() { view.setPixelRatio(phase === 'menu' && !DIRECT ? Math.min(MENU_PIXEL_RATIO, gamePixelRatio()) : gamePixelRatio()); }
+function applyPixelRatio() { view.setPixelRatio(phase === 'menu' && !DIRECT && !wardrobeOpen ? Math.min(MENU_PIXEL_RATIO, gamePixelRatio()) : gamePixelRatio()); }
 function applySettings(name = null) {
   if (!name || name === 'graphics') applyPixelRatio();
   if (name === 'music' || name === 'sound') audio.applySettings();
@@ -1900,23 +2007,41 @@ if (DIRECT) {
       : `A match · you and ${n} computer guests · one is secretly possessed`;
   }
   overlays.showStart();
-  const guest = params.get('guest');      // (?guest=clara or random: the guest you play; none: as before)
-  const planned = planGame(DIRECT === 'practice' ? { practice: true, guest } : { bots: n, role, guest });
-  planned.then(async plan => { setupGame(plan); await warmUp(5000); await ownSoulDrawn(); soulsRest(); startReady = true; maybeReady(); })
+  // (you play as your profile, or ?user= for this visit, or 'Guest': a direct link never shows the register;
+  // the account is waited for first, as a server account will need)
+  const planned = account.ready.then(() => planGame(DIRECT === 'practice' ? { practice: true } : { bots: n, role }));
+  planned.then(async plan => {
+    setupGame(plan);
+    // (the portraits' shaders, then every seat's portraits, behind the "Tap to begin" card)
+    await portraits.prewarm(myIdentity().avatar);
+    if (!plan.practice) portraits.prepare(tablePortraits(plan));
+    await warmUp(5000); await ownSoulDrawn(); soulsRest(); startReady = true; maybeReady();
+  })
     .catch(err => { console.error(err); overlays.showError(`The game could not be set up. (${err?.message || err})`); });
   overlays.onBegin(() => { if (startReady) begin(); });
 } else {
-  menu.show('main');
+  // (the account first: a server account has no profile until it is ready, and the menu sends anyone
+  // without one to the register)
+  account.ready.then(() => menu.show('main'), () => menu.show('main'));
   audio.setScene('menu');          // (heard from the first tap: browsers allow no sound before one)
   container.classList.add('blurred');
   import('./menu/lobbyScene.js')
     .then(mod => {
       lobby = mod.createLobbyScene({ renderer: view.renderer, cfg });
       lobby.setSize(view.size.w, view.size.h);
+      // (your avatar by the lift; the wardrobe's camera if that screen is already open)
+      lobby.setPlayerAvatar(avatarEditor.isOpen ? avatarEditor.avatar : account.profile?.avatar || null);
+      if (wardrobeOpen) lobby.setWardrobe(true, { centreX: wardrobeCentre() });
       return lobby.ready;
     })
-    .then(() => { lobbyReady = !!lobby; releaseHotel(); prepareWarmUp(); })
-    .catch(err => { console.warn('The lobby behind the menu could not be loaded; the menu shows over the hotel instead.', err); lobby = null; releaseHotel(); });
+    .then(() => {
+      lobbyReady = !!lobby; releaseHotel(); prepareWarmUp();
+      // (your portraits, normal and possessed, drawn in the menu: the card shows one, a game needs both;
+      // the portraits start once their shaders are built)
+      const mine = account.profile?.avatar;
+      if (mine) warmPortraits(mine); else portraits.resume();
+    })
+    .catch(err => { console.warn('The lobby behind the menu could not be loaded; the menu shows over the hotel instead.', err); lobby = null; releaseHotel(); portraits.resume(); });
 }
 let startReady = !DIRECT;
 let framesReady = false;
@@ -2053,16 +2178,28 @@ window.__game = {
   isBot: i => isBot(i),
   bots: () => bots,
   botProfiles: () => botProfiles.map(p => (p ? { username: p.username, style: p.style } : null)),
+  // Who you are (src/account/account.js: the saved profile, or null before the register), and the seats
+  // of this table (src/table.js: id, username, colour, avatar), you marked.
+  profile: () => account.profile,
+  seats: () => cast.map((s, i) => ({ id: s.id, name: s.name, color: s.color, avatar: s.avatar, you: i === humanSeat })),
+  storageKept: () => account.persistent,      // (false: this device keeps nothing, the profile lasts the visit)
+  menuShow: name => menu.show(name),          // (tests: a menu screen; Change name opens the register)
+  showRename: () => menu.showRename(),
+  rebuildHud: () => { hud.rebuild(); refresh(); },   // (tests: the strip built again, after renaming guests)
   myTurn: () => myTurn(),
   meetingLive: () => meetingLive,
   phase: () => phase,
   lobbyReady: () => lobbyReady,
   menuScreen: () => menu.screen,
   feedLines: () => [...document.querySelectorAll('#feed .feed-line')].map(e => e.textContent),
-  // Quick chat (tests): say a line as the player (null while cooling down), the panel, the bubbles
-  // showing over the guests, the computer guests' chatter.
-  chatSay: id => chat.send(id),
+  // Quick chat (tests): say a line as the player (`about`: the seat a line names; null while cooling
+  // down), the panel (its tab and step), the bubbles showing over the guests, the computer guests' chatter,
+  // a line said as another seat (as the table would relay it), what the bots heard.
+  chatSay: (id, about = null) => chat.send(id, about),
   chatOpen: () => chat.isOpen,
+  chatPanel: () => chat.panelState(),
+  chatPost: msg => chatChannel.post(msg),
+  botsHeard: () => bots?.heardCount?.() ?? 0,
   chatBubbles: () => screenTags.list('chat:'),
   chatRecent: () => chat.recent(),
   chatter: () => chatter,
@@ -2078,8 +2215,10 @@ window.__game = {
   // noTradeMe, noTradeBoth, blockedPossessed: a possessed you blocked a soul), with sample cards, for your
   // guest and another; nothing in the game changes.
   previewTradeReveal: (outcome = 'swap') => {
-    const you = state.players[humanSeat] || roster[0];
-    const them = state.players.find(p => p !== you) || roster.find(r => r.outfit !== you.outfit) || roster[1];
+    const you = state.players[humanSeat] || cast[0];
+    // (practice: a sample other guest, a bot's name in a look that is not yours)
+    const them = state.players.find(p => p !== you)
+      || { ...seatTable({ me: { username: 'nightowl', avatar: botAvatars(['nightowl'], { avoid: [you.avatar] })[0] }, seat: 0 })[0], id: 'p2', index: 1, color: '#5ac8e6' };
     return tradeReveal.preview(outcome, you, them);
   },
   tradeRevealOutcome: () => tradeReveal.outcome,
@@ -2164,6 +2303,16 @@ window.__game = {
   onABody: (x, z) => onABody(x, z),
   bodyEnds: i => bodyEnds(movers[i]),
   programCount: () => view.renderer.info.programs.length,
+  // Avatars (tests): the portrait service, the wardrobe screen, your avatar in the lobby, the character
+  // views alive (one per seat: views not at the table are let go), the renderer's counts.
+  portraits: () => portraits,
+  avatarEditor: () => avatarEditor.debug(),
+  lobbyPlayer: () => lobby?.debug.player ?? null,
+  lobbyWardrobe: () => lobby?.debug.wardrobe ?? null,
+  lobbyBoarders: () => lobby?.debug.boarders ?? null,
+  characterViewCount: () => characterViews.length,
+  renderInfo: () => ({ calls: view.renderer.info.render.calls, triangles: view.renderer.info.render.triangles,
+    geometries: view.renderer.info.memory.geometries, textures: view.renderer.info.memory.textures, programs: view.renderer.info.programs.length }),
   setPixelRatio: cap => view.setPixelRatio(cap),
 };
 

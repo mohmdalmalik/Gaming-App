@@ -12,8 +12,15 @@
 //                                            //  to 0.5, sub-stepped); all motion follows dt, so dt = 0
 //                                            //  freezes the room. `time` is accepted but not needed.
 //   renderer.render(lobby.scene, lobby.camera);
+//   lobby.setPlayerAvatar(avatar);           // the player's own avatar (src/data/wardrobe.js ids) stands
+//                                            //  by the lift; again with a new look repaints it live
+//                                            //  (another body or look: rebuilt in place)
+//   lobby.setWardrobe(on, { centreX });      // the wardrobe camera on the avatar (eased), the avatar
+//                                            //  shown at screen x = centreX (CSS px; the free space
+//                                            //  right of the menu panel)
 //   await lobby.enter({ guests: 3 });        // the boarding; resolves when the lift doors have shut
-//                                            //  (prefer: 'clara' boards that guest, if they can)
+//                                            //  (your avatar boards first: alone for 1, with Victor and
+//                                            //  Clara for 3; without one, the first guests by `boards`)
 //                                            //  (~5.8 s for 3 guests, ~4.8 s for 1); the dial keeps
 //                                            //  moving afterwards, so keep rendering during the fade.
 //                                            //  onCue(name) (optional) is told 'liftDing' / 'liftDoors'
@@ -27,8 +34,12 @@
 import * as THREE from 'three';
 import { lobbyLayout } from './lobbyLayout.js';
 import { buildLobbySet } from './lobbySet.js';
-import { createActor, preloadCast, disposeCast } from './lobbyCast.js';
+import { createActor, createAvatarActor, preloadCast, disposeCast } from './lobbyCast.js';
 import { disposeTextures } from './lobbyTextures.js';
+import { loadBase, createAvatarModel } from '../render/avatar.js';
+
+// The lobby's own rim light on the guests (src/menu/lobbyCast.js): the player's avatar gets the same.
+const LOBBY_RIM = { color: '#ffd9a8', rim: 0.55, fill: 0.08 };
 
 const D2R = Math.PI / 180;
 const ease = t => (t <= 0 ? 0 : t >= 1 ? 1 : t * t * (3 - 2 * t));
@@ -74,7 +85,7 @@ export function createLobbyScene({ renderer, cfg, layout = lobbyLayout } = {}) {
   const camera = new THREE.PerspectiveCamera(C.fov, 16 / 9, 0.1, 60);
   const basePos = new THREE.Vector3(...C.pos), baseTarget = new THREE.Vector3(...C.target);
   const endPos = new THREE.Vector3(...C.enterPos), endTarget = new THREE.Vector3(...C.enterTarget);
-  let aspect = 16 / 9, baseFov = C.fov;
+  let aspect = 16 / 9, baseFov = C.fov, viewW = 16, viewH = 9, viewShift = 0;
 
   const set = buildLobbySet(L);
   scene.add(set.group);
@@ -102,7 +113,8 @@ export function createLobbyScene({ renderer, cfg, layout = lobbyLayout } = {}) {
   function fitVignette() {
     // a quad just in front of the near plane covering the whole view
     const d = 0.2, hh = Math.tan((camera.fov * D2R) / 2) * d;
-    vignette.mesh.position.set(0, 0, -d);
+    // (centred on the screen, also when the view is shifted sideways: the wardrobe)
+    vignette.mesh.position.set(viewShift ? -(viewShift / viewW) * hh * 2 * camera.aspect : 0, 0, -d);
     vignette.mesh.scale.set(hh * 2 * camera.aspect * 1.02, hh * 2 * 1.02, 1);
   }
 
@@ -175,6 +187,66 @@ export function createLobbyScene({ renderer, cfg, layout = lobbyLayout } = {}) {
     }
   })();
 
+  // ---- the player's own avatar ---------------------------------------------------------------------
+  // Built from their profile (src/render/avatar.js: the game's own model, its eye colour and glasses),
+  // standing by the lift (layout `player`). A new look of the same body and cut is a repaint (instant);
+  // another look is rebuilt in the same spot.
+  let player = null;            // { actor, model, base }
+  let wantAvatar = null, playerToken = 0;
+  function dropPlayer(p) {
+    if (!p) return;
+    if (actors.get('you') === p.actor) actors.delete('you');
+    p.actor.dispose();
+    p.model.dispose();
+  }
+  // Resolves true once it shows, false if it could not be shown, null if a newer avatar took its place.
+  async function setPlayerAvatar(av) {
+    wantAvatar = av ? { ...av } : null;
+    const token = ++playerToken;
+    if (!wantAvatar || !L.player) { dropPlayer(player); player = null; return true; }
+    if (player && player.base.id === wantAvatar.base) { player.model.setAvatar(wantAvatar); return true; }
+    try {
+      const base = await loadBase(wantAvatar.base);
+      await ready;
+      if (token !== playerToken || disposed || !wantAvatar) return null;
+      const model = createAvatarModel(base, wantAvatar, { rim: LOBBY_RIM });
+      const actor = createAvatarActor(model, base, L.player, scene);
+      const old = player;
+      player = { actor, model, base };
+      actors.set('you', actor);
+      placeActor(actor);
+      if (old) {
+        actor.place(old.actor.x, old.actor.z, old.actor.heading); actor.board = old.actor.board;
+        // (in the middle of the boarding: the new look takes the old one's place in it, and walks on)
+        if (seq && !seq.done) {
+          const i = seq.boarders.indexOf(old.actor);
+          if (i >= 0) {
+            seq.boarders[i] = actor;
+            if (old.actor.path) actor.walkPath(old.actor.path.map(p => [p.x, p.z]), { speed: old.actor.speed, face: old.actor.arriveFace, onArrive: old.actor.onArrive });
+          }
+        }
+        dropPlayer(old); actors.set('you', actor);
+      }
+      actor.update(0.016);
+      // (its shaders, the red / coloured eyes and the glasses' included, built now rather than on a pick)
+      try {
+        if (renderer) await model.withAllShaders(async () => {
+          if (renderer.compileAsync && renderer.extensions?.has?.('KHR_parallel_shader_compile')) await renderer.compileAsync(scene, camera);
+          else renderer.compile(scene, camera);
+        });
+      } catch { /* only an optimisation */ }
+      return true;
+    } catch (e) { console.warn('lobby: your avatar could not be shown:', e && e.message); return token === playerToken ? false : null; }
+  }
+
+  // ---- the wardrobe camera ----------------------------------------------------------------------
+  const W = L.wardrobeCamera;
+  const wardrobe = { want: 0, k: 0, centreX: null };
+  function setWardrobe(on, { centreX = null } = {}) {
+    wardrobe.want = on && W ? 1 : 0;
+    if (centreX != null) wardrobe.centreX = centreX;
+  }
+
   // ---- idle behaviour ---------------------------------------------------------------------------
   // who looks at whom (glances are re-chosen every few seconds)
   const lookAt = (a, x, z, max = 1.2) => {
@@ -198,6 +270,13 @@ export function createLobbyScene({ renderer, cfg, layout = lobbyLayout } = {}) {
   }
 
   function updateStroll(a, st, dt) {
+    // (while the wardrobe is open, a stroller in its view waits at their spot out of it)
+    const hold = wardrobe.want && W?.hold?.[a.spec.name];
+    if (hold) {
+      if (!st.held) { st.held = true; a.path = null; a.onArrive = null; a.walkPath([[hold[0], hold[1]]], { speed: a.spec.speed || 0.9, face: hold[2] * D2R }); }
+      return;
+    }
+    if (st.held) { st.held = false; st.pause = 0.5; }
     if (a.path) return;
     if (st.pause > 0) {
       st.pause -= dt;
@@ -237,10 +316,17 @@ export function createLobbyScene({ renderer, cfg, layout = lobbyLayout } = {}) {
     const promise = new Promise(r => { resolve = r; });
     const n = Math.max(0, Math.min(3, Math.round(+guests) || 0));
     // who boards: the first `n` by `boards`; they leave their seats (and fill the car) by `boardDelay`.
-    // `prefer` (a cast name, e.g. 'clara': the player's own guest) boards too, when they are one who can.
-    const pool = L.cast.filter(c => c.boards).sort((a, b) => a.boards - b.boards);
-    const mine = pool.findIndex(c => c.name === prefer);
-    if (mine >= n) pool.unshift(...pool.splice(mine, 1));
+    // The player's own avatar, when it is in the room, boards first (practice: alone; a match: with the
+    // first guests, Victor and Clara). Without it, `prefer` (a cast name) boards too, when they can.
+    let pool = L.cast.filter(c => c.boards).sort((a, b) => a.boards - b.boards);
+    if (player && actors.get('you') === player.actor) {
+      // (never beside a guest in your own look: from behind, nobody could tell which one is you)
+      pool = pool.filter(c => c.model !== player.base.id);
+      pool.unshift(L.player);
+    } else {
+      const mine = pool.findIndex(c => c.name === prefer);
+      if (mine >= n) pool.unshift(...pool.splice(mine, 1));
+    }
     const boarders = pool.slice(0, n)
       .sort((a, b) => (a.boardDelay ?? 0) - (b.boardDelay ?? 0))
       .map(c => actors.get(c.name)).filter(Boolean);
@@ -277,7 +363,8 @@ export function createLobbyScene({ renderer, cfg, layout = lobbyLayout } = {}) {
     const b = a.board;
     b.started = true;
     a.standUp();
-    const solo = seq.boarders.length < 3 && L.soloBoardingPaths?.[a.spec.name];   // (someone stays seated in the way)
+    const round = L.soloBoardingPaths?.[a.spec.name];       // (someone who stays seated is in the way)
+    const solo = round && !seq.boarders.some(x => x.spec.name === round.past) ? round.path : null;
     const toDoor = (solo || L.boardingPaths[a.spec.name] || []).map(p => [...p]);
     toDoor.push([lift.x + 0.1, lift.front[1] - 0.1], [lift.x + 0.05, L.room.z0 - 0.3]);
     const inside = b.via ? [[...b.via], [...b.slot]] : [[...b.slot]];
@@ -319,9 +406,19 @@ export function createLobbyScene({ renderer, cfg, layout = lobbyLayout } = {}) {
 
   // ---- camera ------------------------------------------------------------------------------------
   const camPos = new THREE.Vector3(), camTgt = new THREE.Vector3();
+  const wPos = new THREE.Vector3(), wTgt = new THREE.Vector3();
   let cameraOverride = null;     // debug: { pos: [x,y,z], target: [x,y,z], fov }
+  function setShift(px) {
+    // the picture moved sideways by px (CSS px) without turning the camera (a view offset)
+    px = Math.abs(px) < 0.05 ? 0 : px;
+    if (px === viewShift) return;
+    viewShift = px;
+    if (!px) camera.clearViewOffset();
+    else camera.setViewOffset(viewW, viewH, -px, 0, viewW, viewH);
+  }
   function updateCamera(time) {
     if (cameraOverride) {
+      setShift(0);
       camera.position.set(...cameraOverride.pos);
       camera.lookAt(...cameraOverride.target);
       if (cameraOverride.fov && camera.fov !== cameraOverride.fov) { camera.fov = cameraOverride.fov; camera.updateProjectionMatrix(); }
@@ -340,12 +437,27 @@ export function createLobbyScene({ renderer, cfg, layout = lobbyLayout } = {}) {
     camTgt.x += Math.sin(time * w * 0.6 + 2) * d.x * 0.3 * driftK;
     camera.position.copy(camPos);
     camera.lookAt(camTgt);
-    const fov = THREE.MathUtils.lerp(baseFov, Math.min(baseFov, C.enterFov * baseFov / C.fov), push);
+    let fov = THREE.MathUtils.lerp(baseFov, Math.min(baseFov, C.enterFov * baseFov / C.fov), push);
+    // the wardrobe: toward a camera in front of the player's avatar, the avatar moved to centreX
+    const k = ease(wardrobe.k);
+    const you = actors.get('you');
+    let shift = 0;
+    if (k > 0 && W && you) {
+      wTgt.set(you.x, W.look, you.z);
+      wPos.set(you.x + W.from[0], W.look + W.from[1], you.z + W.from[2]);
+      camPos.lerp(wPos, k); camTgt.lerp(wTgt, k);
+      camera.position.copy(camPos);
+      camera.lookAt(camTgt);
+      fov = THREE.MathUtils.lerp(fov, W.fov, k);
+      if (wardrobe.centreX != null) shift = (wardrobe.centreX - viewW / 2) * k;
+    }
+    setShift(shift);
     if (Math.abs(camera.fov - fov) > 1e-3) { camera.fov = fov; camera.updateProjectionMatrix(); }
     fitVignette();
   }
 
   function setSize(width, height) {
+    viewW = width || 1; viewH = height || 1; viewShift = NaN;
     aspect = Math.max(0.2, (width || 1) / (height || 1));
     camera.aspect = aspect;
     // keep at least `minHFov` across: narrower (4:3) screens get a taller view instead of losing the sides
@@ -375,7 +487,8 @@ export function createLobbyScene({ renderer, cfg, layout = lobbyLayout } = {}) {
     conv(actors.get('eleanor'), actors.get('concierge'), 0.45, 0);
     conv(actors.get('extraM'), actors.get('extraF'), 0.38, 1.3);
     for (const a of actors.values()) {
-      if (!seq) idleGlances(a, dt, clock);
+      if (!seq && a.spec.name === 'you' && wardrobe.want) a.headYawTarget = 0;   // (in the wardrobe: facing you)
+      else if (!seq) idleGlances(a, dt, clock);
       else if (a.board) { if (a.path) a.headYawTarget = 0; }
       else if (a.spec.name !== 'manager' && !a.path && seq.t > (a.lookDelay ??= 0.3 + Math.random() * 1.2)) {
         lookAt(a, lift.x, L.room.z0, 1.3);   // everyone left behind turns to watch the lift
@@ -385,6 +498,19 @@ export function createLobbyScene({ renderer, cfg, layout = lobbyLayout } = {}) {
   }
   function update(dt /* seconds */, time /* accepted, not needed */) {
     dt = Math.min(Math.max(+dt || 0, 0), 0.5);
+    // the wardrobe camera eases in and out (at once when the room is still: the 'Still' background)
+    if (dt > 0 && W) { const step = dt / Math.max(0.05, W.ease || 0.7); wardrobe.k += Math.sign(wardrobe.want - wardrobe.k) * Math.min(step, Math.abs(wardrobe.want - wardrobe.k)); }
+    else {
+      wardrobe.k = wardrobe.want;
+      // (a still room: nobody walks, so a stroller in the wardrobe's view is simply put at their spot)
+      if (wardrobe.want && loaded && W?.hold) for (const [name, st] of strolls) {
+        const spot = W.hold[name], a = actors.get(name);
+        if (!spot || !a || st.held === 'placed') continue;
+        a.path = null; a.onArrive = null; a.place(spot[0], spot[1], spot[2] * D2R);
+        st.held = 'placed';
+        a.update(0.016);
+      }
+    }
     // Frozen (the menu's "Still" background): nothing is stepped at all. (Stepping with dt = 0 is not
     // a freeze: the animation mixer skips re-writing bones whose sampled value did not change, so the
     // small head / arm gestures that are added on top each frame would pile up and spin heads round.)
@@ -419,7 +545,9 @@ export function createLobbyScene({ renderer, cfg, layout = lobbyLayout } = {}) {
 
   function dispose() {
     disposed = true;
+    playerToken++;
     if (seq && !seq.done) { seq.done = true; seq.resolve(); }
+    if (player) { actors.delete('you'); dropPlayer(player); player = null; }
     for (const a of actors.values()) a.dispose();
     actors.clear();
     set.dispose();
@@ -431,9 +559,22 @@ export function createLobbyScene({ renderer, cfg, layout = lobbyLayout } = {}) {
 
   updateCamera(0);
 
+  // (tests) where a person's feet and the top of their head are on screen (CSS px), as last drawn
+  function screenOf(name) {
+    const a = actors.get(name);
+    if (!a) return null;
+    const p = new THREE.Vector3(), out = {};
+    for (const [k, y] of [['feet', 0.02], ['head', 1.72]]) { p.set(a.x, y, a.z).project(camera); out[k] = [(p.x + 1) / 2 * viewW, (1 - p.y) / 2 * viewH]; }
+    return out;
+  }
+
   return {
-    scene, camera, ready, setSize, update, enter, reset, dispose,
+    scene, camera, ready, setSize, update, enter, reset, dispose, setPlayerAvatar, setWardrobe,
     // for the preview page and tests
-    debug: { actors, set, get seq() { return seq; }, layout: L, setCamera(c) { cameraOverride = c; updateCamera(clock); } },
+    debug: { actors, set, get seq() { return seq; }, layout: L, setCamera(c) { cameraOverride = c; updateCamera(clock); },
+      get player() { return player ? { avatar: player.model.avatar, base: player.base.id, x: player.actor.x, z: player.actor.z, glasses: !!player.model.glasses, screen: screenOf('you') } : null; },
+      get wardrobe() { return { ...wardrobe }; },
+      get boarders() { return seq ? seq.boarders.map(a => a.spec.name) : null; },
+      screenOf },
   };
 }

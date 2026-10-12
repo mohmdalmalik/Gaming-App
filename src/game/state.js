@@ -46,6 +46,7 @@ export function resetState(state, floor, seed) {
     id: p.id,
     name: p.name,
     outfit: p.outfit,
+    avatar: p.avatar,          // how the guest looks (src/data/wardrobe.js ids): display only, never read by the rules
     color: p.color,
     index,
     currentRoom: floor.start.room,

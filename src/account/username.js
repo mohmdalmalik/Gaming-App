@@ -3,9 +3,10 @@
 //   show and ignored when names are compared ("Nora" and "nora" are the same name).
 //   Reserved: the hotel's own words and the words of the rules' public log (src/data/names.js), and every
 //   card and room name in the game's data, so a name can never read as a card, a room or part of a line
-//   in the feed ("nora searched Kitchen.").
+//   in the feed ("nora searched Kitchen."); and a name that reads like a role ("possess" anywhere in it,
+//   "clean" as a whole part: "NotPossessed", "Clean_"), so no line can look like the game telling one.
 //   A light word filter (src/data/names.js). The real check belongs to a server once there is one.
-import { SUGGEST, RESERVED, LOG_WORDS, FILTER } from '../data/names.js';
+import { SUGGEST, RESERVED, LOG_WORDS, ROLE_WORDS, FILTER, FILTER_ALLOW } from '../data/names.js';
 import { rules } from '../data/rules.js';
 import { hotel } from '../data/hotel.js';
 
@@ -61,16 +62,28 @@ function filters() {
   };
   return filterCache;
 }
-// Whether a name trips the filter: lowercase, leetspeak read as letters, then the long words anywhere
-// in the name (_ and digits taken out) and the short ones only as a whole part of it.
+// A name read as words: lowercase, leetspeak read as letters, split on _, digits and capitals.
+function partsOf(name) {
+  const split = name.replace(/([a-z])([A-Z])/g, '$1 $2').toLowerCase().replace(/[0-9@$]/g, ch => LEET[ch] ?? ch);
+  return split.split(/[\s_0-9]+/).filter(Boolean);
+}
+const ALLOW = new RegExp(FILTER_ALLOW.join('|'), 'g');
+// Whether a name trips the filter: the long words anywhere in the name (_ and digits taken out, and the
+// real names that contain one by chance), the short ones only as a whole part of it.
 export function isFiltered(name) {
   if (typeof name !== 'string' || !name) return false;
-  const split = name.replace(/([a-z])([A-Z])/g, '$1 $2').toLowerCase().replace(/[0-9@$]/g, ch => LEET[ch] ?? ch);
-  const parts = split.split(/[\s_0-9]+/).filter(Boolean);
-  const joined = parts.join('');
+  const parts = partsOf(name);
+  const joined = parts.join('').replace(ALLOW, ' ');
   const f = filters();
   if (f.anywhere.some(re => re.test(joined))) return true;
   return parts.some(p => f.whole.some(re => re.test(p)));
+}
+// Whether a name reads like a role (ROLE_WORDS).
+export function readsLikeRole(name) {
+  if (typeof name !== 'string' || !name) return false;
+  const parts = partsOf(name);
+  const joined = parts.join('');
+  return ROLE_WORDS.anywhere.some(w => joined.includes(w)) || parts.some(p => ROLE_WORDS.whole.includes(p));
 }
 
 // Check a name as typed: { ok: true, name } (trimmed) or { ok: false, code, message }.
@@ -82,7 +95,7 @@ export function checkUsername(raw, { reserved = reservedWords() } = {}) {
   if (name.length < USERNAME.min) return fail('short');
   if (name.length > USERNAME.max) return fail('long');
   if (!/^[A-Za-z]/.test(name)) return fail('start');
-  if (reserved.has(name.toLowerCase())) return fail('reserved');
+  if (reserved.has(name.toLowerCase()) || readsLikeRole(name)) return fail('reserved');
   if (isFiltered(name)) return fail('filtered');
   return { ok: true, name };
 }

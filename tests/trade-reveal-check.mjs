@@ -127,7 +127,7 @@ async function trade(mode) {
     const faces = await ev(() => ({
       mine: document.querySelector('.tr-rail.mine .tr-front img')?.dataset.soul ?? null,
       theirs: document.querySelector('.tr-rail.theirs .tr-front img')?.dataset.soul ?? null,
-      held: [...document.querySelectorAll('.tr-extra .tr-front img')].map(i => ({ soul: i.dataset.soul ?? null, drawn: /^data:image\//.test(i.getAttribute('src') || '') })),
+      held: [...document.querySelectorAll('.tr-extra .tr-front img')].map(i => ({ soul: i.dataset.soul ?? null, drawn: /^(data:image\/|blob:)/.test(i.getAttribute('src') || '') })),
     }));
     if (plan.iGive === 'soul') check(faces.mine === before.meId, `your soul in the scene shows your face (${faces.mine})`);
     if (plan.theyGive === 'soul') check(faces.theirs === before.tId, `their soul in the scene shows ${before.tName}'s face (${faces.theirs})`);
@@ -204,7 +204,7 @@ async function trade(mode) {
       `after it: red eyes on ${before.tName} ${plan.reveals ? 'in the strip and in the hotel' : 'nowhere (a clean player never sees them)'} (strip ${post.strip}, hotel ${post.hotel}, model loaded ${post.loaded})`);
     if (plan.reveals || plan.role === 'possessed') {
       // Your own souls on the hand fan: one stack, your own face, the drawn picture.
-      const fan = await ev(() => { const i = document.querySelector('#hand-fan .fan-card[data-type="possession"] img'); return i ? { soul: i.dataset.soul ?? null, drawn: /^data:image\//.test(i.getAttribute('src') || '') } : null; });
+      const fan = await ev(() => { const i = document.querySelector('#hand-fan .fan-card[data-type="possession"] img'); return i ? { soul: i.dataset.soul ?? null, drawn: /^(data:image\/|blob:)/.test(i.getAttribute('src') || '') } : null; });
       const meNow = await ev(() => window.__game.state.players[window.__game.humanSeat()].hand.filter(c => c.type === 'possession').length);
       if (meNow > 0) check(fan && fan.soul === before.meId && fan.drawn, `the hand fan's souls show your own face (${JSON.stringify(fan)})`);
       if (shots && mode === 'possessed') await page.screenshot({ path: `${shots}/trade-${mode}-fan-${W}x${H}.png` });

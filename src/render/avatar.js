@@ -24,7 +24,7 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
 import { createPossessedEyes, possessedEyeMaterial, measureEyes } from './possessedLook.js';
 import { glassesMesh } from './avatarGlasses.js';
-import { BASES, item } from '../data/wardrobe.js';
+import { BASES, isBase, item } from '../data/wardrobe.js';
 
 const loader = new GLTFLoader();
 const bases = new Map();          // look id -> Promise<base>
@@ -47,7 +47,7 @@ export function guestLight(m, rim = GAME_RIM) {
 }
 
 export function loadBase(id) {
-  if (!BASES[id]) id = 'victor';
+  if (!isBase(id)) id = 'victor';
   if (bases.has(id)) return bases.get(id);
   const def = BASES[id];
   const p = loader.loadAsync(def.model).then(gltf => {

@@ -141,7 +141,10 @@ export function createChatUI(doc, { channel, feed, nameOf, colorOf, mySeat, gues
   function ask(id) {
     const p = PHRASE.get(id);
     const list = guests();
-    if (!p || !list.length) return;
+    if (!p) return;
+    // (nobody left to name — the last other guest left the hotel while the step was open: back to the
+    // lines, those that name a guest now disabled)
+    if (!list.length) { unask(); syncAbout(); return; }
     asking = id;
     whomLine.innerHTML = labelHtml(p);
     grid.replaceChildren(...list.map(g => {
@@ -163,6 +166,7 @@ export function createChatUI(doc, { channel, feed, nameOf, colorOf, mySeat, gues
     asking = null;
     whom.hidden = true; main.hidden = false;
     grid.replaceChildren();
+    syncAbout();
   }
 
   el.panel.addEventListener('click', e => {
@@ -310,7 +314,9 @@ export function createChatUI(doc, { channel, feed, nameOf, colorOf, mySeat, gues
   function addEndLine(icon, lead, parts, me) {
     const line = doc.createElement('span');
     line.className = `ec-line${me ? ' me' : ''}`;
-    line.innerHTML = `<span class="ec-icon">${icon}</span><span class="ec-who">${esc(lead)}</span> ${partsHtml(parts, 'ec-name')}`;
+    // (the words in one span, as a bubble's: each piece a flex item of its own would stand 6 px apart,
+    // "I don't trust you ." with a gap before the full stop)
+    line.innerHTML = `<span class="ec-icon">${icon}</span><span class="ec-who">${esc(lead)}</span> <span class="ec-text">${partsHtml(parts, 'ec-name')}</span>`;
     endLines.appendChild(line);
     while (endLines.children.length > 2) endLines.firstChild.remove();   // (one row: the newest two)
   }

@@ -215,7 +215,7 @@ profile, the inventory and the match history. Warn the player first that their c
 ## 3. The cosmetics economy
 
 ### What to sell, and how
-- **Catalog as data.** All items go in a data file (e.g. `src/data/cosmetics.js`), used by both game and
+- **Catalog as data.** All items go in a data file (`src/data/wardrobe.js`), used by both game and
   server. Each item has:
   - an id,
   - a slot (outfit colour, hat or hair accessory, gloves, card backs, lantern style, end-screen emote,
@@ -357,7 +357,7 @@ Each step is something you can see and test before the next one starts.
   six looks, skin tone, hair, eyes, glasses, outfit colours. Everything is saved on the device, with no
   server and no money. The item list is a data file (`src/data/wardrobe.js`), ready for the store later; a
   few items already show as locked, "Coming soon". Bots appear as players: usernames and random looks.
-- **Being built (12 Oct 2026)** with the owner's choices: bots look like players, a few locked items shown,
+- **Built (12 Oct 2026)** with the owner's choices: bots look like players, a few locked items shown,
   chat lines that name a guest, bots that talk and listen.
 - **Still to decide later:** which items are earned by playing (and how), and which are sold.
 - **Cost:** $0.

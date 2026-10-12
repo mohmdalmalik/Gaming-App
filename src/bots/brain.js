@@ -44,8 +44,9 @@
 //     between the two, "<them> is possessed!" with no Hand Mirror on them) or a lie about the listener
 //     itself makes the speaker look possessed; two guests naming each other share the blame. What it
 //     heard moves its estimate of a guest by a capped amount, in full for whom it avoids, meets, trades
-//     with in the Fire Exit or pools with, in part (blockShare, attackShare) for a Lantern block or an
-//     attack. A possessed guest holds back a soul from a guest the talk suggests is possessed too.
+//     with in the Fire Exit or pools with, in part for an attack (attackShare), and not at all for a
+//     Lantern block (blockShare 0: talk never makes a guest a Lantern magnet). A possessed guest holds back
+//     a soul from a guest the talk suggests is possessed too.
 import { makeRng } from '../game/cards.js';
 import { BOT_HEAR } from '../data/chat.js';
 

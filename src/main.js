@@ -111,11 +111,12 @@ if (params.get('mode') === 'hotseat') {
 }
 const DIRECT = ['practice', 'bots'].includes(params.get('mode')) ? params.get('mode') : null;
 // Who the player is at the table (src/account/account.js): their profile's name and avatar; a direct link
-// may name them for this visit (?user=, checked, not saved); a device with no profile plays as 'Guest'.
-const LINK_USER = (() => { const r = DIRECT && params.has('user') ? checkUsername(params.get('user')) : null; return r?.ok ? r.name : null; })();
+// may name them for its own game (?user=, checked, not saved; forgotten once the menu opens, where the
+// profile card shows who plays); a device with no profile plays as 'Guest'.
+let linkUser = (() => { const r = DIRECT && params.has('user') ? checkUsername(params.get('user')) : null; return r?.ok ? r.name : null; })();
 function myIdentity() {
   const p = account.profile;
-  return { username: LINK_USER || p?.username || STAND_IN.username, avatar: p?.avatar || STAND_IN.avatar };
+  return { username: linkUser || p?.username || STAND_IN.username, avatar: p?.avatar || STAND_IN.avatar };
 }
 const TIMER_OFF = params.get('timer') === 'off';
 const INTRO = params.get('intro') !== 'off';
@@ -156,8 +157,10 @@ const view = createScene(container, cfg);
 // Every seat's portraits (the strip, the panel, the meeting, the trades, the profile card) are drawn from
 // their avatar with this renderer (src/render/avatarPortrait.js; never a second WebGL context), one per
 // frame, kept by look; the look's shipped picture shows until then. The soul cards' faces are the owners'
-// possessed portraits, found by seat id among this table's seats.
-const portraits = createAvatarPortraits(view.renderer);
+// possessed portraits, found by seat id among this table's seats. From the menu they wait (paused) until
+// its lobby is up and the player's own portraits' shaders are built (warmPortraits), so neither a model
+// download nor a shader build comes before the lobby; a game set up before that starts them (planGame).
+const portraits = createAvatarPortraits(view.renderer, { paused: !DIRECT });
 setPortraitService(portraits);
 const seatAvatar = id => (cast.find(s => s.id === id) || state?.players?.find(p => p.id === id))?.avatar || null;
 setSoulPortraits({
@@ -1327,6 +1330,7 @@ async function loadBots() {
 // avatar (rolled from its name: src/data/randomAvatar.js, never the match's random numbers). The six
 // named guests (Victor, Clara …) stay in the menu's lobby. `seats` (also `cast`): in seat order.
 async function planGame(choice) {
+  portraits.resume();                      // (a game is coming: its portraits must be drawn)
   const mine = myIdentity();
   if (choice.practice) {
     const seats = seatTable({ me: mine, seat: 0 });
@@ -1500,9 +1504,12 @@ async function startBots(choice) {
   const seats = [humanSeatFirst(plan)].concat(plan.seats.map((s, i) => ({ i, s })).filter(x => x.i !== plan.humanSeat).map(x => ({
     username: x.s.name, color: x.s.color, avatar: x.s.avatar, you: false,
   })));
-  portraits.prepare(plan.seats.map(s => s.avatar));     // (the table's portraits, drawn while it fills up)
+  portraits.prepare(tablePortraits(plan));     // (the table's portraits, drawn while it fills up)
   menu.matchmake(seats, { onFull: () => enterGame(plan, { guests: 3 }), onCancel: () => {} });
 }
+// Every seat's two portraits, normal and possessed (a soul card's face, an ally's red eyes): drawn ahead,
+// during matchmaking and the lift, never in the first seconds of play.
+const tablePortraits = plan => plan.seats.flatMap(s => [s.avatar, { avatar: s.avatar, possessed: true }]);
 function humanSeatFirst(plan) {
   const s = plan.seats[plan.humanSeat];
   return { username: s.name, color: s.color, avatar: s.avatar, you: true };
@@ -1511,6 +1518,7 @@ function humanSeatFirst(plan) {
 // Play again (a match): a new table with the same choices, straight in (no menu, no lift).
 async function playAgain() {
   const plan = await planGame(lastChoice.practice ? { practice: true } : lastChoice);
+  if (!plan.practice) portraits.prepare(tablePortraits(plan));
   audio.stopStinger();
   await fade(true, 450);
   setupGame(plan);
@@ -1547,6 +1555,7 @@ async function backToMenu() {
   chatter = null;
   if (lobbyReady) releaseTileTextures();  // (the menu shows the lobby scene: the hotel's maps are not drawn)
   lobby?.reset();
+  linkUser = null;                       // (the menu plays as the profile its card shows)
   applyPixelRatio();
   container.classList.add('blurred');
   menu.show('main');
@@ -1938,15 +1947,20 @@ function onMenuScreen(name, prev) {
   const open = name === 'avatar';
   if (open) avatarEditor.open();
   else if (prev === 'avatar') avatarEditor.close().then(() => { if (!avatarEditor.isOpen) lobby?.setPlayerAvatar(account.profile?.avatar || null); });
-  if (open === wardrobeOpen) return;
-  wardrobeOpen = open;
-  lobby?.setWardrobe(open, { centreX: wardrobeCentre() });
-  if (phase === 'menu' && !DIRECT) { container.classList.toggle('blurred', !open); applyPixelRatio(); }
+  // (Change name, from the wardrobe: the camera stays on your avatar and the lobby stays sharp, so the
+  // register comes and goes without the camera flying out to the lobby and back)
+  const framing = open || (name === 'signup' && (prev === 'avatar' || wardrobeOpen));
+  if (framing === wardrobeOpen) return;
+  wardrobeOpen = framing;
+  lobby?.setWardrobe(framing, { centreX: wardrobeCentre() });
+  if (phase === 'menu' && !DIRECT) { container.classList.toggle('blurred', !framing); applyPixelRatio(); }
 }
 window.addEventListener('resize', () => { if (wardrobeOpen) lobby?.setWardrobe(true, { centreX: wardrobeCentre() }); });
 // Your avatar in the lobby follows your profile (a new name or look, another tab), except while the
 // wardrobe shows the one being chosen.
 account.onChange?.(p => {
+  // (the profile gone — another tab cleared the site's data — while the menu shows: the register first)
+  if (!p && menu.screen && menu.screen !== 'signup') menu.show('main');
   if (!avatarEditor.isOpen) lobby?.setPlayerAvatar(p?.avatar || null);
   // (a new player, signed up after the lobby loaded: their portraits' shaders built now, as on a later
   // visit; then, for any new look, both its portraits drawn ahead: the card shows one, a game needs both)
@@ -1957,7 +1971,7 @@ function warmPortraits(av) {
   const both = () => portraits.prepare([av, { avatar: av, possessed: true }]);
   if (portraitsWarm) { both(); return; }
   portraitsWarm = true;
-  portraits.prewarm(av).then(both);
+  portraits.prewarm(av).then(() => { portraits.resume(); both(); });
 }
 // The lobby behind the menu is drawn at a lower resolution (it is blurred anyway: cheaper on the iPad);
 // the lift sequence and the game use the Graphics setting (and so does the wardrobe, sharp on your avatar).
@@ -1993,13 +2007,22 @@ if (DIRECT) {
       : `A match · you and ${n} computer guests · one is secretly possessed`;
   }
   overlays.showStart();
-  // (you play as your profile, or ?user= for this visit, or 'Guest': a direct link never shows the register)
-  const planned = planGame(DIRECT === 'practice' ? { practice: true } : { bots: n, role });
-  planned.then(async plan => { setupGame(plan); await warmUp(5000); await ownSoulDrawn(); soulsRest(); startReady = true; maybeReady(); })
+  // (you play as your profile, or ?user= for this visit, or 'Guest': a direct link never shows the register;
+  // the account is waited for first, as a server account will need)
+  const planned = account.ready.then(() => planGame(DIRECT === 'practice' ? { practice: true } : { bots: n, role }));
+  planned.then(async plan => {
+    setupGame(plan);
+    // (the portraits' shaders, then every seat's portraits, behind the "Tap to begin" card)
+    await portraits.prewarm(myIdentity().avatar);
+    if (!plan.practice) portraits.prepare(tablePortraits(plan));
+    await warmUp(5000); await ownSoulDrawn(); soulsRest(); startReady = true; maybeReady();
+  })
     .catch(err => { console.error(err); overlays.showError(`The game could not be set up. (${err?.message || err})`); });
   overlays.onBegin(() => { if (startReady) begin(); });
 } else {
-  menu.show('main');
+  // (the account first: a server account has no profile until it is ready, and the menu sends anyone
+  // without one to the register)
+  account.ready.then(() => menu.show('main'), () => menu.show('main'));
   audio.setScene('menu');          // (heard from the first tap: browsers allow no sound before one)
   container.classList.add('blurred');
   import('./menu/lobbyScene.js')
@@ -2013,11 +2036,12 @@ if (DIRECT) {
     })
     .then(() => {
       lobbyReady = !!lobby; releaseHotel(); prepareWarmUp();
-      // (your portraits, normal and possessed, drawn in the menu: the card shows one, a game needs both)
+      // (your portraits, normal and possessed, drawn in the menu: the card shows one, a game needs both;
+      // the portraits start once their shaders are built)
       const mine = account.profile?.avatar;
-      if (mine) warmPortraits(mine);
+      if (mine) warmPortraits(mine); else portraits.resume();
     })
-    .catch(err => { console.warn('The lobby behind the menu could not be loaded; the menu shows over the hotel instead.', err); lobby = null; releaseHotel(); });
+    .catch(err => { console.warn('The lobby behind the menu could not be loaded; the menu shows over the hotel instead.', err); lobby = null; releaseHotel(); portraits.resume(); });
 }
 let startReady = !DIRECT;
 let framesReady = false;

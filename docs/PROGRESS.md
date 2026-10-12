@@ -1,5 +1,33 @@
 # PROGRESS
 
+## Players, avatars, chat that talks and listens; the online plan (2026-10-12)
+
+- **The plan for going online** and onto the app stores: docs/ONLINE_PLAN.md (accounts, a server, the
+  cosmetics economy, packaging; seven steps). Step 1 is done (below); step 2 (a per-player view inside the
+  game: the screens read only your own view, ready for a server) is next.
+- **Players, not named guests**: a username sign-up ("Sign the register", Change name later) and a profile
+  kept on this device behind an account interface a server can replace (src/account/). Bots are players
+  too: their own usernames and random looks.
+- **The avatar wardrobe** on the main menu (your profile card · Adjust avatar): Male / Female, six looks,
+  skin, hair, eyes, glasses and frames, outfit, accent, jewellery; six locked "Coming soon" items. Every pick
+  shows at once on your avatar in the 3D lobby, which boards the lift first. Portraits of every avatar are
+  drawn in the game.
+- **Chat**: twenty lines in two tabs (Table, Suspicion), lines that name a guest ("Choose a guest"); the
+  bots talk from what they know and listen to what is said.
+- **Quality round 4** (12 Oct): bots' chat no longer gives roles away (no third guest taking sides, true
+  and false accusations with the same timing, turn-start lines only in their own turn, "I trust" and "Who
+  has a Lantern?" as often from either side, answers to everyone's small talk); lying in chat no longer gets
+  a guest handed Lanterns; profile and name robustness (saved names no longer allowed, newer saves, damaged
+  saves, real names the filter caught, role-like names refused); the wardrobe (touch scrolling, the panel
+  anchored, the desk out of the way, Change name without the camera flight); portraits (no other look's face
+  on the card, no broken pictures, a stand-in figure when a model cannot load, drawn after the lobby and
+  ahead of a match). Details in docs/DECISIONS.md 'Quality round 4'.
+- **Waiting for the owner**: whether "I trust <name>." right after a trade may hint that a Lantern was
+  handed over; whether guests who are out of the match may still chat (and whether bots listen to them).
+- **Tests**: rules-check, logic-check, bots-check, chat-check, profile-check, avatar-check,
+  trade-reveal-check, tips-check, audio-check, browser-profile, browser-practice, browser-lobby,
+  browser-bots, menu-scene-shots.
+
 ## Soul cards, quick chat, choose your guest, your record, tips (2026-10-10 / 11)
 
 - **Owner-approved rules** (docs/GAME_RULES.md updated with the approved wording, including the hot-seat
@@ -535,11 +563,11 @@ The full Hotel Escape rules from `docs/GAME_RULES.md` play on the greybox:
   add to the Home Screen.
 
 ## Next steps
+(Superseded: the main menu, the lobby, avatars and sound are done; the next steps are docs/ONLINE_PLAN.md
+step 2 onward — see the top of this file.)
 1. iPad test of the rules; tune numbers and feel from feedback.
 2. Decide the deferred items above.
-3. Later passes: main menu with the 3D lobby, character selection (outfits already in data),
-   receptionist intro; then real art, sound, and true multiplayer (where hidden roles finally
-   become hidden).
+3. Later passes: real art and true multiplayer (where hidden roles finally become hidden).
 
 
 ---

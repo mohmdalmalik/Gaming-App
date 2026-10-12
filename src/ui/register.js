@@ -16,7 +16,18 @@ const WORDS = {
   rename: { kicker: 'Your avatar', title: 'Change your name', left: 'Cancel', go: 'Save',
     note: 'The name the other guests will know you by.' },
 };
-const PRIVATE_NOTE = "This device isn't keeping your name (private browsing?). It lasts until you close the page.";
+// One note at most under the panel, for what this device can or cannot keep (src/account/account.js):
+const NOTES = {
+  // nothing saved, and nothing can be (blocked storage, a private window)
+  private: "This device isn't keeping your name (private browsing?). It lasts until you close the page.",
+  // a saved profile, but changes cannot be saved now (storage full, or blocked since)
+  unsaved: "This device can't save changes right now (storage full?). Your new name lasts until you close the page.",
+  // the saved profile is a newer version's: it is never written over
+  newer: 'Hotel Escape has been updated: please reload the page. Until then, changes are not kept.',
+  // a saved name a newer version of the rules no longer allows
+  nameLost: 'Your name can no longer be used: please choose another. Your avatar is kept.',
+};
+const SAVE_FAILED = 'Could not save your name. Try again.';
 
 export function createRegister(doc, { account, guard = () => false, onDone } = {}) {
   const $ = id => doc.getElementById(id);
@@ -43,9 +54,13 @@ export function createRegister(doc, { account, guard = () => false, onDone } = {
     $('su-title').textContent = w.title;
     left.textContent = w.left;
     go.textContent = w.go;
-    $('su-device').textContent = w.note;
+    const note = account?.readOnly ? NOTES.newer
+      : mode === 'signup' && account?.nameLost ? NOTES.nameLost
+      : account && !account.persistent ? (mode === 'rename' ? NOTES.unsaved : NOTES.private) : '';
+    // (the "Kept on this device" line only where it is true: never above a note that says otherwise)
+    $('su-device').textContent = note && mode === 'signup' ? WORDS.rename.note : w.note;
     const priv = $('su-private');
-    if (priv) { priv.textContent = PRIVATE_NOTE; priv.hidden = !!account?.persistent; }
+    if (priv) { priv.textContent = note; priv.hidden = !note; }
   }
 
   async function submit() {
@@ -59,6 +74,10 @@ export function createRegister(doc, { account, guard = () => false, onDone } = {
         : await account.signUp(r.name, { avatar: startingAvatar(r.name, settings.get('guest')) });
       if (!res.ok) { live = true; setHint(res.error || 'That name cannot be used.', true); return; }
       onDone?.(mode);
+    } catch (err) {
+      // (a server account can fail: say so, and let the player try again)
+      console.warn('Saving the name failed:', err);
+      setHint(SAVE_FAILED, true);
     } finally { busy = false; }
   }
 

@@ -93,11 +93,13 @@ export const BOT_CHAT = {
     // --- small talk (never weighed by the listeners: its rates can change freely) --------------------
     // the start of the match (round 1)
     start: { chance: 0.5, say: [['greet', 3], ['wave', 2]], delay: [1500, 9000] },
-    // the player said "Good evening!" or waved: at most `max` bots answer
-    answerGreet: { chance: 0.65, max: 2, say: [['greet', 3], ['wave', 2], ['smile', 1]], delay: [900, 2600] },
-    // the player said "Sorry!" soon after attacking this bot
+    // a guest (a person or a bot alike) said "Good evening!" or waved: at most `max` answers to greetings in
+    // any `spanMs`, from the whole table (so greetings never go round and round); a bot that has said
+    // "Good evening!" already waves or smiles
+    answerGreet: { chance: 0.65, max: 2, spanMs: 20000, say: [['greet', 3], ['wave', 2], ['smile', 1]], delay: [900, 2600] },
+    // a guest said "Sorry!" soon after attacking this bot
     answerSorry: { chance: 0.6, within: 25000, say: [['cross', 2], ['smile', 1]], delay: [900, 2200] },
-    // the player said "Good game!" (a bot that has not said it yet)
+    // a guest said "Good game!" (a bot that has not said it yet; at most end.max + max last words in all)
     answerGG: { chance: 0.5, max: 2, say: [['gg', 3], ['smile', 1]], delay: [900, 2600] },
     // someone asked "Who has a Lantern?": one bot may say it has one (mostly while it holds one:
     // lanternBluff; the same chances whatever its role)
@@ -140,24 +142,27 @@ export const BOT_CHAT = {
     // heard; "Stay away" four times as likely when it knows) / a possessed guest: one who knows what it is
     suspects: { chance: 0.2, fromRound: 2, threshold: 0.6, knownBoost: 4, prio: 1, say: [['distrustX', 3], ['stayAway', 1]], delay: [700, 2200] },
     // ...or it trusts a guest a good deal (a Lantern given, cleared by a Hand Mirror or the Switchboard;
-    // a possessed guest: an ally)
-    vouches: { chance: 0.06, fromRound: 2, prio: 0, say: [['trustX', 1]], delay: [700, 2200] },
+    // a possessed guest: an ally, or a guest it is winning over with gifts, at `possessedShare` of the
+    // chance: as often a turn as a clean guest says it, so the line never points at either side)
+    vouches: { chance: 0.06, fromRound: 2, possessedShare: 0.15, prio: 0, say: [['trustX', 1]], delay: [700, 2200] },
     // plans at the start of its turn: little left to find, a Lantern in hand and the Fire Exit found
     // (a possessed guest: standing guard by it with a soul in hand, a lure) / many trades since the
-    // Switchboard last spoke / short of Lanterns (a possessed guest holding a soul: half as often)
+    // Switchboard last spoke / short of Lanterns with little left to find (either side, the possessed
+    // at `possessedShare` of the chance, so it is asked as often a turn by both)
     gather: { chance: 0.25, prio: 0, say: [['meetExit', 1]], delay: [700, 2200] },
     checkCount: { chance: 0.12, trades: 3, prio: 0, say: [['ringSwitchboard', 1]], delay: [700, 2200] },
-    askLantern: { chance: 0.06, fromRound: 3, possessedShare: 0.5, prio: 0, say: [['whoLantern', 1]], delay: [700, 2200] },
-    // A POSSESSED guest's lies (it never says "I am possessed." during play):
+    askLantern: { chance: 0.06, fromRound: 3, possessedShare: 1, prio: 0, say: [['whoLantern', 1]], delay: [700, 2200] },
+    // (`nearby`, `suspects`, `vouches`, `gather`, `checkCount` and `askLantern` are about the bot's own
+    // turn: said in it or not at all.)
+    // A POSSESSED guest's lies (it never says "I am possessed." during play), each with the same timing as
+    // the true line it imitates (`blocked`, `sawSoul`), so when a line comes never tells which it is:
     // its soul was burned by a guest's Lantern, so that guest knows: muddy it first
-    counter: { base: 0.2, bold: 0.35, prio: 3, free: true, say: [['triedPossess', 3], ['distrustX', 2]], delay: [700, 2200], staleMs: 20000 },
-    // a guest it knows is possessed was named: doubt the one who named them, or vouch for them
-    allyNamed: { chance: 0.35, prio: 1, say: [['distrustX', 2], ['trustX', 1]], delay: [1200, 3200] },
-    // a false "<them> tried to possess me!" about a clean guest it traded with in the last `rounds`
-    // rounds, most of all one who named an ally (at most caps.frame a match): chance = base + bold ×
+    counter: { base: 0.2, bold: 0.35, prio: 3, free: true, say: [['triedPossess', 3], ['distrustX', 2]], delay: [900, 2600], staleMs: 20000 },
+    // right after a trade in which it handed over no soul, a false "<them> tried to possess me!" about that
+    // guest (never an ally, nor one who knows what it is; at most caps.frame a match): chance = base + bold ×
     // boldness + late × (1 if they named an ally, else how late the match is). Its Hand Mirror showing no
     // soul gives it the same chance of the lie "<them> is possessed!"
-    frame: { base: 0.04, bold: 0.08, late: 0.12, rounds: 2, prio: 2, say: [['triedPossess', 1]], delay: [700, 2200] },
+    frame: { base: 0.04, bold: 0.08, late: 0.12, prio: 3, free: true, say: [['triedPossess', 1]], delay: [900, 2600], staleMs: 20000 },
     // the match is over, nobody escaped (its side won): "I am possessed." as its last word (every role is
     // on the end screen by then)
     confess: { chance: 0.25, say: [['iAmPossessed', 1]], delay: [900, 4000] },
@@ -177,9 +182,11 @@ export const BOT_HEAR = {
   weight: { triedPossess: 0.55, isPossessed: 0.55, stayAway: 0.15, distrustX: 0.06, trustX: -0.06, isClean: -0.3, clean: -0.02, iAmPossessed: 0.15 },
   cap: 0.5, floor: -0.25,
   // what was said counts in full for whom to avoid, meet, trade with in the Fire Exit or pool Lanterns
-  // with, but only in part for handing over a Lantern to block and for an attack: a Lantern "blocked"
-  // against a clean guest is simply theirs, so talk alone must not make a guest a Lantern magnet
-  blockShare: 0.75, attackShare: 0.75,
+  // with, in part for an attack, and NOT AT ALL for handing over a Lantern to block: a Lantern "blocked"
+  // against a clean guest is simply theirs, so talk must never make a guest a Lantern magnet (measured,
+  // QA 12 Oct: at 0.75, a clean guest who lied — "I am possessed.", false or impossible accusations —
+  // was handed about a third more Lanterns and escaped about half as often again)
+  blockShare: 0, attackShare: 0.75,
   // a claim the table can see is impossible (no trade between the two, no Hand Mirror by the speaker on
   // that guest), or a lie about the listener itself: the speaker looks possessed
   baseless: 0.35, lieAboutMe: 0.5, mistakeAboutMe: 0.05,
@@ -188,5 +195,6 @@ export const BOT_HEAR = {
   confirmed: 0.3, wrong: 0.3,
   // a possessed listener: how much a line makes it think a guest is possessed too (it then holds back a
   // soul: one handed to a guest already possessed is only used up)
-  allyHint: { accused: 0.45, iAmPossessed: 0.2, liarAboutMe: 0.6, cap: 0.85 },
+  // (liarAboutMe kept low: a guest who falsely says it tried to possess them must not be spared its souls)
+  allyHint: { accused: 0.45, iAmPossessed: 0.2, liarAboutMe: 0.2, cap: 0.85 },
 };

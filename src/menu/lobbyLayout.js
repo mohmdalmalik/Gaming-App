@@ -117,8 +117,11 @@ export const lobbyLayout = {
 
   // The player's own avatar (src/render/avatar.js, built from their profile by src/menu/lobbyScene.js
   // setPlayerAvatar): standing by the lift, the first to board it (practice: alone; a match: with the
-  // first two guests above, Victor and Clara). Not in `cast`: it is made from the avatar, not a model file.
-  player: { name: 'you', at: [2.05, -4.3, -10], boards: 0.5, boardDelay: 0.05 },
+  // first two guests above, Victor and Clara — never a guest in the player's own look, who would be
+  // taken for them from behind: Henry boards instead). Not in `cast`: it is made from the avatar.
+  // (a step right of the reception desk's rounded end and back toward the wall, so the desk is never
+  // between the wardrobe camera and the avatar, a gown's skirt included)
+  player: { name: 'you', at: [2.3, -4.55, -10], boards: 0.5, boardDelay: 0.05 },
 
   // Idle walks (looping): [x, z, pause seconds, heading to face while paused (deg) or null, glance (deg)]
   strolls: {
@@ -145,12 +148,11 @@ export const lobbyLayout = {
     clara: [[3.28, -2.72], [3.15, -4.3]],
     henry: [[3.2, -2.7], [3.15, -4.3]],
   },
-  // ...and when fewer board (practice: only your own guest), a guest whose way out passes someone who
-  // stays seated goes round them: Clara cannot pass in front of Victor (his knees, the tea table and
-  // Henry close the way), so she goes round the sofa's right end, outside the floor lamp, and along
-  // behind it to the lift.
+  // ...and a guest whose way out passes someone who stays seated (`past`) goes round them: Clara cannot
+  // pass in front of Victor when he stays on the sofa (his knees, the tea table and Henry close the way),
+  // so she goes round the sofa's right end, outside the floor lamp, and along behind it to the lift.
   soloBoardingPaths: {
-    clara: [[5.3, -2.4], [6.1, -3.3], [5.9, -4.05], [4.2, -4.3]],
+    clara: { past: 'victor', path: [[5.3, -2.4], [6.1, -3.3], [5.9, -4.05], [4.2, -4.3]] },
   },
 
   camera: {
@@ -167,7 +169,8 @@ export const lobbyLayout = {
   // The wardrobe screen (src/ui/avatarEditor.js): a closer camera on the player's avatar by the lift,
   // full length. The vertical field of view is kept at every screen shape; the picture is shifted
   // sideways (a view offset) so the avatar stands in the middle of the space right of the menu panel.
-  // (`look`: the height looked at on the avatar; `from`: the camera, from that point; `ease`: seconds;
-  // `hold`: strollers whose walk crosses that view wait out of it, [x, z, heading], while it is open)
-  wardrobeCamera: { look: 0.86, from: [0, 0.55, 2.7], fov: 46, ease: 0.7, hold: { manager: [7.05, -2.75, 90] } },
+  // (`look`: the height looked at on the avatar; `from`: the camera, from that point — a little to its
+  // left, where neither the reception desk's rounded end nor Henry in his armchair comes between; `ease`:
+  // seconds; `hold`: strollers whose walk crosses that view wait out of it, [x, z, heading], while it is open)
+  wardrobeCamera: { look: 0.86, from: [-0.3, 0.55, 2.4], fov: 46, ease: 0.7, hold: { manager: [7.05, -2.75, 90] } },
 };

@@ -173,7 +173,8 @@ export function createMenu(doc, { onPlayBots, onPractice, onSettingChanged, onSc
 
   const click = (el, fn) => el.addEventListener('click', e => { e.preventDefault(); if (tooSoon(e, shownAt)) return; fn(); });
   click(btn.bots, () => { if (ready) show('bots'); });
-  click(btn.practice, () => { if (ready) onPractice?.({}); });
+  // (no profile — another tab cleared it — : the register first, as for every screen)
+  click(btn.practice, () => { if (!ready) return; if (account && !account.profile) { show('main'); return; } onPractice?.({}); });
   click(btn.settings, () => show('settings'));
   click(btn.record, () => show('record'));
   click($('btn-bots-back'), () => show('main'));

@@ -7,7 +7,9 @@
 // (src/account/account.js setAvatar: made safe there, owned items only).
 // Locked items (src/data/wardrobe.js, unlock 'earn' / 'shop') show with a lock and "Coming soon" and
 // cannot be chosen: nothing can be bought or earned yet. The list scrolls inside the panel; the page
-// never does. Plain words, no emoji. Nothing here touches the game.
+// never does. While a new look is still on its way (onPreview's promise: true shown, false could not be)
+// the Look row says "Loading…"; a look that cannot be shown says so under the panel (the choice is
+// still kept). Plain words, no emoji. Nothing here touches the game.
 import { BASES, BODIES, SLOT_LABELS, basesFor, bodyOf, item, itemsFor, isAvailable, normaliseAvatar,
   slotsFor, withBase, withBody } from '../data/wardrobe.js';
 import { tooSoon } from './tapGuard.js';
@@ -35,17 +37,41 @@ export function createAvatarEditor(doc, { account, onPreview, onDone, onRename }
   const menuRoot = $('menu');
   let working = null, saved = null, openedAt = 0, isOpen = false;
   let soon = null;                  // { slot, id }: the locked item last tapped (its row says "Coming soon")
+  let lookLoading = false, previewBad = false, previewSeq = 0;   // (the preview of a new look: on its way / failed)
   if (!host || !body) return { open() {}, close() {}, get isOpen() { return false; }, debug: () => null };
 
+  // The panel sits at the top of the screen while the wardrobe is open (styles.css .menu.avatar), so a
+  // row that comes or goes (Frame, Accent, Jewellery) moves only the rows below it; it gets there at once,
+  // with no slide (as the register does).
+  const anchor = on => {
+    if (!menuRoot || menuRoot.classList.contains('avatar') === on) return;
+    menuRoot.classList.add('snap');
+    menuRoot.classList.toggle('avatar', on);
+    void menuRoot.offsetWidth;
+    requestAnimationFrame(() => menuRoot.classList.remove('snap'));
+  };
   const owns = id => !!account?.owns?.(id);
   const wearable = it => isAvailable(it, owns);
   const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 
+  function preview() {
+    const seq = ++previewSeq;
+    let r = null;
+    try { r = onPreview?.(working); } catch (err) { console.warn('wardrobe preview failed:', err); }
+    lookLoading = !!(r && typeof r.then === 'function');
+    if (!lookLoading) return;
+    r.then(ok => {
+      if (seq !== previewSeq) return;
+      lookLoading = false;
+      if (ok === true || ok === false) previewBad = !ok;
+      if (isOpen) render();
+    }, () => { if (seq === previewSeq) { lookLoading = false; previewBad = true; if (isOpen) render(); } });
+  }
   function pick(av) {
     working = normaliseAvatar(av, { owns });
     soon = null;
+    preview();
     render();
-    try { onPreview?.(working); } catch (err) { console.warn('wardrobe preview failed:', err); }
   }
 
   // ---- rows ----
@@ -77,7 +103,7 @@ export function createAvatarEditor(doc, { account, onPreview, onDone, onRename }
     const html = [];
     const body0 = bodyOf(av.base);
     html.push(row('body', 'Body', '', BODIES.map(b => chip('body', b.id, b.label, b.id === body0)).join(''), { chips: true }));
-    html.push(row('base', SLOT_LABELS.base, esc(BASES[av.base].label),
+    html.push(row('base', SLOT_LABELS.base, lookLoading ? `${esc(BASES[av.base].label)} · Loading…` : esc(BASES[av.base].label),
       basesFor(body0).map(b => chip('base', b, BASES[b].label, b === av.base)).join(''), { chips: true }));
     for (const slot of slotsFor(av)) {
       const list = itemsFor(slot, av.base);
@@ -93,9 +119,12 @@ export function createAvatarEditor(doc, { account, onPreview, onDone, onRename }
     body.innerHTML = html.join('');
     body.scrollTop = keep;
     if (nameEl) { const n = account?.profile?.username || ''; nameEl.textContent = n; nameEl.title = n; }
-    if (noteEl) noteEl.textContent = account && account.persistent === false
-      ? 'This device is not keeping your choices (private browsing?): they last until you close the page.'
-      : 'More outfits and accessories are coming soon.';
+    if (noteEl) noteEl.textContent = account?.readOnly
+      ? 'Hotel Escape has been updated: please reload the page. Until then, changes are not kept.'
+      : account && account.persistent === false
+        ? 'This device is not keeping your choices (private browsing?): they last until you close the page.'
+        : previewBad ? 'Preview unavailable — your choices are still saved.'
+          : 'More outfits and accessories are coming soon.';
   }
 
   // ---- taps ----
@@ -132,16 +161,17 @@ export function createAvatarEditor(doc, { account, onPreview, onDone, onRename }
       isOpen = true;
       openedAt = performance.now();
       soon = null;
-      menuRoot?.classList.add('avatar');
+      previewBad = false;
+      anchor(true);
+      preview();
       render();
       body.scrollTop = 0;
-      try { onPreview?.(working); } catch { /* the preview is only a picture */ }
     },
     // The screen left: your choices are kept (account.setAvatar).
     close() {
       if (!isOpen) return Promise.resolve();
       isOpen = false;
-      menuRoot?.classList.remove('avatar');
+      anchor(false);
       return save().catch(err => console.warn('your avatar could not be saved:', err));
     },
     get isOpen() { return isOpen; },

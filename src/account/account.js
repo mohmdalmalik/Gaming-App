@@ -8,16 +8,23 @@
 //                                  sign-up
 //   account.persistent             false when this device keeps nothing (blocked or full storage): the
 //                                  profile then lasts for this visit only
+//   account.readOnly               the saved profile was written by a NEWER version of the game: it is read
+//                                  (best effort) but never written over, so its newer data is not lost
+//                                  (the page should be reloaded to update)
+//   account.nameLost               a saved profile whose name can no longer be used (a word reserved since):
+//                                  no profile until a new name is signed, which keeps its id, avatar and dates
 //   account.signUp(username)       -> Promise<{ ok, error? }>   error: the reason, in plain words
 //   account.rename(username)       -> Promise<{ ok, error? }>
 //   account.setAvatar(avatar)      -> Promise<{ ok, avatar }>   made safe (normaliseAvatar, owned items only)
 //   account.owns(itemId)           -> boolean ('glasses.monocle'): the free items, nothing else yet
 //   account.onChange(fn)           -> unsubscribe; fn(profile) after every change (here or in another tab)
 //
-// Like src/record.js, every read and write is guarded: a private window or blocked storage still plays.
+// Callers wait for `ready` before they first read `profile` (a server account has none until then).
+// Like src/record.js, every read and write is guarded: a private window, blocked storage or a damaged
+// save still plays.
 import { checkUsername } from './username.js';
 import { newProfile, repairProfile, startingAvatar } from './profile.js';
-import { ITEMS, itemId, isAvailable, normaliseAvatar } from '../data/wardrobe.js';
+import { ITEMS, itemId, normaliseAvatar } from '../data/wardrobe.js';
 
 export const PROFILE_KEY = 'hotelEscape.profile.v1';
 
@@ -71,16 +78,25 @@ export function memoryStore(initial = null, { broken = false } = {}) {
 export function createAccount({ store = deviceStore(), now = () => Date.now() } = {}) {
   let profile = null;
   let persistent = store.works();
+  let readOnly = false;          // saved by a newer version: never written over
+  let kept = null;               // what a saved profile with a name no longer allowed keeps (nameLost)
   const listeners = new Set();
 
   function read() {
-    const raw = store.load();
-    if (raw === undefined) return { profile: null, readable: false };
-    if (raw === null || raw === '') return { profile: null, readable: true };
-    const out = repairProfile(raw, { repairAvatar: av => normaliseAvatar(av, { owns }) });
-    return { profile: out.profile, repaired: out.repaired, readable: true };
+    try {
+      const raw = store.load();
+      if (raw === undefined) return { profile: null, readable: false };
+      if (raw === null || raw === '') return { profile: null, readable: true };
+      const out = repairProfile(raw, { repairAvatar: av => normaliseAvatar(av, { owns }) });
+      return { profile: out.profile, repaired: out.repaired, readOnly: !!out.readOnly, kept: out.kept || null, readable: true };
+    } catch (err) {
+      // (no damaged save may stop the page: the register asks for a name again)
+      console.warn('The saved profile could not be read:', err);
+      return { profile: null, readable: true };
+    }
   }
   function write() {
+    if (readOnly) return false;
     const ok = store.save(JSON.stringify(profile));
     if (!ok) persistent = false;
     return ok;
@@ -92,14 +108,18 @@ export function createAccount({ store = deviceStore(), now = () => Date.now() } 
 
   const loaded = read();
   profile = loaded.profile;
+  readOnly = !!loaded.readOnly;
+  kept = loaded.kept || null;
   if (!loaded.readable) persistent = false;
   if (profile && loaded.repaired && persistent) write();      // (a repaired profile is saved back)
 
   store.watch?.(() => {
     const again = read();
     if (!again.readable) return;
+    readOnly = !!again.readOnly;
     if (JSON.stringify(again.profile) === JSON.stringify(profile)) return;
     profile = again.profile;
+    kept = again.kept || null;
     emit();
   });
 
@@ -110,11 +130,22 @@ export function createAccount({ store = deviceStore(), now = () => Date.now() } 
     return UNLOCKING && !!profile?.inventory?.includes(id);
   }
   const stamp = () => new Date(now()).toISOString();
+  // Ask the browser to keep this site's storage (Safari may clear it after 7 days without a visit), but
+  // only where it decides quietly: Firefox asks the player in a pop-up, which is not what a name is for.
+  function keepStorage() {
+    try {
+      const nav = globalThis.navigator, st = nav?.storage;
+      if (!st?.persist || /firefox/i.test(nav.userAgent || '')) return;
+      Promise.resolve(st.persisted ? st.persisted() : false).then(p => (p ? null : st.persist())).catch(() => {});
+    } catch { /* best effort */ }
+  }
 
   const account = {
     ready: Promise.resolve(),
     get profile() { return copy(profile); },
     get persistent() { return persistent; },
+    get readOnly() { return readOnly; },
+    get nameLost() { return !profile && !!kept; },
     owns,
 
     // Sign the register. `avatar` (optional): the first look; otherwise rolled from the name.
@@ -122,9 +153,13 @@ export function createAccount({ store = deviceStore(), now = () => Date.now() } 
       const check = checkUsername(username);
       if (!check.ok) return { ok: false, error: check.message, code: check.code };
       if (profile) return account.rename(check.name);
-      profile = newProfile({ username: check.name, avatar: normaliseAvatar(avatar || startingAvatar(check.name), { owns }), now: now() });
+      if (kept) {
+        // a saved profile whose name is no longer allowed: the new name, everything else kept
+        profile = { ...newProfile({ username: check.name, avatar: kept.avatar, id: kept.id, now: now() }), inventory: kept.inventory, createdAt: kept.createdAt };
+        kept = null;
+      } else profile = newProfile({ username: check.name, avatar: normaliseAvatar(avatar || startingAvatar(check.name), { owns }), now: now() });
       write();
-      try { globalThis.navigator?.storage?.persist?.()?.catch?.(() => {}); } catch { /* best effort */ }
+      keepStorage();
       emit();
       return { ok: true };
     },
@@ -161,9 +196,6 @@ export function createAccount({ store = deviceStore(), now = () => Date.now() } 
   };
   return account;
 }
-
-// (whether an item may be worn by this player: free, or owned)
-export const wearable = (acct, it) => isAvailable(it, id => acct.owns(id));
 
 // The device's account (the game's one).
 export const account = createAccount();

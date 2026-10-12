@@ -4,13 +4,18 @@
 //
 //   1. usernames: the rules (3-16 of A-Z a-z 0-9 _, a letter first), each refusal's message, reserved words
 //      (case ignored; the cards' and rooms' names from the data, run together or with _), the light filter
-//      (leetspeak, case, stretched letters; short words only as a whole part: "class" and "Sussex" pass)
+//      (leetspeak, case, stretched letters; short words only as a whole part: "class" and "Sussex" pass);
+//      names that read like a role refused ("NotPossessed", "Clean_"); real names the filter once caught pass
+//      (Nazir, Shital, Pornchai, Scunthorpe …)
 //   2. suggestions: 1000 of them, every one valid, never the one to avoid; every bot username is valid
 //   3. the profile: its shape; repairs of damaged, old and not-owned data (a valid name kept, bad avatar
 //      slots and locked items back to the look's own, unknown inventory ids dropped; no valid name: none)
 //   4. the account (a memory store): sign up, rename, set an avatar (made safe), owns (free items only),
 //      onChange and its unsubscribe, a frozen profile, kept across a new start, a damaged save repaired
-//      and saved back, a store that keeps nothing (not persistent, still works for the visit)
+//      and saved back, a store that keeps nothing (not persistent, still works for the visit); a saved name
+//      no longer allowed keeps the id, avatar and first date for the new one (nameLost); a newer version's
+//      profile is read and never written over (readOnly); a saved look called "constructor" or
+//      "__proto__" (any built-in name) and a store that throws when read never crash
 //   5. the first avatar: last round's "Your guest" seeds it ('p6' is Clara's look); 'random' rolls one
 //   6. the table: seat ids p1..pN and colours by seat; bots' avatars deterministic, free items only, no two
 //      in one look nor in yours; bots never take your name (case ignored), with the same random draws
@@ -64,6 +69,12 @@ for (const n of [w('fu', 'ck'), w('F', 'U', 'C', 'K', 'er'), w('fuu', 'uck', '_y
 for (const n of ['class', 'Sussex', 'bass_player', 'scrapbook', 'cockatoo', 'therapist', 'grape', 'swanky_owl', 'Dickens_fan', 'assassin', 'passport'])
   check(!isFiltered(n), `"${n}" is not caught (short words only as a whole part)`);
 check(sameName('Nora', 'nora') && !sameName('nora', 'nora_b'), 'names compare without case');
+// a name that reads like the game telling a role ("POSSESSED_X searched Kitchen.") is the hotel's
+for (const n of ['POSSESSED_X', 'Possessed_', 'IsPossessed', 'possessed1', 'NotPossessed', 'p0ssessed', 'Clean_', 'Mr_Clean', 'CleanGuest'])
+  check(code(n) === 'reserved', `"${n}" is refused like a reserved name (it reads like a role)`);
+// real names and places that hold a filtered word by chance are good names
+for (const n of ['Nazir', 'Nazim', 'Nazia', 'Nazih', 'Nazila', 'Shital', 'Shitij', 'Ashita', 'Mishita', 'Pornchai', 'Pornthip', 'Pornpimol', 'Scunthorpe', 'Penistone'])
+  check(checkUsername(n).ok, `"${n}" is a good name (a real name, not a filtered word)`);
 
 // --- 2. suggestions -----------------------------------------------------------------------------------
 console.log('\nsuggestions');
@@ -157,6 +168,28 @@ console.log('\nthe account');
   check(fixed.profile?.username === 'velvet_owl' && fixed.profile.avatar.base === 'victor' && JSON.parse(hurt.load()).avatar.base === 'victor', 'a damaged save: the name kept, the avatar repaired and saved back');
   const lost = createAccount({ store: memoryStore('{"username":"7up"}') });
   check(lost.profile === null, 'a save with a bad name: no profile (the register asks again)');
+  // a name allowed once and reserved since: the register asks for a new one, everything else is kept
+  const since = memoryStore(JSON.stringify({ ...saved, username: 'Kitchen', avatar: originalAvatar('clara'), createdAt: '2026-01-02T00:00:00.000Z' }));
+  const renamed = createAccount({ store: since });
+  check(renamed.profile === null && renamed.nameLost, 'a saved name no longer allowed: no profile yet, the register says why (nameLost)');
+  await renamed.signUp('kitchen_porter', { avatar: originalAvatar('victor') });
+  check(renamed.profile?.username === 'kitchen_porter' && renamed.profile.id === saved.id && renamed.profile.avatar.base === 'clara'
+    && renamed.profile.createdAt === '2026-01-02T00:00:00.000Z' && !renamed.nameLost, '...then the new name keeps the id, the avatar and the first date');
+  // a profile saved by a newer version: read, never written over (its newer fields are not lost)
+  const newer = JSON.stringify({ ...saved, version: 2, coins: 99, friends: ['a'] });
+  const v2store = memoryStore(newer);
+  const v2 = createAccount({ store: v2store });
+  check(v2.readOnly && v2.profile?.username === saved.username && v2store.load() === newer, 'a newer version\'s profile is read (readOnly) and not written back');
+  await v2.setAvatar(originalAvatar('henry')); await v2.rename('later_name');
+  check(v2.profile.username === 'later_name' && v2store.load() === newer, '...changes last for the visit; the saved newer profile is untouched');
+  // a damaged save of any shape never stops the page
+  for (const base of ['constructor', '__proto__', 'toString', 'hasOwnProperty', 'valueOf']) {
+    let ok = true, acct = null;
+    try { acct = createAccount({ store: memoryStore(JSON.stringify({ ...saved, avatar: { base } })) }); } catch { ok = false; }
+    check(ok && acct.profile?.avatar.base === 'victor', `a saved look called "${base}" is repaired, never a crash`);
+  }
+  const throwing = createAccount({ store: { load: () => { throw new Error('boom'); }, save: () => true, works: () => true, watch: () => () => {} } });
+  check(throwing.profile === null, 'a store that throws when read: no profile, no crash');
   // a device that keeps nothing (private window, blocked or full storage)
   const none = createAccount({ store: memoryStore(null, { broken: true }) });
   check(none.persistent === false && none.profile === null, 'blocked storage: not persistent, no profile');

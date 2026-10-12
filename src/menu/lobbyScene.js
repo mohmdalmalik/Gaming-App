@@ -199,22 +199,34 @@ export function createLobbyScene({ renderer, cfg, layout = lobbyLayout } = {}) {
     p.actor.dispose();
     p.model.dispose();
   }
+  // Resolves true once it shows, false if it could not be shown, null if a newer avatar took its place.
   async function setPlayerAvatar(av) {
     wantAvatar = av ? { ...av } : null;
     const token = ++playerToken;
-    if (!wantAvatar || !L.player) { dropPlayer(player); player = null; return; }
-    if (player && player.base.id === wantAvatar.base) { player.model.setAvatar(wantAvatar); return; }
+    if (!wantAvatar || !L.player) { dropPlayer(player); player = null; return true; }
+    if (player && player.base.id === wantAvatar.base) { player.model.setAvatar(wantAvatar); return true; }
     try {
       const base = await loadBase(wantAvatar.base);
       await ready;
-      if (token !== playerToken || disposed || !wantAvatar) return;
+      if (token !== playerToken || disposed || !wantAvatar) return null;
       const model = createAvatarModel(base, wantAvatar, { rim: LOBBY_RIM });
       const actor = createAvatarActor(model, base, L.player, scene);
       const old = player;
       player = { actor, model, base };
       actors.set('you', actor);
       placeActor(actor);
-      if (old) { actor.place(old.actor.x, old.actor.z, old.actor.heading); actor.board = old.actor.board; dropPlayer(old); actors.set('you', actor); }
+      if (old) {
+        actor.place(old.actor.x, old.actor.z, old.actor.heading); actor.board = old.actor.board;
+        // (in the middle of the boarding: the new look takes the old one's place in it, and walks on)
+        if (seq && !seq.done) {
+          const i = seq.boarders.indexOf(old.actor);
+          if (i >= 0) {
+            seq.boarders[i] = actor;
+            if (old.actor.path) actor.walkPath(old.actor.path.map(p => [p.x, p.z]), { speed: old.actor.speed, face: old.actor.arriveFace, onArrive: old.actor.onArrive });
+          }
+        }
+        dropPlayer(old); actors.set('you', actor);
+      }
       actor.update(0.016);
       // (its shaders, the red / coloured eyes and the glasses' included, built now rather than on a pick)
       try {
@@ -223,7 +235,8 @@ export function createLobbyScene({ renderer, cfg, layout = lobbyLayout } = {}) {
           else renderer.compile(scene, camera);
         });
       } catch { /* only an optimisation */ }
-    } catch (e) { console.warn('lobby: your avatar could not be shown:', e && e.message); }
+      return true;
+    } catch (e) { console.warn('lobby: your avatar could not be shown:', e && e.message); return token === playerToken ? false : null; }
   }
 
   // ---- the wardrobe camera ----------------------------------------------------------------------
@@ -305,9 +318,12 @@ export function createLobbyScene({ renderer, cfg, layout = lobbyLayout } = {}) {
     // who boards: the first `n` by `boards`; they leave their seats (and fill the car) by `boardDelay`.
     // The player's own avatar, when it is in the room, boards first (practice: alone; a match: with the
     // first guests, Victor and Clara). Without it, `prefer` (a cast name) boards too, when they can.
-    const pool = L.cast.filter(c => c.boards).sort((a, b) => a.boards - b.boards);
-    if (player && actors.get('you') === player.actor) pool.unshift(L.player);
-    else {
+    let pool = L.cast.filter(c => c.boards).sort((a, b) => a.boards - b.boards);
+    if (player && actors.get('you') === player.actor) {
+      // (never beside a guest in your own look: from behind, nobody could tell which one is you)
+      pool = pool.filter(c => c.model !== player.base.id);
+      pool.unshift(L.player);
+    } else {
       const mine = pool.findIndex(c => c.name === prefer);
       if (mine >= n) pool.unshift(...pool.splice(mine, 1));
     }
@@ -347,7 +363,8 @@ export function createLobbyScene({ renderer, cfg, layout = lobbyLayout } = {}) {
     const b = a.board;
     b.started = true;
     a.standUp();
-    const solo = seq.boarders.length < 3 && L.soloBoardingPaths?.[a.spec.name];   // (someone stays seated in the way)
+    const round = L.soloBoardingPaths?.[a.spec.name];       // (someone who stays seated is in the way)
+    const solo = round && !seq.boarders.some(x => x.spec.name === round.past) ? round.path : null;
     const toDoor = (solo || L.boardingPaths[a.spec.name] || []).map(p => [...p]);
     toDoor.push([lift.x + 0.1, lift.front[1] - 0.1], [lift.x + 0.05, L.room.z0 - 0.3]);
     const inside = b.via ? [[...b.via], [...b.slot]] : [[...b.slot]];

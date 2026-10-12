@@ -11,12 +11,16 @@
 // -> a JPEG (about 26 kB) -> an object URL, kept by avatarKey + look. The canvas the player sees is never
 // touched, so the menu's 'Still' background and the game's frames are unaffected.
 //
-//   const portraits = createAvatarPortraits(renderer);
+//   const portraits = createAvatarPortraits(renderer, { paused });
 //   portraits.peek(avatar, { possessed })  -> the URL if it is drawn, else null
 //   portraits.url(avatar, { possessed })   -> Promise<URL | null> (drawn soon: one portrait per frame)
 //   portraits.prepare([avatar | { avatar, possessed }, ...])  -> drawn ahead, after anything asked for
 //   portraits.prewarm(avatar)              -> builds the shaders (the menu), so the first draw is quick
+//   portraits.resume()                     -> start drawing (created `paused`: the menu's lobby first)
 //   portraits.draw(avatar, { possessed, original, w, h }) -> Promise<canvas> (tests)
+// While paused, url() and prepare() still queue their portraits (the shipped picture shows meanwhile).
+// The off-screen buffers are let go once nothing has been drawn for a few seconds (RELEASE_MS) and made
+// again when needed. A picture that could not be drawn is tried again after RETRY_MS.
 // Nothing here knows any rule or role: the caller says which look it wants.
 import * as THREE from 'three';
 import { createAvatarModel, loadBase } from './avatar.js';
@@ -27,9 +31,11 @@ const VERSION = 1;                      // (bump when the catalogue's colours or
 const NORMAL_BG = '#171b27';
 const FRAME_W = 1200, FRAME_H = 1600;
 const KEEP = 80;                        // portraits kept (about 2 MB); the oldest are let go
+const RELEASE_MS = 5000;                // the buffers (about 12 MB on the graphics chip) after the last draw
+const RETRY_MS = 30000;                 // a portrait that failed (its model did not download) is tried again
 const nextFrame = () => new Promise(r => { let done = false; const go = () => { if (!done) { done = true; r(); } }; requestAnimationFrame(go); setTimeout(go, 60); });
 
-export function createAvatarPortraits(renderer, { w = 384, h = 512 } = {}) {
+export function createAvatarPortraits(renderer, { w = 384, h = 512, paused = false } = {}) {
   const scene = new THREE.Scene();
   scene.name = 'avatar-portraits';
   scene.add(new THREE.HemisphereLight(new THREE.Color('#ffffff').lerp(new THREE.Color('#ffd9a8'), 0.5), new THREE.Color('#3a3438'), 0.6));
@@ -40,7 +46,7 @@ export function createAvatarPortraits(renderer, { w = 384, h = 512 } = {}) {
   const cache = new Map();              // key -> { url, promise, failed }
   const urgent = [], later = [];        // jobs: asked for (shown now) first, then drawn ahead
   const timings = [];
-  let targets = null, running = false, disposed = false;
+  let targets = null, running = false, disposed = false, releaseTimer = 0, drawing = 0;
 
   const keyOf = (av, possessed) => `${avatarKey(av)}:${possessed ? 'p' : 'n'}:${VERSION}`;
 
@@ -52,7 +58,11 @@ export function createAvatarPortraits(renderer, { w = 384, h = 512 } = {}) {
     const floatOk = !!(ext?.has?.('EXT_color_buffer_float') || ext?.has?.('EXT_color_buffer_half_float'));
     const samples = Math.min(4, renderer.capabilities?.maxSamples ?? 4);
     const hdr = new THREE.WebGLRenderTarget(W, H, { type: floatOk ? THREE.HalfFloatType : THREE.UnsignedByteType, samples });
-    const ldr = new THREE.WebGLRenderTarget(W, H, { type: THREE.UnsignedByteType });
+    // (no float buffers on this device: an sRGB 8-bit buffer keeps the dark cloth and hair free of banding;
+    // the tone-map pass still reads it as linear light)
+    if (!floatOk) hdr.texture.colorSpace = THREE.SRGBColorSpace;
+    // (the 8-bit target only ever takes the full-screen tone-map pass: no depth buffer)
+    const ldr = new THREE.WebGLRenderTarget(W, H, { type: THREE.UnsignedByteType, depthBuffer: false });
     const material = new THREE.ShaderMaterial({
       uniforms: { tMap: { value: hdr.texture }, uExposure: { value: 1 } },
       vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }',
@@ -86,6 +96,11 @@ export function createAvatarPortraits(renderer, { w = 384, h = 512 } = {}) {
     if (!targets) return;
     targets.hdr.dispose(); targets.ldr.dispose(); targets.material.dispose(); targets.quad.geometry.dispose();
     targets = null;
+  }
+  // Nothing drawn for a while: the buffers and the plates go (made again on the next portrait).
+  function releaseSoon() {
+    clearTimeout(releaseTimer);
+    releaseTimer = setTimeout(() => { if (!running && !drawing && !disposed) { disposeTargets(); plates.clear(); } }, RELEASE_MS);
   }
 
   // ---- one model per look, posed and framed once ----
@@ -186,7 +201,11 @@ export function createAvatarPortraits(renderer, { w = 384, h = 512 } = {}) {
   }
 
   // ---- one portrait ----
-  async function draw(av, { possessed = false, original = false, w: W = w, h: H = h } = {}) {
+  async function draw(av, opts = {}) {
+    drawing++;
+    try { return await drawOne(av, opts); } finally { drawing--; }
+  }
+  async function drawOne(av, { possessed = false, original = false, w: W = w, h: H = h } = {}) {
     const t0 = performance.now();
     const m = await modelFor(av);
     if (disposed) return null;
@@ -248,8 +267,9 @@ export function createAvatarPortraits(renderer, { w = 384, h = 512 } = {}) {
   const toBlob = canvas => new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.9));
 
   async function run() {
-    if (running) return;
+    if (running || paused) return;
     running = true;
+    clearTimeout(releaseTimer);
     try {
       while (!disposed && (urgent.length || later.length)) {
         await nextFrame();                       // (one portrait per frame: never a long stall)
@@ -264,13 +284,13 @@ export function createAvatarPortraits(renderer, { w = 384, h = 512 } = {}) {
           entry.url = URL.createObjectURL(blob);
           job.resolve(entry.url);
         } catch (err) {
-          entry.failed = true;
+          entry.failed = true; entry.failedAt = performance.now();
           if (!run.warned) { run.warned = true; console.warn('avatar portraits: the shipped picture is used instead:', err?.message || err); }
           job.resolve(null);
         }
         trim();
       }
-    } finally { running = false; }
+    } finally { running = false; releaseSoon(); }
   }
   function trim() {
     if (cache.size <= KEEP) return;
@@ -285,6 +305,7 @@ export function createAvatarPortraits(renderer, { w = 384, h = 512 } = {}) {
   function request(av, possessed, lane) {
     const k = keyOf(av, possessed);
     let e = cache.get(k);
+    if (e?.failed && performance.now() - e.failedAt > RETRY_MS) { cache.delete(k); e = null; }   // (try again)
     if (e) {
       cache.delete(k); cache.set(k, e);          // (recently used: kept longest)
       if (lane === urgent && !e.url && !e.failed && e.job && later.includes(e.job)) { later.splice(later.indexOf(e.job), 1); urgent.push(e.job); }
@@ -300,12 +321,24 @@ export function createAvatarPortraits(renderer, { w = 384, h = 512 } = {}) {
 
   return {
     keyOf,
-    peek(av, { possessed = false } = {}) { return av ? cache.get(keyOf(av, possessed))?.url || null : null; },
+    // (a portrait shown is a portrait used: kept longest, like one asked for — the player's own possessed
+    // portrait is read only this way during play, and must not be the first let go in a long visit)
+    peek(av, { possessed = false } = {}) {
+      if (!av) return null;
+      const k = keyOf(av, possessed), e = cache.get(k);
+      if (!e?.url) return null;
+      cache.delete(k); cache.set(k, e);
+      return e.url;
+    },
     url(av, { possessed = false } = {}) { return av ? request(av, !!possessed, urgent) : Promise.resolve(null); },
     prepare(list = []) {
       return Promise.all(list.filter(Boolean).map(x => (x.avatar ? request(x.avatar, !!x.possessed, later) : request(x, false, later))));
     },
     // Build the shaders for this look up front (in the menu): the first portrait then needs no compile.
+    // They are built for the off-screen targets the portraits are drawn into (three.js picks the tone
+    // mapping and colour space of a shader from the target bound when it is built: one built for the
+    // screen would be another shader). compileAsync works the shaders out at once and then only waits,
+    // so the target can be put back before the wait.
     async prewarm(av) {
       try {
         const m = await modelFor(av);
@@ -313,18 +346,21 @@ export function createAvatarPortraits(renderer, { w = 384, h = 512 } = {}) {
         frameFor(m);
         const T = makeTargets(w, h);
         m.model.root.visible = true;
-        const prev = renderer.getRenderTarget();
+        const parallel = !!(renderer.compileAsync && renderer.extensions?.has?.('KHR_parallel_shader_compile'));
+        const build = (target, sc, camera) => {
+          const prev = renderer.getRenderTarget();
+          renderer.setRenderTarget(target);
+          try { return parallel ? renderer.compileAsync(sc, camera) : renderer.compile(sc, camera); } finally { renderer.setRenderTarget(prev); }
+        };
         // (the red / coloured eyes and a pair of glasses included)
         await m.model.withAllShaders(async () => {
-          if (renderer.compileAsync && renderer.extensions?.has?.('KHR_parallel_shader_compile')) {
-            await renderer.compileAsync(scene, cam);
-            await renderer.compileAsync(T.qs, T.qcam);
-          } else { renderer.compile(scene, cam); renderer.compile(T.qs, T.qcam); }
+          const a = build(T.hdr, scene, cam), b = build(T.ldr, T.qs, T.qcam);
+          if (parallel) await Promise.all([a, b]);
         });
-        renderer.setRenderTarget(prev);
         m.model.root.visible = false;
-      } catch { /* only an optimisation */ }
+      } catch { /* only an optimisation */ } finally { if (!running) releaseSoon(); }
     },
+    resume() { if (!paused) return; paused = false; run(); },
     draw,
     // (tests) the eyes' middles in a W x H portrait of a look already drawn: [[x, y], [x, y]]
     eyesAt(baseId, W = w, H = h) {
@@ -338,6 +374,7 @@ export function createAvatarPortraits(renderer, { w = 384, h = 512 } = {}) {
     pending: () => urgent.length + later.length,
     dispose() {
       disposed = true;
+      clearTimeout(releaseTimer);
       for (const e of cache.values()) if (e.url) URL.revokeObjectURL(e.url);
       cache.clear();
       for (const m of models.values()) { m.model.dispose(); m.originalModel?.dispose(); }

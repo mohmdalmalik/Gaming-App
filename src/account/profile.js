@@ -42,31 +42,41 @@ export function newProfile({ username, avatar, now, id } = {}) {
 const KNOWN_ITEMS = new Set(ITEMS.map(itemId));
 const isDate = v => typeof v === 'string' && !Number.isNaN(Date.parse(v));
 
-// A saved profile made safe: { profile, repaired }. A valid username is kept and anything else damaged
-// (avatar slots, dates, the inventory) is repaired; without a valid username there is no profile (null:
-// the register screen asks for a name again). `repairAvatar(av)`: how avatars are made safe (default:
-// the catalogue's, free items only). Older versions would be migrated here (there are none yet).
+// A saved profile made safe: { profile, repaired, readOnly?, kept? }. A valid username is kept and anything
+// else damaged (avatar slots, dates, the inventory) is repaired. Without a valid username there is no
+// profile (null: the register screen asks for a name again), but a name that was valid once and is no
+// longer (a word reserved since) leaves `kept`: { id, avatar, inventory, createdAt } for the new name to
+// keep. A profile saved by a NEWER version is read as well as this one can (`readOnly`: it must not be
+// written over, or the newer fields would be lost). `repairAvatar(av)`: how avatars are made safe
+// (default: the catalogue's, free items only). Older versions would be migrated here (there are none yet).
 export function repairProfile(raw, { repairAvatar = av => normaliseAvatar(av), now } = {}) {
   let data = raw;
   if (typeof data === 'string') { try { data = JSON.parse(data); } catch { return { profile: null, repaired: true }; } }
   if (!data || typeof data !== 'object' || Array.isArray(data)) return { profile: null, repaired: raw != null };
+  const readOnly = Number.isFinite(data.version) && data.version > PROFILE_VERSION;
   // (version migrations go here: if (data.version === 1) data = fromV1(data) …)
   const name = checkUsername(data.username);
-  if (!name.ok) return { profile: null, repaired: true };
   const at = iso(now);
   const created = isDate(data.createdAt) ? data.createdAt : at;
   const inventory = Array.isArray(data.inventory)
     ? [...new Set(data.inventory.filter(id => typeof id === 'string' && KNOWN_ITEMS.has(id)))] : [];
+  const id = typeof data.id === 'string' && /^[A-Za-z0-9_-]{4,64}$/.test(data.id) ? data.id : newProfileId();
+  const avatar = repairAvatar(data.avatar && typeof data.avatar === 'object' ? data.avatar : startingAvatar(name.ok ? name.name : 'guest'));
+  if (!name.ok) {
+    const once = typeof data.username === 'string' && data.username.trim().length > 0;
+    return { profile: null, repaired: true, readOnly, ...(once ? { kept: { id, avatar, inventory, createdAt: created } } : {}) };
+  }
   const profile = {
     version: PROFILE_VERSION,
-    id: typeof data.id === 'string' && /^[A-Za-z0-9_-]{4,64}$/.test(data.id) ? data.id : newProfileId(),
+    id,
     username: name.name,
-    avatar: repairAvatar(data.avatar && typeof data.avatar === 'object' ? data.avatar : startingAvatar(name.name)),
+    avatar,
     inventory,
     createdAt: created,
     updatedAt: isDate(data.updatedAt) ? data.updatedAt : created,
     nameChangedAt: isDate(data.nameChangedAt) ? data.nameChangedAt : created,
   };
+  if (readOnly) return { profile, repaired: false, readOnly };
   const repaired = JSON.stringify(profile) !== JSON.stringify(data);
   return { profile, repaired };
 }

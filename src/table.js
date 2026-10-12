@@ -8,7 +8,6 @@
 // The six named guests (Victor, Clara …) are not players: they stay as guests of the menu's 3D lobby.
 import { normaliseAvatar, DEFAULT_AVATAR } from './data/wardrobe.js';
 import { tableAvatars } from './data/randomAvatar.js';
-import { sameName } from './account/username.js';
 
 export const SEAT_COLORS = ['#e6b45a', '#5ac8e6', '#a8e05a', '#e67ab8', '#f0743c', '#b8a2f0'];
 
@@ -38,6 +37,3 @@ export function seatTable({ me, bots = [], seat = 0 }) {
     return { id: `p${i + 1}`, name: p.username, color: SEAT_COLORS[i % SEAT_COLORS.length], avatar, outfit: OUTFIT_OF_BASE[avatar.base] };
   });
 }
-
-// (a bot's username is never yours, case ignored)
-export const notMine = (names, mine) => names.filter(n => !sameName(n, mine));

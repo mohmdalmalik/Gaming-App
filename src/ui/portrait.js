@@ -8,7 +8,11 @@
 // own portrait, drawn at run time by the portrait service main.js hands in (setPortraitService: src/render/
 // avatarPortrait.js, so src/ui keeps no three.js import). Until it is drawn the look's shipped picture
 // (assets/portraits/<look>.jpg, -possessed.jpg) shows, and every <img> of that portrait is swapped in place
-// the moment it is ready. `img.dataset.look` says which state it shows ('normal' | 'possessed').
+// the moment it is ready. `img.dataset.look` says which state it shows ('normal' | 'possessed'). The profile
+// card asks for its own first picture instead (`first`: the last one drawn of that avatar, kept on the
+// device; or `plate`: a plain navy plate with a brass silhouette — never another look's face). A picture
+// that cannot be loaded shows that plate too (`portrait-missing`), never a broken-image icon or its alt
+// text spilling out of the tile.
 // PORTRAIT_ART stays for anything still keyed by outfit (tools, old fixtures).
 import { outfits, bodyTypes } from '../data/characters.js';
 import { avatarKey, shippedPortrait } from '../data/wardrobe.js';
@@ -17,7 +21,11 @@ let service = null;          // { peek(avatar, { possessed }), url(avatar, { pos
 export function setPortraitService(svc) { service = svc || null; }
 const portraitTag = (av, possessed) => `${avatarKey(av)}:${possessed ? 'p' : 'n'}`.replace(/[^A-Za-z0-9_:-]/g, '-');
 
-function avatarPortrait(doc, player, possessed) {
+// (a transparent pixel: the plate's own background shows through, with no broken-image icon)
+const BLANK = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
+const toPlate = img => { img.classList.add('portrait-missing'); if (img.getAttribute('src') !== BLANK) img.src = BLANK; };
+
+function avatarPortrait(doc, player, possessed, { first = null, plate = false, onReady = null } = {}) {
   const av = player.avatar;
   const img = doc.createElement('img');
   img.className = 'portrait-img';
@@ -27,13 +35,17 @@ function avatarPortrait(doc, player, possessed) {
   img.dataset.look = possessed ? 'possessed' : 'normal';
   const tag = portraitTag(av, possessed);
   img.dataset.portrait = tag;
+  img.addEventListener('error', () => toPlate(img));
   const ready = service?.peek(av, { possessed }) || null;
-  img.src = ready || shippedPortrait(av.base, possessed);
-  if (!ready && service) {
+  if (ready || first || !plate) img.src = ready || first || shippedPortrait(av.base, possessed);
+  else toPlate(img);
+  if (ready) onReady?.(ready);
+  else if (service) {
     service.url(av, { possessed }).then(url => {
       if (!url) return;
       const all = new Set([img, ...doc.querySelectorAll(`img[data-portrait="${tag}"]`)]);
-      for (const el of all) if (el.getAttribute('src') !== url) el.src = url;
+      for (const el of all) if (el.getAttribute('src') !== url) { el.classList.remove('portrait-missing'); el.src = url; }
+      onReady?.(url);
     }).catch(() => {});
   }
   return img;
@@ -55,8 +67,9 @@ export const PORTRAIT_ART = {
   dressMidnight: { normal: 'assets/portraits/eleanor.jpg', possessed: 'assets/portraits/eleanor-possessed.jpg' },
 };
 
-export function makePortrait(doc, player, { possessed = false } = {}) {
-  if (player?.avatar) return avatarPortrait(doc, player, possessed);
+// `first`, `plate`, `onReady(url)`: see the header (an avatar's portrait only).
+export function makePortrait(doc, player, { possessed = false, first = null, plate = false, onReady = null } = {}) {
+  if (player?.avatar) return avatarPortrait(doc, player, possessed, { first, plate, onReady });
   // Real artwork, if registered for this guest's outfit. Honour the possessed state: use a
   // dedicated possessed image when supplied (the same face with red eyes), otherwise the normal image
   // unchanged. The public strip always asks for the neutral look (possessed:false).

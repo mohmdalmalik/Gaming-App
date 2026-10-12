@@ -4,7 +4,8 @@
 // the brass. It is drawn ONCE per guest on a small canvas from the Possession card face and the
 // portrait, and kept as an image; every surface then shows that image like any other card face (one
 // <img>, so the hand fan, the tiles, the card view, the trade scenes and the burning dissolve all work
-// unchanged). Nothing is drawn per frame.
+// unchanged). Nothing is drawn per frame. The image is encoded off the main thread (canvas.toBlob, an
+// object URL, let go when the face is), so drawing one never holds up a frame.
 //
 //   soulFaceSrc(ownerId, plain)    the drawn face if it is ready; else `plain`, the Possession card's own
 //                                  face (and it starts drawing it)
@@ -131,8 +132,12 @@ function draw(card, port) {
   g.drawImage(frame, 0, 0);
   g.beginPath(); g.ellipse(cx, cy, rx - 1 * sx, ry - 1 * sy, 0, 0, Math.PI * 2);
   g.strokeStyle = RING; g.lineWidth = 3.5 * sx; g.stroke();
-  return c.toDataURL('image/jpeg', 0.9);
+  return new Promise(resolve => {
+    try { c.toBlob(b => resolve(b ? URL.createObjectURL(b) : c.toDataURL('image/jpeg', 0.9)), 'image/jpeg', 0.9); }
+    catch { resolve(c.toDataURL('image/jpeg', 0.9)); }
+  });
 }
+const letGo = f => { if (f?.src?.startsWith('blob:')) URL.revokeObjectURL(f.src); };
 
 const NONE = { src: null, loading: null };
 function build(ownerId, plain, gapMs = 16) {
@@ -150,7 +155,8 @@ function build(ownerId, plain, gapMs = 16) {
   pictures.catch(() => {});
   f.loading = queue = queue.then(() => pictures).then(async ([card, port]) => {
     await wait(gapMs);
-    f.src = draw(card, port);
+    f.src = await draw(card, port);
+    if (faces.get(key) !== f) { letGo(f); return; }      // (let go while it was drawn)
     // (every card on screen whose owner wears this look now)
     for (const img of document.querySelectorAll('img[data-soul]')) if (keyOf(img.dataset.soul) === key) img.src = f.src;
   }).catch(err => { if (!warned) { warned = true; console.warn('soul card faces: the plain face is used:', err?.message || err); } })
@@ -160,7 +166,7 @@ function build(ownerId, plain, gapMs = 16) {
 function trimFaces() {
   for (const [k, f] of faces) {
     if (faces.size <= KEEP_FACES) break;
-    if (f.src || !f.loading) faces.delete(k);
+    if (f.src || !f.loading) { faces.delete(k); letGo(f); }
   }
 }
 

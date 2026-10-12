@@ -8,7 +8,7 @@
 //   2. the channel: a message is { seat, id, at } (+ `about` for a line that names a guest) and nothing
 //      else; a missing, own-seat or out-of-range `about` is refused; `about` is dropped from other lines;
 //      the cooldown
-//   3. INFORMATION HONESTY with chat: one bot, twice — one copy sees the truth, the other a world where
+//   3. INFORMATION HONESTY with chat (128 matches): one bot, twice — one copy sees the truth, the other a world where
 //      everything that guest could not know is scrambled each time it looks; both hear the same lines,
 //      and what each says and every choice it makes must match (its own role is forced possessed in half
 //      the runs); and being named gets the same answers from a possessed bot as from a clean one
@@ -20,11 +20,19 @@
 //      Mirror showed one; "I am possessed." only after the end, from a possessed guest; a line about a guest
 //      never names the speaker, always a guest still in the hotel; the caps hold; "I trust <name>." only
 //      for a guest who was kind or cleared (or, possessed, an ally); the table never chatters faster than
-//      its gap, a bot never faster than its own (but for its free lines), about six lines a minute at
-//      most; "Thank you." / "Watch out!" / "Sorry!" only when they fit; greetings, "Good game!", quiet after
+//      its gap, a bot never faster than its own (each line: its moment free or not), about six lines a
+//      minute at most and never more than the gap allows in any 30 s; "Thank you." / "Watch out!" /
+//      "Sorry!" only when they fit; greetings, "Good game!", quiet after
 //   7. the player at the table: a greeting, "Sorry!" and "Good game!" get answers; a bot the player names
 //      answers; the player's accusation raises the clean bots' estimate of that guest — more when they
 //      believe the player — and a claim the table can see is impossible counts against the player instead
+//   8. no role tells (200 six-guest matches): a line about a bot's own turn is said in that turn; no third
+//      guest takes sides when someone is named; never "I trust <name>." after accusing them; every "tried to
+//      possess me!", true or false, right after a trade between the two; who accuses first, about half and
+//      half; the turn-start plans about as often a turn from either side. And talk never makes a Lantern
+//      magnet: the same matches played with one clean seat saying "Good evening!", "I am possessed." or an
+//      impossible accusation at round 2 — the liar is handed no more Lanterns (and the reason, exactly: what
+//      was said never moves a clean bot's estimate for a Lantern block)
 import fs from 'node:fs';
 import { rules, applyMode } from '../src/data/rules.js';
 import { hotel } from '../src/data/hotel.js';
@@ -69,13 +77,17 @@ function newMatch(seed, players, { possessedIndex = null, botSeats = null } = {}
 const TICK = 250;
 const ANIM = { move: 900, open: 800, search: 900, card: 900, job: 900, escape: 1500, trade: 900, end: 300 };
 const MEET = { trade: 2600, attack: 2000, noTrade: 1200 };
-function play(seed, players, { chat = 'on', chatSeed = (seed * 7 + 1) >>> 0, holdEvery = 0, onSaid = null } = {}) {
+// `inject`: { id, about: 'never' | null, round } — one clean seat (the one after the first possessed guest)
+// says this line at the start of its first turn in that round, as a person might (the exploit checks;
+// 'never': about a guest it has never traded with, a claim the table can see is impossible).
+function play(seed, players, { chat = 'on', chatSeed = (seed * 7 + 1) >>> 0, holdEvery = 0, onSaid = null, inject = null } = {}) {
   const was = BOT_HEAR.on;
   BOT_HEAR.on = chat === 'on';
   try {
     const { state, table, seats, profiles } = newMatch(seed, players);
     const chatter = chat !== 'off' ? createChatter(state, floor, seats, chatSeed, BOT_CHAT, table) : null;
-    const said = [], held = [];
+    const said = [], held = [], turns = [];
+    const exploit = { seat: (state.players.findIndex(p => p.possessed) + 1) % players, said: false };
     const eventTime = new Map();      // event seq -> { t: when it was first there to see, held: the held time by then }
     let now = 0, lastTick = 0, finishedAt = null, holding = false, seen = 0, heldMs = 0;
     const advance = ms => {
@@ -89,6 +101,7 @@ function play(seed, players, { chat = 'on', chatSeed = (seed * 7 + 1) >>> 0, hol
         for (const m of chatter.tick(t, { hold: holding })) {
           const P = state.players[m.seat], Q = m.about != null ? state.players[m.about] : null;
           const rec = { ...m, ev: state.eventSeq, heldAt: heldMs, round: state.round, finished: !!state.finished, speakerPossessed: P.possessed,
+            active: state.activeIndex, turn: state.turn,
             lantern: P.hand.some(c => c.type === 'lantern'),
             aboutPossessed: Q ? Q.possessed : null, aboutIn: Q ? Q.alive && !state.escaped.has(Q.id) : null };
           said.push(rec);
@@ -105,18 +118,35 @@ function play(seed, players, { chat = 'on', chatSeed = (seed * 7 + 1) >>> 0, hol
       for (const mt of meets) ms += MEET[mt.kind] || 2000;
       advance(ms);
     } : null;
-    let turns = 0;
-    while (!state.finished && turns < 400) {
-      holding = holdEvery > 0 && turns % holdEvery === holdEvery - 1;
-      advance(chatter ? table.thinkMs(S.activePlayer(state).index, 'turn') : 0);
+    let n = 0;
+    while (!state.finished && n < 400) {
+      holding = holdEvery > 0 && n % holdEvery === holdEvery - 1;
+      const who = S.activePlayer(state);
+      turns.push({ seat: who.index, possessed: who.possessed });
+      if (inject && chatter && !exploit.said && who.index === exploit.seat && state.round >= inject.round) {
+        exploit.said = true;
+        let about = null;
+        if (inject.about === 'never') {
+          const traded = new Set(state.events.filter(e => e.type === 'trade' && (e.a === who.index || e.b === who.index)).map(e => (e.a === who.index ? e.b : e.a)));
+          about = state.players.find(p => p.index !== who.index && p.alive && !state.escaped.has(p.id) && !traded.has(p.index))?.index ?? null;
+        }
+        if (who.possessed || (inject.about && about == null)) exploit.said = 'skipped';
+        else { const m = { seat: who.index, id: inject.id, at: now, ...(about != null ? { about } : {}) }; table.hear(m); chatter.hear(m, now); }
+      }
+      advance(chatter ? table.thinkMs(who.index, 'turn') : 0);
       playBotTurn(state, floor, table, { maxSteps: 40, onStep });
       advance(chatter ? 600 : 0);
-      turns++;
+      n++;
     }
     holding = false;
     advance(chatter ? 30000 : 0);
     if (finishedAt == null) finishedAt = now;
-    return { state, table, profiles, said, held, eventTime, finishedAt, clockMs: now };
+    if (exploit.said === true) {
+      const X = state.players[exploit.seat];
+      exploit.lanterns = X.inbox.filter(e => e.type === 'traded' && e.got === 'lantern').length;
+      exploit.escaped = state.escaped.has(X.id);
+    }
+    return { state, table, profiles, said, held, eventTime, finishedAt, clockMs: now, turns, exploit };
   } finally { BOT_HEAR.on = was; }
 }
 
@@ -145,8 +175,8 @@ console.log('the lines');
   check(said.every(isChatId), 'every line a bot may say is one of them');
   check(!said.includes('needLantern'), '(bots never offer a Lantern: that would mostly come from a possessed bot, a tell)');
   check(Object.values(BOT_HEAR.weight).length && Object.keys(BOT_HEAR.weight).every(isChatId), 'every line the bots weigh is one of them');
-  check(BOT_HEAR.blockShare > 0 && BOT_HEAR.blockShare <= 1 && BOT_HEAR.attackShare > 0 && BOT_HEAR.attackShare <= 1 && BOT_HEAR.cap <= 0.6 && BOT_HEAR.floor >= -0.3,
-    `hearsay counts at most ${BOT_HEAR.cap} for one guest; ${BOT_HEAR.blockShare} of it for a Lantern block, ${BOT_HEAR.attackShare} for an attack`);
+  check(BOT_HEAR.blockShare === 0 && BOT_HEAR.attackShare > 0 && BOT_HEAR.attackShare <= 1 && BOT_HEAR.cap <= 0.6 && BOT_HEAR.floor >= -0.3,
+    `hearsay counts at most ${BOT_HEAR.cap} for one guest; none of it for a Lantern block (talk never makes a guest a Lantern magnet), ${BOT_HEAR.attackShare} for an attack`);
   check(CHAT.cooldownMs >= 2500 && CHAT.cooldownMs <= 4000 && CHAT.bubbleMs >= 3000 && CHAT.bubbleMs <= 4500 && CHAT.aboutBubbleMs >= CHAT.bubbleMs && CHAT.aboutBubbleMs <= 6000,
     `cooldown ${CHAT.cooldownMs} ms, bubble ${CHAT.bubbleMs} ms (a line about a guest ${CHAT.aboutBubbleMs} ms)`);
   check(BOT_CHAT.gapMs >= 18000 && BOT_CHAT.tableGapMs >= 3000, `a bot speaks at most every ${BOT_CHAT.gapMs / 1000} s (but for its free lines), the table every ${BOT_CHAT.tableGapMs / 1000} s`);
@@ -233,7 +263,8 @@ function restore(state, snap) {
 {
   let runs = 0, same = 0, lines = 0, decSame = 0, decs = 0, possRuns = 0, about = 0;
   const rng = makeRng(4242);
-  for (let k = 0; k < 16; k++) {
+  const T0 = Date.now();
+  for (let k = 0; k < 128; k++) {
     const pl = 4 + (k % 3), seat = k % pl;
     const { state, table, profiles, seats } = newMatch(8000 + k, pl, { possessedIndex: k % 2 ? seat : (seat + 1) % pl });
     // the watched bot, twice: its own mind and chatter (A sees the truth, B a scrambled world each time it looks)
@@ -273,7 +304,7 @@ function restore(state, snap) {
     if (JSON.stringify(outA) === JSON.stringify(outB)) same++;
     decs += dA.length; decSame += dA.filter((x, i) => x === dB[i]).length;
   }
-  check(lines > 40 && about > 3, `(${lines} lines said by the watched bots over ${runs} matches, ${about} of them about a guest; ${possRuns} watched bots started possessed)`);
+  check(lines > 300 && about > 100, `(${lines} lines said by the watched bots over ${runs} matches, ${about} of them about a guest; ${possRuns} watched bots started possessed; ${((Date.now() - T0) / 1000).toFixed(1)} s)`);
   check(same === runs, `what a bot says never changes when what it could not know is scrambled (${same}/${runs})`);
   check(decSame === decs && decs > 50, `nor any choice it makes, having heard the same lines at the table (${decSame}/${decs})`);
 }
@@ -329,11 +360,9 @@ console.log('\nthe game, with and without talk');
 // --- 6. sense and pacing -----------------------------------------------------------------------------
 console.log('\nsense and pacing');
 {
-  // the ids only a free moment says (a reply, the start, the end, a death gasp, an accusation, a denial)
-  const FREE = new Set(['start', 'answerGreet', 'answerSorry', 'answerGG', 'killed', 'end', 'confess', ...Object.keys(M).filter(k => M[k].free)].flatMap(k => M[k].say.map(([id]) => id)));
   const st = { matches: 0, lines: 0, minutes: 0, held: 0, greeted: 0, gg: 0, ggMax: 0, tableFast: 0, botFast: 0, late: 0, thanksBad: 0, watchBad: 0, sorryBad: 0, lanternTrue: 0, lanternBluff: 0,
     tried: 0, triedBad: 0, isPoss: 0, isPossBad: 0, confess: 0, confessBad: 0, aboutLines: 0, aboutBad: 0, accuseCap: 0, frameCap: 0, opinionCap: 0, trust: 0, trustBad: 0, byId: {},
-    strongClean: 0, strongCleanTrue: 0, strongPoss: 0 };
+    strongClean: 0, strongCleanTrue: 0, strongPoss: 0, burst: 0 };
   const STYLE = {};
   for (let k = 0; k < 90; k++) {
     const pl = 4 + (k % 3);
@@ -360,14 +389,21 @@ console.log('\nsense and pacing');
       const end = said[i].at >= finishedAt;
       if (said[i].at - said[i - 1].at < (end ? BOT_CHAT.endGapMs : BOT_CHAT.tableGapMs)) st.tableFast++;
     }
+    for (let i = 0, j = 0; i < said.length; i++) {       // (the most lines in any 30 s of play)
+      if (said[i].at >= finishedAt) break;
+      while (said[j].at <= said[i].at - 30000) j++;
+      st.burst = Math.max(st.burst, i - j + 1);
+    }
     const opinions = new Map(), strong = new Map(), frames = new Map();
     for (let s = 0; s < pl; s++) {
       const mine = said.filter(m => m.seat === s);
       (STYLE[profiles[s].style] ||= { lines: 0, bots: 0 }).bots++;
       STYLE[profiles[s].style].lines += mine.length;
       let last = -Infinity;
+      // (each line says whether its moment was a free one: a reply, the start, the end, a death gasp, an
+      // accusation, a denial; every other line keeps the bot's own gap)
       for (const m of mine) {
-        if (!FREE.has(m.id) && m.at < finishedAt && m.at - last < BOT_CHAT.gapMs) st.botFast++;
+        if (!m.free && m.at < finishedAt && m.at - last < BOT_CHAT.gapMs) st.botFast++;
         last = m.at;
       }
     }
@@ -417,13 +453,15 @@ console.log('\nsense and pacing');
   check(st.tableFast === 0, `the table never speaks faster than once every ${BOT_CHAT.tableGapMs / 1000} s (at the end, ${BOT_CHAT.endGapMs / 1000} s)`);
   check(st.botFast === 0, `a bot never speaks twice within ${BOT_CHAT.gapMs / 1000} s, but for its free lines (an answer, an accusation, its gasp, the end)`);
   check(st.lines / st.minutes <= 6.5, `about six lines a minute at most (${(st.lines / st.minutes).toFixed(1)})`);
+  const most = Math.floor(30000 / BOT_CHAT.tableGapMs) + 1;
+  check(st.burst <= most, `never more than ${most} lines in any 30 s of play (${st.burst})`);
   check(st.thanksBad === 0, '"Thank you." only after a trade it was part of');
   check(st.watchBad === 0, '"Watch out!" only after it was attacked');
   check(st.sorryBad === 0, '"Sorry!" only after it attacked someone');
   check(st.held === 0, 'nothing is said while the screen is held');
   check(st.lanternTrue > st.lanternBluff && st.lanternBluff > 0, `"I have a Lantern." is a claim, not proof: mostly true, now and then a bluff (${st.lanternTrue} true, ${st.lanternBluff} not)`);
   check(st.greeted / st.matches > 0.8, `a greeting near the start (${st.greeted}/${st.matches} matches)`);
-  check(st.gg / st.matches > 0.7 && st.ggMax <= M.end.max, `"Good game!" at the end (${st.gg}/${st.matches} matches, never more than ${st.ggMax})`);
+  check(st.gg / st.matches > 0.7 && st.ggMax <= M.end.max + M.answerGG.max, `"Good game!" at the end (${st.gg}/${st.matches} matches, never more than ${st.ggMax}: at most ${M.end.max} + ${M.answerGG.max} answers)`);
   check(st.late === 0, 'the bots fall quiet after the end');
   check((STYLE.bold?.lines / STYLE.bold?.bots || 0) > (STYLE.careful?.lines / STYLE.careful?.bots || 0), 'bold guests talk more than careful ones');
 }
@@ -466,12 +504,13 @@ console.log('\nthe player at the table');
     const back = run(4000);
     if (back.some(m => m.seat === victim && ['cross', 'smile'].includes(m.id))) sorryAnswered++;
     if (back.some(m => m.seat !== victim && ['cross', 'smile'].includes(m.id))) sorryWrong++;
-    // the match ends: the bots say "Good game!", then the person does
+    // the match ends: the person says "Good game!" as the end screen comes up, while the bots say it too
+    // (a "Good game!" is answered whoever says it: the person's, like a bot's, while some are still quiet)
     while (!state.finished) playBotTurn(state, floor, table);
-    const ended = run(12000);
+    const ended = run(1500);
     say({ id: 'gg' });
-    const gg = run(5000);
-    if (gg.some(m => m.id === 'gg' || m.id === 'smile')) ggAnswered++;
+    const gg = run(12000);
+    if (gg.some(m => m.moment === 'answerGG' && (m.id === 'gg' || m.id === 'smile'))) ggAnswered++;
     const last = [...ended, ...gg];
     if (chatSeats.some(s => last.filter(m => m.seat === s.index).length > 1)) twice++;
   }
@@ -520,6 +559,97 @@ console.log('\nthe player at the table');
   check(n > 60 && up === n, `the player's "Stay away from <name>!" raises a clean bot's estimate of that guest (${up}/${n})`);
   check(believedMore === n, `...more when the bot believes the player than when it suspects them (${believedMore}/${n})`);
   check(baselessN > 20 && baseless === baselessN, `a "<name> tried to possess me!" with no trade between them counts against the speaker, not the guest named (${baseless}/${baselessN})`);
+}
+
+// --- 8. no role tells; talk never makes a Lantern magnet ----------------------------------------------
+// What a line is, when it comes and who says it must not tell a guest's role (QA 12 Oct 2026: a third guest
+// defending the one just named, a late "tried to possess me!", a turn-start line said after the turn,
+// "I trust <name>." and "Who has a Lantern?" from one side far more often than the other were all tells),
+// and lying in chat must not get a guest handed more Lanterns.
+console.log('\nno role tells; talk never makes a Lantern magnet');
+{
+  const NAMING = new Set(['triedPossess', 'isPossessed', 'stayAway', 'distrustX']);
+  const TURN = new Set(['nearby', 'suspects', 'vouches', 'gather', 'checkCount', 'askLantern']);
+  const st = { matches: 0, turns: { clean: 0, poss: 0 }, rate: {}, offTurn: 0, third: 0, thirdPoss: 0, contra: 0, tried: 0, triedLate: 0,
+    mutual: 0, mutualPossFirst: 0 };
+  const T0 = Date.now();
+  for (let k = 0; k < 200; k++) {
+    const { state, said, turns, eventTime } = play(40000 + k * 7, 6);
+    st.matches++;
+    for (const t of turns) st.turns[t.possessed ? 'poss' : 'clean']++;
+    const live = said.filter(m => !m.finished);
+    for (const m of live) {
+      const r = (st.rate[m.moment] ||= { clean: 0, poss: 0 });
+      r[m.speakerPossessed ? 'poss' : 'clean']++;
+      // a line about its own turn is said in that turn
+      if (TURN.has(m.moment) && (m.active !== m.seat || m.turn == null)) st.offTurn++;
+      // "I trust <X>." after its own "<X> tried to possess me!" / "<X> is possessed!"
+      if (m.id === 'trustX' && live.some(x => x.seat === m.seat && x.about === m.about && (x.id === 'triedPossess' || x.id === 'isPossessed') && x.at < m.at)) st.contra++;
+      // "<X> tried to possess me!" comes right after a trade between the two, true or false alike
+      if (m.id === 'triedPossess') {
+        st.tried++;
+        const trade = state.events.filter(e => e.type === 'trade' && ((e.a === m.seat && e.b === m.about) || (e.b === m.seat && e.a === m.about)) && eventTime.get(e.seq)?.t <= m.at).pop();
+        if (!trade || m.at - eventTime.get(trade.seq).t > 25000) st.triedLate++;
+      }
+    }
+    for (let i = 0; i < live.length; i++) {
+      const a = live[i];
+      if (!NAMING.has(a.id) || a.about == null) continue;
+      // a third guest, not on its own turn, takes sides within 8 s: "I trust <named>." / "I don't trust <namer>."
+      const b = live.find(x => x.at > a.at && x.at - a.at <= 8000 && x.seat !== a.seat && x.seat !== a.about && x.seat !== x.active
+        && ((x.id === 'trustX' && x.about === a.about) || (x.id === 'distrustX' && x.about === a.seat)));
+      if (b) { st.third++; if (b.speakerPossessed) st.thirdPoss++; }
+      // both said "tried to possess me!" of each other (a clean guest and a possessed one): who spoke first?
+      if (a.id === 'triedPossess') {
+        const back = live.find(x => x.id === 'triedPossess' && x.seat === a.about && x.about === a.seat && x.at > a.at && x.at - a.at <= 20000);
+        if (back && back.speakerPossessed !== a.speakerPossessed) { st.mutual++; if (a.speakerPossessed) st.mutualPossFirst++; }
+      }
+    }
+  }
+  const per = (id, side) => 1000 * ((st.rate[id]?.[side] || 0) / Math.max(1, st.turns[side]));
+  const ratio = id => { const c = per(id, 'clean'), p = per(id, 'poss'); return Math.max(c, p) / Math.max(1e-9, Math.min(c, p)); };
+  const show = id => `${id} ${per(id, 'clean').toFixed(1)} / ${per(id, 'poss').toFixed(1)}`;
+  console.log(`         (${st.matches} matches of 6, ${((Date.now() - T0) / 1000).toFixed(1)} s; per 1000 turns, clean / possessed: ${['nearby', 'vouches', 'gather', 'checkCount', 'askLantern'].map(show).join(', ')})`);
+  check(st.offTurn === 0, `a line about a bot's own turn is said in that turn, never as the next guest plays (${st.offTurn} after it)`);
+  check(st.third / st.matches < 0.05, `no third guest takes sides when someone is named (${st.third} times in ${st.matches} matches, ${st.thirdPoss} of them possessed)`);
+  check(st.contra === 0, `never "I trust <name>." after the same guest accused them (${st.contra})`);
+  check(st.tried > 100 && st.triedLate === 0, `"<name> tried to possess me!", true or false, comes right after a trade between the two (${st.tried} lines, ${st.triedLate} later)`);
+  check(st.mutual >= 30 && Math.abs(st.mutualPossFirst / st.mutual - 0.5) <= 0.15,
+    `two guests accusing each other: the possessed one speaks first about half the time (${st.mutualPossFirst}/${st.mutual})`);
+  // (rates per turn of each side; "Meet me at the Fire Exit." comes from different plans on the two sides,
+  // a little more often clean at six players and possessed at four: a looser bound; "Who has a Lantern?" is
+  // rare, so its count is noisy)
+  check(['nearby', 'vouches', 'checkCount'].every(id => ratio(id) <= 1.6) && ratio('gather') <= 2 && ratio('askLantern') <= 2.5,
+    `the plans said at the start of a turn come about as often a turn from either side (nearby ${ratio('nearby').toFixed(2)}x, vouches ${ratio('vouches').toFixed(2)}x, checkCount ${ratio('checkCount').toFixed(2)}x, gather ${ratio('gather').toFixed(2)}x, askLantern ${ratio('askLantern').toFixed(2)}x)`);
+}
+{
+  // Lying in chat ("I am possessed.", or a "<name> tried to possess me!" the table can see is impossible)
+  // must not get a clean guest handed more Lanterns (to block with: a Lantern "blocked" against a clean
+  // guest is simply theirs) than saying "Good evening!" does: the same matches, played three times.
+  const T0 = Date.now();
+  const sum = { greet: { n: 0, l: 0, e: 0 }, iAmPossessed: { n: 0, l: 0, e: 0 }, never: { n: 0, l: 0, e: 0 } };
+  for (let k = 0; k < 180; k++) {
+    const seed = 50000 + k * 11;
+    const runs = { greet: play(seed, 6, { inject: { id: 'greet', round: 2 } }), iAmPossessed: play(seed, 6, { inject: { id: 'iAmPossessed', round: 2 } }),
+      never: play(seed, 6, { inject: { id: 'triedPossess', about: 'never', round: 2 } }) };
+    if (Object.values(runs).some(r => r.exploit.said !== true)) continue;
+    for (const [key, r] of Object.entries(runs)) { sum[key].n++; sum[key].l += r.exploit.lanterns; sum[key].e += r.exploit.escaped ? 1 : 0; }
+  }
+  const L = key => sum[key].l / Math.max(1, sum[key].n), E = key => 100 * sum[key].e / Math.max(1, sum[key].n);
+  console.log(`         (${sum.greet.n} matches each, ${((Date.now() - T0) / 1000).toFixed(1)} s: Lanterns handed to the speaker / escaped — "Good evening!" ${L('greet').toFixed(2)} / ${E('greet').toFixed(1)}%, "I am possessed." ${L('iAmPossessed').toFixed(2)} / ${E('iAmPossessed').toFixed(1)}%, an impossible accusation ${L('never').toFixed(2)} / ${E('never').toFixed(1)}%)`);
+  check(sum.greet.n >= 150 && L('iAmPossessed') <= L('greet') * 1.15 && L('never') <= L('greet') * 1.15,
+    'a guest who lies in chat is handed no more Lanterns than one who says "Good evening!" (within 15%)');
+  {
+    // (and the reason, exactly: what was said never moves a clean bot's estimate for a Lantern block)
+    const { state, table } = newMatch(777, 6);
+    for (let t = 0; t < 8 && !state.finished; t++) playBotTurn(state, floor, table);
+    const L0 = state.players.find(p => !p.possessed && p.alive).index, X = state.players.find(p => p.index !== L0 && p.alive).index;
+    const est = () => { const l = table.catchUp(L0); return l.mind.pPoss(l.mind.context(l.view), X, BOT_HEAR.blockShare); };
+    const before = est();
+    table.hear({ seat: X, id: 'iAmPossessed', at: 0 });
+    table.hear({ seat: X, id: 'triedPossess', about: L0, at: 0 });
+    check(Math.abs(est() - before) < 1e-12, 'what was said never moves a clean bot\'s estimate for handing a Lantern to block');
+  }
 }
 
 console.log(`\n(${((Date.now() - t0) / 1000).toFixed(1)} s)`);

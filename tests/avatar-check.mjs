@@ -22,7 +22,8 @@
 //                 order; the locked items carry a lock and "Coming soon" and cannot be chosen; a pick shows
 //                 on your avatar in the lobby at once; Done keeps it (your profile); Change name opens the
 //                 register in rename mode
-//   7. lift       practice: your avatar boards alone; a match: you, Victor and Clara
+//   7. lift       practice: your avatar boards alone; a match: you with Victor and Clara (Henry in place of
+//                 a guest in your own look: the test profile's Tuxedo is Victor's)
 //   8. games      four tables in a row (Play again): one character view per seat, built from the seats'
 //                 avatars, the others let go; the strip's portraits are the seats' own; geometry, shader
 //                 programs and draw calls stay bounded
@@ -31,6 +32,7 @@ import { launch } from './smoke-lib.mjs';
 import { BASES, ITEMS, SLOTS, item, itemId, itemsFor, normaliseAvatar, originalAvatar, slotsFor, withBase, withBody,
   avatarKey, avatarFromGuest, isAvailable, basesFor } from '../src/data/wardrobe.js';
 import { randomAvatar, tableAvatars } from '../src/data/randomAvatar.js';
+import { lobbyLayout } from '../src/menu/lobbyLayout.js';
 
 const args = process.argv.slice(2);
 const arg = (name, dflt) => (args.includes(name) ? args[args.indexOf(name) + 1] : dflt);
@@ -61,6 +63,14 @@ if (!skip.has('node')) {
   check(bad.base === 'clara' && bad.hair === originalAvatar('clara').hair && bad.glasses === 'none' && bad.main === originalAvatar('clara').main && bad.metal === 'gold' && bad.skin === originalAvatar('clara').skin,
     `unknown and locked values fall back to the look's own (${JSON.stringify(bad)})`);
   check(normaliseAvatar(null).base === 'victor' && normaliseAvatar('junk').v === 1, 'nothing at all gives a whole avatar');
+  {
+    // (built-in names of every object are not looks: a saved or received 'constructor' never crashes)
+    let ok = true;
+    for (const b of ['constructor', '__proto__', 'toString', 'hasOwnProperty', 'valueOf']) {
+      try { ok = ok && normaliseAvatar({ base: b }).base === 'victor' && withBase(originalAvatar('clara'), b).base === 'clara' && originalAvatar(b).base === 'victor'; } catch { ok = false; }
+    }
+    check(ok, 'a look called "constructor", "__proto__", "toString", "hasOwnProperty" or "valueOf" is no look: made safe, never a crash');
+  }
   check(normaliseAvatar({ ...originalAvatar('marcus'), glasses: 'monocle' }, { owns: id => id === 'glasses.monocle' }).glasses === 'monocle', 'an owned locked item is kept (for later: nothing is owned yet)');
   const m = { ...originalAvatar('marcus'), skin: 'deep', eyes: 'green', glasses: 'oval', main: 'plum', accent: 'brass' };
   const f = withBody(m, 'f');
@@ -266,7 +276,8 @@ if (!skip.has('wardrobe')) {
     const { browser, page, messages } = await menuPage(w, h);
     const tag = `${w}x${h}`;
     const idle = await page.evaluate(() => window.__game.lobbyPlayer());
-    check(!!idle && Math.abs(idle.x - 2.05) < 0.05 && Math.abs(idle.z + 4.3) < 0.05, `${tag}: your avatar stands by the lift in the lobby (${idle?.base})`);
+    const [sx, sz] = lobbyLayout.player.at;      // (its spot by the lift: src/menu/lobbyLayout.js)
+    check(!!idle && Math.abs(idle.x - sx) < 0.05 && Math.abs(idle.z - sz) < 0.05, `${tag}: your avatar stands by the lift in the lobby (${idle?.base} at ${idle?.x?.toFixed(2)}, ${idle?.z?.toFixed(2)})`);
     await page.click('#btn-profile');
     await page.waitForFunction(() => window.__game.menuScreen() === 'avatar' && window.__game.lobbyWardrobe()?.k >= 1, null, { timeout: 90000 });
     await sleep(700);
@@ -328,7 +339,8 @@ if (!skip.has('wardrobe')) {
       await page.click('#btn-av-rename');
       await page.waitForFunction(() => window.__game.menuScreen() === 'signup', null, { timeout: 10000 });
       check(await page.evaluate(() => document.getElementById('su-name').value) === 'tester', 'Change name opens the register, your name filled in');
-      check(!(await page.evaluate(() => window.__game.lobbyWardrobe()?.want)), 'and the wardrobe camera lets go');
+      check(await page.evaluate(() => window.__game.lobbyWardrobe()?.want === 1 && !document.getElementById('view').classList.contains('blurred')),
+        'and the wardrobe camera stays on your avatar, the lobby sharp (no flight out to the lobby and back)');
       await sleep(500);
       await page.click('#btn-su-suggest');      // (Cancel, in rename mode)
       await page.waitForFunction(() => window.__game.menuScreen() === 'avatar', null, { timeout: 10000 }).catch(() => {});
@@ -361,7 +373,9 @@ if (!skip.has('lift')) {
     await sleep(500);
     await page.click('#btn-bots-find');
     await page.waitForFunction(() => window.__game.lobbyBoarders(), null, { timeout: 60000 });
-    check(JSON.stringify(await page.evaluate(() => window.__game.lobbyBoarders())) === '["you","victor","clara"]', 'a match: you board first, with Victor and Clara');
+    // (the test profile wears the Tuxedo, Victor's look: Henry boards in his place, so nobody beside you
+    // looks like you from behind)
+    check(JSON.stringify(await page.evaluate(() => window.__game.lobbyBoarders())) === '["you","henry","clara"]', 'a match: you board first, with Clara and Henry (never Victor beside a Tuxedo)');
     await sleep(3000);
     if (shots) await page.screenshot({ path: `${shots}/lift-match.png` });
     await page.waitForFunction(() => window.__game.phase() === 'game', null, { timeout: 60000 });

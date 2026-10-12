@@ -106,19 +106,24 @@ export const ITEMS = [
 ];
 
 export const SLOTS = ['base', 'skin', 'hair', 'eyes', 'glasses', 'frame', 'main', 'accent', 'metal'];
+// Whether `b` is one of the six looks: an own key of BASES only, so a saved or received 'constructor',
+// '__proto__' or 'toString' (built into every object) can never pass for a look.
+const own = (o, k) => typeof k === 'string' && Object.prototype.hasOwnProperty.call(o, k);
+export const isBase = b => own(BASES, b);
 export const item = (slot, id) => ITEMS.find(i => i.slot === slot && i.id === id) || null;
 // An item's id across the whole catalogue (ids repeat between slots: 'brown' hair, 'brown' skin), the one
 // a player's inventory and, later, a store's product list use: 'glasses.monocle'.
 export const itemId = it => `${it.slot}.${it.id}`;
 // The body a look is made for ('m' | 'f'): the wardrobe's Male / Female choice.
-export const bodyOf = base => BASES[base]?.body || 'm';
+export const bodyOf = base => (isBase(base) ? BASES[base].body : 'm');
 // The items of a slot, in catalogue order; with a `base`, only where that look has the part (an accent only
 // on the looks with a tie, bow tie or sash; jewellery only on the gowns).
 export const itemsFor = (slot, base = null) => (base && !slotOn(base, slot) ? [] : ITEMS.filter(i => i.slot === slot));
-const slotOn = (base, slot) => !['accent', 'metal'].includes(slot) || !!BASES[base]?.parts[slot];
+const slotOn = (base, slot) => !['accent', 'metal'].includes(slot) || (isBase(base) && !!BASES[base].parts[slot]);
 
 // The avatar a base wears by default (its original look).
 export function originalAvatar(base) {
+  if (!isBase(base)) base = 'victor';
   const o = BASES[base].original;
   return { v: 1, base, skin: o.skin, hair: o.hair, eyes: 'classic', glasses: o.glasses || 'none', frame: o.frame || 'tortoise',
     main: o.main, accent: o.accent || 'black', metal: o.metal || 'gold' };
@@ -132,7 +137,7 @@ export const isAvailable = (it, owns = freeOwns) => !!it && (it.unlock === 'free
 // Any saved or received avatar made safe: a missing, unknown or not-owned value falls back to the look's
 // original (always free), so a damaged save, an old version or a locked item never reaches the screen.
 export function normaliseAvatar(av, { owns = freeOwns } = {}) {
-  const base = av && BASES[av.base] ? av.base : 'victor';
+  const base = av && isBase(av.base) ? av.base : 'victor';
   const fallback = originalAvatar(base);
   const out = { v: 1, base };
   for (const slot of SLOTS) {
@@ -162,7 +167,7 @@ export function slotsFor(av) {
 // Another look, keeping everything the new look can wear (skin, hair, eyes, glasses, outfit colour, and
 // the accent and jewellery where it has them).
 export function withBase(av, base, opts) {
-  if (!BASES[base]) return normaliseAvatar(av, opts);
+  if (!isBase(base)) return normaliseAvatar(av, opts);
   const out = { ...originalAvatar(base), ...av, v: 1, base };
   if (!slotOn(base, 'accent')) out.accent = originalAvatar(base).accent;
   if (!slotOn(base, 'metal')) out.metal = originalAvatar(base).metal;
@@ -178,7 +183,7 @@ export function withBody(av, body, opts) {
 // The look shipped as a picture (assets/portraits/<base>.jpg and -possessed.jpg), shown until the runtime
 // portrait of an avatar is ready (src/render/avatarPortrait.js) and for anything that has no renderer.
 export const shippedPortrait = (base, possessed = false) =>
-  `assets/portraits/${BASES[base] ? base : 'victor'}${possessed ? '-possessed' : ''}.jpg`;
+  `assets/portraits/${isBase(base) ? base : 'victor'}${possessed ? '-possessed' : ''}.jpg`;
 
 // The avatar of last round's "Your guest" choice (the 'guest' setting: a roster id 'p1'..'p6' or a name),
 // so an old player's first avatar is the guest they chose; null for 'random' or anything unknown.
@@ -186,7 +191,7 @@ const GUEST_BASES = { p1: 'victor', p2: 'eleanor', p3: 'marcus', p4: 'beatrice',
 export function avatarFromGuest(guest) {
   if (guest == null) return null;
   const v = String(guest).trim().toLowerCase();
-  const base = GUEST_BASES[v] || (BASES[v] ? v : null);
+  const base = own(GUEST_BASES, v) ? GUEST_BASES[v] : isBase(v) ? v : null;
   return base ? originalAvatar(base) : null;
 }
 

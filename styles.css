@@ -202,6 +202,12 @@ html, body {
 
 .portrait-svg { display: block; width: 100%; height: 100%; }
 .portrait-img { display: block; width: 100%; height: 100%; object-fit: cover; object-position: 50% 20%; }
+/* No picture (yet, or it failed to load): a plain navy plate with a brass silhouette, no face, no glasses
+   (src/ui/portrait.js); the alt text stays for screen readers but is never drawn over the tile. */
+.portrait-img.portrait-missing {
+  color: transparent; font-size: 0;
+  background: #161b2b url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 118'%3E%3Cg fill='%23b48a46' fill-opacity='.38'%3E%3Ccircle cx='50' cy='43' r='17'/%3E%3Cpath d='M14 118c2-27 17-41 36-41s34 14 36 41z'/%3E%3C/g%3E%3C/svg%3E") center / cover no-repeat;
+}
 /* A possessed portrait is its own image (the same face with red eyes, assets/portraits/*-possessed.jpg).
    If a guest ever has only a normal image, the private view shows it unchanged — no colour wash on
    the face; the crimson plate around it says the rest. The public strip always asks for normal. */
@@ -1136,13 +1142,14 @@ html, body {
 /* The end of a match: everyone's role, now that it is over. */
 .end-reveal { display: grid; gap: 6px; margin: 2px auto 22px; width: min(540px, 80vw); text-align: left; }
 .er-row {
-  /* (a fixed role column, wide enough for POSSESSED, so every row's columns line up) */
-  display: grid; grid-template-columns: 12px minmax(0, 1fr) minmax(0, 1fr) 92px 64px; gap: 10px; align-items: center;
+  /* (a fixed role column, wide enough for POSSESSED, so every row's columns line up; "You" takes only
+  its own width and the name the rest, cut short with "…" rather than run under "You") */
+  display: grid; grid-template-columns: 12px minmax(0, 1fr) auto 92px 64px; gap: 10px; align-items: center;
   padding: 7px 12px; border-radius: 10px; background: rgba(255, 255, 255, 0.03); border: 1px solid var(--line-soft);
 }
 .er-row.you { border-color: var(--brass); }
 .er-dot { width: 11px; height: 11px; border-radius: 50%; background: var(--player-color, var(--brass)); }
-.er-name { font-family: var(--serif); font-size: 17px; font-weight: 700; color: var(--ivory); }
+.er-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--serif); font-size: 17px; font-weight: 700; color: var(--ivory); }
 .er-who { font-size: 13px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .er-row.you .er-who { color: var(--brass-bright); font-weight: 700; }
 .er-role { font-size: 12px; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; }
@@ -1770,7 +1777,7 @@ html, body {
 .pc-portrait img, .pc-portrait svg { width: 100%; height: 100%; object-fit: cover; display: block; -webkit-user-drag: none; }
 .pc-text { display: flex; flex-direction: column; gap: 3px; min-width: 0; flex: 1; }
 .pc-kicker { font-size: 10.5px; font-weight: 700; letter-spacing: 0.18em; text-transform: uppercase; color: var(--muted); }
-.pc-name { font-family: var(--serif); font-size: 24px; font-weight: 700; color: var(--ivory); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pc-name { font-family: var(--serif); font-size: clamp(18px, 2.2vw, 24px); font-weight: 700; color: var(--ivory); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .pc-edit { font-size: 13.5px; font-weight: 600; color: var(--brass); letter-spacing: 0.02em; }
 #menu-main .menu-tag { margin-bottom: 18px; }
 /* Settings and Your record share one row under the two ways to play. */
@@ -1801,7 +1808,10 @@ html, body {
 .menu.avatar .menu-panel {
   display: flex; flex-direction: column;
   max-height: calc(100% - max(28px, calc(var(--safe-top) + var(--safe-bottom) + 24px)));
+  /* anchored to the top (not centred): a row that comes or goes moves only the rows below it */
+  top: max(14px, calc(var(--safe-top) + 12px)); transform: none;
 }
+.menu.avatar.leaving .menu-panel { transform: translateX(-24px); }
 #menu-avatar:not([hidden]) { display: flex; flex-direction: column; min-height: 0; flex: 0 1 auto; }
 #menu-avatar .menu-kicker { margin-bottom: 2px; }
 .av-head { display: flex; align-items: center; gap: 12px; margin-bottom: 6px; }
@@ -1887,7 +1897,8 @@ html, body {
   border-right: 1.5px solid var(--brass); border-bottom: 1.5px solid var(--brass); transform: rotate(-45deg);
 }
 .cp-blank {
-  display: inline-block; min-width: 26px; margin: 0 1px; padding: 0 2px; border-bottom: 1.5px dotted var(--brass);
+  /* (no space after it: "I trust WHO." — the right margin also takes back the last letter's spacing) */
+  display: inline-block; min-width: 26px; margin: 0 -0.12em 0 1px; padding: 0 0 0 2px; border-bottom: 1.5px dotted var(--brass);
   color: var(--brass-bright); font: 700 10px/1.5 var(--sans); letter-spacing: 0.12em; text-transform: uppercase; vertical-align: 1px;
 }
 /* the second step: Back, the line, "Choose a guest", the guests */

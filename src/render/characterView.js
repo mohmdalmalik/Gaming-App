@@ -13,7 +13,7 @@ import { bodyTypes, outfits } from '../data/characters.js';
 import { xrayGuest } from './xray.js';
 import { createPossessedEyes } from './possessedLook.js';
 import { loadBase, createAvatarModel, GAME_RIM } from './avatar.js';
-import { BASES } from '../data/wardrobe.js';
+import { BASES, isBase, item } from '../data/wardrobe.js';
 
 const gltfLoader = new GLTFLoader();
 
@@ -47,8 +47,17 @@ function box(geo, color, w, h, d, emissive) {
   return m;
 }
 
-// (an avatar's stand-in outfit: only its body and nominal height are read before the model loads)
-const avatarOutfit = av => ({ name: BASES[av.base]?.label || 'Guest', body: BASES[av.base]?.body === 'f' ? 'female' : 'male', modelHeight: 1.66, avatar: true });
+// (an avatar's stand-in outfit: its body and nominal height are read before the model loads; its colours
+// only if the model cannot be loaded, when the box figure stands in for it)
+const SKIRTS = { clara: 'column', eleanor: 'full', beatrice: 'aline' };
+const avatarOutfit = av => {
+  const def = isBase(av.base) ? BASES[av.base] : null;
+  const main = item('main', av.main)?.value || '#36436a', accent = item('accent', av.accent)?.value || '#1a1a1e';
+  const female = def?.body === 'f';
+  return { name: def?.label || 'Guest', body: female ? 'female' : 'male', modelHeight: 1.66, avatar: true,
+    ...(female ? { bodice: main, skirt: main, skirtStyle: SKIRTS[av.base] || 'aline', sleeves: 'none', ...(av.base === 'clara' ? { sash: accent } : {}) }
+      : { jacket: main, trousers: main, shirt: '#e9e6dc', neckwear: av.base === 'marcus' ? 'tie' : 'bow', neckwearColor: accent }) };
+};
 
 export function createCharacterView(playerDef, cfg, scene) {
   let avatar = playerDef.avatar || null;
@@ -104,11 +113,27 @@ export function createCharacterView(playerDef, cfg, scene) {
   let model = null, loadToken = 0, ownGltf = null;   // (avatar: the avatar model; a glTF guest: its own scene)
 
   // An avatar's model: the look parsed once (shared by every seat in it), cloned with this seat's colours.
+  // If it cannot be downloaded the box figure stands in (the guest is never invisible), and it is tried
+  // once more a few seconds later.
+  let placeholderParts = null, retried = false;
+  function showPlaceholder() {
+    if (placeholderParts) return;
+    const n = body.children.length;
+    buildPlaceholder();
+    placeholderParts = body.children.slice(n);
+  }
+  function dropPlaceholder() {
+    if (!placeholderParts) return;
+    for (const o of placeholderParts) body.remove(o);
+    skirt?.geometry.dispose();
+    arms = []; legs = []; skirt = null; placeholderParts = null;
+  }
   function loadAvatar(av) {
     const token = ++loadToken;
     loadBase(av.base).then(base => {
       if (token !== loadToken || disposed) return;
       dropModel();
+      dropPlaceholder();
       model = createAvatarModel(base, av, { rim: GAME_RIM });
       body.add(model.root);
       eyes = { set: v => model.setPossessed(v), get on() { return model.eyes.on; } };
@@ -117,7 +142,12 @@ export function createCharacterView(playerDef, cfg, scene) {
       headY = base.height > 0.8 && base.height < 2.4 ? base.height : headY;
       marker.position.y = headY + c.markerHeight;
       startClips(model.root, base.clips.idle, base.clips.walk);
-    }).catch(e => console.warn('character model load failed:', av.base, e && e.message));
+    }).catch(e => {
+      console.warn('character model load failed:', av.base, e && e.message);
+      if (token !== loadToken || disposed) return;
+      if (!model) showPlaceholder();
+      if (!retried) { retried = true; setTimeout(() => { if (token === loadToken && !disposed) loadAvatar(av); }, 4000); }
+    });
   }
   function startClips(root, idle, walk) {
     mixer = new THREE.AnimationMixer(root);
@@ -325,6 +355,7 @@ export function createCharacterView(playerDef, cfg, scene) {
       disposed = true;
       loadToken++;
       dropModel();
+      dropPlaceholder();
       scene.remove(group);
       // (the shadow, the box figure's colours and the shared geometries are shared by every view: kept)
       ringMat.dispose(); marker.material.dispose(); bloodMat.dispose();
@@ -334,7 +365,7 @@ export function createCharacterView(playerDef, cfg, scene) {
     // Test/debug hook: what the animation is doing (stride in use, walk weight, walk phase 0..1).
     debug() {
       return { model: useModel, loaded: !!mixer, strideLength, walkDuration, walkW, walkPhase: walkAction ? walkAction.time / walkDuration : 0, possessedEyes: !!eyes?.on,
-        avatar: avatar ? { ...avatar } : null, glasses: !!model?.glasses };
+        avatar: avatar ? { ...avatar } : null, glasses: !!model?.glasses, standIn: !!placeholderParts };
     },
     // The possessed look on this figure (red eyes). Cheap: does nothing unless it changes. Whose screen
     // shows it is main.js's decision (the player's own guest while possessed, and the guests a possessed

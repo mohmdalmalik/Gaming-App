@@ -6,8 +6,13 @@
 // crossing (a trade — never a card face: trades are secret), an empty card (met, no trade), the weapon
 // (an attack — public), a door, a magnifier (a search), a telephone (the Switchboard), a mirror, a
 // barricade, the Infirmary's cross, the fire exit.
+// Guests are players with usernames (src/table.js), which can be any word: so a line is read with every
+// guest's name put aside first (and the hotel's own room and card names kept whole), never by matching
+// raw text against a name — "nora searched Kitchen." stays as it is even next to a guest called "searched".
 import { CARD_BACK } from './cards.js';
 import { CARD_ICONS } from './cardIcons.js';
+import { rules } from '../data/rules.js';
+import { hotel } from '../data/hotel.js';
 
 const KEEP = 4;          // lines on screen at once
 const LIFE_MS = 9000;    // how long a line stays
@@ -45,21 +50,41 @@ function kindOf(text) {
 }
 export const _kindOf = kindOf;   // (tests)
 
+// The hotel's own words a log line may hold (room and card names), longest first: kept whole while the
+// guests' names are looked for, so a guest called "Linen" is never found inside "Linen Store".
+const PHRASES = [...new Set([hotel.lobby?.name, ...(hotel.tiles || []).map(t => t.name), ...Object.values(rules.cards || {}).map(c => c.name)]
+  .filter(n => typeof n === 'string' && n))].sort((a, b) => b.length - a.length);
+const NAME = '\u0001', HOLD = '\u0002';          // (never in a log line, nor in a username)
+const escapeRe = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+// A public log line as the player reads it in the feed. `players`: the guests at the table (their names);
+// `me`: the player's own guest (or null). Returns { text, kind, own, mentionsMe }: the words (their own
+// name as "You" / "you"), the icon it gets, whether it is the player's own doing (left out of the feed),
+// whether it names them.
+export function feedLine(text, players = [], me = null) {
+  let t = String(text);
+  const held = [];
+  // (as whole words only: "Kitchen" in a name like "Kitchen_boy" is the name's, not the room's)
+  const whole = (w, flags = 'g') => new RegExp(`(^|[^A-Za-z0-9_])${escapeRe(w)}(?=[^A-Za-z0-9_]|$)`, flags);
+  for (const ph of PHRASES) if (t.includes(ph)) t = t.replace(whole(ph), (_, pre) => `${pre}${HOLD}${held.push(ph) - 1}${HOLD}`);
+  // every guest's name (the longest first: "nora_b" before "nora")
+  const order = players.map((p, i) => ({ i, name: String(p?.name ?? '') })).filter(x => x.name).sort((a, b) => b.name.length - a.name.length);
+  for (const { i, name } of order) t = t.replace(whole(name), `$1${NAME}${i}${NAME}`);
+  t = t.replace(new RegExp(`${HOLD}(\\d+)${HOLD}`, 'g'), (_, k) => held[+k]);
+  const kind = kindOf(t);
+  const mine = me && players.indexOf(me) >= 0 ? `${NAME}${players.indexOf(me)}${NAME}` : null;
+  const own = !!mine && t.startsWith(`${mine} `);
+  const mentionsMe = !!mine && t.includes(mine);
+  if (mine) t = t.replace(new RegExp(`^${mine}`), 'You').split(mine).join('you');
+  t = t.replace(new RegExp(`${NAME}(\\d+)${NAME}`, 'g'), (_, k) => String(players[+k]?.name ?? ''));
+  return { text: t, kind, own, mentionsMe };
+}
+
 export function createFeed(doc) {
   const host = doc.getElementById('feed');
   const seen = new WeakSet();
   let lines = [];        // { el, until }
   let enabled = false;
   let placedTop = -1;
-
-  const escapeRe = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  function personal(text, me) {
-    if (!me) return text;
-    const name = escapeRe(me.name);
-    return text
-      .replace(new RegExp(`^${name}\\b`), 'You')
-      .replace(new RegExp(`\\b${name}\\b`, 'g'), 'you');
-  }
 
   function icon(kind) {
     const i = doc.createElement('span');
@@ -75,10 +100,9 @@ export function createFeed(doc) {
     return i;
   }
 
-  function add(text, cls = '') {
+  function add(text, cls = '', kind = kindOf(text)) {
     const el = doc.createElement('div');
     el.className = `feed-line ${cls}`.trim();
-    const kind = kindOf(text);
     if (kind) {
       el.classList.add('has-icon');
       el.appendChild(icon(kind));
@@ -107,15 +131,16 @@ export function createFeed(doc) {
       for (const l of state.log) {
         if (seen.has(l)) continue;
         seen.add(l);
-        if (me && l.text.startsWith(`${me.name} `)) continue;   // the player's own doing
-        const mentionsMe = me && new RegExp(`\\b${escapeRe(me.name)}\\b`).test(l.text);
-        add(personal(l.text, me), mentionsMe ? 'me' : '');
+        const line = feedLine(l.text, state.players, me);
+        if (line.own) continue;   // the player's own doing
+        add(line.text, line.mentionsMe ? 'me' : '', line.kind);
       }
     },
     // A line that is not in the rules' log (a public event the interface reports itself).
     say(text, cls = '') { if (enabled) add(text, cls); },
-    // A quick-chat line (src/ui/chat.js): its own icon (the emote, or a speech bubble), who ("Henry:")
-    // and what. Chat is not a game event, so it is never in the rules' log.
+    // A quick-chat line (src/ui/chat.js): its own icon (the emote, or a speech bubble), who ("nora:")
+    // and what. Chat is not a game event, so it is never in the rules' log. `text`: the words, or the
+    // words in pieces (strings, and { name, cls, you } for a guest the line names, shown in its own span).
     chat(iconHtml, who, text, cls = '') {
       if (!enabled) return;
       const el = doc.createElement('div');
@@ -123,7 +148,12 @@ export function createFeed(doc) {
       const i = doc.createElement('span'); i.className = 'feed-icon'; i.setAttribute('aria-hidden', 'true'); i.innerHTML = iconHtml;
       const t = doc.createElement('span'); t.className = 'feed-text';
       const w = doc.createElement('span'); w.className = 'feed-who'; w.textContent = who;
-      t.append(w, ` ${text}`);
+      t.append(w, ' ');
+      for (const x of Array.isArray(text) ? text : [text]) {
+        if (typeof x === 'string') { t.append(x); continue; }
+        const n = doc.createElement('span'); n.className = `${x.cls || 'feed-name'}${x.you ? ' you' : ''}`; n.textContent = String(x.name ?? '');
+        t.append(n);
+      }
       el.append(i, t);
       host.appendChild(el);
       lines.push({ el, until: performance.now() + LIFE_MS });

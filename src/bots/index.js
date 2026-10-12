@@ -12,9 +12,14 @@
 //   table.discard(i, cardIds)           a card to drop at the hand limit (end of its turn)
 //   table.thinkMs(i, kind)              how long it "thinks" first (kinds: turn act move meet attack trade reply discard)
 //   table.has(i) / table.profile(i) / table.addSeat(i, profile) / table.seats()
+//   table.hear(msg)                     a quick-chat line said at the table ({ seat, id, about?, at }: anyone's,
+//                                       the player's and the bots' alike): every bot hears it
+//   table.catchUp(i)                    { mind, view }: the bot caught up on what it may know (for its
+//                                       chatter, src/bots/chatter.js)
 //
-// Every method first lets the bot read whatever public events (state.events) and own private events
-// (its player.inbox) are new since it last looked, so the caller never feeds it anything.
+// Every method first lets the bot read whatever public events (state.events), own private events (its
+// player.inbox) and lines said at the table are new since it last looked, so the caller never feeds it
+// anything else.
 //
 // Actions returned by nextAction:
 //   { k:'move', to: roomId }   { k:'open', door }   { k:'search' }   { k:'job' }   { k:'escape' }
@@ -31,6 +36,8 @@ const mix = (seed, index) => (Math.imul((seed >>> 0) ^ 0x51ed27, 2654435761) ^ M
 
 export function createBotTable(state, floor, seats = [], seed = 1) {
   const minds = new Map();
+  // What was said at the table (public), in order: { seq: the last event there was when it was said, msg }.
+  const heard = [];
   const extraRng = makeRng(mix(seed, 99) || 1);   // only for profiles of seats added later without one
 
   const addSeat = (index, profile = null) => {
@@ -45,7 +52,7 @@ export function createBotTable(state, floor, seats = [], seed = 1) {
     const mind = minds.get(index);
     if (!mind) return null;
     const view = botView(state, floor, index, mind.cursor);
-    mind.observe(view);
+    mind.observe(view, heard.slice(mind.cursor.chat || 0));
     return { mind, view };
   };
   // The brain names a Hand Mirror target by seat; the rules want a player id.
@@ -65,6 +72,13 @@ export function createBotTable(state, floor, seats = [], seed = 1) {
     seats: () => [...minds.keys()].sort((a, b) => a - b),
     addSeat,
     removeSeat: index => minds.delete(index),
+
+    // A line said at the table. Every bot hears it; each weighs it when it next thinks (brain.js onChat),
+    // read in its place among the events, from what that bot knows.
+    hear(msg) { if (msg) heard.push({ seq: state.eventSeq || 0, msg: { seat: msg.seat, id: msg.id, ...(msg.about != null ? { about: msg.about } : {}) } }); },
+    heardCount: () => heard.length,
+    // The chatter (src/bots/chatter.js): this bot's mind, caught up on what it may know, and its view.
+    catchUp: index => look(index),
 
     nextAction(index) {
       const l = look(index);

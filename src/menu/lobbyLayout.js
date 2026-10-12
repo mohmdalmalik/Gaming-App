@@ -4,7 +4,8 @@
 // Floor y = 0. The back wall is at z = -5.5 (lift, reception, archway, stairs), the right wall at
 // x = 8.4 (tall night windows). The camera looks in from the front-left. The menu buttons cover the
 // left ~40% of the screen, so the stairs and the left lounge sit there (soft background) and the
-// reception, the lift and the seated guests who board it are centre-right.
+// reception, the lift and the seated guests who board it are centre-right. The player's own avatar
+// (`player`) stands by the lift and boards first; the wardrobe screen frames it (`wardrobeCamera`).
 
 export const lobbyLayout = {
   room: {
@@ -114,6 +115,11 @@ export const lobbyLayout = {
       dress: { Hair: '#c8a46a', Dress: '#9c7d4c', Sash: '#5a4426', Gold: '#e0c070' } },
   ],
 
+  // The player's own avatar (src/render/avatar.js, built from their profile by src/menu/lobbyScene.js
+  // setPlayerAvatar): standing by the lift, the first to board it (practice: alone; a match: with the
+  // first two guests above, Victor and Clara). Not in `cast`: it is made from the avatar, not a model file.
+  player: { name: 'you', at: [2.05, -4.3, -10], boards: 0.5, boardDelay: 0.05 },
+
   // Idle walks (looping): [x, z, pause seconds, heading to face while paused (deg) or null, glance (deg)]
   strolls: {
     manager: [
@@ -134,6 +140,7 @@ export const lobbyLayout = {
 
   // Boarding: each guest walks from where they stood up to the lift, around the furniture.
   boardingPaths: {
+    you: [[2.6, -4.45], [3.15, -4.5]],
     victor: [[3.22, -2.75], [3.15, -4.3]],
     clara: [[3.28, -2.72], [3.15, -4.3]],
     henry: [[3.2, -2.7], [3.15, -4.3]],
@@ -157,4 +164,10 @@ export const lobbyLayout = {
     enterTarget: [3.2, 2.0, -5.6],
     enterFov: 34,
   },
+  // The wardrobe screen (src/ui/avatarEditor.js): a closer camera on the player's avatar by the lift,
+  // full length. The vertical field of view is kept at every screen shape; the picture is shifted
+  // sideways (a view offset) so the avatar stands in the middle of the space right of the menu panel.
+  // (`look`: the height looked at on the avatar; `from`: the camera, from that point; `ease`: seconds;
+  // `hold`: strollers whose walk crosses that view wait out of it, [x, z, heading], while it is open)
+  wardrobeCamera: { look: 0.86, from: [0, 0.55, 2.7], fov: 46, ease: 0.7, hold: { manager: [7.05, -2.75, 90] } },
 };

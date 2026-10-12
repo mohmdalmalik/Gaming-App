@@ -1,16 +1,22 @@
-// Quick chat in a match (src/data/chat.js): the Chat button by the Menu button, its small panel of
-// preset lines and emotes (one tap sends and closes it), and how a message shows — a speech bubble over
-// the speaker's guest for a few seconds (through the shared tag layer, src/ui/screenTags.js, so it stays
-// under the interface and inside the screen) and a line in the table feed ("Henry: Good evening!",
-// "You wave."). When the match is over, the end screen shows what is said there and offers a one-tap
-// "Good game!". A soft click when someone else speaks.
+// Quick chat in a match (src/data/chat.js): the Chat button by the Menu button, its small panel — two tabs
+// of preset lines ("Table" and "Suspicion") and the emotes; one tap sends and closes it, and a line that
+// names a guest ("I don't trust <name>.") first asks which guest (the "Choose a guest" step: the other
+// guests still in the hotel, with their portraits) — and how a message shows: a speech bubble over the
+// speaker's guest for a few seconds (through the shared tag layer, src/ui/screenTags.js, so it stays
+// under the interface and inside the screen) and a line in the table feed ("nora: Good evening!",
+// "nora: I don't trust felix.", "You wave."). A line that names the player reads as said to them ("I
+// don't trust you.") with a brighter edge — never crimson: crimson is only ever the player's own possessed
+// look, and a public line must not look like a role. When the match is over, the end screen shows what is
+// said there and offers a one-tap "Good game!". A soft click when someone else speaks.
 //
 // Not in practice (nobody to talk to), and nothing at all when Settings > Quick chat is Off. The button
 // and the panel are there whenever the game is in view — on other guests' turns and while watching
 // after death too — but never over a private screen, a meeting or the map. Messages travel through the
-// chat channel (src/social/chat.js): { seat, id, at }, public to the whole table, nothing else.
-import { CHAT, CHAT_PHRASES, CHAT_EMOTES } from '../data/chat.js';
+// chat channel (src/social/chat.js): { seat, id, at } (+ `about`: the seat a line names), public to the
+// whole table, nothing else. What a line claims is talk, never proof: nothing here reads a role.
+import { CHAT, CHAT_PHRASES, CHAT_EMOTES, CHAT_TABS } from '../data/chat.js';
 import { tooSoon } from './tapGuard.js';
+import { makePortrait } from './portrait.js';
 
 const esc = s => String(s).replace(/[&<>"]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]));
 const svg = body => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${body}</svg>`;
@@ -26,19 +32,44 @@ export const CHAT_ICONS = {
   cross: svg(`${FACE}<path d="M7.5 8l2.8 1.2M16.5 8l-2.8 1.2"/>${dot(9.3, 11)}${dot(14.7, 11)}<path d="M8.6 16.4c.9-1.3 2.1-1.9 3.4-1.9s2.5.6 3.4 1.9"/>`),
   speak: svg('<path d="M5.2 5h13.6c.9 0 1.7.8 1.7 1.7v7.6c0 .9-.8 1.7-1.7 1.7h-7.9l-4.4 3.5V16H5.2c-.9 0-1.7-.8-1.7-1.7V6.7C3.5 5.8 4.3 5 5.2 5z"/><path d="M8.4 10.5h.01M12 10.5h.01M15.6 10.5h.01" stroke-width="2.2"/>'),
 };
+const BACK_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>';
 const PHRASE = new Map(CHAT_PHRASES.map(p => [p.id, p]));
 const EMOTE = new Map(CHAT_EMOTES.map(e => [e.id, e]));
+const TAB_KEY = 'hotelEscape.chatTab.v1';      // (this device: the tab the panel last showed)
 
-// What a message says, in words: "Good evening!", or the emote's line for the feed.
-export function chatWords(id, { you = false } = {}) {
-  if (PHRASE.has(id)) return { text: PHRASE.get(id).text, emote: false };
+// What a message says, in words. `you`: the player said it (an emote reads "You wave."). For a line that
+// names a guest: `about` (their seat), `aboutYou` (it names the player: "I don't trust you.") and
+// `nameOf(seat)`. Returns { text, emote, parts, names }: `parts` is the text in pieces, strings and
+// { name, you } for the guest it names (shown in bright brass), `names` whether it names a guest.
+export function chatWords(id, { you = false, about = null, aboutYou = false, nameOf = null } = {}) {
+  const p = PHRASE.get(id);
+  if (p) {
+    if (!p.about) return { text: p.text, emote: false, parts: [p.text], names: false };
+    if (aboutYou && p.you) {
+      // "You tried to possess me!", "I trust you.": the word "you" stands for the player's name
+      const m = /\b[Yy]ou\b/.exec(p.you);
+      const parts = m ? [p.you.slice(0, m.index), { name: m[0], you: true }, p.you.slice(m.index + m[0].length)] : [p.you];
+      return { text: p.you, emote: false, parts, names: true };
+    }
+    const name = String((about != null && nameOf ? nameOf(about) : null) ?? 'a guest');
+    const [pre, post = ''] = p.text.split('{name}');
+    return { text: `${pre}${name}${post}`, emote: false, parts: [pre, { name, you: !!aboutYou }, post], names: true };
+  }
   const e = EMOTE.get(id);
-  return e ? { text: `${you ? e.you : e.does}.`, emote: true } : null;
+  if (!e) return null;
+  const text = `${you ? e.you : e.does}.`;
+  return { text, emote: true, parts: [text], names: false };
 }
+// The words as HTML, the guest named in a span of class `cls` (+ ' you' when it is the player).
+const partsHtml = (parts, cls) => parts.map(x => (typeof x === 'string' ? esc(x) : `<span class="${cls}${x.you ? ' you' : ''}">${esc(x.name)}</span>`)).join('');
+// The panel's label for a line: a line that names a guest shows a dotted blank where the name goes.
+const labelHtml = p => (p.about ? esc(p.text).replace('{name}', '<span class="cp-blank">who</span>') : esc(p.text));
 
 // `channel`: src/social/chat.js. `feed`: src/ui/feed.js. `nameOf(seat)` / `colorOf(seat)`: the guest's
-// name and colour (public). `mySeat()`: the player's seat. `sfx(name, opts)`: the sound cue bus.
-export function createChatUI(doc, { channel, feed, nameOf, colorOf, mySeat, sfx = () => {} }) {
+// name and colour (public). `mySeat()`: the player's seat. `guests()`: the guests a line may name now
+// ([{ seat, player, red }]: the others still in the hotel, in seat order; `red`: shown with red eyes, as
+// in the guest strip). `sfx(name, opts)`: the sound cue bus.
+export function createChatUI(doc, { channel, feed, nameOf, colorOf, mySeat, guests = () => [], sfx = () => {} }) {
   const el = {
     button: doc.getElementById('btn-chat'),
     panel: doc.getElementById('chat-panel'),
@@ -46,18 +77,34 @@ export function createChatUI(doc, { channel, feed, nameOf, colorOf, mySeat, sfx 
   let on = false;               // this match has chat (a match, and Quick chat is On)
   let showing = false;          // the button may show now (nothing covers the game)
   let openedAt = 0, pressedOutAt = -Infinity;   // (when a press outside the panel, or a line sent, closed it)
+  let stepAt = 0;               // when the panel last changed what is under the finger (opened, a step, Back)
   let coolTimer = 0;
+  let tab = readTab();          // the tab showing
+  let asking = null;            // the line waiting for a guest to be chosen (the second step), or null
   const bubbles = new Map();    // seat -> { html, cls, until }
   const recent = [];            // (tests) the last messages shown
 
-  // --- the panel: the phrases, then the emotes ------------------------------------------------------
-  const kicker = doc.createElement('div'); kicker.className = 'chat-kicker'; kicker.textContent = 'Say to the table';
-  const phrases = doc.createElement('div'); phrases.className = 'chat-phrases';
+  // --- the panel: the tabs, the lines, the emotes; and the "Choose a guest" step ---------------------
+  el.panel.classList.add('cp');
+  const tabRow = doc.createElement('div'); tabRow.className = 'cp-tabs'; tabRow.setAttribute('role', 'tablist');
+  const pages = new Map();
+  for (const t of CHAT_TABS) {
+    const b = doc.createElement('button');
+    b.type = 'button'; b.className = 'cp-tab'; b.dataset.tab = t.id; b.dataset.sfx = 'select';
+    b.setAttribute('role', 'tab'); b.id = `chat-tab-${t.id}`; b.setAttribute('aria-controls', `chat-page-${t.id}`);
+    b.textContent = t.label;
+    tabRow.appendChild(b);
+    const page = doc.createElement('div');
+    page.className = 'cp-page'; page.id = `chat-page-${t.id}`; page.dataset.page = t.id;
+    page.setAttribute('role', 'tabpanel'); page.setAttribute('aria-labelledby', b.id);
+    pages.set(t.id, page);
+  }
   for (const p of CHAT_PHRASES) {
     const b = doc.createElement('button');
-    b.type = 'button'; b.className = 'chat-phrase'; b.dataset.chat = p.id; b.dataset.sfx = 'select';
-    b.textContent = p.text;
-    phrases.appendChild(b);
+    b.type = 'button'; b.className = `chat-phrase${p.about ? ' about' : ''}`; b.dataset.chat = p.id; b.dataset.sfx = 'select';
+    if (p.about) b.setAttribute('aria-label', `${p.text.replace('{name}', '…')} Choose a guest.`);
+    b.innerHTML = `<span class="cp-label">${labelHtml(p)}</span>`;
+    (pages.get(p.tab) || pages.values().next().value).appendChild(b);
   }
   const emotes = doc.createElement('div'); emotes.className = 'chat-emotes';
   for (const e of CHAT_EMOTES) {
@@ -67,12 +114,82 @@ export function createChatUI(doc, { channel, feed, nameOf, colorOf, mySeat, sfx 
     b.innerHTML = CHAT_ICONS[e.id];
     emotes.appendChild(b);
   }
-  el.panel.replaceChildren(kicker, phrases, emotes);
+  const main = doc.createElement('div'); main.className = 'cp-main';
+  main.append(tabRow, ...pages.values(), emotes);
+  const whom = doc.createElement('div'); whom.className = 'cp-whom'; whom.hidden = true;
+  whom.innerHTML = `<div class="cp-whom-head"><button type="button" class="cp-back" data-sfx="select" aria-label="Back">${BACK_ICON}</button>`
+    + '<div class="cp-whom-line"></div></div><div class="cp-whom-hint">Choose a guest</div><div class="cp-guests"></div>';
+  const whomLine = whom.querySelector('.cp-whom-line'), grid = whom.querySelector('.cp-guests'), back = whom.querySelector('.cp-back');
+  el.panel.replaceChildren(main, whom);
+  showTab(tab);
+
+  function readTab() {
+    try { const t = window.localStorage?.getItem(TAB_KEY); if (CHAT_TABS.some(x => x.id === t)) return t; } catch { /* storage blocked */ }
+    return CHAT_TABS[0].id;
+  }
+  function showTab(id) {
+    tab = CHAT_TABS.some(t => t.id === id) ? id : CHAT_TABS[0].id;
+    for (const b of tabRow.children) { const sel = b.dataset.tab === tab; b.setAttribute('aria-selected', String(sel)); b.tabIndex = sel ? 0 : -1; }
+    for (const [k, page] of pages) page.hidden = k !== tab;
+  }
+  // The lines that name a guest are there only while there is someone else to name.
+  function syncAbout() {
+    const none = !guests().length;
+    for (const b of main.querySelectorAll('.chat-phrase.about')) b.disabled = none;
+  }
+  // The second step: "<line>", Choose a guest, a tile for each guest a line may name.
+  function ask(id) {
+    const p = PHRASE.get(id);
+    const list = guests();
+    if (!p || !list.length) return;
+    asking = id;
+    whomLine.innerHTML = labelHtml(p);
+    grid.replaceChildren(...list.map(g => {
+      const b = doc.createElement('button');
+      b.type = 'button'; b.className = 'cp-guest'; b.dataset.seat = String(g.seat); b.dataset.sfx = 'select';
+      b.style.setProperty('--player-color', colorOf(g.seat));      // (the seat's colour under the portrait, as in the strip)
+      const port = doc.createElement('span'); port.className = 'mini-portrait cp-portrait';
+      port.appendChild(makePortrait(doc, g.player, { possessed: !!g.red }));
+      const nm = doc.createElement('span'); nm.className = 'cp-guest-name'; nm.textContent = nameOf(g.seat);
+      b.append(port, nm);
+      return b;
+    }));
+    whom.style.minHeight = `${main.offsetHeight}px`;     // (the panel keeps its height: nothing jumps)
+    main.hidden = true; whom.hidden = false;
+    stepAt = performance.now();
+  }
+  function unask() {
+    if (asking == null) return;
+    asking = null;
+    whom.hidden = true; main.hidden = false;
+    grid.replaceChildren();
+  }
+
   el.panel.addEventListener('click', e => {
+    const t = e.target.closest?.('.cp-tab');
+    if (t) { e.preventDefault(); showTab(t.dataset.tab); try { window.localStorage?.setItem(TAB_KEY, tab); } catch { /* fine */ } return; }
+    if (e.target.closest?.('.cp-back')) {
+      e.preventDefault();
+      if (tooSoon(e, stepAt)) return;
+      unask(); stepAt = performance.now();
+      return;
+    }
+    const g = e.target.closest?.('.cp-guest');
+    if (g) {
+      e.preventDefault();
+      if (tooSoon(e, stepAt) || asking == null) return;   // (the second tap of a double tap on a line chooses nobody)
+      const seat = Number(g.dataset.seat);
+      if (!guests().some(x => x.seat === seat)) { ask(asking); return; }   // (they left the hotel meanwhile)
+      send(asking, seat);
+      close();
+      pressedOutAt = performance.now();
+      return;
+    }
     const b = e.target.closest?.('[data-chat]');
-    if (!b) return;
+    if (!b || b.disabled) return;
     e.preventDefault();
-    if (tooSoon(e, openedAt)) return;     // (the second tap of a double tap on Chat sends nothing)
+    if (tooSoon(e, Math.max(openedAt, stepAt))) return;     // (the second tap of a double tap on Chat, or on Back, sends nothing)
+    if (PHRASE.get(b.dataset.chat)?.about) { ask(b.dataset.chat); return; }
     send(b.dataset.chat);
     close();
     pressedOutAt = performance.now();     // (and the second tap of a double tap on a line, now on the hotel, does nothing)
@@ -109,15 +226,18 @@ export function createChatUI(doc, { channel, feed, nameOf, colorOf, mySeat, sfx 
 
   function open() {
     if (!on || !showing || el.button.disabled) return;
+    unask();
+    syncAbout();
     el.panel.hidden = false;
     el.button.setAttribute('aria-expanded', 'true');
-    openedAt = performance.now();
+    openedAt = stepAt = performance.now();
     place();
   }
   function close() {
     if (el.panel.hidden) return;
     el.panel.hidden = true;
     el.button.setAttribute('aria-expanded', 'false');
+    unask();              // (the next time it opens on the lines, on the same tab)
   }
   // Under the top-right buttons, against the right edge — and below the guest strip if it would reach it.
   function place() {
@@ -144,10 +264,11 @@ export function createChatUI(doc, { channel, feed, nameOf, colorOf, mySeat, sfx 
   doc.addEventListener('keydown', e => { if (e.key === 'Escape') close(); });
   window.addEventListener('resize', () => { if (!el.panel.hidden) place(); });
 
-  // The player says something. Returns the message, or null (cooling down).
-  function send(id) {
+  // The player says something (`about`: the seat of the guest a line names). Returns the message, or null
+  // (cooling down, or a line that needs a guest without one).
+  function send(id, about = null) {
     if (!on) return null;
-    const msg = channel.say(mySeat(), id);
+    const msg = channel.say(mySeat(), id, about);
     if (msg) cool();
     return msg;
   }
@@ -166,25 +287,30 @@ export function createChatUI(doc, { channel, feed, nameOf, colorOf, mySeat, sfx 
   function show(msg) {
     if (!on) return;
     recent.push(msg); if (recent.length > 30) recent.shift();
-    const mine = msg.seat === mySeat();
-    const words = chatWords(msg.id, { you: mine });
+    const me = mySeat();
+    const mine = msg.seat === me;
+    const aboutYou = msg.about != null && msg.about === me;
+    const words = chatWords(msg.id, { you: mine, about: msg.about ?? null, aboutYou, nameOf });
     if (!words) return;
     const who = mine ? 'You' : nameOf(msg.seat);
     const icon = words.emote ? CHAT_ICONS[msg.id] : CHAT_ICONS.speak;
+    const dotHtml = `<span class="cb-dot" style="background:${esc(colorOf(msg.seat))}"></span>`;
     const html = words.emote
-      ? `<span class="cb-dot" style="background:${esc(colorOf(msg.seat))}"></span><span class="cb-icon" role="img" aria-label="${esc(EMOTE.get(msg.id).label)}">${CHAT_ICONS[msg.id]}</span>`
-      : `<span class="cb-dot" style="background:${esc(colorOf(msg.seat))}"></span><span class="cb-text">${esc(words.text)}</span>`;
-    bubbles.set(msg.seat, { html, cls: `chat-bubble${words.emote ? ' emote' : ''}${mine ? ' mine' : ''}`, until: performance.now() + CHAT.bubbleMs });
-    // the feed: "Henry: Good evening!" / "Henry waves."
+      ? `${dotHtml}<span class="cb-icon" role="img" aria-label="${esc(EMOTE.get(msg.id).label)}">${CHAT_ICONS[msg.id]}</span>`
+      : `${dotHtml}<span class="cb-text">${partsHtml(words.parts, 'cb-name')}</span>`;
+    const cls = `chat-bubble${words.emote ? ' emote' : ''}${mine ? ' mine' : ''}${aboutYou ? ' about-me' : ''}`;
+    bubbles.set(msg.seat, { html, cls, until: performance.now() + (words.names ? CHAT.aboutBubbleMs : CHAT.bubbleMs) });
+    // the feed: "nora: Good evening!" / "nora waves." / "nora: I don't trust felix."
     const lead = words.emote ? who : `${who}:`;
-    feed.chat?.(icon, lead, words.text, `chat${words.emote ? ' emote' : ''}${mine ? ' me' : ''}`);
-    if (endShown) addEndLine(icon, lead, words.text, mine);
+    const feedParts = words.parts.map(x => (typeof x === 'string' ? x : { ...x, cls: 'feed-name' }));
+    feed.chat?.(icon, lead, feedParts, `chat${words.emote ? ' emote' : ''}${mine || aboutYou ? ' me' : ''}`);
+    if (endShown) addEndLine(icon, lead, words.parts, mine || aboutYou);
     if (!mine) sfx('click', { volume: 0.5 });
   }
-  function addEndLine(icon, lead, text, mine) {
+  function addEndLine(icon, lead, parts, me) {
     const line = doc.createElement('span');
-    line.className = `ec-line${mine ? ' me' : ''}`;
-    line.innerHTML = `<span class="ec-icon">${icon}</span><span class="ec-who">${esc(lead)}</span> ${esc(text)}`;
+    line.className = `ec-line${me ? ' me' : ''}`;
+    line.innerHTML = `<span class="ec-icon">${icon}</span><span class="ec-who">${esc(lead)}</span> ${partsHtml(parts, 'ec-name')}`;
     endLines.appendChild(line);
     while (endLines.children.length > 2) endLines.firstChild.remove();   // (one row: the newest two)
   }
@@ -242,7 +368,11 @@ export function createChatUI(doc, { channel, feed, nameOf, colorOf, mySeat, sfx 
     },
     send,
     close,
-    // Tests: the last messages shown ({ seat, id, at }).
+    // Tests: the panel's state — the tab showing, the line waiting for a guest (or null), the guests it
+    // offers — and the speech bubbles waiting to show (whether or not their guest is on screen).
+    panelState: () => ({ open: !el.panel.hidden, tab, asking, guests: [...grid.children].map(b => Number(b.dataset.seat)),
+      bubbles: [...bubbles].map(([seat, b]) => ({ seat, cls: b.cls, text: b.html.replace(/<[^>]*>/g, '').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"') })) }),
+    // Tests: the last messages shown ({ seat, id, about?, at }).
     recent: () => [...recent],
   };
 }

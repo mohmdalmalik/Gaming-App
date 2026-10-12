@@ -103,8 +103,9 @@ export function runAction(state, floor, table, p, a, meetings = null) {
   }
 }
 
-// Play the ACTIVE guest's whole turn. Returns a summary.
-export function playBotTurn(state, floor, table, { maxSteps = 40 } = {}) {
+// Play the ACTIVE guest's whole turn. Returns a summary. `onStep(action, result, meetings)`: after each
+// action (tools: a clock for the bots' chat runs alongside, tools/balance/bot-match.mjs).
+export function playBotTurn(state, floor, table, { maxSteps = 40, onStep = null } = {}) {
   const p = activePlayer(state);
   const summary = { seat: p.index, round: state.round, actions: [], refusals: [], meetings: [], discards: 0, ended: false };
   if (state.finished) return summary;
@@ -113,8 +114,10 @@ export function playBotTurn(state, floor, table, { maxSteps = 40 } = {}) {
   for (let step = 0; step < maxSteps && !state.finished && p.alive && activePlayer(state) === p; step++) {
     const a = table.nextAction(p.index);
     if (!a || a.k === 'end') break;
+    const before = summary.meetings.length;
     const r = runAction(state, floor, table, p, a, summary.meetings);
     summary.actions.push(a);
+    onStep?.(a, r, summary.meetings.slice(before));
     if (!r?.ok) {
       summary.refusals.push({ action: a, reason: r?.reason ?? null });
       table.reject(p.index, a, r?.reason ?? null);

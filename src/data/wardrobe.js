@@ -10,20 +10,20 @@
 // parts: which named materials each slot paints. derive: materials that follow a slot's colour,
 // darkened (linear multiply), so seams / satin lapels / the sash stay a shade darker than the cloth.
 export const BASES = {
-  victor: { label: 'Tuxedo', body: 'm', model: 'assets/characters/victor.glb',
+  victor: { label: 'Tuxedo', body: 'm', model: 'assets/characters/victor.glb', accentLabel: 'Bow tie',
     parts: { skin: ['Skin'], hair: ['Hair'], brow: ['Brow', 'Stache'], main: ['Jacket', 'Trouser'], accent: ['Tie'] },
     derive: { Lapel: { from: 'main', mul: 0.62 }, Shade: { from: 'main', dark: true } },
     original: { skin: 'fair', hair: 'black', main: 'midnight', accent: 'black' } },
-  marcus: { label: 'Suit and tie', body: 'm', model: 'assets/characters/marcus.glb',
+  marcus: { label: 'Suit and tie', body: 'm', model: 'assets/characters/marcus.glb', accentLabel: 'Tie',
     parts: { skin: ['Skin'], hair: ['Hair'], brow: ['Brow'], main: ['Jacket', 'Trouser'], accent: ['Tie'] },
     derive: { Shade: { from: 'main', dark: true } },
     original: { skin: 'tan', hair: 'black', main: 'midnight', accent: 'claret' } },
-  henry: { label: 'Dinner jacket', body: 'm', model: 'assets/characters/henry.glb',
+  henry: { label: 'Dinner jacket', body: 'm', model: 'assets/characters/henry.glb', accentLabel: 'Bow tie',
     parts: { skin: ['Skin'], hair: ['Hair'], brow: ['Brow'], main: ['Jacket'], accent: ['Tie'] },
     derive: { Shade: { from: 'main', dark: true } },
     builtInGlasses: 'Glasses',           // his own round frames: hidden unless the avatar wears 'round'
     original: { skin: 'rosy', hair: 'silver', main: 'ivory', accent: 'black', glasses: 'round', frame: 'tortoise' } },
-  clara: { label: 'Column dress', body: 'f', model: 'assets/characters/clara.glb',
+  clara: { label: 'Column dress', body: 'f', model: 'assets/characters/clara.glb', accentLabel: 'Sash',
     parts: { skin: ['Skin'], hair: ['Hair'], brow: ['Brow'], lips: ['Lips'], main: ['Dress'], accent: ['Sash'], metal: ['Gold'] },
     derive: {},
     original: { skin: 'rosy', hair: 'auburn', main: 'claret', accent: 'claret', metal: 'gold' } },
@@ -112,7 +112,10 @@ export const item = (slot, id) => ITEMS.find(i => i.slot === slot && i.id === id
 export const itemId = it => `${it.slot}.${it.id}`;
 // The body a look is made for ('m' | 'f'): the wardrobe's Male / Female choice.
 export const bodyOf = base => BASES[base]?.body || 'm';
-export const itemsFor = slot => ITEMS.filter(i => i.slot === slot);
+// The items of a slot, in catalogue order; with a `base`, only where that look has the part (an accent only
+// on the looks with a tie, bow tie or sash; jewellery only on the gowns).
+export const itemsFor = (slot, base = null) => (base && !slotOn(base, slot) ? [] : ITEMS.filter(i => i.slot === slot));
+const slotOn = (base, slot) => !['accent', 'metal'].includes(slot) || !!BASES[base]?.parts[slot];
 
 // The avatar a base wears by default (its original look).
 export function originalAvatar(base) {
@@ -142,3 +145,50 @@ export function normaliseAvatar(av, { owns = freeOwns } = {}) {
 
 // A stable string for an avatar (caches: portraits, soul faces, character views).
 export const avatarKey = av => `v1|${SLOTS.map(s => av?.[s] ?? '').join('|')}`;
+
+// ---- The wardrobe screen's order and words (src/ui/avatarEditor.js) ---------------------------------
+// The first choice is the body ('Male' / 'Female': the owner's words), which shows that body's three looks.
+export const BODIES = [{ id: 'm', label: 'Male' }, { id: 'f', label: 'Female' }];
+export const basesFor = body => Object.keys(BASES).filter(b => BASES[b].body === body);
+export const SLOT_LABELS = { base: 'Look', skin: 'Skin tone', hair: 'Hair', eyes: 'Eyes', glasses: 'Glasses', frame: 'Frame',
+  main: 'Outfit', accent: 'Accent', metal: 'Jewellery' };
+// The slots the wardrobe shows for an avatar, in order: Frame only while glasses are on, Accent only where
+// the look has one, Jewellery only on the gowns.
+export function slotsFor(av) {
+  return ['skin', 'hair', 'eyes', 'glasses', 'frame', 'main', 'accent', 'metal']
+    .filter(s => (s !== 'frame' || (av?.glasses && av.glasses !== 'none')) && slotOn(av?.base, s));
+}
+
+// Another look, keeping everything the new look can wear (skin, hair, eyes, glasses, outfit colour, and
+// the accent and jewellery where it has them).
+export function withBase(av, base, opts) {
+  if (!BASES[base]) return normaliseAvatar(av, opts);
+  const out = { ...originalAvatar(base), ...av, v: 1, base };
+  if (!slotOn(base, 'accent')) out.accent = originalAvatar(base).accent;
+  if (!slotOn(base, 'metal')) out.metal = originalAvatar(base).metal;
+  return normaliseAvatar(out, opts);
+}
+// The other body: the same place in its list of looks (Tuxedo <-> Column dress, ...), the rest kept.
+export function withBody(av, body, opts) {
+  if (bodyOf(av?.base) === body) return normaliseAvatar(av, opts);
+  const from = basesFor(bodyOf(av?.base)), to = basesFor(body);
+  return withBase(av, to[Math.max(0, from.indexOf(av?.base))] || to[0], opts);
+}
+
+// The look shipped as a picture (assets/portraits/<base>.jpg and -possessed.jpg), shown until the runtime
+// portrait of an avatar is ready (src/render/avatarPortrait.js) and for anything that has no renderer.
+export const shippedPortrait = (base, possessed = false) =>
+  `assets/portraits/${BASES[base] ? base : 'victor'}${possessed ? '-possessed' : ''}.jpg`;
+
+// The avatar of last round's "Your guest" choice (the 'guest' setting: a roster id 'p1'..'p6' or a name),
+// so an old player's first avatar is the guest they chose; null for 'random' or anything unknown.
+const GUEST_BASES = { p1: 'victor', p2: 'eleanor', p3: 'marcus', p4: 'beatrice', p5: 'henry', p6: 'clara' };
+export function avatarFromGuest(guest) {
+  if (guest == null) return null;
+  const v = String(guest).trim().toLowerCase();
+  const base = GUEST_BASES[v] || (BASES[v] ? v : null);
+  return base ? originalAvatar(base) : null;
+}
+
+// The look anyone without a profile wears (a direct link with no saved profile, a damaged save).
+export const DEFAULT_AVATAR = Object.freeze(originalAvatar('victor'));

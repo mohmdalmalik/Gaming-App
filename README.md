@@ -18,6 +18,23 @@ list). The page opens on a **main menu** over an animated, blurred hotel lobby (
 guests seated and strolling, the manager walking by): **Play with bots**, **Practice alone**, **Settings**,
 **Your record**.
 
+- **Your profile.** The first visit asks for a username ("Sign the register": 3 to 16 letters, numbers
+  or _, starting with a letter; **Suggest a name** picks one). The main menu then shows your profile card
+  ("Playing as velvet_owl · Adjust avatar ›"); **Change name** is on the avatar screen. At the table
+  everyone is a player: you by your username and avatar, each bot by its own username and its own
+  avatar (Victor, Clara and the other named guests stay in the lobby). Kept on this device for now
+  (`src/account/`), behind an interface a server account (Sign in with Apple / Google) can replace.
+
+- **Your avatar (the wardrobe).** **Adjust avatar** opens it: **Male** or **Female**, which shows that
+  body's three looks (Tuxedo, Suit and tie, Dinner jacket / Column dress, Ballgown, A-line gown), then
+  skin tone, hair, eyes, glasses (and their frame), outfit colour, the accent (bow tie, tie or sash) and
+  jewellery. Every pick shows at once on **your own avatar, who stands by the lift in the lobby** (the
+  camera moves in on them); it is kept when you leave the screen. Your avatar boards the lift first (alone
+  in practice, with Victor and Clara in a match). A few items show a lock and **"Coming soon"** (Platinum
+  hair, Monocle, Gold frames, Champagne and Gatsby gold outfits, Rose gold jewellery): nothing can be
+  bought or unlocked yet. Every portrait (the guest strip, your panel, the meeting, the trades, the soul
+  cards) is drawn from the guest's avatar while you play; the look's stock picture shows until it is.
+
 - **Play with bots.** You and 3–5 computer guests (bots), like an online table filling up: choose how
   many others and your role (random, clean guest or possessed), watch the guests join with their online
   names, then the manager takes guests up in the lift, the screen goes black and the match opens. Every
@@ -54,8 +71,8 @@ guests seated and strolling, the manager walking by): **Play with bots**, **Prac
 Hot-seat (several people passing one iPad) was removed at the owner's request; old `?mode=hotseat`
 links open a match against bots instead.
 
-**Online multiplayer is not implemented.** There is no server, no networking, no accounts and no
-database in this project.
+**Online multiplayer is not implemented.** There is no server, no networking, no online accounts and no
+database in this project: your username and avatar are kept on this device only.
 
 ## Open the preview
 
@@ -66,16 +83,21 @@ Published with GitHub Pages from `main`: **https://mohmdalmalik.github.io/Gaming
 ## Play with bots
 
 1. Open the preview: the main menu appears over the lobby. Tap **Play with bots**.
-2. Choose **your guest** (Random, or one of the six by portrait; practice uses the same choice), how
-   many **other guests** (3, 4 or 5) and **your role** (Random, Clean guest, Possessed), then **Find a
-   table**. The guests join one by one; when the table is full the lift sequence plays
+2. Choose how many **other guests** (3, 4 or 5) and **your role** (Random, Clean guest, Possessed), then
+   **Find a table**. The guests join one by one, each by username (yours marked "You"); seat colours go
+   by seat, so yours can change from table to table. When the table is full the lift sequence plays
    and the match opens on your secret role.
 3. On your turn you act (tap rooms, the search icon, cards, buttons); on the others' turns the bots play
    by themselves — the strip at the top shows who is **Playing**, the feed under the room name says what
    they just did, and a bot that walks in on you asks you for a card in private or attacks you.
-   **Chat** (by the Menu button) opens quick chat: nine preset lines and six emotes, one tap sends to the
-   whole table. It shows as a speech bubble over your guest and a line in the feed; the bots chat too,
-   now and then. Settings > Quick chat turns all of it off.
+   **Chat** (by the Menu button) opens quick chat: twenty preset lines in two tabs (**Table**: manners,
+   Lanterns, plans; **Suspicion**: "I am clean.", "I am possessed.", "<name> tried to possess me!", "I
+   trust <name>." …) and six emotes; one tap sends to the whole table. A line that names a guest asks
+   **Choose a guest** first (their portraits; Back returns). It shows as a speech bubble over your guest
+   and a line in the feed; a line about you reads as said to you ("You tried to possess me!"). The bots
+   talk too — an accusation after their Lantern burned a soul, a denial when named, a possessed bot's
+   lies — and they listen: each weighs what is said by how far it trusts the speaker. Settings > Quick
+   chat turns all of it off (then the bots neither talk nor listen).
 4. If you die you can watch or **Skip to the end**. The end screen shows every guest's role;
    **Play again** starts a new table with the same choices, **Main menu** goes back. A quiet line under
    the result gives your record ("Your record: 7 wins · 4 losses"); **Your record** on the main menu
@@ -85,8 +107,9 @@ Published with GitHub Pages from `main`: **https://mohmdalmalik.github.io/Gaming
 
 Direct links (they skip the menu and show a "Tap to begin" card; the tests use them):
 `?mode=practice`, `?mode=bots&bots=5&role=clean` (`role`: random | clean | possessed; `&seat=2` puts you
-in that seat; `&guest=clara` plays that guest, or `random`; without it practice is Victor and a match
-deals a random guest). Also `?timer=off` (no clock), `?seed=123` (the same deal, Possessor, table and hotel),
+in that seat; `&user=nora` plays under that name for the visit, checked like a username and never saved;
+without it you play as your profile, or as 'Guest' on a device with none — a direct link never shows the
+register). Also `?timer=off` (no clock), `?seed=123` (the same deal, Possessor, table and hotel),
 `?intro=off` (no lift sequence), `?botpace=0.1` (bots think 10× faster, for testing).
 
 The standard view is **corner-on**, like the owner's room pictures: the whole room at the default zoom,
@@ -189,21 +212,33 @@ src/
   config.js           display / camera / feel tuning
   settings.js         the player's own settings (bot speed, view, graphics, menu background, music, sound, quick chat, tips), kept on the device
   record.js           your record (played / won / lost, by side, escapes, practice escapes), kept on the device; counted by main.js at the end screen
-  social/chat.js      the table's quick-chat channel: a message is { seat, id, at } and nothing else (a server would relay it)
+  account/            who you are: account.js (the profile on this device, key 'hotelEscape.profile.v1', behind an
+                      async interface a server account can replace: signUp, rename, setAvatar, owns, onChange),
+                      profile.js (the profile's shape and its repair), username.js (the name rules, reserved
+                      words, the light filter, suggestions) — the last two pure (a server can reuse them)
+  table.js            who sits where: seats { id p1..pN, username, colour by seat, avatar }; the bots' avatars
+  social/chat.js      the table's quick-chat channel: a message is { seat, id, at } (+ about: the seat a line names) and nothing else (a server would relay it)
   audio/              music and sound (Web Audio): bus.js (the cue bus: sfx('doorOpen')), index.js (the player:
                       unlock on the first tap, music by scene with crossfades, effects with variation and a
                       voice cap), gameSounds.js (the hotel's sounds from the engine's PUBLIC events, footsteps),
                       sounds.js (the mix: cue -> file, levels, scenes), library.js (GENERATED file table)
   menu/               the lobby behind the main menu: lobbyScene.js (the API: idle life, the lift
-                      sequence, the camera), lobbyLayout.js (every position, the cast, paths and camera as
-                      data), lobbySet.js (the room), lobbyCast.js (guests, staff, seated poses),
+                      sequence, the camera; your avatar by the lift, setPlayerAvatar, and the wardrobe
+                      camera, setWardrobe), lobbyLayout.js (every position, the cast, your spot, paths and
+                      cameras as data), lobbySet.js (the room), lobbyCast.js (guests, staff, seated poses),
                       lobbyTextures.js (canvas textures, no image files). Preview: tools/menu-preview.html
                       (?menu=1 ?blur=1 ?enter=1&guests=3); check: node tests/menu-scene-shots.mjs
   data/
     rules.js          THE RULE NUMBERS — implements docs/GAME_RULES.md (owner-approved changes only)
     hotel.js          THE HOTEL: the lobby and the 24-tile room deck (doorways, dark, locked, furniture, moods)
-    characters.js     body types, outfits and the guests (up to six)
-    chat.js           quick chat: the preset lines and emotes, the cooldown, and when the bots may speak (BOT_CHAT)
+    characters.js     body types and outfits; `roster` (the six named guests) is only a fixture for the Node tests and tools now
+    names.js          the words of "Suggest a name", the reserved words (with the rules' log words) and the light filter (base64)
+    wardrobe.js       THE AVATAR CATALOGUE: the six looks (which named parts each slot paints), every item (colours,
+                      eye colours, glasses, frames; 'free' or locked 'earn' / 'shop'), item ids 'slot.key', an
+                      avatar made safe (normaliseAvatar), avatarKey; pure (a server can check avatars with it)
+    randomAvatar.js   a computer guest's look from its username (seeded, free items only, never a look already at the table)
+    chat.js           quick chat: the two tabs of preset lines and the emotes, the cooldown, when the bots may speak
+                      (BOT_CHAT) and how they weigh what they hear (BOT_HEAR)
     record.js         the words of Your record and of the end screen's record line
     tips.js           the first-match tips' words (one or two sentences each) and their timing
   game/               pure rules, no rendering (a server could reuse these)
@@ -220,14 +255,20 @@ src/
     profiles.js         usernames and playing styles (mostly medium; some bold, some careful)
     index.js            createBotTable: the API the interface calls (nextAction, tradeCard, thinkMs, …)
     autoplay.js         plays bot turns straight through the rules (Node tools; finishing a match at once)
-    chatter.js          the bots' quick chat: greetings, thanks, "Watch out!", "Good game!", answers — from
-                        each bot's own view only, never its private events; its own random numbers
+    chatter.js          the bots' quick chat: small talk and answers, and talk that carries information
+                        (accusations after their own Lantern block or Hand Mirror, denials, trust, a
+                        possessed bot's lies) — from each bot's own view and mind only; its own random numbers
+                        (listening is in brain.js: onChat / hearsay, weights in data/chat.js BOT_HEAR)
   render/             Three.js visuals: greybox rooms, doors, characters, cutaway, mood,
                       searched-room ticks; bakedRoom.js loads the baked rooms; xray.js fades
                       whatever stands between the camera and the active guest / search spot;
                       fog.js the fogged rooms beyond closed doors (+ "Explore · 1 AP" tags);
                       pathPreview.js the dotted path, outline + cost tag of a move to confirm;
-                      possessedLook.js the possessed player's own red eyes (shared with the portrait tool)
+                      possessedLook.js the possessed player's own red eyes (shared with the portrait tool);
+                      avatar.js a player's avatar from one of the six models (parsed once per look, cloned
+                      with its own colours, eye colour and glasses); avatarGlasses.js glasses fitted to any
+                      look; avatarPortrait.js the interface portraits drawn from an avatar with the game's
+                      own renderer (cached by look; the stock picture until ready)
   camera.js input.js player.js discovery.js   camera rig (zoom to fit the hotel, free pan, centre on
                                                me), gestures, movement, room→walk glue
   hud.js  map.js  overlays.js   HUD + action bar (room job / Escape, Trade, End turn), 2D map, overlays
@@ -239,12 +280,16 @@ src/
     screenTags.js                     the one layer for tags over the 3D view: under the interface, never over it
     guestTags.js                      one name tag per room with guests, when zoomed far out
     goTags.js                         the quiet "Go · 1 AP" tags on rooms next door
-    menu.js                           the main menu screens: Play with bots, the table, the guests joining, Settings, Your record
-    guestPicker.js                    "Your guest" on the table screen: Random or one of the six, by portrait
+    menu.js                           the main menu screens: the register, the main menu, your avatar, Play with bots, the table, the guests joining, Settings, Your record
+    register.js                       "Sign the register" (the first visit's username) and Change name
+    profileCard.js                    the main menu's card: "Playing as <name> · Adjust avatar ›"
+    avatarEditor.js                   the wardrobe (your avatar): Male / Female, the look, every slot, locked "Coming soon" items
+    portrait.js                       a guest's portrait: drawn from their avatar (the service main.js hands in), the stock picture until then
     record.js                         the Your record screen and the end screen's record line (words: src/data/record.js)
     feed.js                           what the other guests just did (public words), under the room name
-    chat.js                           quick chat: the Chat button and panel, speech bubbles over the guests, feed
-                                      lines, the end screen's "Good game!" (brass line emotes, no emoji)
+    chat.js                           quick chat: the Chat button and its two-tab panel, "Choose a guest" for a line
+                                      that names one, speech bubbles over the guests, feed lines, the end screen's
+                                      "Good game!" (brass line emotes, no emoji)
     tips.js                           first-match tips: when each comes up, where its card sits (beside what it
                                       explains, clear of the interface), once per device; Settings' "Show tips
                                       again" (words and timing: src/data/tips.js)
@@ -326,13 +371,21 @@ node tests/browser-bots.mjs       # the main menu and matches against bots in a 
 node tests/browser-lobby.mjs      # the baked starting room, fog rooms, tap to open / move, camera (big hotel), draw calls
 node tests/audio-check.mjs        # music and sound: unlock on the first tap, every file decodes, Settings, the menu -> lift -> game music, cues in a match and practice [--quick]
 node tests/trade-reveal-check.mjs # the trade scene: real trades for all seven outcomes (conversion with two new souls of your own, then your role; Lantern block; swap; you possess them; a soul spent on a guest already possessed; two souls crossed): soul faces, hands after, red eyes on known allies
+# (the browser tests' launchers seed a saved profile 'tester' before each page, so the menu opens on the
+#  main screen; tests/browser-profile.mjs starts with none, to check the register)
+node tests/avatar-check.mjs       # avatars: the catalogue and locked items, bots' looks, every look x every value, glasses, runtime portraits vs the stock pictures, red eyes on every look x eye colour, the wardrobe at the three iPad sizes, your avatar in the lift, four tables in a row (memory, draw calls)
+node tests/profile-check.mjs      # profiles: the name rules, reserved words and filter, suggestions, profile repair, the account (memory store), seats and bots' avatars, seeded tables, the feed's name masking (~1 s)
+node tests/browser-profile.mjs    # the first-run register, the profile card, Change name, blocked storage, usernames at the table, ?user=, long names [--screens] [--sizes 1024x768,1366x1024]
 node tests/tips-check.mjs         # first-match tips ON: where they sit, never blocking, the clock runs on, once per device, Hide tips, Show tips again [--size 1024x768] [--shots DIR]
 python3 tools/audio/build.py      # rebuild every sound, ~6 min (tools/audio/README.md); needs numpy, scipy, ffmpeg
 python3 tools/audio/build.py revolver lobby   # rebuild only these (effect or music names); updates library.js + report.json
 node tools/balance/hotseat-sim.mjs 400 6   # 400 six-player matches under the rules as they stand (--before: same bots on the rules before Part 2; --compare: Lantern variants; --cautious)
 node tools/balance/hotseat-sim.mjs --study  # six player personalities (tools/balance/personalities.mjs) + rule proposals, in memory only (tests/personality-report.md)
 node tests/bots-check.mjs                  # the computer guests: information honesty, 450 seeded matches, determinism, the feed's icons (~5 s)
-node tests/chat-check.mjs                  # quick chat: the lines, the channel, the bots' chat honesty (scrambled hidden state, own role too), no effect on the game, pacing, answers (~5 s)
+node tests/chat-check.mjs                  # quick chat: the 20 lines, the channel (about), the bots' talk and listening honesty (scrambled hidden state), talk alone never changes the game, sense, caps, pacing, answers (~15 s)
 node tools/balance/bot-match.mjs --n 1000  # all-bot matches at 6, 5 and 4 players: who wins, trust-building, blocks, waits
                                            # (--players 6, --trace one match, --tune blockBias=-0.2,... to try a bot knob)
+                                           # --chat talk|on: the bots' quick chat on a clock (talk: must match --chat off exactly;
+                                           # on: they listen too), with lines per match, accusations and how true they are;
+                                           # --hear k=v / --say moment.key=v try a chat knob; --inject id[:partner]@round an exploit test
 ```

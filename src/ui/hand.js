@@ -33,7 +33,7 @@ export function createHand(doc, cfg, { onUseBandage, onUnlock, onBarricade, onEs
   function render() {
     const { state, floor } = ctx;
     const p = viewerOf(state);
-    title.textContent = state.players.length > 1 ? 'Your hand' : `${p.name}'s hand`;
+    title.textContent = 'Your hand';
     const souls = soulsHeld(p);
 
     // Possession cards first, then the rest grouped by type (Lanterns lead the catalogue). The

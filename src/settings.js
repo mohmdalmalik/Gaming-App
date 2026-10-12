@@ -54,7 +54,9 @@ export const SETTING_CHOICES = {
   ],
 };
 
-const DEFAULTS = { botSpeed: 'normal', follow: 'follow', graphics: 'balanced', menuMotion: 'on', music: 'medium', sound: 'high', chat: 'on', tips: 'on', bots: 5, role: 'random', guest: 'random' };
+// (the old 'guest' setting, last round's "Your guest", is no longer used: a saved one only picks the first
+// avatar of a player signing the register, src/account/profile.js startingAvatar)
+const DEFAULTS = { botSpeed: 'normal', follow: 'follow', graphics: 'balanced', menuMotion: 'on', music: 'medium', sound: 'high', chat: 'on', tips: 'on', bots: 5, role: 'random' };
 
 function load() {
   try {

@@ -205,28 +205,62 @@
     <div id="menu" class="menu" hidden>
       <div class="menu-shade"></div>
       <div class="menu-panel">
+        <!-- "Sign the register": the first visit's username (src/ui/register.js); also Change name. -->
+        <section id="menu-signup" class="menu-screen" hidden>
+          <div id="su-kicker" class="menu-kicker">Welcome to Hotel Escape</div>
+          <h2 id="su-title" class="menu-h2">Sign the register</h2>
+          <form id="su-form" class="su-form" novalidate autocomplete="off">
+            <div class="su-field">
+              <input id="su-name" class="su-input" type="text" inputmode="text" autocomplete="nickname" autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="go" maxlength="16" placeholder="Your name" aria-label="Your name" aria-describedby="su-hint">
+              <span id="su-count" class="su-count" aria-hidden="true">0 / 16</span>
+            </div>
+            <div id="su-hint" class="su-hint" aria-live="polite">3 to 16 letters or numbers; _ is allowed too.</div>
+            <div class="menu-actions">
+              <button id="btn-su-suggest" class="menu-btn small" type="button">Suggest a name</button>
+              <button id="btn-su-go" class="menu-btn primary small" type="submit">Continue</button>
+            </div>
+          </form>
+          <div id="su-device" class="su-device">The name the other guests will know you by. Kept on this device for now; you can change it later.</div>
+          <div id="su-private" class="su-device su-private" hidden></div>
+        </section>
+
         <section id="menu-main" class="menu-screen">
           <div class="menu-kicker">A hidden-role game for 4&#8211;6 guests</div>
           <h1 class="menu-title">Hotel Escape</h1>
           <p class="menu-tag">Someone in this hotel is already possessed.</p>
+          <!-- Your profile (src/ui/profileCard.js): opens your avatar. -->
+          <button id="btn-profile" class="profile-card" type="button" hidden>
+            <span id="pc-portrait" class="pc-portrait"></span>
+            <span class="pc-text"><span class="pc-kicker">Playing as</span><span id="pc-name" class="pc-name"></span><span class="pc-edit">Adjust avatar &#x203A;</span></span>
+          </button>
           <div class="menu-buttons">
             <button id="btn-menu-bots" class="menu-btn primary" type="button" disabled><span class="mb-main">Play with bots</span><span class="mb-sub">Join a table of 4&#8211;6 guests</span></button>
             <button id="btn-menu-practice" class="menu-btn" type="button" disabled><span class="mb-main">Practice alone</span><span class="mb-sub">Explore the hotel and find the way out</span></button>
-            <button id="btn-menu-settings" class="menu-btn" type="button"><span class="mb-main">Settings</span></button>
-            <button id="btn-menu-record" class="menu-btn minor" type="button"><span class="mb-main">Your record</span></button>
+            <div class="menu-row2">
+              <button id="btn-menu-settings" class="menu-btn" type="button"><span class="mb-main">Settings</span></button>
+              <button id="btn-menu-record" class="menu-btn" type="button"><span class="mb-main">Your record</span></button>
+            </div>
           </div>
           <div id="menu-loading" class="menu-loading">Opening the hotel&#8230;</div>
+        </section>
+
+        <!-- Your avatar: the wardrobe (src/ui/avatarEditor.js); it previews on your avatar in the lobby. -->
+        <section id="menu-avatar" class="menu-screen" hidden>
+          <div class="menu-kicker">Your avatar</div>
+          <div class="av-head">
+            <h2 id="av-name" class="menu-h2 av-name"></h2>
+            <button id="btn-av-rename" class="av-rename" type="button">Change name</button>
+          </div>
+          <div id="av-body" class="av-body"></div>
+          <div id="av-note" class="av-note"></div>
+          <div class="menu-actions av-actions">
+            <button id="btn-av-done" class="menu-btn primary small" type="button">Done</button>
+          </div>
         </section>
 
         <section id="menu-bots" class="menu-screen" hidden>
           <div class="menu-kicker">Play with bots</div>
           <h2 class="menu-h2">Your table</h2>
-          <!-- Who you play, here and in practice (src/ui/guestPicker.js). -->
-          <div class="menu-field">
-            <div class="mf-label">Your guest</div>
-            <div id="opt-guest" class="seg guest-row" role="radiogroup" aria-label="Your guest"></div>
-            <div id="opt-guest-note" class="mf-note"></div>
-          </div>
           <div class="menu-field">
             <div class="mf-label">Other guests</div>
             <div id="opt-bots" class="seg" role="radiogroup" aria-label="How many other guests"></div>

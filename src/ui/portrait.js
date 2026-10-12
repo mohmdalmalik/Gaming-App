@@ -3,7 +3,41 @@
 // guest, framed in brass, with two states: normal and POSSESSED (the same face, both eyes a deep
 // blood-red iris with a white catchlight; nothing else changes).
 // Callers only ask for a portrait of a player in a given state and place the returned element.
+//
+// A player with an `avatar` (src/data/wardrobe.js: every seat at the table, the profile card) gets their
+// own portrait, drawn at run time by the portrait service main.js hands in (setPortraitService: src/render/
+// avatarPortrait.js, so src/ui keeps no three.js import). Until it is drawn the look's shipped picture
+// (assets/portraits/<look>.jpg, -possessed.jpg) shows, and every <img> of that portrait is swapped in place
+// the moment it is ready. `img.dataset.look` says which state it shows ('normal' | 'possessed').
+// PORTRAIT_ART stays for anything still keyed by outfit (tools, old fixtures).
 import { outfits, bodyTypes } from '../data/characters.js';
+import { avatarKey, shippedPortrait } from '../data/wardrobe.js';
+
+let service = null;          // { peek(avatar, { possessed }), url(avatar, { possessed }) -> Promise<url|null> }
+export function setPortraitService(svc) { service = svc || null; }
+const portraitTag = (av, possessed) => `${avatarKey(av)}:${possessed ? 'p' : 'n'}`.replace(/[^A-Za-z0-9_:-]/g, '-');
+
+function avatarPortrait(doc, player, possessed) {
+  const av = player.avatar;
+  const img = doc.createElement('img');
+  img.className = 'portrait-img';
+  img.alt = `${player.name || ''}${possessed ? ', possessed' : ''}`;
+  img.decoding = 'async';
+  img.draggable = false;
+  img.dataset.look = possessed ? 'possessed' : 'normal';
+  const tag = portraitTag(av, possessed);
+  img.dataset.portrait = tag;
+  const ready = service?.peek(av, { possessed }) || null;
+  img.src = ready || shippedPortrait(av.base, possessed);
+  if (!ready && service) {
+    service.url(av, { possessed }).then(url => {
+      if (!url) return;
+      const all = new Set([img, ...doc.querySelectorAll(`img[data-portrait="${tag}"]`)]);
+      for (const el of all) if (el.getAttribute('src') !== url) el.src = url;
+    }).catch(() => {});
+  }
+  return img;
+}
 
 // Drop-in artwork: outfit id → an image path, OR an object with separate looks:
 //   tuxedo: 'assets/portraits/victor.png'                            // one image (normal)
@@ -22,6 +56,7 @@ export const PORTRAIT_ART = {
 };
 
 export function makePortrait(doc, player, { possessed = false } = {}) {
+  if (player?.avatar) return avatarPortrait(doc, player, possessed);
   // Real artwork, if registered for this guest's outfit. Honour the possessed state: use a
   // dedicated possessed image when supplied (the same face with red eyes), otherwise the normal image
   // unchanged. The public strip always asks for the neutral look (possessed:false).

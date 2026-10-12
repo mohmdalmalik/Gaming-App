@@ -11,6 +11,10 @@
 // approach as src/render/characterView.js). There is no sit clip: sitting is posed at runtime on top
 // of the Idle clip (pelvis lowered and pushed back, legs solved by a two-bone IK so the feet stay
 // planted on the floor, forearms resting on the lap), blended in and out over ~0.6 s.
+//
+// The player's own avatar is the one exception (createAvatarActor): it is the game's own avatar model
+// (src/render/avatar.js: its parts, eye colour and glasses, repainted live by the wardrobe), driven by
+// the same Actor, so it walks, glances and boards like everyone else. ~10-15 draw calls, menu only.
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
@@ -158,13 +162,15 @@ export class Actor {
     this.tpl = tpl;
     this.group = new THREE.Group();
     this.group.name = `menu-actor:${spec.name}`;
-    const root = SkeletonUtils.clone(tpl.root);
+    // (a ready-made model — the player's avatar — is used as it is: its own parts and materials)
+    const root = tpl.prebuilt ? tpl.root : SkeletonUtils.clone(tpl.root);
     this.model = root;
     let mesh = null;
-    root.traverse(o => { if (o.isSkinnedMesh) mesh = o; });
-    mesh.geometry = dressedGeometry(tpl, mesh, spec.dress);
-    mesh.material = castMaterial();
-    mesh.frustumCulled = false;
+    root.traverse(o => { if (o.isSkinnedMesh) { mesh = o; o.frustumCulled = false; } });
+    if (!tpl.prebuilt) {
+      mesh.geometry = dressedGeometry(tpl, mesh, spec.dress);
+      mesh.material = castMaterial();
+    }
     this.mesh = mesh;
     if (spec.scale) root.scale.setScalar(spec.scale);
     this.group.add(root);
@@ -406,9 +412,15 @@ export class Actor {
 
   dispose() {
     this.group.parent?.remove(this.group);
-    if (this.spec.dress) this.mesh.geometry.dispose();
+    if (this.spec.dress && !this.tpl.prebuilt) this.mesh.geometry.dispose();
     this.mixer.stopAllAction();
   }
+}
+
+// The player's avatar as a lobby person: `model` from src/render/avatar.js createAvatarModel (its owner
+// disposes it), `base` its look (the clips and the stride).
+export function createAvatarActor(model, base, spec, parent) {
+  return new Actor({ prebuilt: true, root: model.root, idle: base.clips.idle, walk: base.clips.walk, strideLength: base.strideLength }, spec, parent);
 }
 
 export async function createActor(spec, parent) {

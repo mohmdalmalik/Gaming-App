@@ -6,7 +6,7 @@
 //      (state.setup.possessedIndex) leaves the hotel, the deck and the hands exactly as a random deal would
 //   3. INFORMATION HONESTY: a bot's view — and every choice it makes — is identical when everything the
 //      guest could not know (other guests' hands, roles, private notes and events, the draw pile, the room
-//      deck's order) is scrambled
+//      deck's order) is scrambled, having heard the same lines at the table (quick chat)
 //   4. hundreds of seeded all-bot matches at 4, 5 and 6 players: no crash, no refused-action loop, every
 //      match ends
 //   5. determinism: the same seed plays the same match
@@ -31,6 +31,8 @@ import { createMind } from '../src/bots/brain.js';
 import { createBotTable } from '../src/bots/index.js';
 import { rollProfiles, rollProfile, USERNAMES } from '../src/bots/profiles.js';
 import { playBotTurn, playOut } from '../src/bots/autoplay.js';
+import { createChatter } from '../src/bots/chatter.js';
+import { BOT_CHAT } from '../src/data/chat.js';
 import { _kindOf as feedKind } from '../src/ui/feed.js';
 
 const t0 = Date.now();
@@ -60,8 +62,9 @@ for (const f of fs.readdirSync(new URL('../src/bots/', import.meta.url))) {
 }
 {
   const brain = fs.readFileSync(new URL('../src/bots/brain.js', import.meta.url), 'utf8');
-  const imports = [...brain.matchAll(/^import .* from ['"](.*)['"];?$/gm)].map(m => m[1]);
-  check(imports.length === 1 && imports[0] === '../game/cards.js', `brain.js imports only makeRng from cards.js (it reads the view, never the state): ${imports.join(', ')}`);
+  const imports = [...brain.matchAll(/^import .* from ['"](.*)['"];?$/gm)].map(m => m[1]).sort();
+  check(JSON.stringify(imports) === JSON.stringify(['../data/chat.js', '../game/cards.js']),
+    `brain.js imports only makeRng from cards.js and how it weighs what it hears (data/chat.js): it reads the view, never the state: ${imports.join(', ')}`);
 }
 
 // --- 2. engine additions ---------------------------------------------------------------------------------
@@ -166,11 +169,12 @@ function restore(state, snap) {
   state.drawPile = snap.drawPile; state.discardPile = snap.discardPile;
   floor.deck.length = 0; floor.deck.push(...snap.deck);
 }
-// What a FRESH mind with this seed chooses, having read everything this seat may know up to now.
-function choices(state, seat, profile) {
+// What a FRESH mind with this seed chooses, having read everything this seat may know up to now (and
+// heard: the lines said at the table, { seq, msg }, the same in both worlds).
+function choices(state, seat, profile, heard = []) {
   const mind = createMind(seat, profile, 991);
   const view = botView(state, floor, seat, mind.cursor);
-  mind.observe(view);
+  mind.observe(view, heard);
   const other = (seat + 1) % state.players.length;
   const allowed = A.tradeableCards(state.players[seat]).map(c => c.id);
   const isActive = state.activeIndex === seat;
@@ -181,27 +185,34 @@ function choices(state, seat, profile) {
     meet: mind.meetWhom(view, state.players.map(p => p.index).filter(i => i !== seat)),
     accept: mind.acceptTrade(view, other),
     discard: allowed.length ? mind.discard(view, allowed.filter(id => state.players[seat].hand.find(c => c.id === id)?.type !== 'possession')) : null,
-    mem: { known: [...mind.mem.known], allies: [...mind.mem.allies], knowsMe: [...mind.mem.knowsMe], susp: [...mind.mem.susp], trust: [...mind.mem.trust] },
+    mem: { known: [...mind.mem.known], allies: [...mind.mem.allies], knowsMe: [...mind.mem.knowsMe], susp: [...mind.mem.susp], trust: [...mind.mem.trust],
+      liar: [...mind.mem.liar], allyHint: [...mind.mem.allyHint], hearsay: state.players.map(p => (p.index === seat ? 0 : mind.hearsay(mind.context(view), p.index))) },
   });
 }
 {
-  let views = 0, viewSame = 0, decisions = 0, decisionSame = 0, possessedViews = 0;
+  let views = 0, viewSame = 0, decisions = 0, decisionSame = 0, possessedViews = 0, lines = 0;
   const rng = makeRng(31337);
   for (let k = 0; k < 24; k++) {
     const players = 4 + (k % 3);
     const { state, table, profiles } = newMatch(5000 + k, players);
+    // the bots talk at the table as they play (src/bots/chatter.js), and every line is heard
+    const chatter = createChatter(state, floor, profiles.map((profile, index) => ({ index, profile })), 600 + k, BOT_CHAT, table);
+    const heard = [];
+    let now = 0;
+    const talk = () => { for (let i = 0; i < 24; i++) { now += 500; for (const m of chatter.tick(now)) { heard.push({ seq: state.eventSeq, msg: m }); table.hear(m); chatter.hear(m, now); } } };
     const stopAt = 6 + (k * 5) % 24;          // somewhere in rounds 2..6
-    for (let t = 0; t < stopAt && !state.finished; t++) playBotTurn(state, floor, table);
+    for (let t = 0; t < stopAt && !state.finished; t++) { playBotTurn(state, floor, table); talk(); }
     if (state.finished) continue;
+    lines += heard.length;
     for (const p of state.players) {
       if (!p.alive) continue;
       const seat = p.index;
       const before = JSON.stringify(botView(state, floor, seat));
-      const decBefore = choices(state, seat, profiles[seat]);
+      const decBefore = choices(state, seat, profiles[seat], heard);
       const snap = snapshot(state);
       scramble(state, seat, rng);
       const after = JSON.stringify(botView(state, floor, seat));
-      const decAfter = choices(state, seat, profiles[seat]);
+      const decAfter = choices(state, seat, profiles[seat], heard);
       restore(state, snap);
       views++; if (before === after) viewSame++;
       decisions++; if (decBefore === decAfter) decisionSame++;
@@ -209,7 +220,7 @@ function choices(state, seat, profile) {
     }
   }
   check(views > 80 && viewSame === views, `a bot's view never changes when hidden information is scrambled (${viewSame}/${views} views, ${possessedViews} of them possessed guests)`);
-  check(decisionSame === decisions, `nor does any choice it makes or anything it concludes (${decisionSame}/${decisions})`);
+  check(decisionSame === decisions && lines > 100, `nor does any choice it makes or anything it concludes, having heard the same lines at the table (${decisionSame}/${decisions}; ${lines} lines heard)`);
   const v = botView(newMatch(1, 6).state, floor, 2);
   const keys = JSON.stringify(v.players[0]);
   check(!/hand|possess|name|"id"|knows|notes|inbox/.test(keys), `other guests are seen only as seat, room, health, alive, escaped: ${keys}`);

@@ -60,9 +60,11 @@ export function rollProfile(rng, { style = null, username = null } = {}) {
   return { username: username || NAMES[Math.floor(rng() * NAMES.length)], style: s, label: base.label, traits, pace };
 }
 
-// `count` profiles for one match: no username twice.
-export function rollProfiles(count, rng) {
-  const pool = [...NAMES];
+// `count` profiles for one match: no username twice, and none of `avoid` (the player's own name, case
+// ignored). The number of random draws is the same either way.
+export function rollProfiles(count, rng, { avoid = [] } = {}) {
+  const taken = new Set(avoid.filter(a => typeof a === 'string').map(a => a.toLowerCase()));
+  const pool = NAMES.filter(n => !taken.has(n.toLowerCase()));
   const out = [];
   for (let k = 0; k < count; k++) {
     const name = pool.splice(Math.floor(rng() * pool.length), 1)[0] || `guest_${k + 1}`;

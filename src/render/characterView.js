@@ -1,7 +1,9 @@
-// Character view. Two kinds, behind ONE surface { group, def, outfit, update(mover, dt),
-// setActive, setDead, setPossessed }:
-//   • a real rounded glTF guest (when the outfit has a `model`) — a skinned model with Idle/Walk
-//     clips, cross-faded by movement with the stride matched to speed;
+// Character view. Three kinds, behind ONE surface { group, def, outfit, update(mover, dt),
+// setActive, setDead, setPossessed, setAvatar, setDef, dispose }:
+//   • a player's avatar (when the seat has an `avatar`: every seat at the table) — one of the six
+//     looks, parsed once per look and cloned with its own colours, eye colour and glasses
+//     (src/render/avatar.js), with Idle/Walk clips cross-faded by movement, the stride matched to speed;
+//   • a real rounded glTF guest (an outfit with a `model`: old fixtures) — the same, loaded on its own;
 //   • the placeholder articulated box figure (everyone else) with a simple procedural walk.
 // The game logic never touches anything inside; travel/collision come from the mover.
 import * as THREE from 'three';
@@ -10,6 +12,8 @@ import { lambert, makeShadow } from './materials.js';
 import { bodyTypes, outfits } from '../data/characters.js';
 import { xrayGuest } from './xray.js';
 import { createPossessedEyes } from './possessedLook.js';
+import { loadBase, createAvatarModel, GAME_RIM } from './avatar.js';
+import { BASES } from '../data/wardrobe.js';
 
 const gltfLoader = new GLTFLoader();
 
@@ -43,8 +47,12 @@ function box(geo, color, w, h, d, emissive) {
   return m;
 }
 
+// (an avatar's stand-in outfit: only its body and nominal height are read before the model loads)
+const avatarOutfit = av => ({ name: BASES[av.base]?.label || 'Guest', body: BASES[av.base]?.body === 'f' ? 'female' : 'male', modelHeight: 1.66, avatar: true });
+
 export function createCharacterView(playerDef, cfg, scene) {
-  const outfit = outfits[playerDef.outfit];
+  let avatar = playerDef.avatar || null;
+  const outfit = avatar ? avatarOutfit(avatar) : outfits[playerDef.outfit];
   if (!outfit) throw new Error(`Unknown outfit "${playerDef.outfit}" for ${playerDef.name}`);
   const b = bodyTypes[outfit.body];
   const c = cfg.character;
@@ -54,7 +62,7 @@ export function createCharacterView(playerDef, cfg, scene) {
   const sleeveColor = female ? (outfit.sleeves === 'long' ? outfit.bodice : b.skin) : outfit.jacket;
   const hipsTop = b.legLength + b.hipHeight;
   const shoulderY = hipsTop + b.torsoHeight;
-  const useModel = !!outfit.model;
+  const useModel = !!avatar || !!outfit.model;
 
   const group = new THREE.Group();
   group.name = `character:${playerDef.id}`;
@@ -93,8 +101,44 @@ export function createCharacterView(playerDef, cfg, scene) {
   // The possessed look (red eyes, src/render/possessedLook.js): wanted state, applied once the model
   // has loaded. The placeholder box figure has no eyes to change.
   let eyes = null, possessedWanted = false;
+  let model = null, loadToken = 0, ownGltf = null;   // (avatar: the avatar model; a glTF guest: its own scene)
 
-  if (useModel) {
+  // An avatar's model: the look parsed once (shared by every seat in it), cloned with this seat's colours.
+  function loadAvatar(av) {
+    const token = ++loadToken;
+    loadBase(av.base).then(base => {
+      if (token !== loadToken || disposed) return;
+      dropModel();
+      model = createAvatarModel(base, av, { rim: GAME_RIM });
+      body.add(model.root);
+      eyes = { set: v => model.setPossessed(v), get on() { return model.eyes.on; } };
+      eyes.set(possessedWanted);
+      strideLength = base.strideLength;
+      headY = base.height > 0.8 && base.height < 2.4 ? base.height : headY;
+      marker.position.y = headY + c.markerHeight;
+      startClips(model.root, base.clips.idle, base.clips.walk);
+    }).catch(e => console.warn('character model load failed:', av.base, e && e.message));
+  }
+  function startClips(root, idle, walk) {
+    mixer = new THREE.AnimationMixer(root);
+    walkW = 0; prevX = prevZ = null;
+    if (idle) { idleAction = mixer.clipAction(idle); idleAction.play(); idleAction.setEffectiveWeight(1); }
+    if (walk) {
+      walkAction = mixer.clipAction(walk); walkAction.play(); walkAction.setEffectiveWeight(0);
+      walkAction.timeScale = 0;              // phase is advanced by distance in update(), not by time
+      walkDuration = walk.duration;
+    }
+    if (dead) api.setDead(true);
+  }
+  function dropModel() {
+    if (mixer) mixer.stopAllAction();
+    mixer = idleAction = walkAction = null;
+    if (model) { model.dispose(); model = null; }
+    eyes = null;
+  }
+
+  if (avatar) loadAvatar(avatar);
+  else if (useModel) {
     // Load the real guest. Skinned meshes can be wrongly frustum-culled from a stale bind-pose
     // bound, so disable culling. Convert the model's PBR materials to the same matte
     // MeshLambertMaterial the rest of the greybox uses (KEEPING each part's own colour — no
@@ -102,7 +146,9 @@ export function createCharacterView(playerDef, cfg, scene) {
     // MeshStandard's specular would blow a bright hotspot on the round head under the warm overhead
     // light, reading as a shiny bald dome; matte Lambert removes it and matches every other guest.
     gltfLoader.load(outfit.model, (gltf) => {
+      if (disposed) return;
       const root = gltf.scene;
+      ownGltf = root;
       root.traverse(o => {
         if (o.userData && typeof o.userData.strideLength === 'number') strideLength = o.userData.strideLength;
         if (!o.isMesh) return;
@@ -251,14 +297,44 @@ export function createCharacterView(playerDef, cfg, scene) {
   let amp = 0;     // placeholder: 0 = standing, 1 = full walk cycle
   let active = false;
   let dead = false;
+  let disposed = false;
 
-  return {
+  const api = {
     group,
     def: playerDef,
     outfit,
+    // The seat's new look (the wardrobe, a reused view): the same look is repainted at once; another look
+    // loads (shared, parsed once) and replaces the figure. (Avatar views only.)
+    setAvatar(av) {
+      if (!avatar || !av) return;
+      const sameBase = av.base === avatar.base;
+      avatar = av;
+      if (sameBase && model) model.setAvatar(av);
+      else loadAvatar(av);
+    },
+    // A reused view at a new table: the seat it now shows (its colour: ring and marker).
+    setDef(def) {
+      api.def = def;
+      ringMat.color.set(def.color);
+      marker.material.color.set(def.color);
+      if (def.avatar) api.setAvatar(def.avatar);
+    },
+    // Let go of everything this view made (a view not at the table any more). The look's shared
+    // geometry stays with the look (src/render/avatar.js), ready for the next guest wearing it.
+    dispose() {
+      disposed = true;
+      loadToken++;
+      dropModel();
+      scene.remove(group);
+      // (the shadow, the box figure's colours and the shared geometries are shared by every view: kept)
+      ringMat.dispose(); marker.material.dispose(); bloodMat.dispose();
+      for (const d of blood.children) d.geometry.dispose();
+      if (ownGltf) ownGltf.traverse(o => { if (o.isMesh) { o.geometry.dispose(); (Array.isArray(o.material) ? o.material : [o.material]).forEach(m => m.dispose()); } });
+    },
     // Test/debug hook: what the animation is doing (stride in use, walk weight, walk phase 0..1).
     debug() {
-      return { model: useModel, loaded: !!mixer, strideLength, walkDuration, walkW, walkPhase: walkAction ? walkAction.time / walkDuration : 0, possessedEyes: !!eyes?.on };
+      return { model: useModel, loaded: !!mixer, strideLength, walkDuration, walkW, walkPhase: walkAction ? walkAction.time / walkDuration : 0, possessedEyes: !!eyes?.on,
+        avatar: avatar ? { ...avatar } : null, glasses: !!model?.glasses };
     },
     // The possessed look on this figure (red eyes). Cheap: does nothing unless it changes. Whose screen
     // shows it is main.js's decision (the player's own guest while possessed, and the guests a possessed
@@ -343,4 +419,5 @@ export function createCharacterView(playerDef, cfg, scene) {
       marker.rotation.y += dt * 1.5;
     },
   };
+  return api;
 }

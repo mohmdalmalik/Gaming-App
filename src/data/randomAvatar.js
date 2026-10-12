@@ -2,8 +2,12 @@
 // no DOM): the same in a browser, in Node and on a server. Deterministic: seeded from the bot's USERNAME,
 // so "nightowl" always looks like nightowl (like a real returning player), and it never touches the
 // match's own random numbers (the table, the deal and the bots' choices stay exactly as they are).
-// At one table: never two guests with the same look AND outfit colour, and at most two with the same
-// look (a clash re-rolls with a salt: still deterministic).
+// At one table (`taken`: the avatars already seated, the player's own among them): never a look someone
+// else already wears while a free look is left (six looks, at most six seats: so never, today), the look
+// then picked from the free ones by a second stream of the same name, so only the look (and its accent /
+// jewellery) moves and the colours stay that bot's own. Only when every look is taken: never the same look
+// AND outfit colour, and at most two of one look (a clash re-rolls with a salt: still deterministic).
+// Free items only: a bot never wears a locked "Coming soon" item.
 import { BASES, ITEMS } from './wardrobe.js';
 
 function mulberry32(seed) {
@@ -27,7 +31,11 @@ const free = slot => ITEMS.filter(i => i.slot === slot && i.unlock === 'free').m
 // taken: the avatars already at the table.
 export function randomAvatar(username, { taken = [], salt = 0 } = {}) {
   const rng = mulberry32(hashString(`${username}#${salt}`));
-  const base = pick(rng, Object.keys(BASES));
+  const all = Object.keys(BASES);
+  let base = pick(rng, all);
+  const used = new Set(taken.filter(Boolean).map(t => t.base));
+  const open = all.filter(b => !used.has(b));
+  if (used.has(base) && open.length) base = pick(mulberry32(hashString(`${username}#look`)), open);
   const hasAccent = !!BASES[base].parts.accent, hasMetal = !!BASES[base].parts.metal;
   const main = pick(rng, free('main'));
   const av = {
@@ -41,8 +49,16 @@ export function randomAvatar(username, { taken = [], salt = 0 } = {}) {
     accent: hasAccent ? pick(rng, free('accent').filter(a => a !== main)) : 'black',
     metal: hasMetal ? (rng() < 0.7 ? 'gold' : 'silver') : 'gold',
   };
-  // never the same look in the same colour as someone already at the table
-  const clash = taken.some(t => t.base === av.base && t.main === av.main) || taken.filter(t => t.base === av.base).length >= 2;
+  // (every look taken) never the same look in the same colour as someone already at the table
+  const seated = taken.filter(Boolean);
+  const clash = seated.some(t => t.base === av.base && t.main === av.main) || seated.filter(t => t.base === av.base).length >= 2;
   if (clash && salt < 12) return randomAvatar(username, { taken, salt: salt + 1 });
   return av;
+}
+
+// The avatars of a table's computer guests, in seat order: each from its username, none in a look already
+// at the table (`taken`: the player's own avatar first) while a free look is left.
+export function tableAvatars(usernames, { taken = [] } = {}) {
+  const seated = [...taken];
+  return usernames.map(u => { const av = randomAvatar(u, { taken: seated }); seated.push(av); return av; });
 }

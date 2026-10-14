@@ -1958,3 +1958,108 @@ An independent review of the three builds above found these; each was reproduced
   (the tip is placed against the bar while it slides in and moves at the next tick, which on a loaded machine is
   later than the fixed 600 ms the test waited); the README's rollback section says how to bring the rolled-back
   work back (`git revert` the rollback commit: a merge of the old branch says "Already up to date").
+
+## Round 2, learn: How to play, the Menu panel, the Lanterns chip, Victory / Defeat, three tips (14 Oct 2026 — interface, tests and docs only; no rule or rule number changed)
+
+From the 13 Oct audit (owner-approved list: F1 teach new players, G17 the Menu panel, G6 the Lanterns count and
+the end screen, G11 tips). Every number a sentence shows is read from `src/data/rules.js`; `docs/GAME_RULES.md` is
+untouched and no rule was added, removed or changed.
+
+- **One word for the action budget** (`src/ui/actionsWord.js`): "1 action" / "3 actions", never "AP" or "action
+  points", on the tags ("Explore · 1 action", "Go · 1 action"), the Move button and its path tag ("Move · 2
+  actions"), the toasts ("No actions left.", "Not enough actions: ..."), the old hand-over line. The panel's label
+  Actions and the tips already said it. Internal names (`actionPoints`, `actionCost`) and code comments are as they
+  were. `tests/howto-check.mjs` scans every string literal of `src/` (comments left out) and `index.html` for "AP" and
+  "action points", so the old word cannot come back unseen.
+- **How to play** (`src/ui/howToPlay.js`, markup `#howto-overlay`, words `src/data/howToPlay.js`). Five pages from the
+  lead's draft (the goal; your turn; meetings and trades; possession and Lanterns; staying alive), Back / Next /
+  Close. All the wording is in the data file (the owner is reviewing it, so it changes in one place); each line is a
+  function of the rules (`r => ...`, as the tips are), so 4 actions, 45 seconds, 3 Lanterns, 4 health, 6 cards, round
+  8, the Knife's and Revolver's numbers, the Espresso's 2 extra actions and the Infirmary's numbers are never typed
+  in. `tests/howto-check.mjs` draws the pages from a copy of the rules with every number changed and checks the new
+  numbers appear and none of the old ones (and, when the costs of opening, moving, searching, using a card and a room's
+  job stop being equal, the sentence "cost 1 action each" gives way to each cost on its own). One overlay serves both
+  places it opens from (z-index 60: above the main menu's 40 and the Menu panel's 12), and gives the screen back on
+  Close (focus too). It is only reading: it can only open from the main menu or from the Menu panel, which already
+  holds the clock (below). Every page gets the height of the tallest, so Back and Next stay where the finger found
+  them; if a very short window cannot fit a page the lines scroll inside the card (`data-scrolls`) and the buttons
+  stay. Under the tap guard (`src/ui/tapGuard.js`): the second tap of a double tap on the button that opened it answers
+  nothing, and a double tap on Next turns one page. Keyboard: focus moves in (to Next), Tab stays inside, the arrow
+  keys turn pages, Escape closes, focus goes back. It restates the draft exactly; one thing is NOT in it that the
+  owner may want: the Lantern gamble's other half ("a Lantern is lost if the other guest gives you an ordinary card")
+  is said by the first-meeting tip, not on page 4.
+- **The hint under "Practice alone"** (`NEW_PLAYER_HINT`, `src/ui/menu.js renderHint`): shown while the record
+  (`src/record.js`) has no finished match and no finished practice. A match left early does NOT hide it (nothing
+  was played to the end: that player still has not seen how a match goes). It goes for good at the first finished
+  match or practice. The main menu's row is now How to play | Settings | Your record (three equal buttons, 17 px
+  serif); the menu panel is 474 px tall at 1024x694 with the hint, centred (110-584 of 694).
+- **The role screen** (`src/ui/handoff.js revealRole`): the headline is "You are clean" / "You are possessed" (the
+  badge CLEAN GUEST / POSSESSED stays; the player's name is no longer the headline: it is on the panel and the
+  strip), the paragraph is 16 px (was 13), and ONE line below it says how the OTHER side wins (the clean guest is told
+  how the possessed win; the possessed guest, how the clean guests win, "3 Lanterns" from the rules). The change of
+  role mid-match ("You have been possessed") keeps its own headline and gets the possessed line. A possessed guest's
+  own way to win is still only in the tips ("you win at dawn, or when no clean guest is left"): the draft asked for
+  the other side's line only. At 1024x694 the clean card is 436 px and the possessed card 462 px tall (of 694).
+- **The Menu panel** (`src/ui/gameMenu.js`, markup `#gamemenu-overlay`, words `src/data/gameMenu.js`). The Menu button
+  (`#btn-leave`) opens Resume (gold), Music and Sound effects (the same Off / Low / Medium / High, the same saved
+  settings and the same `audio.applySettings()` as Settings), How to play, and Leave (it says "Leave practice" in
+  practice). Leave closes the panel and opens the game's own question exactly as before ("Leave the match?" /
+  "Leave practice?", Keep playing in gold, `#btn-ask-yes` / `#btn-ask-no`); Keep playing goes back to the game, not
+  to the panel. On the end screen the button still goes straight to the main menu; while a screen of the game is up,
+  or a meeting is live, it still does nothing. Focus moves to Resume, Tab stays inside, Escape resumes and
+  gives the focus back to the Menu button; a tap on the dark round the card resumes too (as it closes the question).
+  **What the turn clock does with the Menu, found out before it was touched and kept exactly.** Before this panel the
+  Menu button opened "Leave the match?"; while any question is up `timerPaused()` is true (it includes the question), so
+  the clock stood still (on the player's own turn and on a computer guest's turn alike: `tickTimer` returns before
+  counting), `botTick` returned (the computer guests waited; a walk already under way finished), and the hand, the
+  search icon and the Chat button stepped aside (`screenClear`), the tips waited (`covered`), the game's buttons were
+  held (`uiBusy`). Keep playing, or a tap outside the card, gave the clock back with the time it had; Main menu
+  counted the match as left early. The panel is the same: `main.js` asks `askUp()` (a question is up OR the panel
+  is open) in exactly the five places it asked "is a question up?", so the clock stands still while the panel is
+  open, while How to play is open from it, and while the question after Leave is open. Nothing in the panel starts,
+  stops or changes the clock. Whether it SHOULD run while the Menu is open (an online table cannot hold one player's
+  clock) is the owner's pending decision; if the owner decides it should run, it is one line (`askUp` /
+  `timerPaused`). `tests/browser-learn.mjs` pins it: the clock does not move over 2.5 s with the panel open, nor
+  with the question open, and runs after Keep playing / Resume.
+- **The Lanterns chip** (`src/hud.js syncLanterns`, markup `#lantern-chip`): "✦ LANTERNS 1/3" in the player panel
+  under Actions, your OWN count (Lanterns in your own hand) out of `rules.lanternsToEscape`, in practice and in a
+  match, the same form and wording for a clean and a possessed guest (a possessed guest can hold Lanterns too, and
+  nothing about the chip changes at 3/3: it says nothing of a side). It touches the page only when the count changes
+  and runs every frame with the tell. It sits in the panel's own column (the panel grows about 28 px upward; the possessed
+  panel, which also shows its souls, grows the same), so it crowds nothing: checked against the strip, the room name,
+  the hand fan, the buttons and the toast at the four sizes. Not done: the audit also suggested the count on the
+  match map (`src/map.js` draws it only in practice, with a comment that it was private on a shared screen): the
+  brief asked for the chip only.
+- **The end screen** (`src/overlays.js showEnd`, `src/main.js showEnd`, `src/ui/endRecap.js`, words
+  `src/data/endScreen.js`): "Victory" or "Defeat" above the title, for the player's side whether or not they are alive
+  or got out (a dead clean guest whose side got out sees Victory), gold or salmon like the title; the summary's second
+  line now says who won ("The clean guests win. · Round 5 of 8"; the old "your side" phrase is what Victory / Defeat
+  say now); and one recap line from the finished game's own record (`convertedBy`): "oakhart was possessed first and
+  possessed ari_v, birch and moth." — "You were possessed first and possessed oakhart." — and for a chain "... 1 more
+  was possessed after that." The recap is shown only now, when the roles list under it reveals every side anyway.
+  Practice has no sides and keeps its own words (no verdict, no recap). At 1024x694 the card tightens a little
+  (padding, title 34 px) so six guests, the recap and the Good game row fit.
+- **Tips** (`src/data/tips.js`, `src/ui/tips.js`; the engine keeps its rules: once per device, never over a private
+  screen, never stops the clock; it gained a note of the player's own room, to see an arrival, and the two camera
+  flags below). The first-meeting tip now says both halves of the Lantern dilemma, in the same words for everyone: "A
+  Lantern blocks a soul, but is lost if the other guest gives you an ordinary card." Three new tips, nothing else
+  added: **Safe zone** (in a match, on the first WALK into one: a change of the player's own room to a safe room;
+  the start in the Landing is not an arrival, so it does not crowd the first turn; not in practice, where it would
+  be used up before the match it matters in; it sits below the room's badge), **Look around** (pinch and drag: on
+  the player's own turn while they have not touched the camera in this game; lowest priority, after the others; sits
+  above the camera buttons) and **The round buttons** (the first use of one of the three: what the arrows and the
+  target do). A drag, a pinch, the wheel or any round button counts as touching the camera and marks "Look around"
+  as seen for good (the player did what it says); a drag or a pinch does not bring the round-buttons tip (it is about
+  the buttons). The tips are told three more plain flags (`safe`, `cameraTouched`, `cameraButton`): the player's
+  own room, which the badge shows everyone, and their own use of the camera; never anything about another guest.
+- **Tests**: new `tests/howto-check.mjs` (node, ~1 s: the pages follow the rules, the draft's sentences, the hint,
+  the role lines, the tips' words, the recap for every way a match can end, no "AP") and `tests/browser-learn.mjs`
+  (the menu and How to play at the four iPad sizes with the keyboard and the guard; a match at each size: role
+  screen, chip, Menu panel, the clock, five ways to end; a possessed player; practice); `tests/tips-check.mjs` has a
+  section for the three new tips and now taps Menu, then Leave, before the question; `audio-buttons-check`
+  lists the six new buttons; `browser-practice`, `browser-lobby` expect "1 action"; `browser-bots` taps Menu, then
+  Leave, where it expected the question.
+- **Only a real iPad can say**: how the tap targets and the text sizes feel (the 16 px role paragraph, the How to
+  play pages), whether Safari's focus ring or keyboard show up the way Chromium's do, how Back / Next feel with a
+  finger, the sound rows' loudness change while a match plays, and whether the new camera tips read well beside the
+  round buttons at the real size.

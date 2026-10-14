@@ -415,7 +415,9 @@ console.log('\n5. out of the match, the end screen');
   await waitFor(() => !window.__game.handoffOpen(), null, 30000);
   await answerScreens();
   await tap('#btn-leave');
-  check(await game(() => window.__game.askOpen()), 'the Menu button asks before leaving the match');
+  check(await game(() => window.__game.menuPanelOpen() && !window.__game.askOpen()), 'the Menu button opens the Menu panel (Resume, Sound, How to play, Leave)');
+  await tap('#btn-gm-leave');
+  check(await game(() => window.__game.askOpen() && !window.__game.menuPanelOpen()), 'Leave asks before leaving the match');
   await tap('#btn-ask-yes');
   await waitFor(() => window.__game.phase() === 'menu' && !document.getElementById('menu').hidden, null, 20000);
   check(true, 'and goes back to the main menu');
@@ -439,6 +441,7 @@ console.log('\n6. playing possessed');
   check(await game(() => window.__game.fanIds().some(id => window.__game.state.players[window.__game.humanSeat()].hand.find(c => c.id === id)?.type === 'possession')), 'your Possession cards are in your hand');
   await shot('16-possessed-turn');
   await tap('#btn-leave');
+  await tap('#btn-gm-leave');      // (Leave, on the Menu panel, asks the question)
   check(await game(() => { const q = document.getElementById('ask-title').textContent, no = document.getElementById('btn-ask-no'), yes = document.getElementById('btn-ask-yes');
     return q === 'Leave the match?' && no.textContent === 'Keep playing' && no.classList.contains('primary') && yes.textContent === 'Main menu' && !yes.classList.contains('primary'); }),
     '"Leave the match?": the safe answer, Keep playing, is the gold button; Main menu, which loses the match, is the plain one');

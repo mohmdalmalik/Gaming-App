@@ -5,7 +5,9 @@ export function createOverlays(doc) {
   const start = doc.getElementById('start-overlay');
   const end = doc.getElementById('end-overlay');
   const endTitle = doc.getElementById('end-title');
+  const endVerdict = doc.getElementById('end-verdict');
   const endSummary = doc.getElementById('end-summary');
+  const endRecap = doc.getElementById('end-recap');
   const restartBtn = doc.getElementById('btn-restart');
   const keepBtn = doc.getElementById('btn-keep-exploring');
   const menuBtn = doc.getElementById('btn-end-menu');
@@ -42,10 +44,14 @@ export function createOverlays(doc) {
     // `opts.keepExploring` offers a way back into the hotel instead of only restarting —
     // practice has no losing side, so finishing should never force a new game. `opts.reveal` (a match):
     // every guest with their role, now that it is over — { name, who, color, possessed, status, you }.
-    // `opts.won`: whether the player's side won (colours the title).
+    // `opts.won`: whether the player's side won (colours the title). `opts.verdict`: the plain word for the
+    // player's side, "Victory" or "Defeat" (src/data/endScreen.js), above the title; `opts.recap`: one line on how
+    // the possession spread. Practice has no sides and passes neither.
     showEnd(title, summary, opts = {}) {
       endTitle.textContent = title;
       endSummary.textContent = summary || '';
+      endVerdict.textContent = opts.verdict || ''; endVerdict.hidden = !opts.verdict;
+      endRecap.textContent = opts.recap || ''; endRecap.hidden = !opts.recap;
       keepBtn.hidden = !opts.keepExploring;
       restartBtn.textContent = opts.restartLabel || 'Restart practice';
       end.classList.toggle('won', opts.won === true);

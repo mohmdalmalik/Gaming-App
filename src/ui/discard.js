@@ -9,6 +9,10 @@ import { rules } from '../data/rules.js';
 import { CARDS, countableCards, countableCount } from '../game/cards.js';
 import { cardTile } from './cards.js';
 
+// From more cards than this the tiles are drawn smaller (styles.css #discard-cards.dense): 11 cards fit on the
+// shortest iPad window (1024x694) without scrolling; up to 8 fit at the usual size on every iPad.
+const DENSE_FROM = 8;
+
 export function createDiscard(doc, cfg, { onDiscard }) {
   const overlay = doc.getElementById('discard-overlay');
   const sub = doc.getElementById('discard-sub');
@@ -29,6 +33,7 @@ export function createDiscard(doc, cfg, { onDiscard }) {
       ? `You hold ${count} cards — at the end of your turn the limit is ${rules.handLimit}. Choose ${over} to discard${over === 1 ? '' : ', one at a time'}: tap a card, then the button.`
       : `You are down to ${rules.handLimit} cards.`;
     cards.innerHTML = '';
+    cards.classList.toggle('dense', items.length > DENSE_FROM);      // (a big hand: smaller cards, so it fits without scrolling)
     for (const card of items) {
       cards.appendChild(cardTile(doc, card, {
         selectable: over > 0,

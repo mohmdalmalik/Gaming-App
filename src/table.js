@@ -9,12 +9,27 @@
 import { normaliseAvatar, DEFAULT_AVATAR } from './data/wardrobe.js';
 import { tableAvatars } from './data/randomAvatar.js';
 
-export const SEAT_COLORS = ['#e6b45a', '#5ac8e6', '#a8e05a', '#e67ab8', '#f0743c', '#b8a2f0'];
+// The six seat colours: gold, sky, blue, pink, vermillion, lilac. Chosen so that no two merge for the common
+// kinds of colour blindness (checked with the Machado simulations for protanopia, deuteranopia and
+// tritanopia: every pair stays at least 17 apart in CIELAB, where the old set had pairs at 5); the old
+// lime was the one that merged with gold and orange. Never the only mark of a guest: the plan and the
+// strip also carry the guest's initial.
+export const SEAT_COLORS = ['#e6bc5c', '#73d4e6', '#2f8cff', '#e673ac', '#e6652e', '#b6b2ff'];
 
 // (each look's outfit in src/data/characters.js: what the views keyed by outfit understand)
 export const OUTFIT_OF_BASE = {
   victor: 'tuxedo', marcus: 'suit', henry: 'dinnerJacket', clara: 'dressBurgundy', eleanor: 'dressMidnight', beatrice: 'dressEmerald',
 };
+
+// The short mark of each guest, for places that show a guest as a small coloured shape (the plan's dots, the
+// strip's portraits): the first letter of the name, in capitals. Two guests whose names start with the same
+// letter get two letters each ("Ha", "He"); if even those match, their seat numbers. Public (names are).
+export function guestMarks(names) {
+  const chars = n => [...String(n ?? '').replace(/[^\p{L}\p{N}]/gu, '')];
+  const one = names.map(n => (chars(n)[0] || '?').toUpperCase());
+  const two = one.map((m, i) => (one.some((x, j) => j !== i && x === m) ? m + (chars(names[i])[1] || '').toLowerCase() : m));
+  return two.map((m, i) => (two.some((x, j) => j !== i && x === m) ? String(i + 1) : m));
+}
 
 // A player with no profile yet (a direct link on a new device): 'Guest' is reserved, so nobody else can
 // be called that.

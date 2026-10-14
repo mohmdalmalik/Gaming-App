@@ -100,8 +100,15 @@ const DEFS = [
   { id: 'switchboard', prio: 5, at: '#btn-room', sides: ['above', 'left'], now: true, when: s => s.match && s.acting && s.job === 'switchboard' },
   { id: 'switchboardPractice', prio: 5, at: '#btn-room', sides: ['above', 'left'], now: true, when: s => !s.match && s.acting && s.job === 'switchboard' },
   { id: 'infirmary', prio: 5, at: '#btn-room', sides: ['above', 'left'], now: true, when: s => s.acting && s.job === 'infirmary' },
+  // The first walk into a safe zone in a match (the start, in the Landing, is not an arrival). Not in practice: alone
+  // in the hotel there are no meetings anywhere, and the tip would be used up before the match where it matters.
+  { id: 'safeZone', prio: 6, at: '#safe-badge', sides: ['below', 'right'], latch: true, when: s => s.match && s.arrivedSafe },
+  // The first use of a round camera button: what the three do.
+  { id: 'cameraButtons', prio: 6, at: '.control-row', point: '#btn-rotate-right', sides: ['above', 'left'], latch: true, when: s => s.cameraButton },
   { id: 'map', prio: 7, at: '#btn-map', sides: ['above', 'left'], when: s => s.turnBegun && s.rooms >= T.mapRooms, done: s => s.mapOpen },
   { id: 'chat', prio: 8, at: '#btn-chat', sides: ['below', 'left'], when: s => s.match && s.turnBegun && (s.heard || s.round >= 2), done: s => s.chatOpen },
+  // Pinch and drag: on the player's own turn, while they have not touched the camera (after the others).
+  { id: 'camera', prio: 9, at: '.control-row', point: '#btn-rotate-right', sides: ['above', 'left'], when: s => s.acting && s.turnBegun && !s.cameraTouched },
 ];
 
 // The parts of the interface a tip keeps clear of (whichever are showing), and the tags over the hotel
@@ -122,7 +129,9 @@ const overlaps = (a, b) => a.l < b.r && a.r > b.l && a.t < b.b && a.b > b.t;
 // `situation()` (main.js) — the player's own situation and public facts only, never the game state itself:
 // { on, game, practice, me (the player's own guest), self (where it stands), myTurn, acting, clock, moveBar,
 // search, meeting, heard (when another guest last spoke, ms), covered, mapOpen, chatOpen, cardOpen (the
-// player's own screens), round, final, rooms, exitFound, job }.
+// player's own screens), round, final, rooms, exitFound, job, safe (their room is a safe zone),
+// cameraTouched (they have dragged, pinched or turned the view in this game), cameraButton (they have used a
+// round camera button in this game) }.
 // `settings`: src/settings.js (Settings > Tips). `camera`: the hotel's camera, to find the player's own
 // guest on the screen. `tagBoxes()`: the tags over the hotel showing now, as the tag layer placed them
 // (src/ui/screenTags.js list(): no need to measure them again).
@@ -149,6 +158,7 @@ export function createTips(doc, { situation, settings, camera = null, tagBoxes =
   let facts = [];               // (tests) what the situation is made of: never the game state itself
   // This game's own memory: whether the player started it possessed, and their hand last time looked.
   let game = null, startedPossessed = false, hand = null, lanterns = 0, heardAt = 0, turnBegun = false;
+  let roomWas = null;           // the room the player's guest was in at the last look (a change into a safe room is an arrival)
   let self = null;              // where the player's own guest stands ({ x, z }), from the last look
 
   // The player's own guest on the screen, feet to head (the figure they watch): a tip keeps off it when
@@ -331,6 +341,7 @@ export function createTips(doc, { situation, settings, camera = null, tagBoxes =
     lanterns = (s.me?.hand || []).filter(c => c.type === 'lantern').length;
     heardAt = s.heard || 0;
     turnBegun = false;
+    roomWas = s.me?.currentRoom ?? null;
     queue.clear();
     putAway(now, { cut: true, gap: T.settleMs });
   }
@@ -358,7 +369,12 @@ export function createTips(doc, { situation, settings, camera = null, tagBoxes =
       const lanternGained = lit > lanterns;
       hand = new Set(ids); lanterns = lit;
       if (raw.myTurn) turnBegun = true;
-      const s = { ...raw, match: !raw.practice, startedPossessed, gained, lanternGained, turnBegun, heard: (raw.heard || 0) > heardAt };
+      // A walk into a safe zone (the room changed, to one): the player's own room, which the whole table sees.
+      const arrivedSafe = !!raw.safe && roomWas != null && me.currentRoom !== roomWas;
+      roomWas = me.currentRoom;
+      const s = { ...raw, match: !raw.practice, startedPossessed, gained, lanternGained, turnBegun, arrivedSafe, heard: (raw.heard || 0) > heardAt };
+      // (a player who has already looked round the hotel needs no tip about how: it counts as seen)
+      if (s.cameraTouched && !seen.has('camera')) { seen.add('camera'); queue.delete('camera'); save(); }
       // Tips that come up now join the queue; ones whose moment has passed leave it.
       for (const def of DEFS) {
         if (seen.has(def.id) || queue.has(def.id) || cur?.def === def) continue;

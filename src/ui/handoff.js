@@ -20,6 +20,8 @@ import { roundLabel, finalRoundNote, isFinal } from './roundLabel.js';
 import { makePortrait } from './portrait.js';
 import { soulsHeld, soulsChip } from './souls.js';
 import { tooSoon } from './tapGuard.js';
+import { actionsWord } from './actionsWord.js';
+import { ROLE_REVEAL } from '../data/howToPlay.js';
 
 export function createHandoff(doc) {
   const el = {
@@ -73,10 +75,12 @@ export function createHandoff(doc) {
     el.role.className = `role-badge ${player.possessed ? 'evil' : 'good'}`;
     // The role word is the same badge pill as on the player panel (dark green CLEAN GUEST, or the dark
     // POSSESSED pill with its brass and crimson edge).
+    // After the words about your own side, ONE line about how the OTHER side wins (src/data/howToPlay.js).
     el.role.innerHTML = `<span class="role-word tell-pill">${player.possessed ? 'POSSESSED' : 'CLEAN GUEST'}</span>`
       + `<span class="role-line">${player.possessed
         ? 'Your Possession cards are your own souls. Give one in a trade to possess the other guest — unless they hand you a Lantern: then both cards are used up and they learn you are possessed. You can never escape.'
-        : `Find Lanterns, pass them to one clean guest, and get that guest out through the Fire Exit with ${rules.lanternsToEscape} Lanterns. Give a Lantern in a trade if you fear who you are trading with — it blocks possession, but is used up doing it.`}</span>`;
+        : `Find Lanterns, pass them to one clean guest, and get that guest out through the Fire Exit with ${rules.lanternsToEscape} Lanterns. Give a Lantern in a trade if you fear who you are trading with — it blocks possession, but is used up doing it.`}</span>`
+      + `<span class="role-other">${ROLE_REVEAL.otherSide(!!player.possessed, rules)}</span>`;
     if (!player.possessed) return;
     // The private tell (docs/GAME_RULES.md, Possession), as the crimson plate: their own possessed
     // portrait (the same face, red eyes), the POSSESSED badge with "Only you can see this" under it, and
@@ -148,7 +152,8 @@ export function createHandoff(doc) {
     revealRole(player, opts, onContinue) {
       reset('role');
       el.kicker.textContent = opts?.changed ? 'Something has changed' : 'Your secret role';
-      el.title.textContent = opts?.changed ? 'You have been possessed' : player.name;
+      // The role itself is the headline: "You are clean" / "You are possessed" (src/data/howToPlay.js).
+      el.title.textContent = opts?.changed ? 'You have been possessed' : ROLE_REVEAL.headline(!!player.possessed);
       // (after a conversion, the guest whose soul did it knows too: their screen shows the player's red eyes)
       el.sub.textContent = !opts?.changed ? 'Only you know this. Nobody else at the table can see it.'
         : opts.by ? `Only ${opts.by}, whose soul possessed you, knows. From now on you play for the hotel.` : 'From now on you play for the hotel.';
@@ -159,7 +164,7 @@ export function createHandoff(doc) {
 
     privateTurn(state, floor, player, handlers) {
       reset('turn');
-      el.kicker.textContent = `${roundLabel(state)} · ${rules.actionPointsPerTurn} action points · health ${player.health} of ${rules.maxHealth}`;
+      el.kicker.textContent = `${roundLabel(state)} · ${actionsWord(rules.actionPointsPerTurn)} · health ${player.health} of ${rules.maxHealth}`;
       if (isFinal(state)) el.kicker.textContent = `${finalRoundNote} · ${el.kicker.textContent}`;
       el.title.textContent = `${player.name}'s turn`;
       const room = floor.rooms.get(player.currentRoom);
@@ -200,7 +205,7 @@ export function createHandoff(doc) {
       const tiles = new Map();     // card id -> its tile
       const lift = card => {
         pickNow.chosen = card; pickNow.chosenAt = performance.now();
-        for (const [id, t] of tiles) t.classList.toggle('selected', id === card.id);
+        for (const [id, t] of tiles) { t.classList.toggle('selected', id === card.id); t.setAttribute('aria-pressed', String(id === card.id)); }
         const meta = CARDS[card.type];
         const name = doc.createElement('b'); name.textContent = meta?.name ?? card.type;
         const words = doc.createElement('span'); words.textContent = cardDesc(card.type, card);

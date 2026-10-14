@@ -5,7 +5,16 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="theme-color" content="#141318">
+<meta name="apple-mobile-web-app-title" content="Hotel Escape">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#0f1119">
+<!-- The app's icon and web-app manifest (Add to Home Screen; the tab's icon). Relative paths: the game lives at a
+     sub-path on GitHub Pages. No service worker: nothing is cached for offline. -->
+<link rel="icon" href="./assets/icons/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="./assets/icons/favicon-32.png" sizes="32x32" type="image/png">
+<link rel="icon" href="./assets/icons/favicon-16.png" sizes="16x16" type="image/png">
+<link rel="apple-touch-icon" href="./assets/icons/icon-180.png">
+<link rel="manifest" href="./manifest.webmanifest">
 <title>Hotel Escape</title>
 <link rel="stylesheet" href="./styles.css">
 <script type="importmap">
@@ -64,6 +73,9 @@
               <div class="player-name-row"><div id="active-player" class="player-name">—</div><span id="panel-role" class="panel-role tell-badge possessed" hidden><span class="tell-pill">Possessed</span><span class="tell-note">Only you can see this</span></span><span id="panel-clean" class="tell-badge clean" hidden><span class="tell-pill">Clean</span></span></div>
               <div id="health-row" class="stat"><span class="stat-label">Health</span><div id="health" class="health" aria-label="Health"></div></div>
               <div class="stat"><span class="stat-label">Actions</span><div id="ap-pips" class="ap-pips" aria-hidden="true"></div><span id="action-points" class="ap-count">— / —</span></div>
+              <!-- The Lanterns you hold out of the number that opens the Fire Exit: your own count, worded and shown the
+                   same for a clean and a possessed guest (src/hud.js syncTell; the words: src/data/howToPlay.js). -->
+              <div id="lantern-row" class="lantern-stat"><span id="lantern-chip" class="lantern-chip" role="status"><span class="lc-glyph" aria-hidden="true">&#x2726;</span><span id="lantern-label" class="lc-label">Lanterns</span><span id="lantern-count" class="lc-count">&#8211;</span></span></div>
               <div id="panel-souls" class="panel-souls" hidden></div>
               <button id="btn-private" class="private-link" type="button">&#x25B8; Private details</button>
             </div>
@@ -96,7 +108,7 @@
         <span id="confirm-text">Move?</span>
         <!-- (Move and Cancel stay together: beside a short sentence, or both on the next line) -->
         <span class="confirm-actions">
-          <button id="btn-confirm-move" class="btn primary" type="button">Move &#183; 1 AP</button>
+          <button id="btn-confirm-move" class="btn primary" type="button">Move &#183; 1 action</button>
           <button id="btn-confirm-cancel" class="btn" type="button">Cancel</button>
         </span>
       </div>
@@ -110,9 +122,9 @@
     <!-- Discard-down-to-the-hand-limit modal: the ONLY place the hand limit is settled, when a guest
          ends their turn holding more than 6 cards (src/ui/discard.js). -->
     <div id="discard-overlay" class="overlay center" hidden>
-      <div class="modal">
+      <div class="modal" data-scrolls>
         <div id="discard-kicker" class="discard-kicker" hidden></div>
-        <div class="modal-title">End of your turn: too many cards</div>
+        <div id="discard-title" class="modal-title">End of your turn: too many cards</div>
         <div id="discard-sub" class="modal-sub"></div>
         <div id="discard-cards" class="cards"></div>
         <div class="modal-actions">
@@ -140,7 +152,7 @@
               <button id="btn-hand-next" class="btn round" type="button" aria-label="Next card">&#x203A;</button>
             </div>
           </div>
-          <div id="hand-detail" class="hand-detail"></div>
+          <div id="hand-detail" class="hand-detail" data-scrolls></div>
         </div>
         <div id="hand-note" class="panel-note"></div>
       </div>
@@ -148,7 +160,7 @@
 
     <!-- Encounter modal -->
     <div id="encounter-overlay" class="overlay center" hidden>
-      <div class="modal">
+      <div class="modal" data-scrolls>
         <div id="encounter-title" class="modal-title">Encounter</div>
         <div id="encounter-body" class="modal-body"></div>
         <div id="encounter-actions" class="modal-actions"></div>
@@ -166,7 +178,7 @@
         <div class="map-legend">
           <span><span class="sw here"></span> You are here</span>
           <span><span class="sw searched"></span> Searched</span>
-          <span><span class="sw guest"></span> A guest &#183; the arrow is whose turn it is</span>
+          <span><span class="sw guest"></span> A guest (their initial) &#183; the arrow is whose turn it is</span>
           <span><span class="mk drop">&#x25C6;</span> Something on the floor</span>
           <span><span class="sw frontier"></span> Closed door (?)</span>
           <span><span class="mk infirmary">&#x271A;</span> Infirmary &#183; heal</span>
@@ -181,7 +193,7 @@
     <!-- Private screens for the player (src/ui/handoff.js): their secret role, the card they give in a
          trade and what they received, what a search found, another guest's hand through a Hand Mirror. -->
     <div id="handoff-overlay" class="overlay center handoff" hidden>
-      <div id="handoff-card" class="card handoff-card">
+      <div id="handoff-card" class="card handoff-card" data-scrolls>
         <div id="handoff-kicker" class="handoff-kicker"></div>
         <h1 id="handoff-title">&nbsp;</h1>
         <p id="handoff-sub" class="muted"></p>
@@ -237,8 +249,12 @@
           </button>
           <div class="menu-buttons">
             <button id="btn-menu-bots" class="menu-btn primary" type="button" disabled><span class="mb-main">Play with bots</span><span class="mb-sub">Join a table of 4&#8211;6 guests</span></button>
-            <button id="btn-menu-practice" class="menu-btn" type="button" disabled><span class="mb-main">Practice alone</span><span class="mb-sub">Explore the hotel and find the way out</span></button>
-            <div class="menu-row2">
+            <button id="btn-menu-practice" class="menu-btn" type="button" aria-describedby="menu-hint" disabled><span class="mb-main">Practice alone</span><span class="mb-sub">Explore the hotel and find the way out</span></button>
+            <!-- Only until the player has played a match or finished a practice (src/ui/menu.js, the words:
+                 src/data/howToPlay.js). -->
+            <p id="menu-hint" class="menu-hint" hidden></p>
+            <div class="menu-row2 three">
+              <button id="btn-menu-howto" class="menu-btn" type="button" data-sfx="open"><span class="mb-main">How to play</span></button>
               <button id="btn-menu-settings" class="menu-btn" type="button"><span class="mb-main">Settings</span></button>
               <button id="btn-menu-record" class="menu-btn" type="button"><span class="mb-main">Your record</span></button>
             </div>
@@ -381,8 +397,12 @@
 
     <div id="end-overlay" class="overlay center" hidden>
       <div class="card">
+        <!-- A match: "Victory" or "Defeat" for the player's side (src/overlays.js showEnd; practice has none). -->
+        <div id="end-verdict" class="end-verdict" hidden></div>
         <h1 id="end-title">Game over</h1>
         <p id="end-summary" class="muted"></p>
+        <!-- A match: one line on how the possession spread (src/ui/endRecap.js). -->
+        <p id="end-recap" class="end-recap" hidden></p>
         <!-- Your record after this game, one quiet line (src/ui/record.js). -->
         <p id="end-record" class="end-record" hidden></p>
         <div id="end-reveal" class="end-reveal" hidden></div>
@@ -390,6 +410,41 @@
           <button id="btn-keep-exploring" class="btn big" type="button" hidden>Keep exploring</button>
           <button id="btn-end-menu" class="btn big" type="button">Main menu</button>
           <button id="btn-restart" class="btn primary big" type="button">Restart practice</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- The in-match Menu panel (src/ui/gameMenu.js; the words: src/data/gameMenu.js): Resume, Sound, How to play
+         and Leave (which asks "Leave the match?" as before). While it is up the clock and the computer guests
+         wait, exactly as they do for a question. -->
+    <div id="gamemenu-overlay" class="overlay center gamemenu" role="dialog" aria-modal="true" aria-labelledby="gm-title" hidden>
+      <div class="card gamemenu-card">
+        <div class="notice-rule"></div>
+        <h1 id="gm-title">Menu</h1>
+        <div class="gm-field"><div id="gm-music-label" class="mf-label">Music</div><div id="gm-music" class="seg" role="radiogroup" aria-labelledby="gm-music-label"></div></div>
+        <div class="gm-field"><div id="gm-sound-label" class="mf-label">Sound effects</div><div id="gm-sound" class="seg" role="radiogroup" aria-labelledby="gm-sound-label"></div></div>
+        <div class="gm-actions">
+          <button id="btn-gm-resume" class="btn primary big" type="button" data-sfx="close">Resume</button>
+          <button id="btn-gm-howto" class="btn big" type="button" data-sfx="open">How to play</button>
+          <button id="btn-gm-leave" class="btn big" type="button">Leave the match</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- How to play (src/ui/howToPlay.js; the words: src/data/howToPlay.js): five short pages, from the main menu
+         and from the in-match Menu. Above both. -->
+    <div id="howto-overlay" class="overlay center howto" role="dialog" aria-modal="true" aria-labelledby="howto-title" hidden>
+      <div class="card howto-card">
+        <div id="howto-kicker" class="howto-kicker">How to play</div>
+        <h1 id="howto-title">&nbsp;</h1>
+        <ul id="howto-lines" class="howto-lines" data-scrolls aria-live="polite"></ul>
+        <div id="howto-dots" class="howto-dots" aria-hidden="true"></div>
+        <div class="howto-actions">
+          <button id="btn-howto-close" class="btn big" type="button">Close</button>
+          <span class="howto-nav">
+            <button id="btn-howto-back" class="btn big" type="button" data-sfx="click">Back</button>
+            <button id="btn-howto-next" class="btn primary big" type="button" data-sfx="click">Next</button>
+          </span>
         </div>
       </div>
     </div>

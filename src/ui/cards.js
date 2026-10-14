@@ -132,7 +132,14 @@ export function cardTile(doc, card, opts = {}) {
 
   // A tap on a card to choose it makes the 'select' sound (the screens that ignore a tap that is too soon
   // say so by returning false: a tap that did nothing is silent).
-  if (opts.selectable && opts.onSelect) el.addEventListener('click', e => { e.preventDefault(); if (opts.onSelect(card, el, e) !== false) sfx('select'); });
+  if (opts.selectable && opts.onSelect) {
+    el.addEventListener('click', e => { e.preventDefault(); if (opts.onSelect(card, el, e) !== false) sfx('select'); });
+    // A card that can be chosen is a button for the keyboard and for a screen reader too (Tab to it, Enter or Space
+    // to choose it); src/ui/focus.js keeps Tab inside the screen it is on.
+    el.tabIndex = 0; el.setAttribute('role', 'button'); el.setAttribute('aria-pressed', String(!!opts.selected));
+    el.setAttribute('aria-label', `${meta.name}${shots}`);
+    el.addEventListener('keydown', e => { if ((e.key === 'Enter' || e.key === ' ') && !e.repeat) { e.preventDefault(); el.click(); } });
+  }
   if (opts.action) {
     const btn = doc.createElement('button');
     btn.className = 'btn' + (opts.action.primary ? ' primary' : '');

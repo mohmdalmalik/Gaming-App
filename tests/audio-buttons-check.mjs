@@ -28,9 +28,12 @@ const EXPECT = {
   'btn-hand-close': 'close', 'btn-hand-prev': 'click', 'btn-hand-next': 'click', 'btn-map-close': 'close',
   'btn-handoff-next': 'click', 'btn-offer-give': 'click',
   'btn-chat-gg': 'select',
+  // the in-match Menu panel (src/ui/gameMenu.js) and How to play (src/ui/howToPlay.js)
+  'btn-gm-resume': 'close', 'btn-gm-howto': 'open', 'btn-gm-leave': 'click',
+  'btn-howto-close': 'close', 'btn-howto-back': 'click', 'btn-howto-next': 'click',
   // the menu
   'btn-su-suggest': 'click', 'btn-su-go': 'click', 'btn-profile': 'open',
-  'btn-menu-bots': 'open', 'btn-menu-practice': 'click', 'btn-menu-settings': 'open', 'btn-menu-record': 'open',
+  'btn-menu-bots': 'open', 'btn-menu-practice': 'click', 'btn-menu-settings': 'open', 'btn-menu-record': 'open', 'btn-menu-howto': 'open',
   'btn-av-rename': 'click', 'btn-av-done': 'close', 'btn-bots-back': 'close', 'btn-bots-find': 'click',
   'btn-mm-cancel': 'close', 'btn-tips-again': 'select', 'btn-settings-done': 'close',
   'btn-record-back': 'close', 'btn-record-reset': 'click', 'btn-record-keep': 'click', 'btn-record-yes': 'click',

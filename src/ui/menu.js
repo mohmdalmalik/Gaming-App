@@ -3,7 +3,8 @@
 //   signup       "Sign the register": the first visit asks for a username (src/ui/register.js); the
 //                same screen changes it later ("Change name" on the avatar screen: showRename)
 //   main         your profile card ("Playing as <name> · Adjust avatar ›", src/ui/profileCard.js),
-//                Play with bots · Practice alone · Settings and Your record side by side
+//                Play with bots · Practice alone (with a hint under it for a player who has played nothing
+//                yet) · How to play, Settings and Your record side by side
 //   avatar       your avatar (the wardrobe: #menu-avatar, built by the avatar screen's own module)
 //   bots         how many other guests (3-5) and your role (random, clean, possessed)
 //   matchmaking  the table filling up, guest by guest, as in an online game
@@ -27,6 +28,7 @@ import { createRecordScreen } from './record.js';
 import { record } from '../record.js';
 import { renderTipsAgain } from './tips.js';
 import { versionLine } from '../version.js';
+import { NEW_PLAYER_HINT } from '../data/howToPlay.js';
 
 const ROLE_CHOICES = [
   { value: 'random', label: 'Random', note: 'Like a real table: you are told your role when the game starts. Usually you are a clean guest.' },
@@ -35,13 +37,13 @@ const ROLE_CHOICES = [
 ];
 const BOT_CHOICES = [3, 4, 5];
 
-export function createMenu(doc, { onPlayBots, onPractice, onSettingChanged, onScreenChange, account = null } = {}) {
+export function createMenu(doc, { onPlayBots, onPractice, onSettingChanged, onScreenChange, onHowToPlay, account = null } = {}) {
   const $ = id => doc.getElementById(id);
   const root = $('menu');
   // (looked up when shown: a screen another module adds to the page, #menu-avatar, is found too)
   const SCREENS = ['signup', 'main', 'avatar', 'bots', 'matchmaking', 'settings', 'record'];
   const screenEl = name => $(`menu-${name}`);
-  const btn = { bots: $('btn-menu-bots'), practice: $('btn-menu-practice'), settings: $('btn-menu-settings'), record: $('btn-menu-record') };
+  const btn = { bots: $('btn-menu-bots'), practice: $('btn-menu-practice'), settings: $('btn-menu-settings'), record: $('btn-menu-record'), howto: $('btn-menu-howto') };
   const recordView = createRecordScreen(doc);
   let current = 'main';
   let ready = false;
@@ -67,7 +69,7 @@ export function createMenu(doc, { onPlayBots, onPractice, onSettingChanged, onSc
       requestAnimationFrame(() => root.classList.remove('snap'));
     }
     for (const k of SCREENS) { const el = screenEl(k); if (el) el.hidden = k !== name; }
-    if (name === 'main') card.render();
+    if (name === 'main') { card.render(); renderHint(); }
     if (name === 'bots') renderBots();
     if (name === 'settings') renderSettings();
     if (name === 'record') { recordView.confirm(false); recordView.render(); }
@@ -100,6 +102,17 @@ export function createMenu(doc, { onPlayBots, onPractice, onSettingChanged, onSc
       b.addEventListener('click', e => { e.preventDefault(); if (tooSoon(e, shownAt)) return; onPick(o.value); });
       host.appendChild(b);
     }
+  }
+
+  // Under "Practice alone", for a player who has played no match and finished no practice yet (your record,
+  // src/record.js): the soft way in. It goes for good once either is counted.
+  function renderHint() {
+    const hint = $('menu-hint');
+    if (!hint) return;
+    const r = record.get();
+    const fresh = !r.played && !r.practiceEscapes;
+    hint.textContent = fresh ? NEW_PLAYER_HINT : '';
+    hint.hidden = !fresh;
   }
 
   function renderBots() {
@@ -187,6 +200,8 @@ export function createMenu(doc, { onPlayBots, onPractice, onSettingChanged, onSc
   click(btn.practice, () => { if (!ready) return; if (account && !account.profile) { show('main'); return; } onPractice?.({}); });
   click(btn.settings, () => show('settings'));
   click(btn.record, () => show('record'));
+  // How to play opens over the menu (src/ui/howToPlay.js); Close gives the focus back to this button.
+  click(btn.howto, () => onHowToPlay?.({ focusBack: btn.howto }));
   click($('btn-bots-back'), () => show('main'));
   click($('btn-bots-find'), () => {
     const n = BOT_CHOICES.includes(+settings.get('bots')) ? +settings.get('bots') : 5;

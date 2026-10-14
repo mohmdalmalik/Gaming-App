@@ -16,8 +16,26 @@ server, cosmetics, packaging) in **[docs/ONLINE_PLAN.md](docs/ONLINE_PLAN.md)**.
 **The owner's restored ruleset is implemented and playable** (see `docs/GAME_RULES.md`, the product
 design; `CLAUDE.md` says no rule or number changes without the owner's approval of a before/after
 list). The page opens on a **main menu** over an animated, blurred hotel lobby (reception and concierge,
-guests seated and strolling, the manager walking by): **Play with bots**, **Practice alone**, **Settings**,
-**Your record**.
+guests seated and strolling, the manager walking by): **Play with bots**, **Practice alone** (with a hint
+under it, "New to Hotel Escape? Practice alone is the best place to start.", until you have played a match or
+finished a practice), **How to play**, **Settings**, **Your record**.
+
+- **How to play** (`src/ui/howToPlay.js`; every word in `src/data/howToPlay.js`, with the numbers read from
+  `src/data/rules.js` so it follows the rules): five short pages (the goal, your turn, meetings and trades,
+  possession and Lanterns, staying alive) with Back / Next / Close, from the main menu and from the Menu
+  panel in a match. The keyboard works (focus moves in, Tab stays inside, the arrow keys turn pages,
+  Escape closes). The action budget is "actions" everywhere ("Explore · 1 action", "Move · 2 actions").
+- **The Menu button in a match** opens a small panel (`src/ui/gameMenu.js`): Resume, Music and Sound effects
+  (the same choices and the same saved settings as Settings), How to play, and Leave, which asks "Leave the
+  match?" as before. **The turn clock does exactly what it did when the button asked that question**: it
+  stands still, and the computer guests wait, while the panel (or the question after it) is open. (Whether
+  the clock should run while the Menu is open is the owner's decision, still pending.) On the end screen the
+  button still goes straight to the main menu.
+- **What the match screen says about your goal**: the role screen's headline is "You are clean" / "You are
+  possessed", with its paragraph at 16 px and ONE line about how the other side wins; a small
+  "Lanterns 1/3" chip in your player panel (your own count, the same for both sides); the end screen says
+  **Victory** or **Defeat** for your side, and a recap ("oakhart was possessed first and possessed ari_v,
+  birch and moth.").
 
 - **Your profile.** The first visit asks for a username ("Sign the register": 3 to 16 letters, numbers
   or _, starting with a letter; **Suggest a name** picks one). The main menu then shows your profile card
@@ -56,7 +74,8 @@ guests seated and strolling, the manager walking by): **Play with bots**, **Prac
   chat (on / off) and Tips (on / off, with **Show tips again**).
 - **Tips during your first matches**: a small card beside the thing it explains, the first time it
   comes up (your turn, the Move bar, searching, a new card, Lanterns, the clock, a meeting, being
-  possessed, the Switchboard and Infirmary, a full hand, the final round, the map, chat, being out), once
+  possessed, the Switchboard and Infirmary, a full hand, the final round, the map, chat, being out, the
+  first walk into a safe zone, how to look round the hotel, what the three round camera buttons do), once
   per device. **Got it** puts it away, **Hide tips** turns them off. They never stop the clock, never
   cover a button, and wait while a private screen is up.
 - **Music and sound** (`src/audio/`, all made from code by `tools/audio/`): a melancholy 1930s waltz in
@@ -80,6 +99,16 @@ database in this project: your username and avatar are kept on this device only.
 Published with GitHub Pages from `main`: **https://mohmdalmalik.github.io/Gaming-App/**
 (if it 404s, enable Pages once: repository → Settings → Pages → Deploy from a branch, `main`
 `/ (root)`).
+
+**Add to Home Screen (iPad).** In Safari: the Share button → *Add to Home Screen*. The game then has its own icon
+(a brass lantern on navy: `assets/icons/`) and opens without Safari's address and toolbar, so there is more
+room (the window is 768 px tall instead of about 694). It is the same game from the same address: no app store
+and no offline mode (there is no service worker). **A Home Screen copy keeps its own separate storage**, so it
+starts with an empty profile: you sign the register again and your record starts at zero; your Safari profile
+and record stay where they were, in Safari. (Safari may clear a site's storage after about 7 days without a visit;
+by WebKit's published policy a Home Screen app is exempt from that: not tested here, there is no device.) The manifest says `display: standalone`: Apple's own
+`apple-mobile-web-app-capable` tag in `index.html` already makes iPadOS run it that way, and `fullscreen` is not
+something iOS is known to honour, so `standalone` is the value that behaves the same everywhere.
 
 ## Play with bots
 
@@ -128,12 +157,12 @@ readout at the top left (below the room name), for measuring speed on the iPad.
 - **Your guest stands in the middle of their room** — there is no walking about inside a room; you
   act by tapping rooms and furniture.
 - **Open a door** (1 AP) — beyond every closed door lies a fogged, unknown room; the ones next to your
-  room glow, with an "Explore · 1 AP" tag. Tap one and its door opens at once (no question): the room
+  room glow, with an "Explore · 1 action" tag. Tap one and its door opens at once (no question): the room
   behind it appears (it is empty, so nothing happens there yet); you stay where you are, and the view
-  eases so both rooms are in view. Rooms next door you can walk into now carry a quiet "Go · 1 AP" tag.
+  eases so both rooms are in view. Rooms next door you can walk into now carry a quiet "Go · 1 action" tag.
   A fogged room further off says "Walk to the room next to it first."
 - **Move** (1 AP per room) — tap any revealed room (anywhere on it): a dotted path, an outline round it
-  and a "Move · N AP" tag show the walk, and **Move** confirms it. The guest walks there by the fewest
+  and a "Move · N actions" tag show the walk, and **Move** confirms it. The guest walks there by the fewest
   rooms and stands in its middle (round it when others are there). Walking into a room with a guest you
   have not met there this round stops the walk there for the meeting. Tapping your own room does
   nothing. A room tapped while walking is offered when you arrive (a fogged room or the search icon
@@ -281,6 +310,7 @@ that answers wrongly still starts the game.
 index.html            page shell: import map, HUD, panels, overlays, the start-up script (what is loading, the
                       old-browser message, one automatic reload, the problem card)
 styles.css            interface styling (touch-safe, safe-area aware)
+manifest.webmanifest  the web-app manifest for Add to Home Screen: name, standalone, landscape, navy colours, the icons (relative paths, so it works at the sub-path)
 .github/workflows/tests.yml   the fast node suites on every push and pull request (a warning only, see above)
 src/
   main.js             starts everything; the menu → lift → game flow; the turn flow (the player's turns
@@ -290,6 +320,7 @@ src/
   settings.js         the player's own settings (bot speed, view, graphics, menu background, music, sound, quick chat, tips), kept on the device
   motion.js           the device's Reduce Motion setting (prefers-reduced-motion), read live: it holds the two flickering corridors' light steady, the menu lobby Still and, in styles.css, the decorative CSS motion quiet
   record.js           your record (played / won / lost, by side, escapes, practice escapes), kept on the device; counted by main.js at the end screen
+  matchMarker.js      "a match is in progress" marker in localStorage (key hotelEscape.matchInProgress.v1, the time only): written when a real match begins, removed when it ends or is left; still there at the next start of the main menu means the browser cut the match short (src/main.js counts one "Left early" and says so once). Never touched by a direct link (?mode=) or practice
   account/            who you are: account.js (the profile on this device, key 'hotelEscape.profile.v1', behind an
                       async interface a server account can replace: signUp, rename, setAvatar, owns, onChange),
                       profile.js (the profile's shape and its repair), username.js (the name rules, reserved
@@ -320,6 +351,10 @@ src/
                       (BOT_CHAT) and how they weigh what they hear (BOT_HEAR)
     record.js         the words of Your record and of the end screen's record line
     tips.js           the first-match tips' words (one or two sentences each) and their timing
+    howToPlay.js      THE WORDS THAT TEACH THE GAME: the How to play pages (written from docs/GAME_RULES.md, the numbers read from rules.js at run time), the hint under "Practice alone", the role screen's headline and its one line about how the other side wins, the Lanterns chip
+    gameMenu.js       the words of the in-match Menu panel
+    lostMatch.js      the card shown once when the browser cut a match short ("The game was restarted by your browser…")
+    endScreen.js      the end screen's Victory / Defeat, who won, and the recap line
   game/               pure rules, no rendering (a server could reuse these)
     hotel.js  grid.js   the random hotel (tiles placed as doors open), walkable grid + A* pathfinding
     cards.js            deck build, seeded shuffle, deal, hand helpers
@@ -341,7 +376,7 @@ src/
   render/             Three.js visuals: greybox rooms, doors, characters, cutaway, mood (flicker.js: the two spooky corridors' flicker as pure functions, steady under Reduce Motion),
                       searched-room ticks; bakedRoom.js loads the baked rooms; xray.js fades
                       whatever stands between the camera and the active guest / search spot;
-                      fog.js the fogged rooms beyond closed doors (+ "Explore · 1 AP" tags);
+                      fog.js the fogged rooms beyond closed doors (+ "Explore · 1 action" tags);
                       pathPreview.js the dotted path, outline + cost tag of a move to confirm;
                       possessedLook.js the possessed player's own red eyes (shared with the portrait tool);
                       avatar.js a player's avatar from one of the six models (parsed once per look, cloned
@@ -352,13 +387,18 @@ src/
                                                me), gestures, movement, room→walk glue
   hud.js  map.js  overlays.js   HUD + action bar (room job / Escape, Trade, End turn), 2D map, overlays
   ui/
-    cards.js                          card tiles, cards shown large, the order a hand is shown in
+    focus.js                          keyboard focus for the screens over the game (private screens, discard, meeting, questions, notice, end, problem card, card view, map): focus on the main button, Tab stays inside, role=dialog + aria-modal + a name, Escape never skips a private screen, focus goes back; reusable (watchDialog)
+    cards.js                          card tiles, cards shown large, the order a hand is shown in (a card you can choose is a keyboard button too)
     handFan.js                        the hand held as a fan of face-up cards (bottom centre)
     hand.js                           the card view: one card large, with Bandage / key / Barricade / … actions
     searchSpot.js                     the search icon over the room's flagged search furniture
     screenTags.js                     the one layer for tags over the 3D view: under the interface, never over it
     guestTags.js                      one name tag per room with guests, when zoomed far out
-    goTags.js                         the quiet "Go · 1 AP" tags on rooms next door
+    goTags.js                         the quiet "Go · 1 action" tags on rooms next door
+    actionsWord.js                    "1 action" / "3 actions": the one word for the action budget wherever the player reads it (never "AP")
+    howToPlay.js                      the How to play screen: five short pages, Back / Next / Close, from the main menu and the in-match Menu panel (words: src/data/howToPlay.js)
+    gameMenu.js                       the in-match Menu panel (the Menu button): Resume, Music and Sound effects, How to play, Leave; holds the clock and the bots still exactly as the Leave question did (words: src/data/gameMenu.js)
+    endRecap.js                       the end screen's one-line recap: who was possessed first and whom they possessed (words: src/data/endScreen.js)
     menu.js                           the main menu screens: the register, the main menu, your avatar, Play with bots, the table, the guests joining, Settings, Your record
     register.js                       "Sign the register" (the first visit's username) and Change name
     profileCard.js                    the main menu's card: "Playing as <name> · Adjust avatar ›"
@@ -384,6 +424,8 @@ src/
     meeting.js                        the PUBLIC side of a meeting: who, Trade or Attack, weapon, outcome
     discard.js                        the end-of-turn discard down to the hand limit (the only hand-limit screen)
 assets/audio/         the music and effects (MP3), generated by tools/audio/ (see tools/audio/README.md)
+assets/icons/         the app icon: a brass lantern on navy in an Art Deco ring. icon.svg is the master (1024), favicon.svg the simpler tab icon, icon-maskable.svg the same at 80 % for round masks;
+                      the PNGs (icon-180 = apple-touch-icon, icon-192, icon-512, icon-maskable-512, favicon-32, favicon-16) are rasterised from them with headless Chromium (README in the folder)
 tools/audio/          the Python that makes every sound from code: dsp.py, instruments.py, music.py (the scores),
                       sfx.py (the effects), build.py (mix, master, encode, measure -> report.json, library.js)
 docs/                 GAME_RULES (spec), GAME_CONCEPT, DECISIONS, PROGRESS, ONLINE_PLAN (going online, step by step)
@@ -457,11 +499,15 @@ node tests/trade-reveal-check.mjs # the trade scene: real trades for all seven o
 # (the browser tests' launchers seed a saved profile 'tester' before each page, so the menu opens on the
 #  main screen; tests/browser-profile.mjs starts with none, to check the register)
 node tests/avatar-check.mjs       # avatars: the catalogue and locked items, bots' looks, every look x every value, glasses, runtime portraits vs the stock pictures, red eyes on every look x eye colour, the wardrobe at the three iPad sizes, your avatar in the lift, four tables in a row (memory, draw calls)
+node tests/polish-check.mjs       # the round 2 polish, pure logic (no browser): the six seat colours stay apart for red-green and blue-yellow colour blindness (a simulation; the old lime set is the control that fails), the guest's initial, the "match in progress" marker (kept, taken once, 6 hours, damaged, blocked storage), the ring's numbers (~1 s; also in the GitHub Action)
+node tests/browser-polish.mjs     # the round 2 polish in a real browser: the app icon and manifest from a sub-path, a match cut short (reload mid-match, Main menu, a finished match, a stale marker, direct links), keyboard focus on the screens over the game, touch scrolling of tall pop-ups, small text and the tight HUD at 1024x768 and 1024x694, the initials and rings [--only head,reload,focus,scroll,text,seats]
 node tests/crash-check.mjs        # the frame safety net (src/ui/crash.js): a failing step is skipped, the card only after repeated failure, the ring of messages (~1 s; also in the GitHub Action)
 node tests/browser-reliability.mjs # start-up and failures in a real browser: an old browser (no import maps), a blocked file (one automatic reload, then the card), slow loading (no false alarm), a failing step (the picture goes on, the card after repeats), the graphics context lost and back (portraits drawn again), the sideways / wider messages, the Version line [--screens]
 node tests/profile-check.mjs      # profiles: the name rules, reserved words and filter, suggestions, profile repair, the account (memory store), seats and bots' avatars, seeded tables, the feed's name masking (~1 s)
 node tests/browser-profile.mjs    # the first-run register, the profile card, Change name, blocked storage, usernames at the table, ?user=, long names [--screens] [--sizes 1024x768,1366x1024]
-node tests/tips-check.mjs         # first-match tips ON: where they sit, never blocking, the clock runs on, once per device, Hide tips, Show tips again [--size 1024x768] [--shots DIR]
+node tests/tips-check.mjs         # first-match tips ON: where they sit, never blocking, the clock runs on, once per device, Hide tips, Show tips again, the safe-zone / pinch-and-drag / round-buttons tips [--size 1024x768] [--shots DIR] [--new-only: just the new tips]
+node tests/howto-check.mjs        # the words that teach the game (no browser): the How to play pages follow the rules' numbers (a copy of the rules with every number changed), the hint, the role screen's lines, the tips, the end screen's recap, no "AP" anywhere the player reads (~1 s)
+node tests/browser-learn.mjs      # How to play, the hint, the role screen, the Lanterns chip, the in-match Menu panel and what the clock does while it is open, the end screen's Victory / Defeat, at the four iPad sizes [--only a,b,c,d] [--sizes 1024x694,1180x820]
 python3 tools/audio/build.py      # rebuild every sound, ~6 min (tools/audio/README.md); needs numpy, scipy, ffmpeg
 python3 tools/audio/build.py revolver lobby   # rebuild only these (effect or music names); updates library.js + report.json
 node tools/balance/hotseat-sim.mjs 400 6   # 400 six-player matches under the rules as they stand (--before: same bots on the rules before Part 2; --compare: Lantern variants; --cautious)

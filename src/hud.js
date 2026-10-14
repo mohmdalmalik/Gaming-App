@@ -21,6 +21,8 @@ import { soulsHeld, soulsChip } from './ui/souls.js';
 import { redEyedAllies } from './ui/allies.js';
 import { roundLabel, finalRoundShort, isFinal } from './ui/roundLabel.js';
 import { tooSoon } from './ui/tapGuard.js';
+import { guestMarks } from './table.js';
+import { LANTERN_CHIP } from './data/howToPlay.js';
 
 // The room-job button (Infirmary, Switchboard): its label, what it does for its cost, and a plain
 // reason when it can't be used. A Linen Store has no button — its job is in the search itself.
@@ -61,6 +63,10 @@ export function createHud(doc, cfg) {
     role: doc.getElementById('panel-role'),
     clean: doc.getElementById('panel-clean'),
     souls: doc.getElementById('panel-souls'),
+    lanternLabel: doc.getElementById('lantern-label'),
+    lanternChip: doc.getElementById('lantern-chip'),
+    lanternGlyph: doc.querySelector('#lantern-chip .lc-glyph'),
+    lanternCount: doc.getElementById('lantern-count'),
     health: doc.getElementById('health'),
     apPips: doc.getElementById('ap-pips'),
     ap: doc.getElementById('action-points'),
@@ -91,17 +97,19 @@ export function createHud(doc, cfg) {
   let mini = null;            // the top-strip guest cells
   let portraitKey = '';       // so the panel portrait only rebuilds when it must
   let soulsKey = '';          // so the panel's souls counter only rebuilds when it must
+  let lanternKey = '';        // so the Lanterns chip only touches the page when the count changes
   let endLine = { own: '', shared: '' };   // End turn's second line: the guest's own words / the shared words
 
   // Top strip: one always-neutral portrait per guest, built once for the roster.
   function buildStrip(state) {
     el.strip.innerHTML = '';
-    mini = state.players.map(p => {
+    const marks = guestMarks(state.players.map(p => p.name));      // (the initial in the portrait's corner, so the colour is not the only mark)
+    mini = state.players.map((p, i) => {
       const cell = doc.createElement('div');
       cell.className = 'mini-player';
       cell.style.setProperty('--player-color', p.color);
       const flag = doc.createElement('div'); flag.className = 'mini-flag';
-      const port = doc.createElement('div'); port.className = 'mini-portrait';
+      const port = doc.createElement('div'); port.className = 'mini-portrait'; port.dataset.mark = marks[i];
       port.appendChild(makePortrait(doc, p, { possessed: false })); // never reveal roles here (but see `red` below)
       // The guest's username, on one line (a long one ends in "…"; the full name on hover).
       const name = doc.createElement('div'); name.className = 'mini-name u'; name.textContent = p.name; name.title = p.name;
@@ -152,7 +160,7 @@ export function createHud(doc, cfg) {
     // back on in the next game only if the player is possessed there.)
     hide() { el.root.hidden = true; el.tint.hidden = true; },
     // A new table: the strip is built again for its guests.
-    rebuild() { mini = null; portraitKey = ''; soulsKey = ''; },
+    rebuild() { mini = null; portraitKey = ''; soulsKey = ''; lanternKey = ''; },
     update(state, floor) {
       const active = activePlayer(state);
       const p = viewerOf(state);
@@ -324,6 +332,21 @@ export function createHud(doc, cfg) {
         soulsKey = sk;
         el.souls.replaceChildren(...(on ? [soulsChip(doc, soulsHeld(p), { compact: true, owner: p.id })] : []));
       }
+      hud.syncLanterns(p);
+    },
+    // The Lanterns chip: the VIEWER's own Lanterns out of the number that opens the Fire Exit ("✦ 1/3"). Their
+    // own hand only, shown the same way whatever their role (a possessed guest can hold Lanterns too, and
+    // the chip is no sign of one side or the other). Touches the page only on a change; syncTell runs it every frame.
+    syncLanterns(p) {
+      const n = p.hand.reduce((k, c) => k + (c.type === 'lantern' ? 1 : 0), 0);
+      const key = `${p.index}:${n}`;
+      if (key === lanternKey) return;
+      lanternKey = key;
+      const need = rules.lanternsToEscape;
+      el.lanternLabel.textContent = LANTERN_CHIP.label;
+      if (el.lanternGlyph) el.lanternGlyph.textContent = rules.cards.lantern.glyph;
+      el.lanternCount.textContent = LANTERN_CHIP.text(n, need);
+      el.lanternChip.setAttribute('aria-label', LANTERN_CHIP.aria(n, need));
     },
     // End turn's second line: "Discard N first" (the player's own card count), or who is next. Cheap
     // (touches the page only on a change), so main.js runs it every frame.

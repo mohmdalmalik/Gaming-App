@@ -1,5 +1,31 @@
 # PROGRESS
 
+## Round 2, learn: How to play, the Menu panel, the Lanterns count, Victory / Defeat, three tips (2026-10-14)
+
+From the 13 Oct audit (owner-approved list: F1, G17, G6, G11). Interface, tests and docs only; no rule or rule
+number changed. Details in docs/DECISIONS.md 'Round 2, learn'.
+
+- **One word for the action budget (F1)**: "1 action" / "3 actions" on the tags, the Move button, the toasts; no
+  "AP" or "action points" anywhere the player reads (tests/howto-check.mjs scans for them).
+- **How to play (F1)**: five short pages (the goal, your turn, meetings and trades, possession and Lanterns,
+  staying alive) with Back / Next / Close, from the main menu (a button beside Settings and Your record) and from
+  the Menu in a match. Every word is in src/data/howToPlay.js (the owner's draft), the numbers read from the
+  rules. A hint under "Practice alone" until you have finished a match or a practice. The role screen's
+  headline is "You are clean" / "You are possessed", its text is 16 px, and one line says how the other side wins.
+- **The Menu panel (G17)**: the Menu button opens Resume, Music and Sound effects, How to play and Leave (which
+  asks "Leave the match?" as before). The turn clock does exactly what it did when the button asked that
+  question: it stands still while the panel (or the question) is open. The owner's decision on pausing is
+  still pending; nothing was changed.
+- **The Lanterns count and the end screen (G6)**: a small "Lanterns 1/3" chip in your player panel (your own
+  count, the same for both sides); the end screen says Victory or Defeat for your side, whether or not you are
+  alive or got out, and one recap line ("oakhart was possessed first and possessed ari_v, birch and moth.").
+- **Tips (G11)**: the first-meeting tip says both halves of the Lantern dilemma; three new tips (the safe
+  zone, pinch and drag, what the round camera buttons do).
+- **Tests**: new tests/howto-check.mjs (node) and tests/browser-learn.mjs; tests/tips-check.mjs has a section
+  for the new tips; browser-bots and tips-check tap Menu, then Leave.
+- **Only a real iPad can say**: the feel of the new buttons and text sizes under a finger, Safari's focus ring,
+  and how the new tips sit beside the round buttons at the real size.
+
 ## Round 1: accidental taps, flicker and Reduce Motion, the small window, sounds, the Revolver, and the review's fixes (2026-10-14)
 
 From the 13 Oct audit (owner-approved list, round 1: F5, G1-G4, then the review's findings). Interface, tests

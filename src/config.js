@@ -63,7 +63,9 @@ export const config = {
     bobAmplitude: 0.03,       // vertical bob while walking
     ringRadius: 0.42,         // coloured floor ring under each character
     ringActiveOpacity: 0.95,
-    ringInactiveOpacity: 0.35,
+    ringInactiveOpacity: 0.6,     // (was 0.35: the other guests' rings hardly showed on a red rug)
+    ringEdgeOpacity: 0.5,         // the thin dark edge round every ring (src/render/characterView.js)
+    ringEdgeActiveOpacity: 0.7,
     markerHeight: 0.16,       // how far the active marker floats above the head
   },
 

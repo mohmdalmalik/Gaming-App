@@ -181,7 +181,7 @@ check(cues.fog.length === cues.n && cues.doors.every(d => cues.fog.some(f => f.d
 check(cues.fogMeshes === 1 && cues.fogDraws === cues.n * 3, `all the fog is one mesh, one draw call (${cues.fogDraws} see-through layers)`);
 {
   const tags = await game(() => window.__game.fogLabels());
-  check(tags.length === cues.n && tags.every(t => t.text === 'Explore · 1 AP'), `each fogged room carries an "Explore · 1 AP" tag (${tags.length})`);
+  check(tags.length === cues.n && tags.every(t => t.text === 'Explore · 1 action'), `each fogged room carries an "Explore · 1 action" tag (${tags.length})`);
 }
 // The hand is a fan of cards along the bottom and searching is an icon over the room's search spot:
 // at every size and every turn of the view, each fogged room can still be tapped somewhere, and a tap
@@ -224,7 +224,7 @@ await frames(4);
 const opened = await game(() => ({ rooms: window.__game.hotelRooms(), ap: window.__game.activePlayer().actionPoints, room: window.__game.activePlayer().currentRoom,
   bar: !document.getElementById('confirm-bar').hidden, toast: document.getElementById('toast').textContent }));
 check(tapped && opened.rooms.length === 2 && opened.ap === 3 && opened.room === 'hall' && !opened.bar,
-  `tapping a fogged room opens its door at once, no question asked: 1 action point, ${opened.rooms[1]} is revealed, and you stay in the lobby`);
+  `tapping a fogged room opens its door at once, no question asked: 1 action, ${opened.rooms[1]} is revealed, and you stay in the lobby`);
 check(/^The door opens/.test(opened.toast.trim()), `the game says what is there ("${opened.toast.trim()}")`);
 const doorwayId = `hall->${opened.rooms[1]}`;
 await page.waitForTimeout(800); await frames(10);
@@ -238,7 +238,7 @@ let pv = await game(() => ({ confirm: !document.getElementById('confirm-bar').hi
 const destName = await game(id => window.__game.floor.rooms.get(id).name, dest);
 check(pv.confirm && pv.text === `Move to ${destName}?`, `tapping the revealed room (anywhere on it) asks first: "${pv.text}"`);
 check(pv.on && pv.dots >= 4, `with a dotted path (${pv.dots} dots)`);
-check(pv.label === 'Move · 1 AP', `and a tag saying what it costs ("${pv.label}")`);
+check(pv.label === 'Move · 1 action', `and a tag saying what it costs ("${pv.label}")`);
 const dc = await game(id => window.__game.roomCenter(id), dest);
 check(!!pv.outline && Math.hypot(pv.outline[0] - dc[0], pv.outline[1] - dc[1]) < 0.01, 'and an outline round the room you are about to walk to');
 const tag = await page.evaluate(() => { const r = document.querySelector('.path-label').getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top, w: r.width, vw: innerWidth, vh: innerHeight }; });
@@ -272,7 +272,7 @@ await frames(3);
 check(await game(() => !window.__game.pathPreview.visible), 'confirming clears the preview as the guest sets off');
 await page.waitForFunction(() => !window.__game.activeMover().walking && window.__game.activeMover().path.length === 0, null, { timeout: 40000 });
 const arrived = await game(() => { const g = window.__game, m = g.activeMover(), p = g.activePlayer(), c = g.roomCenter(p.currentRoom); return { room: p.currentRoom, ap: p.actionPoints, off: Math.hypot(m.x - c[0], m.z - c[1]) }; });
-check(arrived.room === dest && arrived.ap === 2, 'the guest walked through into the new room, for 1 action point');
+check(arrived.room === dest && arrived.ap === 2, 'the guest walked through into the new room, for 1 action');
 check(arrived.off < 0.05, `and stands in its middle (${arrived.off.toFixed(2)} m off)`);
 
 console.log('\n6. camera');

@@ -39,13 +39,13 @@ export const outfits = {
     model: 'assets/characters/eleanor.glb', modelHeight: 1.66, strideLength: 1.0344 },   // Eleanor (tools/char-pipeline/guests/eleanor.py)
 };
 
-// The guests in turn order. `color` is the marker ring / interface colour. A hot-seat match uses
-// the first 4-6 of them; practice uses the first one only. Names are still placeholders.
+// The guests in turn order. `color` is the marker ring / interface colour (the seat colours of src/table.js). A
+// hot-seat match uses the first 4-6 of them; practice uses the first one only. Names are still placeholders.
 export const roster = [
-  { id: 'p1', name: 'Victor', outfit: 'tuxedo', color: '#e6b45a' },
-  { id: 'p2', name: 'Eleanor', outfit: 'dressMidnight', color: '#5ac8e6' },
-  { id: 'p3', name: 'Marcus', outfit: 'suit', color: '#a8e05a' },
-  { id: 'p4', name: 'Beatrice', outfit: 'dressEmerald', color: '#e67ab8' },
-  { id: 'p5', name: 'Henry', outfit: 'dinnerJacket', color: '#f0743c' },
-  { id: 'p6', name: 'Clara', outfit: 'dressBurgundy', color: '#b8a2f0' },
+  { id: 'p1', name: 'Victor', outfit: 'tuxedo', color: '#e6bc5c' },
+  { id: 'p2', name: 'Eleanor', outfit: 'dressMidnight', color: '#73d4e6' },
+  { id: 'p3', name: 'Marcus', outfit: 'suit', color: '#2f8cff' },
+  { id: 'p4', name: 'Beatrice', outfit: 'dressEmerald', color: '#e673ac' },
+  { id: 'p5', name: 'Henry', outfit: 'dinnerJacket', color: '#e6652e' },
+  { id: 'p6', name: 'Clara', outfit: 'dressBurgundy', color: '#b6b2ff' },
 ];

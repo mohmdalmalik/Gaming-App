@@ -229,40 +229,37 @@ commit's mark after a publish.
 1. In `src/version.js` set `VERSION` (`'v0.6'`) and `VERSION_DATE` (`'20 Oct 2026'`). It shows at the bottom of
    Settings ("Version v0.6 · 20 Oct 2026") and in the small print of the "Something went wrong" card, so a
    screenshot or a bug report says which build it came from. Commit it with the publish.
-2. Push to `main`, then name that exact commit:
-
-   ```
-   git tag -a v0.6 -m "v0.6: one line on what is in it"
-   git push origin v0.6
-   ```
+2. Push to `main`, then write that exact commit into `docs/VERSIONS.md` (version, date, commit, one line on what
+   is in it). The version list is a file because Claude's cloud session cannot push git tags (GitHub refuses
+   them); a tag or a Release you make yourself on GitHub works the same way in the commands below.
 
 **See the versions.**
 
 ```
-git tag --list 'v0.*' --sort=-v:refname     # newest first
-git log --oneline v0.5..main                 # what has been published since v0.5
-git show v0.5 --stat                         # what v0.5 was
+cat docs/VERSIONS.md                         # every published version and its commit
+git log --oneline <commit-of-v0.5>..main      # what has been published since v0.5
+git show <commit-of-v0.5> --stat             # what v0.5 was
 ```
 
-On GitHub: the repository's **Tags** list (the code as it was at that version). On the iPad: Settings.
+On the iPad: Settings shows the version of the game you are playing.
 
-**Put the live game back on an earlier version** (to say it to Claude: "roll back to v0.5"). History is never
+**Put the live game back on an earlier version** (to say it to Claude: "roll back to v0.5"; the commit is in `docs/VERSIONS.md`). History is never
 rewritten and nothing is force-pushed: the rollback is one new commit that makes the files exactly what they
 were at `v0.5`, pushed like any other change:
 
 ```
 git checkout main && git pull
-git restore --source=v0.5 --staged --worktree -- .    # the files exactly as at v0.5 (files added since go too)
+git restore --source=<commit-of-v0.5> --staged --worktree -- .    # the files exactly as at v0.5 (files added since go too)
 git commit -m "Roll back to v0.5"
 git push origin main
 ```
 
 About a minute later the live game is v0.5 again, and Settings says so (the version file comes back with it).
-Because history is kept, the newer work is still there to look at (`git log v0.5..main`). To bring it back for
+Because history is kept, the newer work is still there to look at (`git log <commit-of-v0.5>..main`). To bring it back for
 fixing, undo the rollback commit: `git revert <the "Roll back to v0.5" commit>` (merging the old branch again
 does nothing: its commits are already part of history, so git says "Already up to date"), then fix it and
-publish it as the next number. To take back only the LAST publish, undo its merge commit instead (`-m 1` keeps the
-main line): `git revert -m 1 <the "Merge main (published)" commit>` then `git push origin main`.
+publish it as the next number. To take back only the LAST publish, undo its commit instead (each publish is one squashed
+commit on `main`): `git revert <the publish commit>` then `git push origin main`.
 `git revert v0.5..main` over several publishes does not work here: history has merge commits.
 
 **Why not a staging site or a build step:** the owner works straight on `main`, the game is not yet played by

@@ -11,4 +11,4 @@ record instead.) The newest version is written in right after it is published.
 | v0.2 | 10 Oct 2026 | `9edb792ad259c441d1c10f322e148f19f858801c` | Three Possession cards, trades as card scenes, music and sound effects, the quality round |
 | v0.3 | 11 Oct 2026 | `d698cdc103da8b965abf994ce498966892cfa806` | Soul cards, red eyes on known allies, quick chat, choose your guest, your record, first-match tips |
 | v0.4 | 12 Oct 2026 | `4651237dc488d309e4208e4202af453736fd539f` | Username sign-up and profile, the avatar wardrobe, bots as players, chat that names a guest, the online plan |
-| v0.5 | 14 Oct 2026 | (written in after publishing) | Audit round 1: freeze net, start-up messages, publishing safety net, safer taps, gentler flicker, 1024x694 fixes, sound slips, Revolver renewal |
+| v0.5 | 14 Oct 2026 | `103afb4669bb7fb3f869e80923e1518cd68d10de` | Audit round 1: freeze net, start-up messages, publishing safety net, safer taps, gentler flicker, 1024x694 fixes, sound slips, Revolver renewal |

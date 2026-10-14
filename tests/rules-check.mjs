@@ -276,6 +276,32 @@ console.log('\nsearching, the deck and the discard pile');
   const drawn = drawCard(s2);
   check(drawn && drawn.id === card.id && s2.discardPile.length === 0, 'when the deck is empty the discard pile is shuffled into a new deck');
 }
+{
+  // GAME_RULES: a Revolver has two shots and is discarded when empty; the discard pile is shuffled into a new
+  // deck. A Revolver that comes back that way is a new card: two shots again (before the fix it came back with
+  // 0 and, fired once more, went to -1). The card data says how many shots (rules.cards.revolver.shots).
+  const full = rules.cards.revolver.shots;
+  const s = hs(15), A = s.players[0], B = s.players[1], C = s.players[2];
+  A.currentRoom = B.currentRoom = C.currentRoom = 'corridorE'; A.actionPoints = 4;
+  A.hand.push({ id: 'rvSpent', type: 'revolver', shots: full }, { id: 'rvOne', type: 'revolver', shots: full });
+  resolveAttack(s, floor, A, B, 'rvSpent'); resolveAttack(s, floor, A, C, 'rvSpent');
+  check(s.discardPile.some(c => c.id === 'rvSpent') && !A.hand.some(c => c.id === 'rvSpent'), 'a Revolver fired out goes to the discard pile');
+  resolveAttack(s, floor, A, B, 'rvOne');                      // one shot spent: it has one left...
+  check(discardCard(s, A, 'rvOne').ok && s.discardPile.some(c => c.id === 'rvOne'), '...and is thrown away at the hand limit with that shot left');
+  s.drawPile = [];
+  const back = [drawCard(s), drawCard(s)];
+  check(back.every(c => c?.type === 'revolver') && back.map(c => c.id).sort().join() === 'rvOne,rvSpent' && s.discardPile.length === 0,
+    'with the deck empty, the discard pile is shuffled into a new deck: both Revolvers come back');
+  check(back.every(c => c.shots === full), `each comes back with all ${full} shots (${back.map(c => `${c.id}: ${c.shots}`).join(', ')})`);
+  // ...and it really fires twice again, then is gone: never a shot count below 0.
+  B.alive = C.alive = true; B.health = C.health = rules.maxHealth; A.actionPoints = 4;   // (the earlier shots hurt them)
+  const rv = back.find(c => c.id === 'rvSpent'); A.hand.push(rv);
+  const r1 = resolveAttack(s, floor, A, B, rv.id);
+  check(r1.ok && !r1.discarded && rv.shots === full - 1 && B.health === rules.maxHealth - rules.cards.revolver.damage, 'the returned Revolver fires: 2 damage, one shot left');
+  const r2 = resolveAttack(s, floor, A, C, rv.id);
+  check(r2.ok && r2.discarded && rv.shots === 0 && !A.hand.some(c => c.id === rv.id), 'the second shot empties it and it is gone again (0 shots, never fewer)');
+  check(resolveAttack(s, floor, A, B, rv.id).reason === 'noWeapon', 'nothing more to fire');
+}
 // Dark rooms need a Flashlight (not used up).
 {
   const s = hs(10), p = activePlayer(s);

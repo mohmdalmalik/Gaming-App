@@ -171,7 +171,9 @@ readout at the top left (below the room name), for measuring speed on the iPad.
   CLEAN badge. Everyone else (and the guest strip) always sees the normal guest.
 - **Meetings** (a match) — walk in on a guest you have not met in that room this round and you
   must Trade or Attack. In a trade each side picks a card in private and sees only what they
-  received. If either guest has no ordinary card (Possession cards don't count), the trade is
+  received: a tap lifts a card and says what it does (a Revolver says how many shots it has left), a
+  second card switches the choice, and the button that names it ("Give the Lantern", "Give your soul")
+  gives it, so one stray tap gives nothing. If either guest has no ordinary card (Possession cards don't count), the trade is
   skipped and each is told why (the others see only "no trade"). Give a Lantern and a Possession card
   cannot take you. The lobby is safe. The weapon picker has a Back button.
 - **Escape** — a clean guest carrying three Lanterns walks into the Fire Exit (1 AP) and taps
@@ -181,9 +183,19 @@ readout at the top left (below the room name), for measuring speed on the iPad.
 - **End turn** — refills action points to 4; if you hold more than 6 ordinary cards you discard
   first (Lanterns count; Possession cards never do): tap a card to pick it, then confirm with the
   button. The rules engine itself refuses to end a turn over the limit (`canEndTurn` in
-  `src/game/state.js`), so a future server enforces it too. A double tap on End turn ends only one turn. *Restart practice* asks before it wipes the game.
-- **Landscape only** — in portrait (or a window under ~900 px wide) a card asks you to turn the iPad
-  sideways; the turn clock waits meanwhile.
+  `src/game/state.js`), so a future server enforces it too. With actions left, End turn asks first ("You still
+  have 3 actions. End turn?", with End turn and Keep playing in the same bar as Move); no question with none
+  left, when the clock runs out, or for a computer guest. A double tap on End turn only asks, never ends two
+  turns. *Leave the match?*, *Leave practice?* and *Restart practice?* put Keep playing in gold and the
+  leaving answer plain.
+- **Landscape only** — a window taller than wide (an iPad held upright) shows a card asking you to turn the
+  iPad sideways; a wide but small window (page zoom, a small browser window) says "Make this window wider, or
+  reduce page zoom."; so does a narrow window on an iPad that is already sideways (Split View). The turn
+  clock waits behind either card.
+- **Reduce Motion** (the iPad's own Settings > Accessibility > Motion) quiets the decorative motion: the two
+  flickering corridors hold steady, the cards dealt into the hand and the menu pages stop moving, and the lobby
+  behind the menu stays still (Settings > Menu background then shows Animated dimmed, with the reason). Nothing
+  it shows is left out.
 
 Controls (camera): pinch / wheel to zoom — out as far as it takes to see every revealed room at once
 (the limit grows with the hotel; zoomed far out each room with guests carries one name tag) — and drag (one finger,
@@ -202,16 +214,84 @@ python3 -m http.server 8000
 
 Three.js loads from a CDN, so the first load needs an internet connection.
 
+## Publishing and rolling back
+
+**How the live game is made.** GitHub Pages serves the `main` branch as it is: no build, no staging copy. A
+change is live for everyone about a minute after it reaches `main`, and a browser may keep the old files for up
+to about ten minutes (reload twice to be sure). Nothing waits for the tests: a GitHub Action
+(`.github/workflows/tests.yml`) runs the fast suites (`rules-check`, `logic-check`, `bots-check`,
+`chat-check`, `profile-check`, `crash-check`, `audio-buttons-check`, `flicker-check`; no install needed) on every
+push and shows a red cross on the commit if one fails. That is a warning only; it never blocks or removes a publish. Look at the Actions tab or the
+commit's mark after a publish.
+
+**Every publish gets a version, `v0.N`** (the next number each time):
+
+1. In `src/version.js` set `VERSION` (`'v0.6'`) and `VERSION_DATE` (`'20 Oct 2026'`). It shows at the bottom of
+   Settings ("Version v0.6 · 20 Oct 2026") and in the small print of the "Something went wrong" card, so a
+   screenshot or a bug report says which build it came from. Commit it with the publish.
+2. Push to `main`, then name that exact commit:
+
+   ```
+   git tag -a v0.6 -m "v0.6: one line on what is in it"
+   git push origin v0.6
+   ```
+
+**See the versions.**
+
+```
+git tag --list 'v0.*' --sort=-v:refname     # newest first
+git log --oneline v0.5..main                 # what has been published since v0.5
+git show v0.5 --stat                         # what v0.5 was
+```
+
+On GitHub: the repository's **Tags** list (the code as it was at that version). On the iPad: Settings.
+
+**Put the live game back on an earlier version** (to say it to Claude: "roll back to v0.5"). History is never
+rewritten and nothing is force-pushed: the rollback is one new commit that makes the files exactly what they
+were at `v0.5`, pushed like any other change:
+
+```
+git checkout main && git pull
+git restore --source=v0.5 --staged --worktree -- .    # the files exactly as at v0.5 (files added since go too)
+git commit -m "Roll back to v0.5"
+git push origin main
+```
+
+About a minute later the live game is v0.5 again, and Settings says so (the version file comes back with it).
+Because history is kept, the newer work is still there to look at (`git log v0.5..main`). To bring it back for
+fixing, undo the rollback commit: `git revert <the "Roll back to v0.5" commit>` (merging the old branch again
+does nothing: its commits are already part of history, so git says "Already up to date"), then fix it and
+publish it as the next number. To take back only the LAST publish, undo its merge commit instead (`-m 1` keeps the
+main line): `git revert -m 1 <the "Merge main (published)" commit>` then `git push origin main`.
+`git revert v0.5..main` over several publishes does not work here: history has merge commits.
+
+**Why not a staging site or a build step:** the owner works straight on `main`, the game is not yet played by
+outsiders, and CLAUDE.md fixes "no build step for now". This is the cheapest net: a version to name, a one-
+screen way back, a warning when a fast suite fails. If outside players ever arrive, the next step is to let
+Pages publish from a workflow, so a red run blocks the publish (Settings → Pages → Source: GitHub Actions).
+
+**If the game will not load** (right after a publish Safari can mix old and new files): the page reloads once by
+itself (not while the device is offline: a reload cannot help), then says "The game could not load. Try again."
+with a **Reload** button (technical text in small print under it). A load that never finishes (a stalled
+connection) gets a plain Reload button on the loading screen after 30 seconds. A browser too old for the game
+(iPadOS below 16.4) says "Hotel Escape needs iPadOS 16.4 or newer." The browser's own answer about import maps is
+only a hint: the game is always tried first, and that card shows only when it then fails to load, so a browser
+that answers wrongly still starts the game.
+
 ## Project structure
 
 ```
-index.html            page shell: import map, HUD, panels, overlays
+index.html            page shell: import map, HUD, panels, overlays, the start-up script (what is loading, the
+                      old-browser message, one automatic reload, the problem card)
 styles.css            interface styling (touch-safe, safe-area aware)
+.github/workflows/tests.yml   the fast node suites on every push and pull request (a warning only, see above)
 src/
   main.js             starts everything; the menu → lift → game flow; the turn flow (the player's turns
                       and the bots' turns, meetings both ways); window.__game debug hooks
+  version.js          the version label and date shown in Settings (set at each publish)
   config.js           display / camera / feel tuning
   settings.js         the player's own settings (bot speed, view, graphics, menu background, music, sound, quick chat, tips), kept on the device
+  motion.js           the device's Reduce Motion setting (prefers-reduced-motion), read live: it holds the two flickering corridors' light steady, the menu lobby Still and, in styles.css, the decorative CSS motion quiet
   record.js           your record (played / won / lost, by side, escapes, practice escapes), kept on the device; counted by main.js at the end screen
   account/            who you are: account.js (the profile on this device, key 'hotelEscape.profile.v1', behind an
                       async interface a server account can replace: signUp, rename, setAvatar, owns, onChange),
@@ -222,7 +302,8 @@ src/
   audio/              music and sound (Web Audio): bus.js (the cue bus: sfx('doorOpen')), index.js (the player:
                       unlock on the first tap, music by scene with crossfades, effects with variation and a
                       voice cap), gameSounds.js (the hotel's sounds from the engine's PUBLIC events, footsteps),
-                      sounds.js (the mix: cue -> file, levels, scenes), library.js (GENERATED file table)
+                      sounds.js (the mix: cue -> file, levels, scenes), library.js (GENERATED file table),
+                      buttonCues.js (which cue each button makes: open / close / select / click; pure, listed and checked by tests/audio-buttons-check.mjs)
   menu/               the lobby behind the main menu: lobbyScene.js (the API: idle life, the lift
                       sequence, the camera; your avatar by the lift, setPlayerAvatar, and the wardrobe
                       camera, setWardrobe), lobbyLayout.js (every position, the cast, your spot, paths and
@@ -260,7 +341,7 @@ src/
                         (accusations after their own Lantern block or Hand Mirror, denials, trust, a
                         possessed bot's lies) — from each bot's own view and mind only; its own random numbers
                         (listening is in brain.js: onChat / hearsay, weights in data/chat.js BOT_HEAR)
-  render/             Three.js visuals: greybox rooms, doors, characters, cutaway, mood,
+  render/             Three.js visuals: greybox rooms, doors, characters, cutaway, mood (flicker.js: the two spooky corridors' flicker as pure functions, steady under Reduce Motion),
                       searched-room ticks; bakedRoom.js loads the baked rooms; xray.js fades
                       whatever stands between the camera and the active guest / search spot;
                       fog.js the fogged rooms beyond closed doors (+ "Explore · 1 AP" tags);
@@ -286,6 +367,7 @@ src/
     profileCard.js                    the main menu's card: "Playing as <name> · Adjust avatar ›"
     avatarEditor.js                   the wardrobe (your avatar): Male / Female, the look, every slot, locked "Coming soon" items
     portrait.js                       a guest's portrait: drawn from their avatar (the service main.js hands in), the stock picture until then
+    crash.js                          the safety net: every step of a frame runs through it, so one failing step never freezes the picture; the last messages kept; "Something went wrong" (Back to menu, Reload) only after repeated failure
     record.js                         the Your record screen and the end screen's record line (words: src/data/record.js)
     feed.js                           what the other guests just did (public words), under the room name
     chat.js                           quick chat: the Chat button and its two-tab panel, "Choose a guest" for a line
@@ -371,10 +453,15 @@ node tests/browser-practice.mjs   # practice mode in a real browser [--screens]
 node tests/browser-bots.mjs       # the main menu and matches against bots in a real browser: settings, the table filling up, the lift, bots' turns, privacy, meetings both ways, being attacked, the end screen, whole matches [--screens] [--matches 3]
 node tests/browser-lobby.mjs      # the baked starting room, fog rooms, tap to open / move, camera (big hotel), draw calls
 node tests/audio-check.mjs        # music and sound: unlock on the first tap, every file decodes, Settings, the menu -> lift -> game music, cues in a match and practice [--quick]
+node tests/audio-buttons-check.mjs # which sound every button makes (pure, no browser): a new button must be listed with its sound, so it cannot slip onto the wrong one; and every cue has its file (~1 s)
+node tests/flicker-check.mjs       # the two corridors' flicker measured (at most 3 flashes a second of the whole room; steady, not moving at all, under Reduce Motion) (~5 s)
+node tests/browser-build-fixes.mjs # the round 1 fixes in a real browser: End turn's question and the two-step card pick, the sounds, a one-card find and the map legend at the four iPad sizes, Reduce Motion [--only a,b,c,d]
 node tests/trade-reveal-check.mjs # the trade scene: real trades for all seven outcomes (conversion with two new souls of your own, then your role; Lantern block; swap; you possess them; a soul spent on a guest already possessed; two souls crossed): soul faces, hands after, red eyes on known allies
 # (the browser tests' launchers seed a saved profile 'tester' before each page, so the menu opens on the
 #  main screen; tests/browser-profile.mjs starts with none, to check the register)
 node tests/avatar-check.mjs       # avatars: the catalogue and locked items, bots' looks, every look x every value, glasses, runtime portraits vs the stock pictures, red eyes on every look x eye colour, the wardrobe at the three iPad sizes, your avatar in the lift, four tables in a row (memory, draw calls)
+node tests/crash-check.mjs        # the frame safety net (src/ui/crash.js): a failing step is skipped, the card only after repeated failure, the ring of messages (~1 s; also in the GitHub Action)
+node tests/browser-reliability.mjs # start-up and failures in a real browser: an old browser (no import maps), a blocked file (one automatic reload, then the card), slow loading (no false alarm), a failing step (the picture goes on, the card after repeats), the graphics context lost and back (portraits drawn again), the sideways / wider messages, the Version line [--screens]
 node tests/profile-check.mjs      # profiles: the name rules, reserved words and filter, suggestions, profile repair, the account (memory store), seats and bots' avatars, seeded tables, the feed's name masking (~1 s)
 node tests/browser-profile.mjs    # the first-run register, the profile card, Change name, blocked storage, usernames at the table, ?user=, long names [--screens] [--sizes 1024x768,1366x1024]
 node tests/tips-check.mjs         # first-match tips ON: where they sit, never blocking, the clock runs on, once per device, Hide tips, Show tips again [--size 1024x768] [--shots DIR]

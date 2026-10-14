@@ -59,7 +59,7 @@ const QUIET = { color: '#e8d8b8', intensity: 0.8, ambient: 0.6 };
 const COOL = { color: '#c0ccd8', intensity: 0.7, ambient: 0.45 };
 const DARK = { color: '#b8c2d0', intensity: 0.45, ambient: 0.32 };
 const CLINIC = { color: '#e6eeff', intensity: 1.0, ambient: 0.8 };
-const FLICKER = { color: '#c4c8d4', intensity: 0.55, ambient: 0.38, flicker: { min: 0.3, max: 1.0, speed: 10 } };
+const FLICKER = { color: '#c4c8d4', intensity: 0.55, ambient: 0.38, flicker: { min: 0.5, max: 1.0, speed: 5 } };   // (a gentle flicker: about 5 steps a second, never below half the light; src/render/flicker.js)
 
 export const hotel = {
   id: 'hotel',

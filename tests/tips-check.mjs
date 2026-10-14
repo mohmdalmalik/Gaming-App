@@ -49,6 +49,17 @@ const where = () => ev(parts => {
   for (const s of parts) for (const e of document.querySelectorAll(s)) if (!e.hidden && !e.closest('[hidden]') && e.getClientRects().length && hit(e.getBoundingClientRect())) over.push(s);
   return { over: [...new Set(over)], inside: a.left >= 0 && a.top >= 0 && a.right <= innerWidth && a.bottom <= innerHeight, box: { l: a.left, t: a.top, r: a.right, b: a.bottom } };
 }, PARTS);
+// The tip once it has come to rest: whole on screen, over no part of the interface and in the same place at two looks
+// 400 ms apart (up to 8 s; if it never does, the last look, which the check then fails on).
+const settled = async () => {
+  let last = null; const end = Date.now() + 8000;
+  while (Date.now() < end) {
+    const x = await where();
+    if (x && x.inside && !x.over.length && last && Math.abs(x.box.t - last.box.t) < 1 && Math.abs(x.box.l - last.box.l) < 1) return x;
+    last = x; await page.waitForTimeout(400);
+  }
+  return last;
+};
 // What a finger at the middle of `sel` lands on (true: that element or something inside it).
 const underFinger = sel => ev(s => { const e = document.querySelector(s); if (!e) return false; const r = e.getBoundingClientRect(); const at = document.elementFromPoint((r.left + r.right) / 2, (r.top + r.bottom) / 2); return !!at && e.contains(at); }, sel);
 async function begin(query) {
@@ -141,7 +152,10 @@ try {
     check(!!await poll(() => !document.getElementById('confirm-bar').hidden, null, 8000), 'a tap on a room opens the Move bar');
     if (await showing('moveBar')) {
       await page.waitForTimeout(600);
-      w = await where();
+      // The tip is first placed against the bar while it is still sliding in, and moves clear of it at the next look
+      // (every 200 ms of game time: later on a loaded machine that draws a few frames a second). So the check waits
+      // for the tip to settle: clear of the interface and not moving between two looks.
+      w = await settled();
       check(!!w && w.inside && !w.over.length, `the Move bar's tip is over no part of the interface${w?.over.length ? `: ${w.over.join(', ')}` : ''}`);
       check(await underFinger('#btn-confirm-move') && await underFinger('#btn-confirm-cancel'), '...and Move and Cancel are still under the finger');
       await shot('move-bar');

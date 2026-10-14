@@ -1,0 +1,33 @@
+# A quiet safety net: the fast suites (the rules, the generated hotels, the computer guests, quick chat, the
+# profile, the frame safety net, which sound each button makes and the corridors' flicker) run on every push and
+# pull request, and a red cross on the commit says one of them failed. It only REPORTS. The live game is published straight from the main branch by GitHub Pages and
+# does not wait for this, so a red run never blocks (or removes) a publish.
+# See README > Publishing and rolling back.
+#
+# These suites import only src/, with no three.js and no browser, so nothing is installed: no npm ci, no
+# tests/node_modules. (The browser suites need Chromium and take 5-15 minutes each; they are run by hand.)
+name: Tests
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  fast-suites:
+    name: ${{ matrix.suite }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false        # every suite reports, even if another one failed
+      matrix:
+        suite: [rules-check, logic-check, bots-check, chat-check, profile-check, crash-check, audio-buttons-check, flicker-check]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Run ${{ matrix.suite }}
+        run: node tests/${{ matrix.suite }}.mjs

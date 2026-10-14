@@ -44,6 +44,7 @@ import { createDiscovery } from './discovery.js';
 import { createHud } from './hud.js';
 import { createMap } from './map.js';
 import { createOverlays } from './overlays.js';
+import { createCrashNet } from './ui/crash.js';
 import { createHand } from './ui/hand.js';
 import { createHandFan } from './ui/handFan.js';
 import { createSearchSpot } from './ui/searchSpot.js';
@@ -263,6 +264,43 @@ function followPoint() {
 const hud = createHud(document, cfg);
 const map = createMap(document, floor, cfg);
 const overlays = createOverlays(document);
+// The safety net (src/ui/crash.js): every step of a frame runs through crash.step, so one failing step never
+// stops the picture; after a step has failed frame after frame (or the page keeps throwing the same error)
+// the "Something went wrong" card shows, with Back to menu and Reload and the last message in small print.
+let graphicsCard = false;     // (the card on screen is the lost-graphics one: it goes if they come back)
+const crash = createCrashNet({
+  onGiveUp: ({ detail }) => overlays.showError('Go back to the menu, or reload the game.', { title: 'Something went wrong', detail, menu: true }),
+});
+crash.install(window);
+overlays.onErrorMenu(() => {
+  overlays.hideError(); crash.reset(); graphicsCard = false;
+  backToMenu().catch(err => { console.error(err); overlays.showError('The menu could not open. Reload the game.', { title: 'Something went wrong', detail: crash.detail() }); });
+});
+// (graphics lost and back, e.g. iPad Safari short of memory: three.js and the portraits recover by themselves;
+// the card's small print says it happened. Lost and NOT back after GRAPHICS_LOST_MS of the player looking at
+// the page: the picture is a still image with a live interface on top of it, so the card comes up. Time with
+// the page hidden does not count: a loss in the background is normal and Safari restores it on return.)
+const GRAPHICS_LOST_MS = 5000;
+let graphicsWatch = 0;
+view.renderer.domElement.addEventListener('webglcontextlost', () => {
+  crash.note('graphics', 'The graphics context was lost.');
+  clearInterval(graphicsWatch);
+  let seen = 0, last = performance.now();
+  graphicsWatch = setInterval(() => {
+    const t = performance.now();
+    if (document.visibilityState === 'visible') seen += Math.min(t - last, 1000);
+    last = t;
+    if (seen < GRAPHICS_LOST_MS) return;
+    clearInterval(graphicsWatch);
+    graphicsCard = !crash.shown;
+    crash.stuck('graphics', 'The graphics context was lost and did not come back.');
+  }, 500);
+});
+view.renderer.domElement.addEventListener('webglcontextrestored', () => {
+  clearInterval(graphicsWatch);
+  crash.note('graphics', 'The graphics context came back.');
+  if (graphicsCard) { graphicsCard = false; overlays.hideError(); crash.reset(); }   // (it came back after all: the card is not needed)
+});
 const hand = createHand(document, cfg, { onUseBandage, onUnlock, onBarricade, onEspresso, onHandMirror });
 const discard = createDiscard(document, cfg, {
   onDiscard: cardId => { const r = discardCard(state, activePlayer(state), cardId); if (!r.ok) hud.toast('That card cannot be discarded.'); refresh(); },
@@ -310,7 +348,7 @@ const tips = createTips(document, {
     round: state.round, final: isFinal(state), rooms: floor.roomList.length, exitFound: floor.roomList.some(r => r.isExit),
     job: floor.rooms.get(me()?.currentRoom)?.job ?? null,
     myTurn: myTurn(), acting: actionPhaseClear() && !hand.isOpen && !pendingArrival && !activeMover().walking && !activeMover().path.length,
-    clock: rules.turnTimerEnabled && timerLeft > 0 ? timerLeft : null, moveBar: hud.confirmOpen, search: searchSpot.mode,
+    clock: rules.turnTimerEnabled && timerLeft > 0 ? timerLeft : null, moveBar: hud.confirmKind === 'move', search: searchSpot.mode,
     meeting: meeting.isOpen, heard: PRACTICE ? 0 : chat.recent().reduce((t, m) => (m.seat !== humanSeat ? Math.max(t, m.at) : t), 0),   // (when another guest last spoke)
     covered: handoff.isOpen || tradeReveal.isOpen || hand.isOpen || discard.isOpen || map.isOpen || chat.isOpen
       || overlays.endOpen || overlays.noticeOpen || overlays.askOpen || !fadeEl.hidden || !!sideways?.matches,
@@ -480,7 +518,7 @@ function stopTimer() { timerLeft = 0; hud.hideTimer(); }
 // waits while it is up.
 const sideways = window.matchMedia?.('(orientation: portrait), (max-width: 900px)');
 const timerPaused = () => handoff.isOpen || overlays.endOpen || overlays.noticeOpen || overlays.askOpen
-  || meeting.isOpen || discard.isOpen || meetingLive || !!sideways?.matches;
+  || meeting.isOpen || discard.isOpen || meetingLive || overlays.errorOpen || !!sideways?.matches;
 
 function tickTimer(dt) {
   if (!rules.turnTimerEnabled || state.finished || timerLeft <= 0) return;
@@ -591,12 +629,22 @@ function endTurnNow() {
 // moment.
 const END_TURN_GUARD_MS = 700;
 let endTurnGuardUntil = 0;
-function doEndTurn() {
+// With actions still unspent End turn first asks "You still have 3 actions. End turn?" (they are lost
+// when the turn ends: the same light bar as Move; src/hud.js). Never at 0 actions, never when the clock
+// runs out (onTimeUp calls endTurnNow itself) and never for a computer guest (its turn ends in passTurn).
+// `ask: false` ends the turn without the question: the bar's own End turn answer, and the tests' hook.
+function doEndTurn({ ask = true } = {}) {
   if (!running || state.finished || uiBusy()) return;
   // Out of the match (dead) with the others still playing: the button skips to the result.
   if (!PRACTICE && !me().alive) { skipToEnd(); return; }
   if (activeMover().walking || !myTurn() || !inActionPhase) return;
   if (performance.now() < endTurnGuardUntil) return;
+  const left = activePlayer(state).actionPoints;
+  if (ask && left > 0) {
+    if (hud.confirmKind !== 'end') { selectedMove = null; hud.askEndTurn(left); }   // (asked already: it stays)
+    return;
+  }
+  hud.hideConfirm(); selectedMove = null;
   endTurnNow();
 }
 
@@ -865,7 +913,7 @@ function botTick(now) {
   const p = activePlayer(state);
   if (!isBot(p.index) || now < botNextAt || walkCutShort) return;
   if (meetingLive || pendingArrival || activeMover().walking || activeMover().path.length) return;
-  if (handoff.isOpen || overlays.noticeOpen || overlays.askOpen || overlays.endOpen || discard.isOpen || meeting.isOpen) return;
+  if (handoff.isOpen || overlays.noticeOpen || overlays.askOpen || overlays.endOpen || overlays.errorOpen || discard.isOpen || meeting.isOpen) return;
   botStep(p);
 }
 
@@ -1862,7 +1910,7 @@ hud.on('leave', () => {
   if (uiBusy() || meetingLive) return;
   overlays.ask(PRACTICE ? 'Leave practice?' : 'Leave the match?',
     PRACTICE ? 'This hotel and everything you have found will be lost.' : 'The others will carry on without you. This match will be lost.',
-    { yes: 'Main menu', no: 'Keep playing' }, backToMenu);
+    { yes: 'Main menu', no: 'Keep playing', safe: 'no' }, backToMenu);
 });
 hud.onConfirm(
   () => {
@@ -1872,6 +1920,7 @@ hud.onConfirm(
     startWalk(chosen);
   },
   () => { selectedMove = null; hud.hideConfirm(); },
+  () => doEndTurn({ ask: false }),      // (End turn, answered: the question was "You still have 3 actions. End turn?")
 );
 overlays.onRestart(restart);
 overlays.onMenu(backToMenu);
@@ -1881,7 +1930,7 @@ hud.on('restartPractice', () => {
   if (overlays.endOpen) { restart(); return; }
   if (uiBusy()) return;
   overlays.ask('Restart practice?', 'This hotel and everything you have found will be lost, and you start again in the lobby of a new hotel.',
-    { yes: 'Restart', no: 'Keep playing' }, restart);
+    { yes: 'Restart', no: 'Keep playing', safe: 'no' }, restart);
 });
 
 // --- Music and sound -------------------------------------------------------------------------------
@@ -2017,7 +2066,7 @@ if (DIRECT) {
     if (!plan.practice) portraits.prepare(tablePortraits(plan));
     await warmUp(5000); await ownSoulDrawn(); soulsRest(); startReady = true; maybeReady();
   })
-    .catch(err => { console.error(err); overlays.showError(`The game could not be set up. (${err?.message || err})`); });
+    .catch(err => { console.error(err); overlays.showError('The game could not be set up. Try again.', { detail: String(err?.message || err).split('\n')[0].slice(0, 200) }); });
   overlays.onBegin(() => { if (startReady) begin(); });
 } else {
   // (the account first: a server account has no profile until it is ready, and the menu sends anyone
@@ -2065,87 +2114,104 @@ let frames = 0;
 const lobbySize = { w: 0, h: 0 };
 let lastLobby = performance.now();
 let stillKey = '', stillAt = 0;     // what the 'Still' menu background last drew (size, pixel ratio), and when
-view.renderer.setAnimationLoop(now => {
-  perfStats.frame(now - last);
+// Every step of a frame runs through crash.step (src/ui/crash.js): a step that throws is skipped for that
+// frame and the rest still run, above all the picture itself ('render'), so a failing decoration never
+// freezes the hotel; only a step that keeps failing, frame after frame, brings up the "Something went
+// wrong" card. The names are the steps' names in that card's small print.
+view.renderer.setAnimationLoop(now => crash.step('frame', frameLoop, now));
+function frameLoop(now) {
+  const step = crash.step;
+  step('stats', () => perfStats.frame(now - last));
   const dt = Math.min(0.05, Math.max(0, (now - last) / 1000));
   last = now;
   const time = now / 1000;
   const prevLobby = lastLobby; lastLobby = now;
   // The main menu and the lift: the lobby scene (once loaded; until then, the hotel itself shows,
   // blurred, behind the menu).
-  if (phase !== 'game' && lobbyReady && lobby) {
-    if (view.size.w !== lobbySize.w || view.size.h !== lobbySize.h) {
-      lobbySize.w = view.size.w; lobbySize.h = view.size.h;
-      lobby.setSize(lobbySize.w, lobbySize.h);
-    }
-    // (the lift keeps to the clock even when frames are slow: up to a quarter of a second per frame)
-    const ldt = phase === 'intro' ? Math.min(0.25, Math.max(0, (now - prevLobby) / 1000)) : dt;
-    const still = phase === 'menu' && settings.get('menuMotion') === 'off';
-    lobby.update(still ? 0 : ldt, time);
-    // 'Still': the picture does not change, so it is drawn again only on a new size or pixel ratio (and
-    // the first frame after switching to Still or coming back from a game), otherwise at most twice a
-    // second (the lobby's guests may still be arriving); the canvas keeps the last picture meanwhile.
-    if (still) {
-      const key = `${view.size.w}x${view.size.h}@${view.renderer.getPixelRatio()}`;
-      if (framesReady && key === stillKey && now - stillAt < 500) return;
-      stillKey = key; stillAt = now;
-    } else stillKey = '';
-    view.renderer.render(lobby.scene, lobby.camera);
-    if (++frames >= 2 && !framesReady) { framesReady = true; maybeReady(); }
-    return;
-  }
+  if (phase !== 'game' && lobbyReady && lobby) { lobbyFrame(now, dt, time, prevLobby); return; }
   if (running && !state.finished) {
-    tickTimer(dt);
-    activeMover().update(dt);
-    discovery.update();
-    if (pendingArrival && !activeMover().walking && activeMover().path.length === 0) onArrive();
-    replayQueuedTap();
-    botTick(now);
+    step('clock', () => tickTimer(dt));
+    step('walk', () => {
+      activeMover().update(dt);
+      discovery.update();
+      if (pendingArrival && !activeMover().walking && activeMover().path.length === 0) onArrive();
+    });
+    step('queued tap', replayQueuedTap);
+    step('bots', () => botTick(now));
   }
-  rig.setFocus(...followPoint());
-  rig.update(dt);
-  for (const rv of roomViews.values()) rv.update(dt);
-  doorways.update(time, dt, roomViews);
-  pathPreview.update(selectedMove && hud.confirmOpen && !activeMover().walking ? selectedMove : null, time);
-  fog.update(floor, me(), { time, dt });
-  const fi = focusIndex();
-  mood.update(state.players[fi].currentRoom, dt, time, movers[fi]);
-  updateCutaway(roomViews, rig, state, cfg, dt);
+  step('camera', () => { rig.setFocus(...followPoint()); rig.update(dt); });
+  step('rooms', () => { for (const rv of roomViews.values()) rv.update(dt); });
+  step('doorways', () => doorways.update(time, dt, roomViews));
+  step('path', () => pathPreview.update(selectedMove && hud.confirmOpen && !activeMover().walking ? selectedMove : null, time));
+  step('fog', () => fog.update(floor, me(), { time, dt }));
+  step('mood', () => { const fi = focusIndex(); mood.update(state.players[fi].currentRoom, dt, time, movers[fi]); });
+  step('cutaway', () => updateCutaway(roomViews, rig, state, cfg, dt));
   // Red eyes on the player's own guest, on their own screen, while possessed — and then also on every
   // guest they KNOW is possessed (approved; src/ui/allies.js); never in practice, and not on the old game
   // still drawn behind the menu (when the menu's lobby scene is not loaded).
   // (warmEyes: three frames behind the black screen at the start of a game, see warmUp)
-  const allies = redEyedAllies(state, me());
-  characters.forEach((cv, i) => { cv.setPossessed(i === warmEyes || (phase === 'game' && !PRACTICE && (i === humanSeat ? !!state.players[i]?.possessed : allies.has(state.players[i]?.id)))); cv.update(movers[i], dt); });
-  view.render();
-  syncHandFan();
-  syncSearchSpot();     // after the render, so it reads this frame's camera
-  if (running) { feed.sync(state, PRACTICE ? null : me()); feed.tick(); feed.place(topLeftEl); }
-  syncChat(now);
-  tips.update(now);
-  syncSound();
-  // The tags over the view, most important first (a later tag that would clash is left out): when zoomed
-  // far out, the active guest's name (so they can always be found); Explore over the fogged rooms next
-  // door; Go over the rooms next door (not when zoomed far out: the names take over); then the other
-  // guests' names; last, quick chat's speech bubbles.
+  step('guests', () => {
+    const allies = redEyedAllies(state, me());
+    characters.forEach((cv, i) => { cv.setPossessed(i === warmEyes || (phase === 'game' && !PRACTICE && (i === humanSeat ? !!state.players[i]?.possessed : allies.has(state.players[i]?.id)))); cv.update(movers[i], dt); });
+  });
+  step('render', () => view.render());
+  step('hand', syncHandFan);
+  step('search icon', syncSearchSpot);     // after the render, so it reads this frame's camera
+  step('feed', () => { if (running) { feed.sync(state, PRACTICE ? null : me()); feed.tick(); feed.place(topLeftEl); } });
+  step('chat', () => syncChat(now));
+  step('tips', () => tips.update(now));
+  step('sound', syncSound);
+  step('tags', placeTags);
+  if (++frames >= 2 && !framesReady) { framesReady = true; maybeReady(); }
+}
+// The tags over the view, most important first (a later tag that would clash is left out): when zoomed
+// far out, the active guest's name (so they can always be found); Explore over the fogged rooms next
+// door; Go over the rooms next door (not when zoomed far out: the names take over); then the other
+// guests' names; last, quick chat's speech bubbles. Each kind is a step of its own, and the frame's tags
+// are always closed (screenTags.end) whatever one of them does.
+function placeTags() {
+  const step = crash.step;
   const still = !activeMover().walking && !activeMover().path.length && !pendingArrival;
   const tagsOk = actionPhaseClear() && !hand.isOpen && still;
   const namesOk = running && !handoff.isOpen && !overlays.endOpen && !map.isOpen;
   screenTags.begin();
-  guestTags.update(screenTags, state, movers, rig.distance, namesOk, 'active');
-  if (tagsOk) fog.tags(screenTags, me().actionPoints);
-  goTags.update(screenTags, state, floor, me(), tagsOk && !hud.confirmOpen && rig.distance <= cfg.camera.tagsFrom);
-  guestTags.update(screenTags, state, movers, rig.distance, namesOk, 'others');
-  chat.tags(screenTags, chatPoint, namesOk);      // speech bubbles over whoever just spoke (they give way to every other tag)
-  screenTags.end();
+  try {
+    step('tags: names', () => guestTags.update(screenTags, state, movers, rig.distance, namesOk, 'active'));
+    if (tagsOk) step('tags: explore', () => fog.tags(screenTags, me().actionPoints));
+    step('tags: go', () => goTags.update(screenTags, state, floor, me(), tagsOk && !hud.confirmOpen && rig.distance <= cfg.camera.tagsFrom));
+    step('tags: others', () => guestTags.update(screenTags, state, movers, rig.distance, namesOk, 'others'));
+    step('tags: chat', () => chat.tags(screenTags, chatPoint, namesOk));      // speech bubbles over whoever just spoke (they give way to every other tag)
+  } finally { screenTags.end(); }
+}
+// The main menu and the lift (the lobby scene): its own steps, and the picture drawn whatever the rest does.
+function lobbyFrame(now, dt, time, prevLobby) {
+  const step = crash.step;
+  if (view.size.w !== lobbySize.w || view.size.h !== lobbySize.h) {
+    lobbySize.w = view.size.w; lobbySize.h = view.size.h;
+    step('lobby size', () => lobby.setSize(lobbySize.w, lobbySize.h));
+  }
+  // (the lift keeps to the clock even when frames are slow: up to a quarter of a second per frame)
+  const ldt = phase === 'intro' ? Math.min(0.25, Math.max(0, (now - prevLobby) / 1000)) : dt;
+  const still = phase === 'menu' && settings.get('menuMotion') === 'off';
+  step('lobby', () => lobby.update(still ? 0 : ldt, time));
+  // 'Still': the picture does not change, so it is drawn again only on a new size or pixel ratio (and
+  // the first frame after switching to Still or coming back from a game), otherwise at most twice a
+  // second (the lobby's guests may still be arriving); the canvas keeps the last picture meanwhile.
+  if (still) {
+    const key = `${view.size.w}x${view.size.h}@${view.renderer.getPixelRatio()}`;
+    if (framesReady && key === stillKey && now - stillAt < 500) return;
+    stillKey = key; stillAt = now;
+  } else stillKey = '';
+  step('render', () => view.renderer.render(lobby.scene, lobby.camera));
   if (++frames >= 2 && !framesReady) { framesReady = true; maybeReady(); }
-});
+}
 document.addEventListener('visibilitychange', () => { last = performance.now(); });
 
 // --- Debug / test hooks ------------------------------------------------------------------
 window.__game = {
   cfg, rules, hotel, floor, grid, state, movers, rig, roomViews, doorways, characters, discovery, view, pathPreview, fog, screenTags,
-  begin, restart, endTurn: doEndTurn,
+  crash,        // the safety net (src/ui/crash.js): ring(), shown, limits, step(), note()
+  begin, restart, endTurn: () => doEndTurn({ ask: false }),     // (tests: End turn with the question answered; the button asks)
   refresh,
   activePlayer: () => activePlayer(state),
   nextPlayer: () => nextPlayer(state),
@@ -2245,7 +2311,7 @@ window.__game = {
   openLocks: () => [...state.openLocks.keys()],       // locked doors a key opened this turn
   canEscape: () => canEscape(state, floor, activePlayer(state)),
   escape: () => onRoom(),
-  openHand: () => hand.open(state, floor),
+  openHand: cardId => hand.open(state, floor, cardId),
   rotate: steps => rig.rotate(steps),
   toggleMap: () => map.toggle(state, movers),
   isMapOpen: () => map.isOpen,

@@ -10,7 +10,7 @@
 //    music in round 8, the end screen's stinger
 // 5. practice: the game music, a walk with footsteps
 // The console must stay clean, and no audio file may 404.
-import { launch } from './smoke-lib.mjs';
+import { launch, giveCard } from './smoke-lib.mjs';
 
 const args = process.argv.slice(2);
 const base = args.includes('--url') ? args[args.indexOf('--url') + 1] : 'http://127.0.0.1:8123/';
@@ -44,7 +44,7 @@ async function answerScreens() {
     });
     if (!k) return;
     try {
-      if (k === 'pick') await page.click('#offer-cards .card-tile', { timeout: 3000 });
+      if (k === 'pick') await giveCard(page, '#offer-cards .card-tile', { timeout: 3000 });
       else if (k === 'choice') await page.click('#offer-intent .btn', { timeout: 3000 });
       else if (k === 'meeting') { const b = await page.$('#encounter-actions .btn:not([disabled])'); if (b) await b.click(); else await page.waitForTimeout(250); }
       else if (k === 'notice') await page.click('#btn-notice-ok', { timeout: 3000 });

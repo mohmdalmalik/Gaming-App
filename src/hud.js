@@ -20,10 +20,13 @@ import { avatarKey } from './data/wardrobe.js';
 import { soulsHeld, soulsChip } from './ui/souls.js';
 import { redEyedAllies } from './ui/allies.js';
 import { roundLabel, finalRoundShort, isFinal } from './ui/roundLabel.js';
+import { tooSoon } from './ui/tapGuard.js';
 
 // The room-job button (Infirmary, Switchboard): its label, what it does for its cost, and a plain
 // reason when it can't be used. A Linen Store has no button — its job is in the search itself.
 const plural = n => `${n} action${n === 1 ? '' : 's'}`;
+// The question before End turn, while actions are left (they are lost when the turn ends): the real number.
+export const endTurnAsk = n => `You still have ${plural(n)}. End turn?`;
 const ROOM_JOB = {
   infirmary: { name: 'Infirmary', does: () => `Heal ${rules.infirmaryHeal} · ${plural(rules.actionCost.infirmary)}` },
   switchboard: { name: 'Switchboard', does: () => `Call · ${plural(rules.actionCost.switchboard)}` },
@@ -83,6 +86,8 @@ export function createHud(doc, cfg) {
   };
   let toastTimer = 0;
   let pressedConfirm = false;   // a press began on the Move/Cancel bar since it appeared (onConfirm)
+  let confirmKind = 'move';     // what the bar asks: 'move' (Move / Cancel) or 'end' (End turn / Keep playing)
+  let confirmShownAt = 0;       // when the bar last began asking something else (the double-tap guard of 'end')
   let mini = null;            // the top-strip guest cells
   let portraitKey = '';       // so the panel portrait only rebuilds when it must
   let soulsKey = '';          // so the panel's souls counter only rebuilds when it must
@@ -184,6 +189,11 @@ export function createHud(doc, cfg) {
 
       // End turn (prominent; names the next guest). On another guest's turn it says whose turn it is and
       // waits; once the player is out (dead) it skips to the result.
+      // The End turn question names the actions still unspent: it follows them (a card played behind it),
+      // and goes when there is nothing to ask any more (none left, not the player's turn, game over).
+      if (confirmKind === 'end') {
+        if (!mine || p.actionPoints <= 0) hud.hideConfirm(); else el.confirmText.textContent = endTurnAsk(p.actionPoints);
+      }
       el.endTurn.classList.toggle('waiting', !mine && !state.finished && p.alive);
       if (state.finished) { el.endMain.textContent = 'Game over'; endLine = { own: '', shared: '' }; el.endTurn.disabled = true; }
       else if (match && !p.alive) {
@@ -331,23 +341,44 @@ export function createHud(doc, cfg) {
       clearTimeout(toastTimer);
       toastTimer = setTimeout(() => { el.toast.hidden = true; }, seconds * 1000);
     },
-    showConfirm(text, moveLabel) {
+    // The bar asks Move / Cancel (kind 'move', the default) or, from End turn, End turn / Keep playing.
+    showConfirm(text, moveLabel, { kind = 'move', cancelLabel = 'Cancel' } = {}) {
       el.confirmText.textContent = text;
       if (moveLabel) el.confirmMove.textContent = moveLabel;
+      el.confirmCancel.textContent = cancelLabel;
       if (el.confirmBar.hidden) pressedConfirm = false;
+      if (el.confirmBar.hidden || kind !== confirmKind) confirmShownAt = performance.now();
+      confirmKind = kind;
       el.confirmBar.hidden = false;
     },
-    hideConfirm() { el.confirmBar.hidden = true; },
+    // "You still have 3 actions. End turn?" (only called with actions left)
+    askEndTurn(actionsLeft) { hud.showConfirm(endTurnAsk(actionsLeft), 'End turn', { kind: 'end', cancelLabel: 'Keep playing' }); },
+    hideConfirm() { el.confirmBar.hidden = true; confirmKind = 'move'; },
     get confirmOpen() { return !el.confirmBar.hidden; },
+    get confirmKind() { return el.confirmBar.hidden ? null : confirmKind; },
     on(name, fn) { el[name].addEventListener('click', e => { e.preventDefault(); fn(); }); },
-    onConfirm(move, cancel) {
+    onConfirm(move, cancel, endTurn) {
       // Belt and braces for src/input.js: a pointer click on Move/Cancel counts only if the press
       // started on the bar after it appeared (a late click left over from the tap that opened it
-      // does not). Clicks with no pointer behind them (keyboard, e.detail 0) always count.
+      // does not). Clicks with no pointer behind them (keyboard, e.detail 0) always count. The End turn
+      // question is under the tap guard too: the second tap of a double tap on End turn must not answer
+      // the question it opened (src/ui/tapGuard.js).
       el.confirmBar.addEventListener('pointerdown', () => { pressedConfirm = true; });
       const real = e => e.detail === 0 || pressedConfirm;
-      el.confirmMove.addEventListener('click', e => { e.preventDefault(); if (real(e)) move(); });
-      el.confirmCancel.addEventListener('click', e => { e.preventDefault(); if (real(e)) cancel(); });
+      el.confirmMove.addEventListener('click', e => {
+        e.preventDefault();
+        if (confirmKind === 'end') {
+          if (!real(e) || tooSoon(e, confirmShownAt)) return;
+          hud.hideConfirm(); endTurn?.();
+          return;
+        }
+        if (real(e)) move();
+      });
+      el.confirmCancel.addEventListener('click', e => {
+        e.preventDefault();
+        if (confirmKind === 'end' && tooSoon(e, confirmShownAt)) return;
+        if (real(e)) cancel();
+      });
     },
   };
   return hud;

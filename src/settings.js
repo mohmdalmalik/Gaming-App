@@ -2,6 +2,8 @@
 // (localStorage); every read and write is guarded, so a private window or blocked storage simply
 // falls back to the defaults. Nothing here is a game rule: these change how the game looks and
 // sounds and how quickly the computer guests play, never what anyone may do.
+import { reducedMotion } from './motion.js';
+
 const KEY = 'hotelEscape.settings.v1';
 
 export const SETTING_CHOICES = {
@@ -69,7 +71,12 @@ function load() {
 const current = load();
 
 export const settings = {
-  get(name) { return current[name] ?? DEFAULTS[name]; },
+  // (Reduce Motion, the device's own setting, holds the lobby behind the menu Still, whatever was chosen
+  // here: src/motion.js. The Settings row then shows Still, which is what is happening.)
+  get(name) {
+    if (name === 'menuMotion' && reducedMotion()) return 'off';
+    return current[name] ?? DEFAULTS[name];
+  },
   set(name, value) {
     current[name] = value;
     try { window.localStorage?.setItem(KEY, JSON.stringify(current)); } catch { /* storage blocked: keep it for this visit */ }

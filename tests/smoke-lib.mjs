@@ -36,9 +36,10 @@ export const profileOn = (profile) => {
   } catch { /* no storage on this page */ }
 };
 
-export async function launch({ width = 1180, height = 820, touch = true, tips = false, profile = true } = {}) {
+export async function launch({ width = 1180, height = 820, touch = true, tips = false, profile = true, reducedMotion = null } = {}) {
   const browser = await chromium.launch({ executablePath: chrome, headless: true, args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--no-sandbox'] });
-  const context = await browser.newContext({ viewport: { width, height }, deviceScaleFactor: 1, hasTouch: touch });
+  // (`reducedMotion: 'reduce'`: the device's Reduce Motion setting is on, prefers-reduced-motion: src/motion.js)
+  const context = await browser.newContext({ viewport: { width, height }, deviceScaleFactor: 1, hasTouch: touch, ...(reducedMotion ? { reducedMotion } : {}) });
   if (!tips) await context.addInitScript(tipsOff);
   if (profile) await context.addInitScript(profileOn, profile === true ? TEST_PROFILE : { ...TEST_PROFILE, ...profile });
   const page = await context.newPage();
@@ -52,4 +53,38 @@ export async function launch({ width = 1180, height = 820, touch = true, tips = 
     route.fulfill(fs.existsSync(file) ? { status: 200, contentType: 'application/javascript', body: fs.readFileSync(file) } : { status: 404, body: 'x' });
   });
   return { browser, page, messages };
+}
+
+// --- Taps that take two steps now (src/ui/handoff.js, src/hud.js) -------------------------------------------
+// A screen ignores a second tap that comes within 300 ms of the one before (src/ui/tapGuard.js), so a check
+// that taps twice in a row waits a little longer than that between them.
+export const GUARD_WAIT = 350;
+
+// Give a card in a trade: tap the card, then the button that names it ("Give the Lantern", "Give your soul").
+// `tile`: the card to tap (default: the first). Resolves with the button's words.
+export async function giveCard(page, tile = '#offer-cards .card-tile', { timeout = 4000 } = {}) {
+  const lifted = () => page.waitForFunction(() => { const b = document.getElementById('btn-offer-give'); return !!b && !b.hidden && !b.disabled; }, null, { timeout: 700, polling: 50 }).then(() => true, () => false);
+  // (a tap in the screen's first moments is ignored, so a tap that did not lift the card is tried again)
+  let ok = false;
+  for (let i = 0; i < 6 && !ok; i++) { await page.click(tile, { timeout }); ok = await lifted(); }
+  if (!ok) throw new Error('giveCard: tapping the card did not lift it');
+  const label = await page.textContent('#btn-offer-give');
+  await page.waitForTimeout(GUARD_WAIT);
+  await page.click('#btn-offer-give', { timeout });
+  return label;
+}
+
+// End turn: tap the button; with actions left it asks first ("You still have 3 actions. End turn?"), so
+// answer End turn. Resolves true when it asked. (`answer: 'keep'` taps Keep playing instead.)
+export async function endTurn(page, { answer = 'end', timeout = 4000 } = {}) {
+  await page.click('#btn-end-turn', { timeout });
+  const asked = await page.waitForFunction(() => {
+    const bar = document.getElementById('confirm-bar');
+    return !!bar && !bar.hidden && /End turn\?$/.test(document.getElementById('confirm-text').textContent);
+  }, null, { timeout: 700, polling: 50 }).then(() => true, () => false);
+  if (asked) {
+    await page.waitForTimeout(GUARD_WAIT);
+    await page.click(answer === 'keep' ? '#btn-confirm-cancel' : '#btn-confirm-move', { timeout });
+  }
+  return asked;
 }

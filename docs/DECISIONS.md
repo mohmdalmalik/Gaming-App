@@ -1755,3 +1755,206 @@ below. What follows still holds for the small talk, the pacing, the bubbles and 
   random hotels show new tiles (24 tiles, 476 geometries in all, loaded once a page and kept): bounded by
   the tile set, not a per-match leak.
 
+## Reliability: a frame that goes wrong, start-up messages (14 Oct 2026 — interface and tests only; no rule or rule number changed)
+
+From the read-only audit of 13 Oct (code-2, graphics-12, design-10, compat-2, -3, -4, graphics-2); the
+skeptic's corrections were applied (no timer that "unsticks" meetings, no card for a benign rejection).
+
+- **A frame can no longer freeze the picture** (`src/ui/crash.js`, `src/main.js`). three.js asks for the next
+  frame BEFORE it runs the callback, so one `throw` in the per-frame code meant every later line of every
+  frame was skipped (the 3D picture stopped, the buttons kept working, nothing said why). `main.js`'s loop is
+  now `frameLoop` / `placeTags` / `lobbyFrame`, and each part of a frame runs through `crash.step(name, fn)`:
+  clock, walk, queued tap, bots, camera, rooms, doorways, path, fog, mood, cutaway, guests (red eyes),
+  **render**, hand, search icon, feed, chat, tips, sound, and each kind of tag (the frame's tags are always
+  closed with `screenTags.end()`). A step that throws is skipped for that frame; the picture is drawn anyway.
+  The whole callback is a step too ('frame'), the last guard. `window.__game.crash` exposes the net (tests).
+- **When the "Something went wrong" card shows** (Back to menu, Reload, the version and the last message in
+  small print for a screenshot): only after REPEATED failure. One step failing 45 frames in a row for at least
+  3 s; the picture (`render`) 10 frames and 1 s; the same uncaught page error 8 times within 5 s. Never for a
+  one-off, a step that fails every other frame, a rejected promise (benign ones happen on iPad Safari: audio
+  resume, image decode; they are only written down), or the browser's own ResizeObserver / "Script error."
+  notices. Shown once; Back to menu resets the counts. While it is up the turn clock and the computer guests
+  wait (`overlays.errorOpen`). The last 10 messages are kept in memory (a ring; the same message from the same
+  step counts up); a message is one line, 160 characters at most, with the file and line of the first `src/`
+  frame: property names and files, never a value, so nothing of another guest's role or hand can be in it.
+  Console output is limited to one line per failing step every 2 s (the probe had 85 errors a second).
+- **Not done, on purpose**: a fixed-time watchdog that clears `meetingLive` (the skeptic: the flag stays true
+  across a person's private card choice, which may legitimately take minutes; clearing it would let the clock
+  and the bots run during a meeting). The trade scene's own `requestAnimationFrame` loops (`tradeReveal.js`)
+  are not part of the frame and are not wrapped; an error there is only written down by the page listener.
+- **Graphics context lost and back** (`src/render/avatarPortrait.js`; three.js already restores the scene by
+  itself): the portrait renderer now counts losses (`epoch`), ends a wait for a read-back at once on a loss
+  (a cut-off read-back may never settle, and the portraits behind it would wait for ever), and a draw cut off
+  or started inside a loss goes back to the FRONT of its queue instead of being marked failed (a failure shows
+  the stock picture for 30 s). On `webglcontextrestored` the off-screen buffers are made again (they were
+  made in the old context) and the queue runs on. `main.js` writes "lost" and "came back" into the ring.
+- **Start-up** (`index.html`, a classic script in plain old JavaScript, before the game's module):
+  1. no import maps (iPadOS below 16.4) shows "Hotel Escape needs iPadOS 16.4 or newer." (changed after review:
+     `HTMLScriptElement.supports('importmap')` is only a HINT now, see 'Review fixes' below: the game is always
+     tried and the card shows only when it then fails to load);
+  2. no 20 s "check the internet" timer any more. A loading screen (`#boot`, away for the first 0.9 s so a quick
+     load shows nothing) and the menu's "Opening the hotel…" show the real count of files and MB from the
+     browser's own resource timings (`PerformanceObserver`, counted when a file FINISHES). The only complaint is
+     a file that really fails: the game's `import()` rejects, or `main.js` throws while starting;
+  3. a failed load reloads ONCE by itself (a Safari that has old and new files mixed after a publish usually
+     recovers on a reload), marked in `sessionStorage` (`hotelEscape.reloadedOnce`, cleared as soon as the game
+     has loaded; if the marker cannot be written and read back there is no automatic reload, so a loop is
+     impossible), then
+     "The game could not load. Try again." with a **Reload** button and the technical text in small print.
+     No WebGL says so ("This browser cannot show 3D graphics, which Hotel Escape needs.") and does not reload.
+     Reload is plain HTML (`onclick="location.reload()"`), so it works even when the scripts never ran;
+  4. the card is one element (`#error-overlay`), shared with `overlays.showError` (a problem during play, lazy
+     loads); `showError(message, { title, detail, menu })`.
+  The cache window itself (about 10 minutes on GitHub Pages) is NOT fixed: that needs version stamps in the
+  file names, i.e. a build step (CLAUDE.md: none for now). Only a real iPad can say whether a reload revalidates
+  every file in Safari; the audit asked for a check after the next publish (open the game, publish, reload).
+- **"Turn sideways"** is now only for a window taller than wide (`orientation: portrait`); a wide but small
+  one (Split View, Page Zoom at 125 % and more on a 10-inch iPad, a phone held sideways) says "Make this window
+  wider, or reduce page zoom." Pure CSS, one rule (`styles.css`, `.rotate-tall` / `.rotate-wide`); the card still
+  covers the game in both, and the clock still waits (`main.js` `sideways` is the same media query).
+- **Tests**: `tests/crash-check.mjs` (node, the net with a fake clock and window, plus a source check that the
+  frame goes through it), `tests/browser-reliability.mjs` (the scenarios above in Chromium: no import maps,
+  a blocked file, a file missing once, sessionStorage blocked, no WebGL, a 24 s file with no alarm, a failing
+  step, a failing picture, repeated page errors, the context lost, the sideways / wider messages, the Version
+  line); `browser-practice.mjs`'s 860×700 case now expects the wider message.
+
+## Publishing safety net (14 Oct 2026 — a net, not a change of workflow)
+
+The owner keeps committing straight to `main`, and GitHub Pages publishes `main` as it is (the preview
+is the development build; CLAUDE.md fixes "no build step for now"). Audit code-3 and its skeptic: process
+hardening, smallest first. Nothing here blocks a publish.
+
+- **A version to name** (`src/version.js`: `VERSION`, `VERSION_DATE`, set by whoever publishes, together with
+  a git tag `v0.N`): a quiet "Version v0.5 · 14 Oct 2026" line at the bottom of Settings (not on the main menu:
+  that would be a design choice for the owner) and in the small print of the problem card. A hash cannot be
+  injected on a branch deploy with no build, so it is a constant that is edited at each publish.
+- **A way back** (README > Publishing and rolling back): restoring the tag's tree as ONE new commit
+  (`git restore --source=v0.N --staged --worktree -- .`, commit, normal push) puts the live game back exactly
+  as it was at that version without rewriting history. `git revert v0.N..main` does NOT work here: `main`
+  holds "Merge main (published)" merge commits (the commands were tried in a scratch repository with merges,
+  added, changed and deleted files; undoing only the last publish is `git revert -m 1 <its merge>`).
+- **The flaky timing check** (`tests/logic-check.mjs`): "the slowest walkable-grid rebuild under 150 ms" failed
+  from garbage-collection pauses and busy machines (40-157 ms measured with the typical rebuild at 12 ms).
+  Now the MEDIAN of the 400 rebuilds must be under 150 ms (over 10 times the usual: a real slowdown moves the
+  median) and the slowest under 1.5 s.
+- **A warning, not a gate** (`.github/workflows/tests.yml`): on every push and pull request, Node 22, one job
+  per suite (rules-check, logic-check, bots-check, chat-check, profile-check, crash-check; `fail-fast: false`
+  so each reports). These import only `src/`, with no three.js, so there is no `npm ci` and nothing is cached;
+  proven by running the same steps in a clean `git archive` copy with no `node_modules`. A red cross appears
+  on the commit; Pages does not wait for it. The browser suites (Chromium, 5-15 minutes) stay manual.
+  Not done (the owner's call, when outside players exist): Pages deploying FROM the workflow (Settings →
+  Pages → Source: GitHub Actions) so a red run really blocks a publish; a Mac or PC is not needed for it.
+
+
+## Round 1 build fixes: accidental taps, flicker and Reduce Motion, the 1024×694 screens, button sounds, the Revolver (14 Oct 2026 — interface, tests and one bug fix; no rule or rule number changed)
+
+From the 13 Oct audit, items F5 and G1–G4 of the owner-approved list.
+
+- **Giving a card is two steps** (design-2), like the discard screen: a tap lifts the card (`.selected`) and
+  says its name and what it does in the line under the row (the same `cardDesc` words as the hand sheet; two
+  lines of room are kept, so choosing never moves a button); another card switches the choice; the gold button
+  beneath names it ("Give the Lantern"; for the possessed guest's souls, which are one stack with a ×N badge,
+  "Give your soul") and gives it. Until a card is lifted it reads "Tap a card to give" and is grey. Tapping the
+  chosen card again keeps it chosen (unlike the discard screen's toggle: the second tap of a double tap must not
+  un-choose it). The Give button is under the tap guard against the moment of the LAST lift, so the second tap of
+  a double tap cannot give; the cards are still guarded for the screen's first 300 ms. A Cancel (a caller that
+  passes `onCancel`) stays beside it, plain, and keeps working. The same `privatePick` serves a meeting trade, a
+  Fire Exit trade and the souls. Not changed, on the skeptic's advice: the weapon picker and Accept / Decline
+  stay one tap. `tests/smoke-lib.mjs` has `giveCard(page, tile)` for every test that gives a card.
+- **End turn asks only when actions are left** (design-3): "You still have 3 actions. End turn?" (the real
+  number, "action" for 1), as the same light bar as Move (`#confirm-bar`, `hud.askEndTurn`; buttons End turn /
+  Keep playing; `hud.confirmKind` says which question is up). Under the tap guard: its answers ignore a tap
+  within 300 ms of the bar opening, so a double tap on End turn only asks. Never at 0 actions (the bar also goes
+  if the last action is spent behind it), never when the clock runs out (`onTimeUp` calls `endTurnNow` itself),
+  never for a computer guest (its turn ends in `passTurn`). `window.__game.endTurn()` (the tests' hook) is the
+  answered form; `tests/smoke-lib.mjs` `endTurn(page)` taps the button and answers. The Move tip is for the Move
+  bar only (`moveBar: hud.confirmKind === 'move'`). Opening a closed door still asks nothing (a stray door costs
+  one action): a deliberate difference from Move, told to the owner.
+- **Leave and Restart put the safe answer in gold** (`overlays.ask(..., { safe: 'no' })`): "Keep playing" is the
+  primary button and Main menu / Restart plain, for "Leave the match?", "Leave practice?" and "Restart practice?".
+  The "You are out" question (nothing is lost) keeps its gold Skip to the result.
+- **The two flickering corridors** (compat-8): `FLICKER` in `src/data/hotel.js` is now 5 steps a second, between
+  0.5 and 1.0 of the light (was 10 a second, 0.3–1.0). The maths moved to the pure `src/render/flicker.js`, so
+  `tests/flicker-check.mjs` can run the game's own function for 60 bulbs × 10 minutes and count: never more than
+  3 flashes a second of the whole room (a flash: a pair of opposite changes of 10 % of the light; the old setting
+  shows 5, kept as a control so the check can fail). With Reduce Motion (`src/motion.js`, a live
+  `prefers-reduced-motion` query) the level is held at the middle of the range (0.75) at every moment.
+- **Reduce Motion elsewhere** (one block at the end of `styles.css`): the cards dealt into the hand (in place at
+  once), the search icon's pulse, the waiting dots (three still dots), the menu pages and the waiting seats, the
+  found card, the card view, toasts and the Move bar sliding in, the menu's blur-and-zoom and slide-out. Only
+  motion: every word and picture is still there. The lobby behind the menu is held Still (`settings.get
+  ('menuMotion')` answers 'off' while Reduce Motion is on; the Settings row then shows Still, which is true).
+  Not touched: the camera and walking (that is the game), and the lift's short ride into a match. The trade and
+  attack scenes and the tips had their own rule already.
+- **1024×694** (design-4, graphics-9): at heights up to 770 px the found-card picture shrinks with the height
+  (`(92vh − 350px) / 1.5` wide), the card's padding and the bar's margin are tighter, so the note ("You now hold
+  2 Lanterns.") ends above Add to my hand with nothing to scroll; taller windows keep the big card. The map's
+  canvas may now shrink (`min-height: 0`: it used to keep the size it was last drawn at and push the legend out
+  of the panel) and the legend sits in tighter rows up to 770 px. Measured at 1024×694, 1024×768, 1180×820 and
+  1366×1024 (`tests/browser-build-fixes.mjs`, section c).
+- **Button sounds** (sound-5, sound-6): which cue a button makes is the pure `src/audio/buttonCues.js`. The old
+  prefix match (`btn-hand`) had caught Continue (`btn-handoff-next`) and the hand's arrows, which played the long
+  'open' drawer; openers are now named exactly, and a closer is a word of the id (back, cancel, close, done).
+  Two siblings that had been missed now open like their neighbours: the Record page (`btn-menu-record`) and the
+  profile card (`btn-profile`). `tests/audio-buttons-check.mjs` lists every button of `index.html` (and the ones
+  the code makes with an id) with its cue and fails on an unlisted button, so the next one cannot slip; it also
+  checks every cue the code asks for has a sound file. Choosing a card (give, discard, weapon) makes the existing
+  'select' sound: `cardTile` plays it after the screen's own handler, and a handler that ignored the tap
+  (too soon, or the card already chosen) returns `false`, which keeps it silent.
+- **A Revolver that comes back through the reshuffle** (gameplay-8, point 3): confirmed. A fired-out Revolver
+  went to the discard pile with `shots: 0`; when the deck ran out and the pile was shuffled in, the same card came
+  back with 0 shots and fired once more to −1 (a Revolver thrown away at the hand limit with one shot left came
+  back with one). `drawCard` now runs every card of the shuffled pile through `renewCard` (`src/game/cards.js`):
+  full ammunition again, from the card data (`rules.cards.revolver.shots`). It restores what
+  `docs/GAME_RULES.md` says (two shots, discarded when empty, the pile shuffled into a new deck): a bug fix, not
+  a rule change. `tests/rules-check.mjs` has the case (it fails without the fix).
+
+## Round 1 review fixes (14 Oct 2026 — interface, tests and docs only; no rule or rule number changed)
+
+An independent review of the three builds above found these; each was reproduced before it was fixed.
+
+- **The import-map check is a hint, not a gate** (`index.html`). The first build refused to load the game at
+  all when `HTMLScriptElement.supports('importmap')` was false or missing. Nothing here can show what Safari 16.4+
+  answers, and a wrong "no" would have locked the owner's working iPad out. Now the answer is only stored
+  (`boot.noMaps`); the game is always tried; "Hotel Escape needs iPadOS 16.4 or newer." (with a Reload button
+  after all, and the technical text in small print) shows only when the game then FAILS to load and the answer was
+  "no". A browser that answers wrongly still starts. `tests/browser-reliability.mjs` has both cases (the wrong
+  answer: the game starts; the import map taken out of the page: the card).
+- **No automatic reload while offline** (`index.html failed()`): `navigator.onLine === false` goes straight to
+  "The game could not load. Try again." with Reload. A reload cannot help offline, and the browser's own error
+  page replaced the game (in a Home Screen app there is no toolbar to get out).
+- **A load that stalls gets a way out** (`#boot-reload`): the loading screen shows a plain-HTML Reload button
+  once the file and MB count has not changed for 30 s. No message, no marker, no automatic action (a stalled
+  connection never rejects, so nothing else would ever say so).
+- **Graphics lost and never back** (`src/main.js`, `crash.stuck`): a lost context that has not come back after 5
+  s of the page being in view (time with the page hidden does not count: a loss in the background is normal and
+  Safari restores it on return) raises the "Something went wrong" card (Reload; Back to menu), as any freeze does.
+  If it comes back after all, the card goes by itself.
+- **Held sideways in Split View** (`index.html` sets `html.device-landscape`; `styles.css`): a window taller than
+  wide on a device that is held sideways says "Make this window wider", not "Please turn your iPad sideways". The
+  device counts as sideways only when `screen.orientation` says landscape AND Safari's older
+  `window.orientation` (where there is one) agrees: two answers that disagree are not trusted, so an iPad held
+  upright is never told to make the window wider. Chromium cannot show what Safari reports: the test gives the
+  page iPad-like answers. A computer (no `window.orientation`, a landscape screen) asks a tall window to be wider.
+- **A Revolver's words say its own shots** (`cardDesc(type, card)` in `src/ui/cards.js`): a Revolver with one
+  shot left said "Two shots, then it is gone." on the pick screen, the hand's card view and the large card. The
+  words now say "One shot left, then it is gone." (display only; `rules.js` is untouched).
+- **Settings under Reduce Motion**: Animated is dimmed and cannot be tapped, and the label says "Reduce Motion is
+  on" on the same line (the screen stays as tall). Before, a tap was stored and the row snapped back to Still with
+  no explanation.
+- **A reshuffled Revolver is as good as new, even a half-used one.** `renewCard` tops every Revolver of the
+  reshuffled pile up to two shots, including one thrown away at the hand limit with one shot left (it used to
+  come back with one). This is the audit's own fix (gameplay-8, point 3: "reset a Revolver's shots when it goes to
+  the discard pile"; the discard pile is only ever read by the reshuffle), and GAME_RULES.md says only "2 shots,
+  then discarded" and "the discard pile is shuffled into a new deck": told to the owner in the report, who may
+  prefer that only a spent one is renewed.
+- **Left as the owner's call**: "Back to menu" on the "Something went wrong" card counts an unfinished match as
+  "Left early" in the record (`backToMenu` counts any Main-menu exit before the end; the owner defined "left early"
+  as exactly that). Skipping the count for a crash exit is one flag (`backToMenu({ crashed: true })`).
+- **Tests and CI**: `tests/audio-buttons-check.mjs` also checks that `src/audio/index.js` imports and uses
+  `buttonCues.js` (it imported the matcher directly, so it would have passed with the old matcher back in
+  index.js); `audio-buttons-check` and `flicker-check` run in the GitHub Action beside the other fast suites;
+  `tests/tips-check.mjs` waits for the Move bar's tip to finish gliding clear of the bar before it measures
+  (the tip is placed against the bar while it slides in and moves at the next tick, which on a loaded machine is
+  later than the fixed 600 ms the test waited); the README's rollback section says how to bring the rolled-back
+  work back (`git revert` the rollback commit: a merge of the old branch says "Already up to date").

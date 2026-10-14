@@ -13,7 +13,7 @@
 // 6. out of the match: "You are out", skip to the result, the end screen with every role, Play again,
 //    Main menu, the Menu button mid-match
 // 7. whole matches with a simple stand-in player: no stalls, no errors, every match ends
-import { launch } from './smoke-lib.mjs';
+import { launch, giveCard } from './smoke-lib.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -94,7 +94,7 @@ async function answerScreens() {
       return null;
     });
     if (!s) return;
-    if (s === 'pick') await page.click('#offer-cards .card-tile');
+    if (s === 'pick') await giveCard(page);
     else if (s === 'choice') await page.click('#offer-intent .btn');
     else if (s === 'meeting') { const b = await page.$('#encounter-actions .btn:not([disabled])'); if (b) await b.click(); else await page.waitForTimeout(250); }
     else if (s === 'notice') await page.click('#btn-notice-ok');
@@ -300,7 +300,7 @@ console.log('\n4. meetings');
     await shot('09-bot-trade-pick');
     const before = await game(() => window.__game.state.players[window.__game.humanSeat()].hand.map(c => c.id).sort().join());
     await settle();
-    await page.click('#offer-cards .card-tile');
+    await giveCard(page);
     await waitFor(() => window.__game.handoffKind() === 'note', null, 20000);
     check(true, 'after a short wait you read what you received, in private');
     await shot('10-trade-result');
@@ -341,7 +341,7 @@ console.log('\n4. meetings');
       await page.click('#encounter-actions .btn.primary');      // Trade
       await waitFor(() => window.__game.handoffKind() === 'pick', null, 10000);
       await settle();
-      await page.click('#offer-cards .card-tile');
+      await giveCard(page);
       await waitFor(() => window.__game.handoffKind() === 'note', null, 20000);
       check(true, 'you trade with the bot, and read the result in private');
       await page.click('#btn-handoff-next');
@@ -438,7 +438,11 @@ console.log('\n6. playing possessed');
   check(await visible('#panel-role') && await visible('#panel-souls'), 'your panel shows POSSESSED and your souls to trade');
   check(await game(() => window.__game.fanIds().some(id => window.__game.state.players[window.__game.humanSeat()].hand.find(c => c.id === id)?.type === 'possession')), 'your Possession cards are in your hand');
   await shot('16-possessed-turn');
-  await tap('#btn-leave'); await tap('#btn-ask-yes');
+  await tap('#btn-leave');
+  check(await game(() => { const q = document.getElementById('ask-title').textContent, no = document.getElementById('btn-ask-no'), yes = document.getElementById('btn-ask-yes');
+    return q === 'Leave the match?' && no.textContent === 'Keep playing' && no.classList.contains('primary') && yes.textContent === 'Main menu' && !yes.classList.contains('primary'); }),
+    '"Leave the match?": the safe answer, Keep playing, is the gold button; Main menu, which loses the match, is the plain one');
+  await tap('#btn-ask-yes');
   await waitFor(() => window.__game.phase() === 'menu', null, 20000);
 }
 

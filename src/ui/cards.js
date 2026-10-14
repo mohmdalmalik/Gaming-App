@@ -5,6 +5,7 @@ import { CARDS, countableCount } from '../game/cards.js';
 import { rules } from '../data/rules.js';
 import { cardIcon } from './cardIcons.js';
 import { soulFaceSrc, markSoul, prepareSoulFaces } from './soulFace.js';
+import { sfx } from '../audio/bus.js';
 
 // Over the hand limit DURING a turn is allowed (approved rule: the limit is settled only when the turn
 // ends). This is the gentle reminder shown wherever the count is: '' when within the limit, otherwise
@@ -77,8 +78,13 @@ const PRACTICE_DESC = {
 };
 let practiceWording = false;
 export function usePracticeWording(on) { practiceWording = !!on; }
-// What a card does, in words for this mode.
-export function cardDesc(type) {
+// What a card does, in words for this mode. Give the card itself where there is one: a Revolver's words
+// then say how many shots IT has left (the catalogue's own words say two, which is true only of a new one).
+export function cardDesc(type, card = null) {
+  const full = CARDS.revolver?.shots;
+  if (type === 'revolver' && card && card.shots > 0 && card.shots < full) {
+    return `Attack: ${CARDS.revolver.damage} damage. ${card.shots === 1 ? 'One shot' : `${card.shots} shots`} left, then it is gone.`;
+  }
   return (practiceWording && PRACTICE_DESC[type]) || CARDS[type]?.desc || '';
 }
 
@@ -121,10 +127,12 @@ export function cardTile(doc, card, opts = {}) {
   }
   const nm = doc.createElement('span'); nm.className = 'cname'; nm.textContent = `${meta.name}${shots}`; el.appendChild(nm);
   if (!opts.hideDesc) {
-    const d = doc.createElement('span'); d.className = 'cdesc'; d.textContent = opts.desc ?? (CARDS[card.type] ? cardDesc(card.type) : meta.desc); el.appendChild(d);
+    const d = doc.createElement('span'); d.className = 'cdesc'; d.textContent = opts.desc ?? (CARDS[card.type] ? cardDesc(card.type, card) : meta.desc); el.appendChild(d);
   }
 
-  if (opts.selectable && opts.onSelect) el.addEventListener('click', e => { e.preventDefault(); opts.onSelect(card, el, e); });
+  // A tap on a card to choose it makes the 'select' sound (the screens that ignore a tap that is too soon
+  // say so by returning false: a tap that did nothing is silent).
+  if (opts.selectable && opts.onSelect) el.addEventListener('click', e => { e.preventDefault(); if (opts.onSelect(card, el, e) !== false) sfx('select'); });
   if (opts.action) {
     const btn = doc.createElement('button');
     btn.className = 'btn' + (opts.action.primary ? ' primary' : '');
@@ -164,7 +172,7 @@ export function bigCard(doc, card, opts = {}) {
   el.appendChild(face);
   if (opts.text !== false) {
     const nm = doc.createElement('div'); nm.className = 'bc-name'; nm.textContent = meta.name; el.appendChild(nm);
-    const d = doc.createElement('div'); d.className = 'bc-desc'; d.textContent = CARDS[card.type] ? cardDesc(card.type) : meta.desc; el.appendChild(d);
+    const d = doc.createElement('div'); d.className = 'bc-desc'; d.textContent = CARDS[card.type] ? cardDesc(card.type, card) : meta.desc; el.appendChild(d);
   }
   return el;
 }

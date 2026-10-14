@@ -18,7 +18,7 @@
 // absent before the trade and while the scene has not yet shown it, present after, and never for a clean
 // player. The second possessed guest of the last three is made so by the test (their own soul in hand);
 // the computer guests' choices are scripted (window.__game.bots()), nothing else.
-import { launch } from './smoke-lib.mjs';
+import { launch, giveCard } from './smoke-lib.mjs';
 import { rules } from '../src/data/rules.js';
 
 const args = process.argv.slice(2);
@@ -117,7 +117,40 @@ async function trade(mode) {
         `the pick screen shows your ${before.souls} soul${before.souls === 1 ? '' : 's'} as one card with your own face (${JSON.stringify(souls)})`);
     } else check(pick.every(p => p.soul == null), 'a clean guest has no souls to pick');
     await page.waitForTimeout(400);          // (a screen ignores taps in its first moments: src/ui/tapGuard.js)
-    await page.click(`#offer-cards .card-tile[data-card-id="${give}"]`);
+    // Giving a card is two steps (src/ui/handoff.js privatePick): a tap lifts the card and says what it is,
+    // another card switches the choice, and the button, which names the card, gives it.
+    const tileSel = `#offer-cards .card-tile[data-card-id="${give}"]`;
+    const giveType = await ev(id => window.__game.state.players[window.__game.humanSeat()].hand.find(c => c.id === id).type, give);
+    const wantBtn = giveType === 'possession' ? 'Give your soul' : `Give the ${rules.cards[giveType].name}`;
+    const lifted = () => ev(() => ({ kind: window.__game.handoffKind(), sel: [...document.querySelectorAll('#offer-cards .card-tile.selected')].map(t => t.dataset.cardId),
+      words: document.getElementById('offer-summary').textContent, btn: document.getElementById('btn-offer-give').textContent, off: document.getElementById('btn-offer-give').disabled,
+      cards: window.__game.state.players[window.__game.humanSeat()].hand.length }));
+    const before1 = await lifted();
+    check(before1.off && before1.btn === 'Tap a card to give' && before1.sel.length === 0, `before a card is chosen the button says what to do and cannot be pressed ("${before1.btn}")`);
+    await page.click(tileSel);
+    await page.waitForTimeout(200);
+    const one = await lifted();
+    check(one.kind === 'pick' && one.sel.join() === give && one.cards === before.me.length, 'one tap only lifts the card: nothing is given away yet');
+    check(one.words.includes(rules.cards[giveType].name) && one.words.includes(rules.cards[giveType].desc), `its name and what it does are shown ("${one.words.slice(0, 60)}…")`);
+    check(one.btn === wantBtn && !one.off, `the button names it: "${one.btn}"`);
+    const other = pick.find(p => p.id !== give);
+    if (other) {
+      await page.click(`#offer-cards .card-tile[data-card-id="${other.id}"]`);
+      await page.waitForTimeout(200);
+      const two = await lifted();
+      check(two.kind === 'pick' && two.sel.join() === other.id && two.btn !== wantBtn, `another card switches the choice ("${two.btn}")`);
+      // The double-tap guard: a Give tapped in the same instant as the tap that lifted the card is ignored
+      // (src/ui/tapGuard.js; the clicks are made in one go, as a double tap's would be).
+      const early = await ev(([a, b]) => {
+        const tile = document.querySelector(`#offer-cards .card-tile[data-card-id="${a}"]`), btn = document.getElementById('btn-offer-give');
+        const tap = el => el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, detail: 1 }));
+        tap(tile); tap(btn);
+        return { kind: window.__game.handoffKind(), sel: [...document.querySelectorAll('#offer-cards .card-tile.selected')].map(t => t.dataset.cardId) };
+      }, [give, other.id]);
+      check(early.kind === 'pick' && early.sel.join() === give, 'a Give tapped in the same instant as the card (a double tap) does not give it');
+    }
+    const label = await giveCard(page, tileSel);
+    check(label === wantBtn, `after a moment the button gives it ("${label}")`);
     await waitFor(() => window.__game.tradeRevealOutcome() !== null);
     check(await ev(() => window.__game.tradeRevealOutcome()) === mode, `the scene plays "${mode}"`);
     // While the scene has not yet shown it: still no red eyes on them, anywhere behind it.

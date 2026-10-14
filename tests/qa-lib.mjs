@@ -67,7 +67,14 @@ export function helpers(page) {
     }, sel),
     kind: () => game(() => window.__game.handoffKind()),
     handoffOpen: () => game(() => window.__game.handoffOpen()),
-    async tap(sel) { await page.click(sel); await page.waitForTimeout(80); },
+    // (End turn with actions left asks "You still have 3 actions. End turn?" first: this answers it, after the
+    // guard of src/ui/tapGuard.js)
+    async tap(sel) {
+      await page.click(sel); await page.waitForTimeout(80);
+      if (sel === '#btn-end-turn' && await page.evaluate(() => !document.getElementById('confirm-bar').hidden && /End turn\?$/.test(document.getElementById('confirm-text').textContent))) {
+        await page.waitForTimeout(350); await page.click('#btn-confirm-move'); await page.waitForTimeout(80);
+      }
+    },
     async snapCam() { await game(() => { const g = window.__game, m = g.activeMover(); g.rig.setFocus(m.x, m.z, true); }); await page.waitForTimeout(150); },
     place: (index, room, ap = null) => page.evaluate(({ index, room, ap }) => {
       const g = window.__game, p = g.state.players[index], c = g.roomCenter(room);

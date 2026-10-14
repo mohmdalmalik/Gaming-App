@@ -1928,3 +1928,105 @@ html, body {
 .chat-bubble.about-me::after { border-color: var(--brass-bright); }
 .feed-line .feed-name.you, .ec-line .ec-name.you { color: var(--ivory); text-decoration: underline; text-decoration-color: var(--brass-bright); text-underline-offset: 3px; }
 .ec-line.me { color: var(--ivory); border-color: var(--line); }
+
+/* ==== Start-up, the problem card, the version line (reliability round, 14 Oct 2026) ================================
+   index.html: #boot (what is loading), #error-overlay (the problem card), the two "turn sideways" messages;
+   the Version line at the bottom of Settings. */
+/* What is loading: away for the first moment (a quick load shows nothing at all), gone the instant the menu or a
+   direct link's "Tap to begin" card shows (the sibling rules), and under every screen, the cards included. */
+.boot {
+  position: absolute; top: 0; right: 0; bottom: 0; left: 0; z-index: 5; display: flex; align-items: center; justify-content: center;
+  pointer-events: none; opacity: 0; animation: boot-in 0.5s ease 0.9s forwards;
+}
+.boot[hidden], #menu:not([hidden]) ~ .boot, #start-overlay:not([hidden]) ~ .boot { display: none; }
+.boot-card { padding: 0 24px; text-align: center; }
+.boot-title { font-family: var(--serif); font-size: clamp(28px, 5vw, 44px); font-weight: 700; letter-spacing: 0.01em; color: var(--ivory); }
+.boot-text { margin-top: 10px; font-size: 15px; letter-spacing: 0.04em; color: var(--ivory-dim); }
+.boot-count { margin-top: 6px; min-height: 1.3em; font-size: 12.5px; letter-spacing: 0.04em; color: var(--muted); }
+.menu-loading .boot-count { display: inline; margin: 0; min-height: 0; font-size: inherit; }
+@keyframes boot-in { to { opacity: 1; } }
+/* The problem card (could not load / went wrong): above the menu, the black fade and the game; only the
+   "turn sideways" card (z-index 200) is above it. The small print is for a screenshot. */
+#error-overlay { top: 0; right: 0; bottom: 0; left: 0; z-index: 150; }
+.error-card { max-width: min(480px, 92vw); }
+.error-card p { margin-bottom: 18px; }
+.error-actions { margin-top: 4px; }
+.error-actions .btn[hidden] { display: none; }
+.error-card .error-detail {
+  margin: 20px 0 0; font-size: 11.5px; line-height: 1.4; color: var(--muted); opacity: 0.9; overflow-wrap: anywhere;
+  -webkit-user-select: text; user-select: text;
+}
+.error-card .error-detail[hidden] { display: none; }
+/* "Turn sideways" (taller than wide) or "Make this window wider" (wide but small: Split View, Page Zoom). */
+.rotate-wide { display: none; }
+@media (orientation: landscape) {
+  .rotate-tall { display: none; }
+  .rotate-wide { display: block; }
+}
+@media (max-height: 420px) { .rotate-icon { display: none; } }
+/* Settings > Version: quiet, at the bottom. */
+.set-version { margin-top: 10px; text-align: center; font-size: 11.5px; line-height: 1.2; letter-spacing: 0.05em; color: var(--muted); }
+
+/* ==== Round 1, build fixes (accidental taps, found card and legend at 1024x694, Reduce Motion) ==== */
+
+/* The card pick (src/ui/handoff.js privatePick): a tap lifts the card; under the row, its name and what it
+   does (two lines kept free, so choosing a card never moves the buttons); the gold button gives it. */
+.offer-block .card-tile.selectable { transition: transform 0.12s ease; }
+.offer-block .card-tile.selected { transform: translateY(-6px); }
+.offer-summary.card-desc { min-height: 2.9em; margin-top: 10px; line-height: 1.4; color: var(--ivory); text-wrap: balance; }
+.offer-summary.card-desc b { color: var(--brass-bright); margin-right: 4px; }
+/* A one-card find at a short window (an iPad with Safari's bars: 1024x694): the note ("You now hold 2
+   Lanterns.") sat behind the Add to my hand bar and had to be scrolled to. The card picture shrinks with
+   the height instead, the card's padding is a little tighter, and the bar sits under the note, so nothing
+   is hidden and nothing needs scrolling. Taller windows keep the big card. */
+@media (max-height: 770px) {
+  .handoff-card.found { padding-top: 16px; padding-bottom: 16px; }
+  .handoff-card.found .modal-actions { bottom: -16px; margin-top: 10px; padding-top: 8px; }
+  .handoff-card.found .handoff-found { margin: 2px auto 6px; }
+  .handoff-found .big-card { width: clamp(130px, min(24vw, calc((92vh - 350px) / 1.5)), 250px); }
+  .handoff-found.pair .big-card { width: clamp(120px, min(21vw, calc((92vh - 390px) / 1.5)), 220px); }
+}
+
+/* The map's legend: the canvas may shrink to the panel (it used to keep the size it was last drawn at, which
+   pushed the legend's last row, the Barricade, out of the panel at 1024x694), and at a short window the legend
+   sits in tighter rows. */
+#map-canvas { min-height: 0; }
+@media (max-height: 770px) {
+  .map-legend { gap: 4px 14px; padding: 6px 16px; }
+}
+/* Reduce Motion (the iPad's Settings > Accessibility > Motion; src/motion.js): the motion that is only
+   decoration stops, and everything it showed is still shown. The trade and attack scenes and the tips had
+   their own rules already (above); the flicker of the two spooky corridors holds steady in
+   src/render/flicker.js; the lobby behind the menu is held Still in src/settings.js. */
+@media (prefers-reduced-motion: reduce) {
+  .fan-card.dealt { animation-duration: 0.01s; animation-delay: 0s; }       /* (the card is in its place at once; the class still clears) */
+  .search-spot.live .ss-badge { animation: none; }                          /* the search icon's pulse */
+  .think-dots i { animation: none; opacity: 0.8; transform: none; }         /* the waiting dots: three still dots */
+  .mm-seat.empty .mm-name { animation: none; opacity: 0.7; }                /* "waiting for a guest" */
+  .mm-seat.joined, .menu-screen, .handoff-found .big-card, .cv-panel,
+  .confirm-bar, .toast, .feed-line { animation: none; }                     /* things sliding or dealing in */
+  #view canvas { transition: none; }                                        /* the menu's blur and slow zoom */
+  .menu-panel { transition: opacity 0.3s ease; }
+  .menu.leaving .menu-panel { transform: translateY(-50%); }                /* (it fades out, it does not slide) */
+}
+/* (END of the round 1 build-fixes block: keep this line last; new rules above it) */
+
+/* ==== Round 1, fixer block: Reduce Motion in Settings, the loading screen's way out, the wider message ==== */
+
+/* Settings > Menu background with the iPad's Reduce Motion on: Animated is dimmed and cannot be tapped, and the
+   label says why (on the same line, so the Settings screen stays as tall as before). */
+#set-menuMotion .seg-btn:disabled { opacity: 0.4; cursor: default; }
+.mf-why { margin-left: 10px; font-weight: 400; letter-spacing: 0.02em; text-transform: none; color: var(--muted); }
+.mf-why[hidden] { display: none; }
+
+/* The loading screen's way out: a plain Reload button, which the start-up script (index.html) shows only when
+   nothing new has loaded for 30 seconds. (.boot lets taps through to the page below; the button takes its own.) */
+.boot-reload { margin-top: 18px; pointer-events: auto; }
+.boot-reload[hidden] { display: none; }
+
+/* "Turn sideways" is for a device that is held upright. A window taller than wide on a device that is already held
+   sideways (Split View, Slide Over; the start-up script sets html.device-landscape) is asked for more room instead. */
+@media (orientation: portrait) {
+  html.device-landscape .rotate-tall { display: none; }
+  html.device-landscape .rotate-wide { display: block; }
+}

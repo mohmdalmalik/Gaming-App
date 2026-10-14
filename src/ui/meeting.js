@@ -73,7 +73,7 @@ export function createMeeting(doc, cfg, { isViewer = () => false, redEyes = () =
       title.textContent = 'Attack';
       body.innerHTML = `<div class="modal-sub">${esc(Name(P))} ${isViewer(P) ? 'attack' : 'attacks'} ${esc(nameOf(Q))}. Choose a weapon:</div>`;
       const grid = doc.createElement('div'); grid.className = 'cards';
-      for (const w of weaponsIn(P.hand)) grid.appendChild(cardTile(doc, w, { selectable: true, onSelect: (c, _tile, e) => { if (tooSoon(e, shownAt)) return; hide(); onWeapon(c.id); } }));
+      for (const w of weaponsIn(P.hand)) grid.appendChild(cardTile(doc, w, { selectable: true, onSelect: (c, _tile, e) => { if (tooSoon(e, shownAt)) return false; hide(); onWeapon(c.id); } }));
       body.appendChild(grid);
       actions.innerHTML = '';
       if (onBack) actions.appendChild(button('‹ Back', () => { hide(); onBack(); }));

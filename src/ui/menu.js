@@ -9,7 +9,8 @@
 //   matchmaking  the table filling up, guest by guest, as in an online game
 //   settings     bot speed, the view on other guests' turns, graphics, the menu background, music,
 //                sound effects, quick chat and tips (each applied at once, through onSettingChanged;
-//                "Show tips again" brings back the tips already seen: src/ui/tips.js)
+//                "Show tips again" brings back the tips already seen: src/ui/tips.js; the version of the
+//                game in a quiet line at the bottom: src/version.js)
 //   record       your record on this device (src/ui/record.js), with a reset that asks first
 // Choices are remembered on this device (src/settings.js); who you are is the account's
 // (src/account/account.js). Nothing here touches the game itself: main.js gets the choice through the
@@ -17,6 +18,7 @@
 // bus, src/audio/bus.js). `onScreenChange(name, prev)` hears every change of screen (the lobby's camera
 // follows it: the wardrobe frames your avatar).
 import { settings, SETTING_CHOICES } from '../settings.js';
+import { reducedMotion } from '../motion.js';
 import { sfx } from '../audio/bus.js';
 import { tooSoon } from './tapGuard.js';
 import { createRegister } from './register.js';
@@ -24,6 +26,7 @@ import { createProfileCard } from './profileCard.js';
 import { createRecordScreen } from './record.js';
 import { record } from '../record.js';
 import { renderTipsAgain } from './tips.js';
+import { versionLine } from '../version.js';
 
 const ROLE_CHOICES = [
   { value: 'random', label: 'Random', note: 'Like a real table: you are told your role when the game starts. Usually you are a clean guest.' },
@@ -82,7 +85,8 @@ export function createMenu(doc, { onPlayBots, onPractice, onSettingChanged, onSc
   const card = createProfileCard(doc, { account, onOpen: () => show('avatar'), guard: e => tooSoon(e, shownAt) });
 
   // A row of buttons where exactly one is chosen (radio buttons that look like a segmented control).
-  function segment(host, options, value, onPick) {
+  // (`unavailable(option)`: a choice the device rules out right now is shown dimmed and cannot be tapped)
+  function segment(host, options, value, onPick, unavailable = null) {
     host.innerHTML = '';
     for (const o of options) {
       const b = doc.createElement('button');
@@ -92,6 +96,7 @@ export function createMenu(doc, { onPlayBots, onPractice, onSettingChanged, onSc
       b.setAttribute('aria-checked', String(o.value === value));
       b.dataset.value = String(o.value);
       b.textContent = o.label;
+      if (unavailable?.(o)) { b.disabled = true; b.setAttribute('aria-disabled', 'true'); }
       b.addEventListener('click', e => { e.preventDefault(); if (tooSoon(e, shownAt)) return; onPick(o.value); });
       host.appendChild(b);
     }
@@ -110,16 +115,21 @@ export function createMenu(doc, { onPlayBots, onPractice, onSettingChanged, onSc
     for (const name of Object.keys(SETTING_CHOICES)) {
       const host = $(`set-${name}`);
       if (!host) continue;
+      // (Reduce Motion is on: the lobby stays Still whatever is chosen, so Animated cannot be chosen, and the
+      // row says why: src/motion.js)
+      const still = name === 'menuMotion' && reducedMotion();
       segment(host, SETTING_CHOICES[name], settings.choice(name)?.value, v => {
         settings.set(name, v);
         renderSettings();
         onSettingChanged?.(name, v);
-      });
+      }, still ? o => o.value === 'on' : null);
+      if (name === 'menuMotion') { const why = $('set-menuMotion-why'); if (why) why.hidden = !still; }
     }
     renderTipsAgain($('btn-tips-again'), settings, {
       guard: e => tooSoon(e, shownAt),
       after: () => { renderSettings(); onSettingChanged?.('tips', 'on'); },
     });
+    const version = $('set-version'); if (version) version.textContent = versionLine();   // (which build this is: src/version.js)
   }
 
   // The table fills up like an online lobby: you first, then each other guest "joins" after a short,

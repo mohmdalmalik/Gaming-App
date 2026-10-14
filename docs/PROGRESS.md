@@ -1,5 +1,56 @@
 # PROGRESS
 
+## Round 1: accidental taps, flicker and Reduce Motion, the small window, sounds, the Revolver, and the review's fixes (2026-10-14)
+
+From the 13 Oct audit (owner-approved list, round 1: F5, G1-G4, then the review's findings). Interface, tests
+and docs only, plus one bug fix in the rules engine (G4); no rule or rule number changed. Details in
+docs/DECISIONS.md 'Round 1 build fixes' and 'Round 1 review fixes'.
+
+- **Accidental taps (F5)**: giving a card in a trade is two steps (a tap lifts the card and says what it does;
+  the gold button, which names the card, gives it); End turn asks "You still have 3 actions. End turn?" while
+  actions are left; Leave and Restart questions put Keep playing in gold.
+- **Flicker and Reduce Motion (G1)**: the two spooky corridors flicker more gently (at most 3 flashes a second);
+  with the iPad's Reduce Motion on they hold steady, the decorative CSS motion stops and the lobby behind the
+  menu stays still (Settings > Menu background shows Animated dimmed, with the reason).
+- **The smallest window (G2)**: the found card and the map legend fit at 1024x694.
+- **Button sounds (G3)**: Continue and the hand's arrows click instead of playing the long drawer sound;
+  choosing a card makes the select sound; tests/audio-buttons-check.mjs keeps it that way.
+- **The Revolver (G4)**: a fired-out Revolver no longer comes back from the reshuffle with no shots.
+- **The review's fixes**: a Revolver with one shot left says so in its words; the import-map check is a hint
+  (a wrong "no" cannot lock a working iPad out); no automatic reload while offline; a Reload button on a loading
+  screen that stalls for 30 s; a graphics context that never comes back raises the "Something went wrong" card;
+  a narrow window on an iPad held sideways (Split View) asks for a wider window, not for the iPad to be turned;
+  README rollback says how to bring the rolled-back work back.
+- **Tests**: new tests/audio-buttons-check.mjs, tests/flicker-check.mjs, tests/browser-build-fixes.mjs (sections
+  a-e); crash-check and browser-reliability cover the review's fixes; the GitHub Action runs eight fast suites.
+- **Only a real iPad can say**: how the two-step pick and the End turn question feel under a finger; whether
+  Safari honours Reduce Motion for the CSS and the lobby; what `screen.orientation` and `window.orientation`
+  say in Split View; the sounds; the 1024x694 layout with Safari's own bars.
+
+## Reliability round: no silent freeze, clear start-up messages, a way back (2026-10-14)
+
+From the 13 Oct audit (owner-approved list, round 1: F3, F4, F6). Interface, tests and docs only; no rule or
+rule number changed. Details in docs/DECISIONS.md 'Reliability' and 'Publishing safety net'.
+
+- **No silent freeze**: every part of a frame runs through a small safety net (src/ui/crash.js), so one failing
+  part is skipped and the 3D picture is still drawn. After a part has failed frame after frame (never for a
+  one-off) a "Something went wrong" card appears with Back to menu and Reload and the last message in small
+  print (version included) for a screenshot. After the graphics are lost and come back (iPad Safari, low
+  memory) the portraits are drawn again instead of falling back to the stock pictures.
+- **Start-up messages**: a browser too old for the game (iPadOS below 16.4) says "Hotel Escape needs iPadOS 16.4
+  or newer."; a real load failure reloads once by itself, then says "The game could not load. Try again." with
+  a Reload button (technical text in small print); the 20-second "check the internet" alarm is gone (the
+  loading screen and the menu show the real count of files and MB); "Please turn your iPad sideways" only in a
+  window taller than wide, "Make this window wider, or reduce page zoom." in a wide small one.
+- **Publishing safety net**: a version label (src/version.js: "Version v0.5 · 14 Oct 2026" at the bottom of
+  Settings), README 'Publishing and rolling back' (tags v0.N, the exact commands to put the live game back
+  on an earlier version without rewriting history), the flaky 150 ms grid-rebuild check made robust, and a
+  GitHub Action that runs the fast suites on every push (a warning only; it cannot block a publish).
+- **Tests**: node tests/crash-check.mjs (new), browser tests/browser-reliability.mjs (new); logic-check's
+  timing check and browser-practice's 860×700 case changed.
+- **Only a real iPad can say**: whether iPadOS 16.4+ Safari shows the cards as in Chromium; whether a reload
+  after a publish revalidates every file; the real graphics-context loss under memory pressure.
+
 ## Players, avatars, chat that talks and listens; the online plan (2026-10-12)
 
 - **The plan for going online** and onto the app stores: docs/ONLINE_PLAN.md (accounts, a server, the

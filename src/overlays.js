@@ -1,5 +1,5 @@
 // Full-screen overlays: "Tap to begin", a one-off notice (the exit opening), a yes/no question,
-// the end screen and load errors.
+// the end screen and the problem card (a load error, or "Something went wrong": src/ui/crash.js).
 
 export function createOverlays(doc) {
   const start = doc.getElementById('start-overlay');
@@ -16,7 +16,10 @@ export function createOverlays(doc) {
   const noticeBody = doc.getElementById('notice-body');
   const noticeOk = doc.getElementById('btn-notice-ok');
   const error = doc.getElementById('error-overlay');
+  const errorTitle = doc.getElementById('error-title');
   const errorMessage = doc.getElementById('error-message');
+  const errorDetail = doc.getElementById('error-detail');
+  const errorMenu = doc.getElementById('btn-error-menu');
   const beginBtn = doc.getElementById('btn-begin');
 
   const ask = doc.getElementById('ask-overlay');
@@ -74,15 +77,29 @@ export function createOverlays(doc) {
     hideNotice() { notice.hidden = true; noticeNext = null; },
     get noticeOpen() { return !notice.hidden; },
     // A yes/no question ("Restart practice?"). `onYes` runs only on the yes button; the other button
-    // (or tapping outside the card) just closes it.
-    ask(title, body, { yes = 'OK', no = 'Cancel' } = {}, onYes = null) {
+    // (or tapping outside the card) just closes it. The gold (primary) button is the one that is safe to
+    // press by mistake: `safe: 'no'` for a question whose yes throws something away (leaving a match,
+    // restarting practice), so Keep playing is the highlighted answer and the destructive one is plain.
+    ask(title, body, { yes = 'OK', no = 'Cancel', safe = 'yes' } = {}, onYes = null) {
       askTitle.textContent = title; askBody.textContent = body || '';
       askYes.textContent = yes; askNo.textContent = no;
+      askYes.classList.toggle('primary', safe !== 'no'); askNo.classList.toggle('primary', safe === 'no');
       askNext = onYes; ask.hidden = false;
     },
     hideAsk() { ask.hidden = true; askNext = null; },
     get askOpen() { return !ask.hidden; },
-    showError(message) { errorMessage.textContent = message; error.hidden = false; start.hidden = true; if (menuRoot) menuRoot.hidden = true; },
+    // The problem card (index.html #error-overlay: a Reload button always; Reload is plain HTML in the page).
+    // `title`: its heading; `detail`: small print for a screenshot (the version, the last message);
+    // `menu`: also offer Back to menu (onErrorMenu), for a problem during play. It covers everything.
+    showError(message, { title = 'Could not start', detail = '', menu = false } = {}) {
+      errorTitle.textContent = title; errorMessage.textContent = message;
+      errorDetail.textContent = detail; errorDetail.hidden = !detail;
+      errorMenu.hidden = !menu;
+      error.hidden = false; start.hidden = true; if (menuRoot) menuRoot.hidden = true;
+    },
+    hideError() { error.hidden = true; },
+    get errorOpen() { return !error.hidden; },
+    onErrorMenu(fn) { errorMenu.addEventListener('click', e => { e.preventDefault(); fn(); }); },
   };
   noticeOk.addEventListener('click', e => {
     e.preventDefault();

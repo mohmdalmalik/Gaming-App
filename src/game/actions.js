@@ -2,7 +2,7 @@
 // forced meeting resolves — trade or attack. Pure logic; the interface calls these and shows
 // whatever they return. Implements docs/GAME_RULES.md (the owner's design — see CLAUDE.md).
 import { rules } from '../data/rules.js';
-import { CARDS, takeCard, isWeapon, countableCount, shuffle, makeCard } from './cards.js';
+import { CARDS, takeCard, isWeapon, countableCount, shuffle, makeCard, renewCard } from './cards.js';
 import {
   checkWin, canEscape, logPublic, convertToPossessed, isLocked, unlockRoom, placeBarricade, isBarricaded,
   adjacentLockedRooms, doorBetween, emitPublic, emitPrivate,
@@ -56,10 +56,11 @@ export function escape(state, floor, player) {
 }
 
 // --- Deck ------------------------------------------------------------------------------------
-// Draw one card; when the deck runs out the discard pile is shuffled into a new deck.
+// Draw one card; when the deck runs out the discard pile is shuffled into a new deck. Every card in it
+// comes back as good as new (a Revolver fired out has its two shots again: renewCard).
 export function drawCard(state) {
   if (!state.drawPile.length && state.discardPile.length) {
-    state.drawPile = shuffle(state.discardPile.splice(0), state.rng);
+    state.drawPile = shuffle(state.discardPile.splice(0).map(renewCard), state.rng);
   }
   return state.drawPile.shift() || null;
 }

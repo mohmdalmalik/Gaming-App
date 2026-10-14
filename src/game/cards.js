@@ -26,6 +26,15 @@ export function makeCard(type, { owner = null } = {}) {
   return card;
 }
 
+// A card coming back from the discard pile is as good as new (docs/GAME_RULES.md: the discard pile is
+// shuffled into a new deck; a Revolver has two shots and is discarded when empty): its ammunition is
+// full again, however many shots it had when it was thrown away. How many is in the card data.
+export function renewCard(card) {
+  const shots = CARDS[card.type]?.shots;
+  if (shots != null) card.shots = shots;
+  return card;
+}
+
 // The draw pile (Possession cards are never in it).
 export function buildDrawDeck(spec = rules.deck) {
   const deck = [];

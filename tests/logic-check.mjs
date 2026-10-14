@@ -89,7 +89,7 @@ for (const doors of layouts) {
 }
 
 console.log('\n400 generated hotels, opened door by door');
-let problems = [], closed = 0, walkOk = 0, exitWalk = 0, slowest = 0, placed = [], jobRooms = true, jobsSeen = 0;
+let problems = [], closed = 0, walkOk = 0, exitWalk = 0, gridMs = [], placed = [], jobRooms = true, jobsSeen = 0;
 let lockedDead = true, lockedSeen = 0, exitPastLocks = 0, lockedByLobby = false;
 for (let seed = 1; seed <= 400; seed++) {
   resetHotel(floor, seed);
@@ -102,7 +102,7 @@ for (let seed = 1; seed <= 400; seed++) {
   placed.push(floor.roomList.length - 1);
   const t0 = performance.now();
   const grid = buildGrid(floor, config);
-  slowest = Math.max(slowest, performance.now() - t0);
+  gridMs.push(performance.now() - t0);
   if (floor.problems.length) problems.push(`seed ${seed}: ${floor.problems[0]}`);
   // Rooms never overlap and every room is where roomAt says it is.
   const cells = new Set(floor.roomList.map(r => r.cell.join()));
@@ -142,8 +142,14 @@ check(lockedDead && lockedSeen > 400, `every locked room placed is a dead end wi
 check(!lockedByLobby, 'a locked room never joins the lobby');
 check(exitPastLocks === 400, `the Fire Exit is never behind a locked room: reached from the lobby without passing one (${exitPastLocks}/400)`);
 const avg = placed.reduce((a, b) => a + b, 0) / placed.length;
-console.log(`       tiles placed when every door had been tried: average ${avg.toFixed(1)}, fewest ${Math.min(...placed)}; slowest walkable-grid rebuild ${slowest.toFixed(1)} ms`);
-check(slowest < 150, 'rebuilding the walkable grid after a door opens stays quick');
+// (A clock check must not fail on a slow or busy machine, so no single rebuild is held to a tight limit: a
+// pause from the garbage collector or another program is not a slowdown. The typical rebuild takes about
+// 12 ms here (the slowest of 400 about 45-95 ms); a real slowdown moves the MEDIAN, so that is held to 150 ms
+// (over 10 times the usual) and the slowest only to 1.5 s.)
+gridMs.sort((a, b) => a - b);
+const medianMs = gridMs[Math.floor(gridMs.length / 2)], slowest = gridMs[gridMs.length - 1];
+console.log(`       tiles placed when every door had been tried: average ${avg.toFixed(1)}, fewest ${Math.min(...placed)}; walkable-grid rebuild median ${medianMs.toFixed(1)} ms, slowest ${slowest.toFixed(1)} ms`);
+check(medianMs < 150 && slowest < 1500, 'rebuilding the walkable grid after a door opens stays quick (median under 150 ms, slowest under 1.5 s)');
 
 // The fogged rooms (docs/GAME_RULES.md > Doors and exploring): ONE per empty cell that a closed door
 // still leads to, however many doors lead there; never on a room; gone once its door is opened.

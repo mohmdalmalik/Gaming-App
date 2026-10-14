@@ -9,7 +9,7 @@
 import { chromium } from 'playwright-core';
 import fs from 'node:fs';
 import path from 'node:path';
-import { tipsOff } from './smoke-lib.mjs';
+import { tipsOff, endTurn as endTurnTap, GUARD_WAIT } from './smoke-lib.mjs';
 
 const args = process.argv.slice(2);
 const baseUrl = args.includes('--url') ? args[args.indexOf('--url') + 1] : 'http://127.0.0.1:8123/';
@@ -575,7 +575,7 @@ console.log('\n6b. a Linen Store');
   await shot('pr-02c-linen-keep');
   // Ending the turn opens the discard screen first; the turn passes only once the hand is back to 6.
   const turn0 = await game(() => window.__game.state.turn);
-  await tap('#btn-end-turn');
+  await endTurnTap(page);      // (3 actions are left: it asks "You still have 3 actions. End turn?" first, and the answer opens the discard screen)
   check(await visible('#discard-overlay'), 'End turn with 8 cards opens the discard screen');
   check(await game(() => window.__game.state.turn) === turn0, 'and the turn has not passed yet');
   const d0 = await page.evaluate(() => ({ sub: document.getElementById('discard-sub').textContent, n: document.querySelectorAll('#discard-cards .card-tile').length,
@@ -610,6 +610,9 @@ const before7 = await game(() => window.__game.hotelRooms().length);
 check(await page.evaluate(() => document.getElementById('btn-restart-practice').getBoundingClientRect().height >= 44), 'the Restart practice button is at least 44 px tall');
 await tap('#btn-restart-practice');
 check(await visible('#ask-overlay') && /Restart practice\?/.test(await page.textContent('#ask-title')), 'Restart practice asks first');
+check(await page.evaluate(() => document.getElementById('btn-ask-no').classList.contains('primary') && !document.getElementById('btn-ask-yes').classList.contains('primary')
+  && document.getElementById('btn-ask-no').textContent === 'Keep playing' && document.getElementById('btn-ask-yes').textContent === 'Restart'),
+  'the safe answer, Keep playing, is the gold button; Restart, which throws the hotel away, is the plain one');
 check(await game(() => window.__game.hotelRooms().length) === before7, 'and nothing is lost while it asks');
 await tap('#btn-ask-no');
 check(!(await visible('#ask-overlay')) && await game(() => window.__game.hotelRooms().length) === before7, '"Keep playing" keeps the hotel as it was');
@@ -814,21 +817,40 @@ console.log('\n7b. playtest fixes');
     }
   }
 
-  // A double tap on End turn ends ONE turn (practice has no hand-over screen to catch the second).
-  await game(() => { const p = window.__game.activePlayer(); p.hand = p.hand.slice(0, 4); window.__game.refresh(); });
+  // End turn with actions left asks first (src/hud.js, the same bar as Move), and a double tap ends ONE turn at
+  // most (practice has no hand-over screen to catch the second).
+  await game(() => { const p = window.__game.activePlayer(); p.hand = p.hand.slice(0, 4); p.actionPoints = 3; window.__game.refresh(); });
   const t0 = await game(() => window.__game.state.turn);
-  await page.click('#btn-end-turn', { clickCount: 2 }); await page.waitForTimeout(150);
-  const t1 = await game(() => ({ turn: window.__game.state.turn, ap: window.__game.activePlayer().actionPoints }));
-  check(t1.turn === t0 + 1 && t1.ap === 4, `a double tap on End turn ends one turn, not two (turn ${t0} → ${t1.turn})`);
-  await page.waitForTimeout(800);
+  await page.click('#btn-end-turn', { clickCount: 2 }); await page.waitForTimeout(200);
+  const ask1 = await confirmBar();
+  check(await game(() => window.__game.state.turn) === t0 && ask1.open && ask1.text === 'You still have 3 actions. End turn?' && ask1.btn === 'End turn',
+    `a double tap on End turn with 3 actions left only asks, it does not end the turn ("${ask1.text}")`);
+  check(await page.textContent('#btn-confirm-cancel') === 'Keep playing', 'the other answer is Keep playing');
+  await shot('pr-end-turn-ask');
+  await page.waitForTimeout(GUARD_WAIT);
+  await page.click('#btn-confirm-cancel'); await page.waitForTimeout(150);
+  check(!(await confirmBar()).open && await game(() => window.__game.state.turn) === t0 && await game(() => window.__game.activePlayer().actionPoints) === 3, 'Keep playing closes the question and nothing is spent');
+  await game(() => { window.__game.activePlayer().actionPoints = 1; window.__game.refresh(); });
   await tap('#btn-end-turn');
-  check(await game(() => window.__game.state.turn) === t0 + 2, 'a deliberate tap a moment later ends the next one');
+  check((await confirmBar()).text === 'You still have 1 action. End turn?', `with one action left it says "action", not "actions" ("${(await confirmBar()).text}")`);
+  await game(() => { window.__game.activePlayer().actionPoints = 0; window.__game.refresh(); });
+  check(!(await confirmBar()).open, 'and the question goes when the last action is gone');
+  await game(() => { window.__game.activePlayer().actionPoints = 3; window.__game.refresh(); });
+  await tap('#btn-end-turn');
+  await page.waitForTimeout(GUARD_WAIT);
+  await page.click('#btn-confirm-move', { clickCount: 2 }); await page.waitForTimeout(250);
+  const t1 = await game(() => ({ turn: window.__game.state.turn, ap: window.__game.activePlayer().actionPoints }));
+  check(t1.turn === t0 + 1 && t1.ap === 4, `a double tap on the End turn answer ends one turn, not two (turn ${t0} → ${t1.turn})`);
+  await page.waitForTimeout(800);
+  await game(() => { window.__game.activePlayer().actionPoints = 0; window.__game.refresh(); });
+  await tap('#btn-end-turn');
+  check(await game(() => window.__game.state.turn) === t0 + 2 && !(await confirmBar()).open, 'with no actions left, End turn ends the turn at once, with no question');
   await page.waitForTimeout(800);
 
   // The end-of-turn discard: tap a card to pick it, then confirm. Nothing goes on one tap.
   await game(() => { const p = window.__game.activePlayer(); p.hand = ['lantern', 'lantern', 'bandage', 'knife', 'masterKey', 'handMirror', 'espresso', 'barricade'].map((t, i) => ({ id: `d${i}`, type: t })); window.__game.refresh(); });
   const t2 = await game(() => window.__game.state.turn);
-  await tap('#btn-end-turn');
+  await endTurnTap(page);
   const dsc = () => page.evaluate(() => ({ open: !document.getElementById('discard-overlay').hidden, title: document.querySelector('#discard-overlay .modal-title').textContent,
     sub: document.getElementById('discard-sub').textContent, btn: document.getElementById('btn-discard-done').textContent.trim(), dis: document.getElementById('btn-discard-done').disabled,
     sel: [...document.querySelectorAll('#discard-cards .card-tile.selected')].map(t => t.dataset.cardId), n: window.__game.activePlayer().hand.length }));
@@ -896,14 +918,25 @@ console.log('\n7b. playtest fixes');
   check(await game(() => window.__game.noticeOpen()) && /alone/.test(sw) && !/No guest is possessed right now/.test(sw), `the Switchboard speaks to a guest alone ("${sw.slice(0, 60)}…")`);
   await tap('#btn-notice-ok');
 
-  // Portrait (or a window under ~900 px wide): a calm "turn your iPad sideways" card over everything.
+  // Portrait (or a window under ~900 px wide): a calm card over everything: "turn your iPad sideways" in a window
+  // that is taller than wide, "make this window wider" in a wide small one (Split View, Page Zoom; innerText:
+  // the words showing, not the ones CSS hides). tests/browser-reliability.mjs checks more sizes.
   const rot = () => page.evaluate(() => { const el = document.getElementById('rotate-overlay'); const cs = getComputedStyle(el);
-    const hit = document.elementFromPoint(innerWidth / 2, innerHeight / 2); return { shown: cs.display !== 'none', covers: !!hit && el.contains(hit), text: el.textContent }; });
-  for (const [w, h] of [[820, 1180], [768, 1024], [860, 700]]) {
+    const hit = document.elementFromPoint(innerWidth / 2, innerHeight / 2); return { shown: cs.display !== 'none', covers: !!hit && el.contains(hit), text: el.innerText }; });
+  // (Chromium cannot say how a device is held, and always reports a landscape screen: the page is given what an
+  // upright iPad's Safari gives, window.orientation 0, so a portrait window is told to turn the iPad. A narrow
+  // window on an iPad held SIDEWAYS, and a computer, are asked for a wider window: tests/browser-reliability.mjs.)
+  await page.evaluate(() => Object.defineProperty(window, 'orientation', { configurable: true, get: () => 0 }));
+  for (const [w, h] of [[820, 1180], [768, 1024]]) {
     await page.setViewportSize({ width: w, height: h }); await page.waitForTimeout(250);
     const r = await rot();
     check(r.shown && r.covers && /turn your iPad sideways/i.test(r.text), `${w}×${h}: "Please turn your iPad sideways" covers the game`);
     if (w === 820) await shot('ui-portrait-overlay');
+  }
+  {
+    await page.setViewportSize({ width: 860, height: 700 }); await page.waitForTimeout(250);
+    const r = await rot();
+    check(r.shown && r.covers && /Make this window wider/i.test(r.text) && !/turn your iPad/i.test(r.text), '860×700: landscape but narrow — "Make this window wider, or reduce page zoom." covers the game (not "turn sideways")');
   }
   for (const [w, h] of [[1024, 768], [1180, 820], [1440, 900]]) {
     await page.setViewportSize({ width: w, height: h }); await page.waitForTimeout(250);

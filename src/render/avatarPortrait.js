@@ -50,6 +50,22 @@ export function createAvatarPortraits(renderer, { w = 384, h = 512, paused = fal
 
   const keyOf = (av, possessed) => `${avatarKey(av)}:${possessed ? 'p' : 'n'}:${VERSION}`;
 
+  // ---- the graphics context lost and back (iPad Safari does this when memory is short or the tab sat in the
+  // background): three.js sets itself up again, and so do the portraits. Nothing drawn while it was gone counts:
+  // a portrait whose draw was cut off (a failed read-back) or that started inside the loss is NOT marked failed
+  // (that would show the shipped picture for the next 30 s, or until a reload) but goes back to the front of its
+  // queue and is drawn again once the context is back. `epoch` counts the losses, to tell a draw that spanned one.
+  const CONTEXT_LOST = new Error('the graphics context was lost');
+  let epoch = 0, waiting = [];             // (waiting: the draws held in a read-back, told at once of a loss)
+  const lostNow = () => { try { return !!renderer.getContext?.()?.isContextLost?.(); } catch { return false; } };
+  renderer.domElement?.addEventListener('webglcontextlost', () => { epoch++; const w = waiting; waiting = []; for (const reject of w) reject(CONTEXT_LOST); });
+  renderer.domElement?.addEventListener('webglcontextrestored', () => {
+    // (three.js has already made its own state again, its listener having come first: the off-screen buffers
+    // were made in the old context, so they are made again; the pictures drawn so far are plain JPEGs and stay)
+    targets = null;
+    if (!disposed) run();
+  });
+
   // ---- render targets and the tone-map pass ----
   function makeTargets(W, H) {
     if (targets && targets.w === W && targets.h === H) return targets;
@@ -209,6 +225,8 @@ export function createAvatarPortraits(renderer, { w = 384, h = 512, paused = fal
     const t0 = performance.now();
     const m = await modelFor(av);
     if (disposed) return null;
+    if (lostNow()) throw CONTEXT_LOST;
+    const e0 = epoch;
     const { model, mixer } = m;
     if (original) { m.originalModel ||= createAvatarModel(m.base, av, { rim: false, original: true }); }
     const shown = original ? m.originalModel : model;
@@ -245,7 +263,12 @@ export function createAvatarPortraits(renderer, { w = 384, h = 512, paused = fal
     }
     const t2 = performance.now();
     const px = T.px;
-    await renderer.readRenderTargetPixelsAsync(T.ldr, 0, 0, W, H, px);
+    // (a loss during the read-back ends the wait at once: a read-back cut off that way might never settle, and the
+    // portraits behind this one would wait for it for ever)
+    let tell;
+    const lost = new Promise((_, reject) => { tell = reject; waiting.push(tell); });
+    try { await Promise.race([renderer.readRenderTargetPixelsAsync(T.ldr, 0, 0, W, H, px), lost]); } finally { waiting = waiting.filter(f => f !== tell); }
+    if (epoch !== e0 || lostNow()) throw CONTEXT_LOST;     // (those pixels are not a portrait)
     const t3 = performance.now();
     // the render (bottom row first: flipped) laid over the plate ("over", straight alpha)
     const bg = plate(W, H, possessed);
@@ -273,6 +296,7 @@ export function createAvatarPortraits(renderer, { w = 384, h = 512, paused = fal
     try {
       while (!disposed && (urgent.length || later.length)) {
         await nextFrame();                       // (one portrait per frame: never a long stall)
+        if (lostNow()) break;                    // (the graphics context is gone: the queue waits; its restore starts this again)
         const job = urgent.shift() || later.shift();
         if (!job) continue;
         const entry = cache.get(job.key);
@@ -284,6 +308,11 @@ export function createAvatarPortraits(renderer, { w = 384, h = 512, paused = fal
           entry.url = URL.createObjectURL(blob);
           job.resolve(entry.url);
         } catch (err) {
+          if (err === CONTEXT_LOST || lostNow()) {   // (cut off by a lost context: drawn again, never marked failed)
+            job.lane.unshift(job);
+            if (lostNow()) break;
+            continue;
+          }
           entry.failed = true; entry.failedAt = performance.now();
           if (!run.warned) { run.warned = true; console.warn('avatar portraits: the shipped picture is used instead:', err?.message || err); }
           job.resolve(null);
@@ -312,7 +341,7 @@ export function createAvatarPortraits(renderer, { w = 384, h = 512, paused = fal
       return e.promise;
     }
     e = { url: null, failed: false, promise: null, job: null };
-    e.promise = new Promise(resolve => { e.job = { key: k, av: { ...av }, possessed, resolve }; });
+    e.promise = new Promise(resolve => { e.job = { key: k, av: { ...av }, possessed, resolve, lane }; });
     cache.set(k, e);
     lane.push(e.job);
     run();

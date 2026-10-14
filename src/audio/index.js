@@ -18,6 +18,7 @@
 import { onSfx } from './bus.js';
 import { MUSIC, EFFECTS } from './library.js';
 import { CUES, SCENES, TRACK_GAIN, STINGER_GAIN, MAX_VOICES } from './sounds.js';
+import { cueForButton } from './buttonCues.js';
 
 const BASE = new URL('../../assets/audio/', import.meta.url);
 const dbGain = d => Math.pow(10, d / 20);
@@ -346,13 +347,11 @@ export function createAudio({ settings, doc = document, win = window } = {}) {
   onSfx((name, opts) => { try { play(name, opts || {}); } catch (err) { console.warn('sound cue failed:', name, err); } });
 
   // --- buttons: one listener for every press (no per-button wiring) -------------------------------
-  const OPENERS = /^(btn-menu-bots|btn-menu-settings|btn-private|btn-map|btn-hand)/;
-  const CLOSERS = /(back|cancel|close|done)/i;
+  // (which sound each button makes: src/audio/buttonCues.js, listed and checked by tests/audio-buttons-check.mjs)
   doc.addEventListener('click', e => {
     const b = e.target?.closest?.('button, .btn, .menu-btn, .seg-btn, .ctl');
     if (!b || b.disabled || b.getAttribute('aria-disabled') === 'true') return;
-    const kind = b.dataset?.sfx || (b.classList.contains('seg-btn') ? 'select'
-      : CLOSERS.test(b.id || '') ? 'close' : OPENERS.test(b.id || '') ? 'open' : 'click');
+    const kind = cueForButton({ id: b.id, sfx: b.dataset?.sfx, seg: b.classList.contains('seg-btn') });
     if (kind !== 'none') play(kind);
   }, true);
 

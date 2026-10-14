@@ -197,6 +197,8 @@
         </div>
         <div class="modal-actions">
           <button id="btn-handoff-next" class="btn primary big" type="button">Continue</button>
+          <!-- (the card pick only: confirms the card lifted on the screen above; src/ui/handoff.js privatePick) -->
+          <button id="btn-offer-give" class="btn primary big" type="button" hidden disabled>Tap a card to give</button>
         </div>
       </div>
     </div>
@@ -241,7 +243,8 @@
               <button id="btn-menu-record" class="menu-btn" type="button"><span class="mb-main">Your record</span></button>
             </div>
           </div>
-          <div id="menu-loading" class="menu-loading">Opening the hotel&#8230;</div>
+          <!-- (the count of what has loaded so far is the start-up script's, at the bottom of this page) -->
+          <div id="menu-loading" class="menu-loading">Opening the hotel&#8230;<span id="menu-loading-count" class="boot-count"></span></div>
         </section>
 
         <!-- Your avatar: the wardrobe (src/ui/avatarEditor.js); it previews on your avatar in the lobby. -->
@@ -293,7 +296,7 @@
           <div class="menu-field"><div class="mf-label">Bot speed</div><div id="set-botSpeed" class="seg" role="radiogroup" aria-label="Bot speed"></div></div>
           <div class="menu-field"><div class="mf-label">Other guests&#8217; turns</div><div id="set-follow" class="seg" role="radiogroup" aria-label="The view on other guests' turns"></div></div>
           <div class="menu-field"><div class="mf-label">Graphics</div><div id="set-graphics" class="seg" role="radiogroup" aria-label="Graphics"></div></div>
-          <div class="menu-field"><div class="mf-label">Menu background</div><div id="set-menuMotion" class="seg" role="radiogroup" aria-label="Menu background"></div></div>
+          <div class="menu-field"><div class="mf-label">Menu background<span id="set-menuMotion-why" class="mf-why" hidden>Reduce Motion is on</span></div><div id="set-menuMotion" class="seg" role="radiogroup" aria-label="Menu background"></div></div>
           <div class="menu-field"><div class="mf-label">Music</div><div id="set-music" class="seg" role="radiogroup" aria-label="Music"></div></div>
           <div class="menu-field"><div class="mf-label">Sound effects</div><div id="set-sound" class="seg" role="radiogroup" aria-label="Sound effects"></div></div>
           <div class="menu-field"><div class="mf-label">Quick chat</div><div id="set-chat" class="seg" role="radiogroup" aria-label="Quick chat"></div></div>
@@ -302,6 +305,8 @@
           <div class="menu-actions">
             <button id="btn-settings-done" class="menu-btn primary small" type="button">Done</button>
           </div>
+          <!-- Which build this is (src/version.js; filled by src/ui/menu.js): quiet, for bug reports. -->
+          <div id="set-version" class="set-version"></div>
         </section>
 
         <!-- Your record on this device (numbers: src/record.js; filled by src/ui/record.js). -->
@@ -390,44 +395,190 @@
     </div>
 
     <!-- Portrait / narrow window: the game is laid out for landscape only. Shown by CSS alone
-         (styles.css, "Turn sideways"); it covers everything, and the turn clock waits meanwhile. -->
+         (styles.css, "Turn sideways"); it covers everything, and the turn clock waits meanwhile. A window
+         that is taller than wide is asked to be turned; a wide-but-small one (Split View, Page Zoom) is
+         asked for more room: CSS shows one of the two. -->
     <div id="rotate-overlay" class="rotate-overlay" role="alert">
       <div class="card rotate-card">
-        <svg class="rotate-icon" viewBox="0 0 120 90" aria-hidden="true">
-          <rect class="ri-portrait" x="8" y="6" width="44" height="66" rx="6"/>
-          <rect class="ri-landscape" x="40" y="40" width="72" height="44" rx="6"/>
-          <path class="ri-arrow" d="M62 12 q30 0 34 22" />
-          <path class="ri-arrow-head" d="M90 30 l6 6 l5 -8" />
-        </svg>
-        <h1>Please turn your iPad sideways</h1>
-        <p class="muted">Hotel Escape is played in landscape. On a computer, make the window wider.</p>
+        <div class="rotate-tall">
+          <svg class="rotate-icon" viewBox="0 0 120 90" aria-hidden="true">
+            <rect class="ri-portrait" x="8" y="6" width="44" height="66" rx="6"/>
+            <rect class="ri-landscape" x="40" y="40" width="72" height="44" rx="6"/>
+            <path class="ri-arrow" d="M62 12 q30 0 34 22" />
+            <path class="ri-arrow-head" d="M90 30 l6 6 l5 -8" />
+          </svg>
+          <h1>Please turn your iPad sideways</h1>
+          <p class="muted">Hotel Escape is played in landscape. On a computer, make the window wider.</p>
+        </div>
+        <div class="rotate-wide">
+          <svg class="rotate-icon" viewBox="0 0 120 90" aria-hidden="true">
+            <rect class="ri-landscape" x="6" y="22" width="108" height="46" rx="6"/>
+            <rect class="ri-portrait" x="38" y="30" width="44" height="30" rx="4"/>
+            <path class="ri-arrow" d="M32 45 H15 M88 45 H105" />
+            <path class="ri-arrow-head" d="M21 39 L14 45 L21 51 M99 39 L106 45 L99 51" />
+          </svg>
+          <h1>Make this window wider, or reduce page zoom.</h1>
+          <p class="muted">Hotel Escape needs more room than this window has. Give it the whole screen, or make Safari&#8217;s text smaller (the aA button).</p>
+        </div>
       </div>
     </div>
 
-    <div id="error-overlay" class="overlay center" hidden>
-      <div class="card">
-        <h1>Could not start</h1>
+    <!-- What is loading, until the menu (or a direct link's "Tap to begin") is up: files and megabytes counted
+         by the start-up script at the bottom of this page. CSS keeps it away for the first moment and removes
+         it the instant the menu shows. -->
+    <div id="boot" class="boot" role="status" aria-live="polite">
+      <div class="boot-card">
+        <div class="boot-title">Hotel Escape</div>
+        <div id="boot-text" class="boot-text">Loading the game&#8230;</div>
+        <div id="boot-count" class="boot-count"></div>
+        <!-- Only when nothing new has loaded for 30 seconds (the start-up script below). Plain HTML: it works
+             whatever the game's scripts do. -->
+        <button id="boot-reload" class="btn primary big boot-reload" type="button" onclick="location.reload()" hidden>Reload</button>
+      </div>
+    </div>
+
+    <!-- A problem card: the game could not load (the start-up script below), could not start, or went wrong
+         while playing (src/overlays.js showError, src/ui/crash.js). Reload is plain HTML, so it works even if
+         the game's scripts never ran; "Back to menu" shows only when there is a menu to go back to. The small
+         print is for a screenshot: the version and the last message. -->
+    <div id="error-overlay" class="overlay center" role="alertdialog" aria-labelledby="error-title" hidden>
+      <div class="card error-card">
+        <h1 id="error-title">Could not start</h1>
         <p id="error-message" class="muted"></p>
+        <div id="error-actions" class="end-actions error-actions">
+          <button id="btn-error-menu" class="btn big" type="button" hidden>Back to menu</button>
+          <button id="btn-error-reload" class="btn primary big" type="button" onclick="location.reload()">Reload</button>
+        </div>
+        <p id="error-detail" class="error-detail" hidden></p>
       </div>
     </div>
   </div>
 
+  <!-- Start-up. A classic script, in plain old JavaScript on purpose: it must run on a browser too old for
+       the game, and before any of the game has loaded. It does these things:
+         1. A browser without import maps (iPadOS below 16.4) is told so, in words, instead of a blank page. The
+            browser's own answer ("do I have import maps?") is only a HINT, never a gate: the game is always
+            tried, and the "needs iPadOS 16.4" card shows only if the game then fails to load AND the hint said no.
+            So a browser that answers wrongly still starts the game.
+         2. It shows what is loading (files and megabytes, from the browser's own timings) until the menu is
+            up: no timer guesses that the internet is down; only a file that really fails to load is a problem.
+            If nothing new has loaded for 30 seconds, a plain Reload button appears on that screen: a way out
+            (a stalled connection never fails, so nothing else would ever say so).
+         3. When the game really fails to load (a file missing, or old and new files mixed just after a publish)
+            it reloads ONCE by itself (a sessionStorage marker makes a loop impossible; and not at all while the
+            device is offline: a reload cannot help, and the browser's own error page would replace the game),
+            then shows "The game could not load. Try again." with a Reload button; the technical text is small print.
+         4. A window taller than wide on a device that is held sideways (Split View) gets the class
+            device-landscape on <html>, so styles.css asks for a wider window, not for the iPad to be turned.
+         5. Anything that goes wrong later, while playing, is src/ui/crash.js's. -->
+  <script>
+  (function () {
+    var $ = function (id) { return document.getElementById(id); };
+    var boot = window.__hotelBoot = { unsupported: false, failed: false, stage: 'game', files: 0, bytes: 0, reloaded: false };
+    var MARK = 'hotelEscape.reloadedOnce';
+
+    function card(title, message, detail, reload) {
+      var ids = ['boot', 'start-overlay', 'menu'];
+      for (var i = 0; i < ids.length; i++) if ($(ids[i])) $(ids[i]).hidden = true;
+      $('error-title').textContent = title;
+      $('error-message').textContent = message;
+      $('error-detail').textContent = detail || '';
+      $('error-detail').hidden = !detail;
+      $('btn-error-menu').hidden = true;
+      $('btn-error-reload').hidden = !reload;
+      $('error-overlay').hidden = false;
+    }
+
+    // 1. Import maps (iPadOS 16.4+, any browser since 2023). This is the browser's answer, used as a hint only:
+    // see failed() below, and the comment at the top of this script.
+    boot.noMaps = !(window.HTMLScriptElement && HTMLScriptElement.supports && HTMLScriptElement.supports('importmap'));
+
+    // 3. A marker in sessionStorage says this tab has already reloaded once because of a failed load. If the
+    // storage cannot be used (it throws, or a marker written cannot be read back) the marker cannot be kept, so
+    // there is no automatic reload (it could loop).
+    function marked() { try { return !!sessionStorage.getItem(MARK); } catch (e) { return true; } }
+    function mark(on) { try { if (on) sessionStorage.setItem(MARK, '1'); else sessionStorage.removeItem(MARK); } catch (e) { /* nothing to keep it in */ } }
+
+    function failed(err) {
+      boot.failed = true;
+      var text = String(err && err.message ? err.message : err);
+      try { console.error(err); } catch (e) { /* no console */ }
+      if (/webgl/i.test(text)) {
+        card('Could not start', 'This browser cannot show 3D graphics, which Hotel Escape needs.', text, true);
+      } else if (boot.noMaps) {      // (it said it has no import maps, and the game did not load: too old, or at least it looks so)
+        boot.unsupported = true;
+        card('Update needed', 'Hotel Escape needs iPadOS 16.4 or newer.', 'On a computer, use a recent Chrome, Edge, Firefox or Safari. ' + text, true);
+      } else if (navigator.onLine !== false && !marked() && (mark(true), marked())) {      // (reload only once the marker is really in place, and never while offline)
+        boot.reloaded = true;
+        $('boot-text').textContent = 'Trying again…';
+        location.reload();
+      } else {
+        card('Could not start', 'The game could not load. Try again.', text, true);
+      }
+    }
+
+    // Called by the module script below with the import of the game.
+    boot.load = function (start) {
+      var p;
+      try { p = start(); } catch (err) { failed(err); return; }
+      p.then(function () { boot.stage = 'hotel'; mark(false); }, failed);
+    };
+
+    // 2. What has loaded so far, counted from the browser's own resource timings (the game's files, the 3D
+    // library and, once the menu is up, the hotel's models and pictures).
+    function add(list) {
+      for (var i = 0; i < list.length; i++) { boot.files++; boot.bytes += list[i].encodedBodySize || list[i].transferSize || 0; }
+    }
+    try {
+      new PerformanceObserver(function (l) { add(l.getEntries()); }).observe({ type: 'resource', buffered: true });
+    } catch (e) {
+      boot.poll = true;     // (no observer: the entries are counted by the timer below)
+    }
+    function countText() {
+      if (boot.poll) { boot.files = performance.getEntriesByType('resource').length; }
+      if (!boot.files) return '';
+      var mb = boot.bytes / 1048576;
+      return boot.files + (boot.files === 1 ? ' file' : ' files') + (boot.bytes ? ' · ' + (mb < 10 ? mb.toFixed(1) : Math.round(mb)) + ' MB' : '');
+    }
+    boot.progress = function () { return { stage: boot.stage, files: boot.files, bytes: boot.bytes, text: countText() }; };
+    var STALL_MS = 30000, lastText = null, changedAt = new Date().getTime();
+    var timer = setInterval(function () {
+      var loading = $('menu-loading'), begin = $('btn-begin');
+      // (the menu, the direct link's card or a problem card is up: this screen's work is over for good; CSS
+      // has already hidden it the moment one of them showed)
+      if (!$('menu').hidden || !$('start-overlay').hidden || !$('error-overlay').hidden) $('boot').hidden = true;
+      // (done: the menu is ready, or the direct link's begin button, or a problem card is up)
+      if (!$('error-overlay').hidden || (loading && loading.hidden) || (begin && !begin.disabled)) { clearInterval(timer); return; }
+      var t = countText();
+      if (t !== lastText) { lastText = t; changedAt = new Date().getTime(); }
+      $('boot-reload').hidden = new Date().getTime() - changedAt < STALL_MS;      // (nothing new for 30 s: a way out, no message)
+      $('boot-text').textContent = boot.stage === 'game' ? 'Loading the game…' : 'Opening the hotel…';
+      $('boot-count').textContent = t;
+      if ($('menu-loading-count')) $('menu-loading-count').textContent = t ? ' · ' + t : '';
+    }, 300);
+
+    // 4. Held sideways, but the window is taller than wide (Split View, Slide Over): "make this window wider", not
+    // "turn the iPad". The class is read by styles.css. screen.orientation says how the device is held; Safari's
+    // older window.orientation (0 upright, 90 sideways), where there is one, must AGREE: two answers that differ
+    // are not trusted, so an iPad held upright is never told to make the window wider. (A computer has no
+    // window.orientation and a landscape screen: a tall window there is asked to be wider, which is right.)
+    function sideways() {
+      var type = window.screen && screen.orientation && screen.orientation.type, old = window.orientation, land = false;
+      if (type) land = /landscape/.test(type);
+      else if (typeof old === 'number') land = Math.abs(old) === 90;
+      if (land && typeof old === 'number' && Math.abs(old) !== 90) land = false;
+      document.documentElement.classList.toggle('device-landscape', land);
+    }
+    sideways();
+    window.addEventListener('resize', sideways);
+    window.addEventListener('orientationchange', sideways);
+    try { screen.orientation.addEventListener('change', sideways); } catch (e) { /* no screen.orientation */ }
+  })();
+  </script>
   <script type="module">
-    setTimeout(() => {
-      if (!document.getElementById('btn-begin').disabled) return;
-      document.getElementById('error-message').textContent = 'Still loading the 3D engine — check the internet connection and reload the page.';
-      document.getElementById('error-overlay').hidden = false;
-      document.getElementById('start-overlay').hidden = true;
-      document.getElementById('menu').hidden = true;
-    }, 20000);
-    import('./src/main.js').catch((err) => {
-      console.error(err);
-      const box = document.getElementById('error-overlay');
-      document.getElementById('error-message').textContent = 'The 3D engine could not be loaded. Check the internet connection and reload. (' + (err && err.message ? err.message : err) + ')';
-      box.hidden = false;
-      document.getElementById('start-overlay').hidden = true;
-      document.getElementById('menu').hidden = true;
-    });
+    var boot = window.__hotelBoot, go = function () { return import('./src/main.js'); };
+    if (boot && boot.load) boot.load(go);
+    else go();
   </script>
 </body>
 </html>

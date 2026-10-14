@@ -5,7 +5,7 @@
 //   PASS     — (the old hot-seat hand-over; kept for tools, unused in the game)
 //   ROLE     — the player's secret role (once at the start, again if converted).
 //   TURN     — their private start-of-turn screen: role, news, health, hand, Lanterns.
-//   PICK     — a private card choice (which card to give in a trade).
+//   PICK     — a private card choice (which card to give in a trade): lift a card, then give it.
 //   CHOICE   — a private yes/no (accept a lobby trade?).
 //   NOTE     — a private consequence (what you received, that you were possessed, who tried).
 //   MIRROR   — another guest's whole hand, seen through a Hand Mirror.
@@ -15,7 +15,7 @@
 // Nothing here ever appears on the public HUD, and the turn timer is paused while any of it is up.
 import { rules } from '../data/rules.js';
 import { CARDS, countableCards, countableCount } from '../game/cards.js';
-import { cardTile, bigCard, handLimitWarning } from './cards.js';
+import { cardTile, bigCard, handLimitWarning, cardDesc } from './cards.js';
 import { roundLabel, finalRoundNote, isFinal } from './roundLabel.js';
 import { makePortrait } from './portrait.js';
 import { soulsHeld, soulsChip } from './souls.js';
@@ -37,9 +37,11 @@ export function createHandoff(doc) {
     pickCards: doc.getElementById('offer-cards'),
     pickIntent: doc.getElementById('offer-intent'),
     pickSummary: doc.getElementById('offer-summary'),
+    give: doc.getElementById('btn-offer-give'),
     next: doc.getElementById('btn-handoff-next'),
   };
   let onNext = null;
+  let pickNow = null;   // the card pick on screen: { chosen (the lifted card), chosenAt, onPick }
   let kind = null;
   let openedAt = 0;   // when the current screen opened: a card or an answer is never chosen by the
                      // second tap of the double tap that opened it (src/ui/tapGuard.js)
@@ -55,9 +57,10 @@ export function createHandoff(doc) {
     el.overlay.className = el.overlayBase;
     el.pick.hidden = true; el.pickCards.innerHTML = '';
     el.pickIntent.hidden = true; el.pickIntent.innerHTML = '';
-    el.pickSummary.textContent = '';
+    el.pickSummary.textContent = ''; el.pickSummary.className = 'offer-summary';
     el.sub.textContent = ''; el.kicker.textContent = '';
-    el.next.hidden = false;
+    el.give.hidden = true; el.give.disabled = true; pickNow = null;
+    el.next.hidden = false; el.next.classList.add('primary');
   }
   function show(label, fn) {
     el.next.textContent = label;
@@ -174,6 +177,10 @@ export function createHandoff(doc) {
     // A private card choice. `cards` are the options; the guest taps one. There is ALWAYS a way on:
     // with no card to choose, the button says Continue and calls `onCancel` (or `onPick(null)`), so
     // this screen can never be a dead end.
+    // Two steps, like the discard screen (nothing is given away by a stray tap, and a newcomer can read
+    // what a card does first): a tap lifts the card and says its name and what it does, another card
+    // switches the choice, and the button, which names the card, gives it. The button ignores the second
+    // tap of a double tap (src/ui/tapGuard.js), as the cards do on the screen's first moments.
     privatePick(player, { kicker, title, sub, cards, onPick, cancelLabel, onCancel }) {
       reset('pick');
       el.kicker.textContent = kicker || 'Only you see this';
@@ -186,19 +193,40 @@ export function createHandoff(doc) {
         show(onCancel ? (cancelLabel || 'Continue') : 'Continue', onCancel || (() => onPick(null)));
         return;
       }
+      el.pickSummary.classList.add('card-desc');
+      el.pickSummary.setAttribute('aria-live', 'polite');
+      el.give.hidden = false; el.give.disabled = true; el.give.textContent = 'Tap a card to give';
+      pickNow = { chosen: null, chosenAt: 0, onPick };
+      const tiles = new Map();     // card id -> its tile
+      const lift = card => {
+        pickNow.chosen = card; pickNow.chosenAt = performance.now();
+        for (const [id, t] of tiles) t.classList.toggle('selected', id === card.id);
+        const meta = CARDS[card.type];
+        const name = doc.createElement('b'); name.textContent = meta?.name ?? card.type;
+        const words = doc.createElement('span'); words.textContent = cardDesc(card.type, card);
+        el.pickSummary.replaceChildren(name, ' ', words);
+        el.give.textContent = card.type === 'possession' ? 'Give your soul' : `Give the ${meta?.name ?? 'card'}`;
+        el.give.disabled = false;
+      };
       // Your souls are one tile with a ×N badge, as in your hand (they are all yours, with your face, and
-      // any one of them does the same): a tap gives one. A full hand stays on one row.
+      // any one of them does the same): a tap lifts one. A full hand stays on one row.
       const souls = cards.filter(c => c.type === 'possession');
       for (const c of cards.filter(c => c.type !== 'possession' || c === souls[0])) {
-        const tile = cardTile(doc, c, { hideDesc: true, selectable: true, onSelect: (card, _tile, e) => { if (tooSoon(e, openedAt)) return; api.close(); onPick(card.id); } });
+        const tile = cardTile(doc, c, {
+          hideDesc: true, selectable: true,
+          // (a tap that did nothing returns false: no sound. The chosen card tapped again stays chosen.)
+          onSelect: (card, _tile, e) => { if (tooSoon(e, openedAt) || pickNow?.chosen?.id === card.id) return false; lift(card); },
+        });
         if (c.type === 'possession' && souls.length > 1) {
           const b = doc.createElement('span'); b.className = 'face-badge souls'; b.textContent = `×${souls.length}`;
           b.setAttribute('aria-label', `${souls.length} Possession cards`);
           tile.querySelector('.face-img')?.appendChild(b);
         }
+        tiles.set(c.id, tile);
         el.pickCards.appendChild(tile);
       }
-      if (onCancel) show(cancelLabel || 'Cancel', onCancel); else el.next.hidden = true, el.overlay.hidden = false;
+      if (onCancel) { show(cancelLabel || 'Cancel', onCancel); el.next.classList.remove('primary'); }   // (the gold button is Give)
+      else el.next.hidden = true, el.overlay.hidden = false;
     },
 
     // A private yes/no.
@@ -267,9 +295,16 @@ export function createHandoff(doc) {
       show(button || (cards.length ? 'Add to my hand' : 'Continue'), onContinue);
     },
 
-    close() { el.overlay.hidden = true; onNext = null; kind = null; },
+    close() { el.overlay.hidden = true; onNext = null; pickNow = null; kind = null; },
   };
 
+  el.give.addEventListener('click', e => {
+    e.preventDefault();
+    if (!pickNow?.chosen || tooSoon(e, pickNow.chosenAt)) return;   // (not the second tap of a double tap on a card)
+    const { chosen, onPick } = pickNow;
+    api.close();
+    onPick(chosen.id);
+  });
   el.next.addEventListener('click', e => {
     e.preventDefault();
     const fn = onNext;

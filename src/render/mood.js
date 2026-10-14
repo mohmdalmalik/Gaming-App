@@ -5,18 +5,8 @@
 // A global light level also eases toward the mood of the room the active guest is in.
 import * as THREE from 'three';
 import { easeOutCubic } from './materials.js';
-
-function hash(n) {
-  const x = Math.sin(n * 12.9898 + 78.233) * 43758.5453;
-  return x - Math.floor(x);
-}
-
-function flickerLevel(time, f, seed) {
-  const step = Math.floor(time * f.speed) + Math.floor(seed * 100);
-  const noise = hash(step);
-  const slow = 0.5 + 0.5 * Math.sin(time * 2.3 + seed);
-  return f.min + (f.max - f.min) * (0.65 * noise + 0.35 * slow);
-}
+import { flickerLevel, bakedScale } from './flicker.js';
+import { reducedMotion } from '../motion.js';
 
 export function createMood(roomViews, hemi, cfg, scene) {
   const skyBase = new THREE.Color(cfg.render.hemisphere.sky);
@@ -42,13 +32,14 @@ export function createMood(roomViews, hemi, cfg, scene) {
       hemi.color.lerp(target, k);
 
       candidates.length = 0;
+      const calm = reducedMotion();     // (Reduce Motion: a flickering room holds steady: src/render/flicker.js)
       for (const view of roomViews.values()) {
         if (!view.group.visible) continue;
         const reveal = easeOutCubic(view.revealT);
-        const fl = view.room.mood.flicker ? flickerLevel(time, view.room.mood.flicker, view.seed) : 1;
+        const fl = view.room.mood.flicker ? flickerLevel(time, view.room.mood.flicker, view.seed, calm) : 1;
         // A baked room's light is in its light map: a flickering room dims the whole map with the bulb.
         if (view.bakedMats && view.room.mood.flicker) {
-          for (const b of view.bakedMats) b.mat.lightMapIntensity = b.base * (0.45 + 0.55 * fl);
+          for (const b of view.bakedMats) b.mat.lightMapIntensity = b.base * bakedScale(fl);
         }
         for (const L of view.lights) {
           const d = focus ? Math.hypot(L.pos.x - focus.x, L.pos.z - focus.z) : 0;

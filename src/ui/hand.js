@@ -129,7 +129,7 @@ export function createHand(doc, cfg, { onUseBandage, onUnlock, onBarricade, onEs
     if (meta.evil) name.style.color = 'var(--evil)';
     detail.appendChild(name);
     // (A Possession card has its own count line and description below instead of the catalogue words.)
-    if (card.type !== 'possession') line(cardDesc(card.type), 'd-desc');
+    if (card.type !== 'possession') line(cardDesc(card.type, card), 'd-desc');
 
     // Not their turn: the card can be read, not used.
     const notMine = !ownTurn(state, p);

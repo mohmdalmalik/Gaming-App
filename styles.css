@@ -2200,3 +2200,29 @@ html, body {
 #btn-end-turn.nudge { animation: end-nudge 1.9s ease-in-out infinite; }
 @keyframes end-nudge { 0%, 100% { box-shadow: 0 0 0 0 rgba(233, 201, 143, 0); } 50% { box-shadow: 0 0 0 5px rgba(233, 201, 143, 0.5); } }
 @media (prefers-reduced-motion: reduce) { #btn-end-turn.nudge { animation: none; box-shadow: 0 0 0 3px rgba(233, 201, 143, 0.55); } }   /* (a steady ring) */
+
+/* ==== Round 4, lock: choosing a key or a pick at a locked door (src/ui/lockChoice.js, index.html #lock-overlay) ====
+   A small card near the padlock (JS sets left and top; the middle of the screen when it does not know where), the room
+   still in view behind a light veil. One big button for each kind of card the guest holds, each with one line under it,
+   and Not now. Every button is 44 px or taller. It is shorter than 340 px, so it fits the shortest iPad window (1024x694)
+   between the top strip and the hand. The fan and the search icon step aside while it is up, like under any screen. */
+.lock-overlay { background: rgba(8, 9, 14, 0.3); }
+.lock-card {
+  position: absolute; left: 0; top: 0; width: min(380px, calc(100% - 24px)); max-width: none; padding: 14px 18px 14px;
+  display: flex; flex-direction: column; align-items: stretch; gap: 8px; text-align: center;
+}
+.lock-kicker { font-size: 12px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); }
+.lock-card h1.lock-title { margin: 0; font-size: 23px; line-height: 1.15; letter-spacing: 0; color: var(--brass-bright); text-wrap: balance; }
+.lock-cost { margin: 0 0 2px; font-size: 14px; color: var(--ivory-dim); }
+.lock-options { display: flex; flex-direction: column; gap: 8px; }
+.lock-opt { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 62px; padding: 8px 14px; text-align: left; }
+.lock-opt-art { flex: none; width: 38px; height: 38px; color: #20170a; }
+.lock-opt-art svg { width: 100%; height: 100%; display: block; }
+.lock-opt-words { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.lock-opt-name { font-family: var(--serif); font-size: 18px; font-weight: 700; line-height: 1.15; color: #20170a; }
+.lock-opt-hint { font-size: 13px; font-weight: 600; line-height: 1.25; color: #4a3712; text-wrap: pretty; }
+.lock-warn { margin: 0; font-size: 13px; line-height: 1.35; color: var(--brass-bright); text-wrap: pretty; }
+.lock-warn[hidden] { display: none; }
+.lock-cancel { align-self: center; min-width: 150px; min-height: 48px; margin-top: 2px; font-family: var(--serif); font-size: 17px; font-weight: 700; }
+.lock-opt:focus-visible, .lock-cancel:focus-visible { outline: 2px solid var(--brass-bright); outline-offset: 2px; }
+#app:has(#lock-overlay:not([hidden])) :is(#hand-fan, #search-spot) { display: none !important; }

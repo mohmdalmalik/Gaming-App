@@ -17,7 +17,7 @@ import { buildGrid } from './game/grid.js';
 import {
   createState, resetState, endTurn, activePlayer, nextPlayer, checkWin, canEscape,
   openableDoors, pendingEncounters, lockEncounter, playersInRoom, isLocked,
-  isBarricaded, canTradeVoluntarily, doorBetween, encountersIn,
+  isBarricaded, canTradeVoluntarily, doorBetween, encountersIn, adjacentLockedRooms,
 } from './game/state.js';
 import {
   search, canSearch, escape, useBandage, useUnlock, useBarricade, resolveTrade, resolveAttack,
@@ -49,6 +49,7 @@ import { watchDialogs } from './ui/focus.js';
 import { matchMarker } from './matchMarker.js';
 import { LOST_MATCH } from './data/lostMatch.js';
 import { createHand } from './ui/hand.js';
+import { createLockChoice, lockWarning } from './ui/lockChoice.js';
 import { createHandFan } from './ui/handFan.js';
 import { createSearchSpot } from './ui/searchSpot.js';
 import { createDiscard } from './ui/discard.js';
@@ -325,6 +326,8 @@ view.renderer.domElement.addEventListener('webglcontextrestored', () => {
   if (graphicsCard) { graphicsCard = false; overlays.hideError(); crash.reset(); }   // (it came back after all: the card is not needed)
 });
 const hand = createHand(document, cfg, { onUseBandage, onUnlock, onBarricade, onEspresso, onHandMirror });
+// The padlock of a locked door next to the guest, tapped: which key or pick to open it with (onLockTap, onUnlock).
+const lockChoice = createLockChoice(document, { onChoose: (cardId, roomId) => onUnlock(cardId, roomId) });
 const discard = createDiscard(document, cfg, {
   onDiscard: cardId => { const r = discardCard(state, activePlayer(state), cardId); if (!r.ok) hud.toast('That card cannot be discarded.'); refresh(); },
 });
@@ -387,7 +390,7 @@ let selectedMove = null;     // a move to a room awaiting confirmation
 let activeWalk = null;       // the confirmed walk under way (its plan), until the guest arrives
 let walkCutShort = false;    // the clock ran out during this walk: it was cut short at the next room
 
-const uiBusy = () => map.isOpen || hand.isOpen || discard.isOpen
+const uiBusy = () => map.isOpen || hand.isOpen || discard.isOpen || lockChoice.isOpen
   || overlays.endOpen || overlays.noticeOpen || askUp() || handoff.isOpen || meeting.isOpen;
 
 const discovery = createDiscovery({
@@ -467,6 +470,9 @@ function refreshUsable() {
   const p = me();
   const usable = new Set(state.finished || !myTurn() ? [] : openableDoors(state, floor, p).map(d => d.id));
   for (const dv of doorways.views.values()) dv.setUsable(usable.has(dv.doorway.id), p.currentRoom);
+  // The padlock of a locked door next to the guest is drawn larger while they hold a key or a pick and an action to use it.
+  const canKey = !state.finished && myTurn() && p.actionPoints >= rules.actionCost.useCard && p.hand.some(c => CARDS[c.type]?.unlock);
+  doorways.setKeyable(canKey ? adjacentLockedRooms(state, floor, p) : []);
 }
 
 function refresh() { hud.update(state, floor); refreshUsable(); hand.refresh(); searchMarks.update(state); discovery.refresh(); syncHandFan(); syncSearchSpot(); }
@@ -707,7 +713,7 @@ function autoEndState() {
   return p.hand.some(c => c.type === 'espresso') || canTradeVoluntarily(state, floor, p) ? 'free' : 'out';
 }
 const autoEndBusy = () => uiBusy() || timerPaused() || tradeReveal.isOpen || chat.isOpen || howTo.isOpen || cardsGuide.isOpen
-  || crash.shown || meetingLive || !!pendingArrival || walkCutShort || activeMover().walking || activeMover().path.length > 0;
+  || doorways.animating || crash.shown || meetingLive || !!pendingArrival || walkCutShort || activeMover().walking || activeMover().path.length > 0;
 
 function tickAutoEnd(now) {
   const s = autoEndState();
@@ -1208,13 +1214,19 @@ function onUseBandage(cardId) {
   refresh();
 }
 
+const doorBarricaded = name => `The ${name} door is barricaded: a key or pick cannot get you through it until the barricade comes down.`;
+
+// A Master Key or Lock Pick on the locked door of room `roomId` (1 action): from the hand's Open button, or from the
+// choice card the padlock opens (onLockTap). The rules settle it (useUnlock); then the door shows the outcome
+// (roomView.js playUnlock): opened, the padlock pops open and the door swings (its sound after the unlock cue the public
+// event plays), snapped, the padlock shakes and the door stays shut (the lockFail cue is that same event's).
 function onUnlock(cardId, roomId) {
   if (!myTurn() || !inActionPhase) return;
   const r = useUnlock(state, floor, activePlayer(state), cardId, roomId);
   const name = floor.rooms.get(roomId)?.name ?? 'locked room';
   if (!r.ok) {
     hud.toast(r.reason === 'ap' ? 'No actions left.'
-      : r.reason === 'sealed' ? `The ${name} door is barricaded: a key or pick cannot get you through it until the barricade comes down.`
+      : r.reason === 'sealed' ? doorBarricaded(name)
         : 'Cannot use that here.');
     return;
   }
@@ -1222,6 +1234,40 @@ function onUnlock(cardId, roomId) {
     : `The lock pick snapped. The ${name} door stays locked.`);
   hand.close();
   syncViews(false); refresh();
+  doorways.playUnlock(r.doorway, r.opened);
+  if (r.opened) sfx('doorOpen', { delay: 0.45 });
+}
+
+// The padlock of a locked door (or that door) was tapped by the guest standing next to it (tapTarget 'lock'): the same
+// cards as the hand's Open button, chosen on the door itself. A guest holding neither is told what opens it. Otherwise
+// the choice card asks which to use: one button for each kind held, and Not now, so a tap meant for something else never
+// spends a card. A barricaded door and a turn with no action left are refused here, plainly, with nothing spent.
+function onLockTap(roomId) {
+  if (!myTurn() || !inActionPhase || uiBusy()) return;
+  const player = activePlayer(state);
+  if (!adjacentLockedRooms(state, floor, player).includes(roomId)) return;
+  const room = floor.rooms.get(roomId);
+  const door = doorBetween(floor, player.currentRoom, roomId);
+  hud.hideConfirm(); selectedMove = null;
+  const held = new Map();                       // one card of each kind held (the choice is a kind, not a card)
+  for (const c of player.hand) if (CARDS[c.type]?.unlock && !held.has(c.type)) held.set(c.type, c.id);
+  if (!held.size) { hud.toast(moveRefusal({ reason: 'locked' }, room, player), 4); sfx('doorLocked'); return; }
+  if (door && isBarricaded(state, door.id)) { hud.toast(doorBarricaded(room.name), 4); sfx('deny'); return; }
+  if (player.actionPoints < rules.actionCost.useCard) { hud.toast('No actions left.'); sfx('deny'); return; }
+  // (the sure one first)
+  const options = [...held].map(([type, cardId]) => ({ type, cardId })).sort((a, b) => (b.type === 'masterKey') - (a.type === 'masterKey'));
+  lockChoice.open({ roomId, roomName: room.name, options, cost: actionsWord(rules.actionCost.useCard), warn: lockWarning(state, player, roomId), anchor: lockPoint(roomId) });
+  sfx('doorLocked', { volume: 0.6 });
+}
+
+// Where the padlock of a locked room's door is on screen (the choice card sits near it), or null. `part: 'door'`: the
+// shut door itself, low on it (tests).
+function lockPoint(roomId, part = 'sign') {
+  const v = [...doorways.views.values()].find(w => w.kind === 'open' && w.lockRoom === roomId);
+  if (!v || !v.mark.visible) return null;
+  const rect = view.renderer.domElement.getBoundingClientRect();
+  const p = part === 'door' ? v.leaf.userData.leaf.getWorldPosition(new THREE.Vector3()).setY(0.45).project(view.camera) : v.mark.position.clone().project(view.camera);
+  return p.z < 1 ? { x: rect.left + ((p.x + 1) / 2) * rect.width, y: rect.top + ((1 - p.y) / 2) * rect.height } : null;
 }
 
 function onBarricade(cardId, doorwayId) {
@@ -1730,6 +1776,7 @@ function groundToScreen(x, z) {
 // tapping the magnifier over it.
 //   { kind: 'room', id }        a revealed room
 //   { kind: 'search' }          the search spot's furniture in the guest's own room
+//   { kind: 'lock', id }        the padlock, or the shut door, of the locked room `id` next to the guest
 //   { kind: 'fog', key, doors } a fogged room: the closed doors that lead into it
 //   { kind: 'jammed', door }    the empty space behind a jammed door
 function tapTargetAt(x, y) {
@@ -1754,6 +1801,11 @@ function tapTargetAt(x, y) {
     if (id !== here) for (const w of rv.walls) tryBox(w.wall.min[0], w.wall.min[1], w.wall.max[0], w.wall.max[1], Math.max(cfg.cutaway.stubHeight, w.height) * k, id);
     for (const f of rv.room.furniture) tryBox(f.min[0], f.min[1], f.max[0], f.max[1], f.size[1] * k, id, f);
   }
+  // The padlock sign (drawn over everything) or the shut door of a locked room next to the guest, whichever the tap is on;
+  // the door only when nothing stands in front of it (src/render/roomView.js pickLock).
+  const next = adjacentLockedRooms(state, floor, activePlayer(state));
+  const lock = next.length ? doorways.pickLock(raycaster, view.camera, rect, x, y, next) : null;
+  if (lock && lock.distance < best) return { kind: 'lock', id: lock.room };
   if (hitRoom === here && hitPiece?.search) return { kind: 'search' };
   if (hitRoom) return { kind: 'room', id: hitRoom };
   if (!g) return null;
@@ -1773,6 +1825,7 @@ function tapTargetAt(x, y) {
 function tapTarget(t, { queued = false } = {}) {
   const player = activePlayer(state);
   if (t.kind === 'search') { if (!queued) onSearchSpot(); return; }
+  if (t.kind === 'lock') { if (!queued) onLockTap(t.id); return; }
   if (t.kind === 'fog') {
     // (your own door into it is jammed — even if another room's door into it is not: say so)
     const mine = floor.rooms.get(player.currentRoom)?.frontier.find(d => `${d.cell[0]},${d.cell[1]}` === t.key);
@@ -1956,6 +2009,7 @@ createInput(view.renderer.domElement, {
     if (chat.swallowTap()) return;     // (a tap that closes the chat panel does nothing else)
     if (tips.swallowTap()) return;     // (nor the second tap of a double tap on a tip's button)
     if (gameMenu.swallowTap() || overlays.swallowTap()) return;     // (nor on the Menu panel or the Leave question closing)
+    if (lockChoice.swallowTap()) return;     // (nor the second tap of a double tap on the lock choice, landing on the door)
     if (!running || state.finished || uiBusy()) return;
     if (!myTurn() || !inActionPhase) return;
     if (inDeadZone(x, y)) return;
@@ -1963,7 +2017,7 @@ createInput(view.renderer.domElement, {
     if (!t) return;
     if (activeMover().walking || activeMover().path.length || pendingArrival) {
       if (t.kind === 'room') queuedTap = { target: t, turn: state.turn };
-      else if (t.kind === 'fog' || t.kind === 'search') { queuedTap = null; hud.toast('Wait until you arrive.'); }
+      else if (t.kind === 'fog' || t.kind === 'search' || t.kind === 'lock') { queuedTap = null; hud.toast('Wait until you arrive.'); }
       return;
     }
     queuedTap = null;
@@ -2241,6 +2295,8 @@ function frameLoop(now) {
     step('bots', () => botTick(now));
   }
   step('auto end', () => tickAutoEnd(now));      // (after the walk: an arrival and its meeting have started by now)
+  // The lock choice stays only while it is still the player's own action phase (the clock may run out, the match end).
+  step('lock choice', () => { if (lockChoice.isOpen && !(running && myTurn() && inActionPhase)) lockChoice.close(); });
   step('camera', () => { rig.setFocus(...followPoint()); rig.update(dt); });
   step('rooms', () => { for (const rv of roomViews.values()) rv.update(dt); });
   step('doorways', () => doorways.update(time, dt, roomViews));
@@ -2338,6 +2394,11 @@ window.__game = {
   handMirrorTargets: () => playersInRoom(state, activePlayer(state).currentRoom, activePlayer(state).id).map(q => q.id),
   mirrorOpen: () => handoff.kind === 'mirror',
   unlock: (id, room) => onUnlock(id, room),
+  // The padlock of a locked room's door next to the guest (tests): where it is on screen, a tap on it, the choice card.
+  lockPoint: (room, part) => lockPoint(room, part),
+  tapLock: room => onLockTap(room),
+  lockChoiceOpen: () => lockChoice.isOpen,
+  doorsAnimating: () => doorways.animating,
   barricade: (id, door) => onBarricade(id, door),
   trade: () => onTrade(),
   mode: () => (PRACTICE ? 'practice' : 'match'),

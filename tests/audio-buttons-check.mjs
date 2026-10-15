@@ -41,6 +41,7 @@ const EXPECT = {
   'btn-record-back': 'close', 'btn-record-reset': 'click', 'btn-record-keep': 'click', 'btn-record-yes': 'click',
   // the full-screen overlays
   'btn-begin': 'click', 'btn-notice-ok': 'click', 'btn-ask-no': 'click', 'btn-ask-yes': 'click',
+  'btn-lock-cancel': 'close',            // the lock choice (src/ui/lockChoice.js): Not now; its "Use ..." buttons have no id, a plain click
   'btn-keep-exploring': 'click', 'btn-end-menu': 'click', 'btn-restart': 'click',
   'btn-error-menu': 'click', 'btn-error-reload': 'click', 'boot-reload': 'click',
 };

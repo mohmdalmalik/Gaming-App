@@ -13,7 +13,7 @@
 // 6. out of the match: "You are out", skip to the result, the end screen with every role, Play again,
 //    Main menu, the Menu button mid-match
 // 7. whole matches with a simple stand-in player: no stalls, no errors, every match ends
-import { launch, giveCard } from './smoke-lib.mjs';
+import { launch, giveCard, discardDown } from './smoke-lib.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -506,9 +506,7 @@ for (let m = 0; m < MATCHES; m++) {
       if (await game(() => window.__game.myTurn() && window.__game.inActionPhase() && !window.__game.isFinished())) {
         await game(() => window.__game.endTurn());
         // over the hand limit: discard the first card until the turn passes
-        for (let d = 0; d < 6 && await visible('#discard-overlay'); d++) {
-          await page.click('#discard-cards .card-tile'); await page.click('#btn-discard-done'); await page.waitForTimeout(150);
-        }
+        if (await visible('#discard-overlay')) await discardDown(page);     // (the last discard closes the screen by itself)
       }
     }
     if (!s.alive && await game(() => window.__game.askOpen())) await page.click('#btn-ask-yes');

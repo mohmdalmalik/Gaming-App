@@ -269,21 +269,24 @@ if (only.includes('c')) {
     const { browser, page, messages } = await launch({ width: W, height: H });
     try {
       await intoPractice(page);
-      for (const variant of ['one', 'pair', 'limit']) {
+      // (round 4: the reveal is the card(s), the name and one short line each, and the button: no note under them any more;
+      // 'same' is two of one kind, which share one column and one line; Lantern's line is the longer two-sentence one)
+      for (const variant of ['one', 'pair', 'same']) {
         await page.evaluate(variant => {
           const g = window.__game, p = g.activePlayer();
-          const cards = variant === 'one' ? [{ id: 'x1', type: 'lantern' }] : [{ id: 'x1', type: 'lantern' }, { id: 'x2', type: 'revolver', shots: 2 }];
-          const limit = variant === 'limit' ? ' You hold 8 cards, more than 6: keep them all for now, and discard 2 when you end your turn.' : '';
-          g.handoff.privateFound(p, { kicker: 'You search the room-service trolley', title: cards.length > 1 ? 'You found a Lantern and a Revolver' : 'You found a Lantern', cards,
-            lines: [`You search the room-service trolley and find ${cards.length > 1 ? 'a Lantern and a Revolver' : 'a Lantern'}. You now hold 2 Lanterns.${limit}`], soft: true }, () => {});
+          g.rules.cards.lantern.desc = 'Three let you escape through the Fire Exit. One protects you from a Possession card.';
+          const cards = variant === 'one' ? [{ id: 'x1', type: 'lantern' }] : variant === 'same' ? [{ id: 'x1', type: 'lantern' }, { id: 'x2', type: 'lantern' }] : [{ id: 'x1', type: 'lantern' }, { id: 'x2', type: 'revolver', shots: 2 }];
+          g.handoff.privateFound(p, { kicker: 'You search the room-service trolley', title: variant === 'pair' ? 'You found a Lantern and a Revolver' : variant === 'same' ? 'You found 2 Lanterns' : 'You found a Lantern', cards, soft: true }, () => {});
         }, variant);
         await page.waitForTimeout(2200);      // (the cards fade in; software rendering is slow)
         const m = await page.evaluate(() => {
-          const card = document.getElementById('handoff-card'), notes = document.getElementById('handoff-notes'), btn = document.getElementById('btn-handoff-next');
-          const n = notes.getBoundingClientRect(), bt = btn.getBoundingClientRect(), c = card.getBoundingClientRect();
-          return { scroll: card.scrollHeight - card.clientHeight, notesBottom: n.bottom, btnTop: bt.top, cardTop: c.top, cardBottom: c.bottom, h: innerHeight };
+          const card = document.getElementById('handoff-card'), found = document.getElementById('handoff-found'), btn = document.getElementById('btn-handoff-next');
+          const lines = [...document.querySelectorAll('#handoff-found .ft-desc')].length;
+          const n = found.getBoundingClientRect(), bt = btn.getBoundingClientRect(), c = card.getBoundingClientRect();
+          return { scroll: card.scrollHeight - card.clientHeight, notesBottom: n.bottom, btnTop: bt.top, cardTop: c.top, cardBottom: c.bottom, h: innerHeight, lines, notesText: document.getElementById('handoff-notes').textContent.trim() };
         });
-        check(m.notesBottom <= m.btnTop - 4, `${W}x${H} ${variant}: the note ends (${Math.round(m.notesBottom)}) above the button (${Math.round(m.btnTop)})`);
+        check(m.notesBottom <= m.btnTop - 4, `${W}x${H} ${variant}: the cards and their words end (${Math.round(m.notesBottom)}) above the button (${Math.round(m.btnTop)})`);
+        check(m.lines === (variant === 'pair' ? 2 : 1) && m.notesText === '', `${W}x${H} ${variant}: one short line for each kind of card (${m.lines}), and no note`);
         check(m.scroll <= 0 && m.cardTop >= 0 && m.cardBottom <= m.h, `${W}x${H} ${variant}: the card fits the window without scrolling (${m.scroll} over)`);
         await page.screenshot({ path: path.join(outDir, `c-found-${variant}-${W}x${H}.png`) });
         await page.evaluate(() => window.__game.handoff.close());

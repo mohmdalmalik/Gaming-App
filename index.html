@@ -400,6 +400,19 @@
       </div>
     </div>
 
+    <!-- The padlock of a locked door was tapped: which key or pick to open it with (src/ui/lockChoice.js
+         fills the buttons; the room stays in view behind a light veil). -->
+    <div id="lock-overlay" class="overlay lock-overlay" hidden>
+      <div class="card lock-card">
+        <div class="lock-kicker">Locked door</div>
+        <h1 id="lock-title" class="lock-title">&nbsp;</h1>
+        <p id="lock-cost" class="lock-cost"></p>
+        <div id="lock-options" class="lock-options"></div>
+        <p id="lock-warn" class="lock-warn" hidden></p>
+        <button id="btn-lock-cancel" class="btn lock-cancel" type="button">Not now</button>
+      </div>
+    </div>
+
     <div id="end-overlay" class="overlay center" hidden>
       <div class="card">
         <!-- A match: "Victory" or "Defeat" for the player's side (src/overlays.js showEnd; practice has none). -->

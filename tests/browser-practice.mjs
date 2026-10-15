@@ -298,11 +298,13 @@ await searchHere();
 }
 check(await kind() === 'found' && sameSet(await revealIds(), [top1]), 'the card found is shown large');
 {
-  const r = await page.evaluate(() => { const c = document.querySelector('#handoff-found .big-card'); return c && { img: c.querySelector('img')?.getAttribute('src'), name: c.querySelector('.bc-name')?.textContent, desc: c.querySelector('.bc-desc')?.textContent, w: c.getBoundingClientRect().width }; });
+  const r = await page.evaluate(() => { const col = document.querySelector('#handoff-found .found-type'), c = col?.querySelector('.big-card'); return c && { img: c.querySelector('img')?.getAttribute('src'), name: col.querySelector('.ft-name')?.textContent, desc: col.querySelector('.ft-desc')?.textContent, w: c.getBoundingClientRect().width }; });
   const meta = await game(id => { const c = window.__game.activePlayer().hand.find(c => c.id === id); return window.__game.rules.cards[c.type]; }, top1);
   check(r && /assets\/cards\/face\//.test(r.img) && r.name === meta.name && r.desc === meta.desc && r.w >= 150,
     `with its card face, its name and what it does ("${r?.name}", ${Math.round(r?.w)} px wide)`);
-  check(/You search .+ and find an? /.test(await revealText()), 'and the search is described');
+  // (round 4: the reveal is short: the kicker, "You found a ...", the card with its one line, and nothing more)
+  check(/^You search /.test((await page.textContent('#handoff-kicker')).trim()) && /^You found an? /.test((await page.textContent('#handoff-title')).trim()), 'the kicker says where you searched and the title what you found');
+  check((await revealText()).trim() === '', 'and there is no long sentence: no "you search ... and find", no Lantern tally, no limit note');
   check(!(await visible('#hand-fan')) && !(await visible('#search-spot')), 'the fan and the icon step aside while it is shown');
 }
 await shot('ui-search-reveal');
@@ -533,6 +535,7 @@ console.log('\n6b. a Linen Store');
   await searchHere();
   check(await kind() === 'found' && sameSet(await revealIds(), top), 'both cards are shown large');
   const toast = (await revealText()).trim();
+  const title = (await page.textContent('#handoff-title')).trim();
   await shot('ui-search-linen');
   await next();
   const ls = await game(ids => ({
@@ -541,7 +544,7 @@ console.log('\n6b. a Linen Store');
   }), top);
   check(ls.n === before + 2 && ls.has, `the first search there draws two cards (${before} -> ${ls.n}), the top two of the deck`);
   check(ls.ap === 3 && !ls.full, 'for one action, with no prompt while there is room for both');
-  check(/find an? .+ and an? /.test(toast), `the message names both cards ("${toast.slice(0, 80)}")`);
+  check(toast === '' && /^You found (an? .+ and an? .+|2 .+)$/.test(title), `the title names both cards, and there is nothing else to read ("${title}")`);
   check((await spot()).mode === null, 'and the room gives up its draw once, like any other: no icon now');
 
   // Six cards in hand: both cards are KEPT (8 in hand) — the hand limit is settled only at the end of the
@@ -559,8 +562,10 @@ console.log('\n6b. a Linen Store');
   await searchHere();
   check(await kind() === 'found' && sameSet(await revealIds(), ['ls1', 'ls2']), 'with 6 cards in hand the reveal shows both new cards');
   const keepText = await revealText();
-  check(/You hold 8 cards, more than 6: keep them all for now, and discard 2 when you end your turn\./.test(keepText), `and says calmly that they are kept for now ("…${keepText.slice(-80)}")`);
+  check(keepText.trim() === '', 'and says nothing about the limit (round 4: the hand fan says it)');
   await next();
+  check(await page.waitForFunction(() => document.querySelector('#hand-fan .fan-limit')?.textContent === 'Cards 8/6 · discard 2 at end of turn', null, { timeout: 4000, polling: 30 }).then(() => true, () => false),
+    'the moment it closes the fan says "Cards 8/6 · discard 2 at end of turn"');
   const kept = await game(() => {
     const g = window.__game, p = g.activePlayer();
     return { ids: p.hand.map(c => c.id), discard: g.state.discardPile.map(c => c.id), ap: p.actionPoints, overlay: !document.getElementById('discard-overlay').hidden };
@@ -591,13 +596,13 @@ console.log('\n6b. a Linen Store');
   await tap('#btn-discard-done');
   await page.click('#discard-cards .card-tile[data-card-id="k3"]'); await page.waitForTimeout(80);
   await tap('#btn-discard-done');
-  const d1 = await page.evaluate(() => ({ btn: document.getElementById('btn-discard-done').textContent.trim(), n: window.__game.activePlayer().hand.length, turn: window.__game.state.turn }));
-  check(d1.n === 6 && d1.btn === 'Keep these 6' && d1.turn === turn0, 'after two discards: 6 cards, "Keep these 6", still the same turn');
-  await tap('#btn-discard-done');
+  // (round 4: the discard that reaches the limit finishes the screen by itself: the card is seen leaving for half a
+  // second, then it closes and the turn passes. There is no "Keep these 6" step.)
+  await page.waitForFunction(() => document.getElementById('discard-overlay').hidden, null, { timeout: 6000, polling: 50 });
   await page.waitForTimeout(150);
   const after = await game(() => ({ turn: window.__game.state.turn, open: !document.getElementById('discard-overlay').hidden,
     discard: window.__game.state.discardPile.map(c => c.id), hand: window.__game.activePlayer().hand.map(c => c.id) }));
-  check(!after.open && after.turn === turn0 + 1, 'then the turn passes');
+  check(!after.open && after.turn === turn0 + 1, 'after the second discard (6 cards) the screen closes by itself and the turn passes: no "Keep these 6"');
   check(after.discard.includes('k1') && after.discard.includes('k3') && after.hand.length === 6 && after.hand.includes('ls1') && after.hand.includes('ls2'),
     'the two chosen Knives went to the discard pile; the new cards were kept');
   check(!(await page.evaluate(() => { const el = document.querySelector('#hand-fan .fan-limit'); return el && !el.hidden; })), 'and the reminder is gone');
@@ -649,8 +654,11 @@ check(held >= 3, `searching ${searched} rooms turned up ${held} Lanterns`);
     await searchHere();
     if (await kind() === 'found') { notes7.push(await revealText()); await next(); }
   }
+  // (round 4: the reveal no longer says "You now hold N Lanterns": the Lantern chip on the guest panel keeps the count)
   const n = await game(() => window.__game.lanterns());
-  check(notes7.some(t => new RegExp(`You now hold ${n} Lanterns?\\.`).test(t)), `the search message keeps count of the Lanterns you hold ("…${(notes7.at(-1) || '').slice(-28)}")`);
+  check(!notes7.some(t => /You now hold|more than \d|keep them all/.test(t)), 'the search reveals carry no tally and no limit talk');
+  await page.waitForTimeout(250);
+  check((await page.textContent('#lantern-count')).trim() === `${n}/3`, `and the Lantern chip keeps count of the Lanterns you hold ("${(await page.textContent('#lantern-count')).trim()}")`);
 }
 check(sameSet(await fanIds(), await handIds()), 'Lanterns are in the hand like any card: the fan shows them');
 await game(() => window.__game.toggleMap());
@@ -871,9 +879,9 @@ console.log('\n7b. playtest fixes');
   await page.click('#discard-cards .card-tile[data-card-id="d7"]'); await page.waitForTimeout(80);
   await tap('#btn-discard-done');
   d = await dsc();
-  check(d.n === 6 && !d.dis && d.btn === 'Keep these 6' && await game(t => window.__game.state.turn === t, t2), 'down to six: "Keep these 6", and the turn has not ended yet');
-  await tap('#btn-discard-done');
-  check(!(await visible('#discard-overlay')) && await game(t => window.__game.state.turn === t + 1, t2), 'then the turn ends');
+  check(d.n === 6 && d.dis && !/Keep these/.test(d.btn), 'down to six: no "Keep these 6" step (the screen finishes by itself)');
+  await page.waitForFunction(() => document.getElementById('discard-overlay').hidden, null, { timeout: 6000, polling: 50 });
+  check(!(await visible('#discard-overlay')) && await game(t => window.__game.state.turn === t + 1, t2), 'it closes by itself and the turn ends');
   await page.waitForTimeout(800);
 
   // A tap on a fan card works while the fan is being re-laid out under the finger (a card arriving,

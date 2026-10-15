@@ -94,6 +94,25 @@ export async function giveCard(page, tile = '#offer-cards .card-tile', { timeout
   return label;
 }
 
+// The end-of-turn discard screen (src/ui/discard.js): discard the first card, a step at a time (pick it, then
+// confirm), until the hand is down to the limit. The discard that gets there finishes the screen by itself: the card
+// is seen leaving for half a second (the overlay has the class `leaving`), then it closes and the turn passes, so
+// there is no "Keep these 6" to tap. Resolves true once it has closed (false if it did not within `timeout`).
+export async function discardDown(page, { timeout = 15000 } = {}) {
+  const end = Date.now() + timeout;
+  while (Date.now() < end) {
+    const s = await page.evaluate(() => { const o = document.getElementById('discard-overlay'); return !o || o.hidden ? 'closed' : o.classList.contains('leaving') ? 'leaving' : 'open'; });
+    if (s === 'closed') return true;
+    if (s === 'open') {
+      await page.click('#discard-cards .card-tile', { timeout: 3000 });
+      await page.waitForTimeout(80);
+      await page.click('#btn-discard-done', { timeout: 3000 });
+    }
+    await page.waitForTimeout(120);
+  }
+  return false;
+}
+
 // End turn: tap the button; with actions left it asks first ("You still have 3 actions. End turn?"), so
 // answer End turn. Resolves true when it asked. (`answer: 'keep'` taps Keep playing instead.)
 export async function endTurn(page, { answer = 'end', timeout = 4000 } = {}) {

@@ -1767,9 +1767,9 @@
     "intensity": 0.55,
     "ambient": 0.38,
     "flicker": {
-     "min": 0.3,
+     "min": 0.5,
      "max": 1,
-     "speed": 10
+     "speed": 5
     }
    },
    "doors": [
@@ -3340,9 +3340,9 @@
     "intensity": 0.55,
     "ambient": 0.38,
     "flicker": {
-     "min": 0.3,
+     "min": 0.5,
      "max": 1,
-     "speed": 10
+     "speed": 5
     }
    },
    "doors": [

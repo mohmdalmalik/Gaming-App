@@ -45,6 +45,9 @@ import { createHud } from './hud.js';
 import { createMap } from './map.js';
 import { createOverlays } from './overlays.js';
 import { createCrashNet } from './ui/crash.js';
+import { watchDialogs } from './ui/focus.js';
+import { matchMarker } from './matchMarker.js';
+import { LOST_MATCH } from './data/lostMatch.js';
 import { createHand } from './ui/hand.js';
 import { createHandFan } from './ui/handFan.js';
 import { createSearchSpot } from './ui/searchSpot.js';
@@ -53,6 +56,7 @@ import { createHandoff } from './ui/handoff.js';
 import { createMeeting } from './ui/meeting.js';
 import { createTradeReveal, tradeOutcome } from './ui/tradeReveal.js';
 import { roundLabel, finalRoundNote, isFinal } from './ui/roundLabel.js';
+import { actionsWord } from './ui/actionsWord.js';
 import { createPerfStats } from './ui/perfStats.js';
 import { createGuestTags } from './ui/guestTags.js';
 import { createGoTags } from './ui/goTags.js';
@@ -73,6 +77,10 @@ import { createFeed } from './ui/feed.js';
 import { createChatUI } from './ui/chat.js';
 import { createChatChannel } from './social/chat.js';
 import { createTips } from './ui/tips.js';
+import { createHowToPlay } from './ui/howToPlay.js';
+import { createGameMenu } from './ui/gameMenu.js';
+import { endRecap } from './ui/endRecap.js';
+import { END_WORDS } from './data/endScreen.js';
 import { CHAT, BOT_CHAT } from './data/chat.js';
 import { settings } from './settings.js';
 import { createAudio } from './audio/index.js';
@@ -107,7 +115,7 @@ if (params.get('camera') === 'diagonal') Object.assign(cfg.camera, cfg.cameraDia
 // with the same number of guests, the player in the first seat.)
 if (params.get('mode') === 'hotseat') {
   params.set('mode', 'bots');
-  if (!params.has('bots')) params.set('bots', String(Math.max(3, Math.min(5, (parseInt(params.get('players'), 10) || 6) - 1))));
+  if (!params.has('bots')) params.set('bots', String(Math.max(rules.minBots, Math.min(rules.maxBots, (parseInt(params.get('players'), 10) || rules.maxPlayers) - 1))));
   if (!params.has('seat')) params.set('seat', '0');
 }
 const DIRECT = ['practice', 'bots'].includes(params.get('mode')) ? params.get('mode') : null;
@@ -264,6 +272,17 @@ function followPoint() {
 const hud = createHud(document, cfg);
 const map = createMap(document, floor, cfg);
 const overlays = createOverlays(document);
+watchDialogs(document);      // the screens over the game take the keyboard focus and keep it (src/ui/focus.js)
+// How to play (src/ui/howToPlay.js: five pages, from the main menu and from the Menu) and the in-match Menu
+// panel (src/ui/gameMenu.js). The panel holds the game still exactly as a question does (the clock, the computer
+// guests, the hand and the buttons): everywhere main.js asks "is a question up?" it asks askUp().
+const howTo = createHowToPlay(document);
+const gameMenu = createGameMenu(document, {
+  settings, howTo, practice: () => PRACTICE,
+  onSettingChanged: name => applySettings(name),       // (Music and Sound effects, as in Settings)
+  onLeave: () => askLeave(),
+});
+const askUp = () => overlays.askOpen || gameMenu.isOpen;
 // The safety net (src/ui/crash.js): every step of a frame runs through crash.step, so one failing step never
 // stops the picture; after a step has failed frame after frame (or the page keeps throwing the same error)
 // the "Something went wrong" card shows, with Back to menu and Reload and the last message in small print.
@@ -347,11 +366,13 @@ const tips = createTips(document, {
     // (public: the round, the rooms on the board, the job of the room the player stands in)
     round: state.round, final: isFinal(state), rooms: floor.roomList.length, exitFound: floor.roomList.some(r => r.isExit),
     job: floor.rooms.get(me()?.currentRoom)?.job ?? null,
+    safe: !!floor.rooms.get(me()?.currentRoom)?.safe,                  // (the player's own room is a safe zone: the badge says so to everyone)
+    cameraTouched: camTouchedIn === gameToken, cameraButton: camButtonIn === gameToken,   // (the player's own use of the camera in this game)
     myTurn: myTurn(), acting: actionPhaseClear() && !hand.isOpen && !pendingArrival && !activeMover().walking && !activeMover().path.length,
     clock: rules.turnTimerEnabled && timerLeft > 0 ? timerLeft : null, moveBar: hud.confirmKind === 'move', search: searchSpot.mode,
     meeting: meeting.isOpen, heard: PRACTICE ? 0 : chat.recent().reduce((t, m) => (m.seat !== humanSeat ? Math.max(t, m.at) : t), 0),   // (when another guest last spoke)
     covered: handoff.isOpen || tradeReveal.isOpen || hand.isOpen || discard.isOpen || map.isOpen || chat.isOpen
-      || overlays.endOpen || overlays.noticeOpen || overlays.askOpen || !fadeEl.hidden || !!sideways?.matches,
+      || overlays.endOpen || overlays.noticeOpen || askUp() || !fadeEl.hidden || !!sideways?.matches,
     mapOpen: map.isOpen, chatOpen: chat.isOpen, cardOpen: hand.isOpen,   // (the player's own screens: a tip they obeyed is seen)
   }),
 });
@@ -363,7 +384,7 @@ let activeWalk = null;       // the confirmed walk under way (its plan), until t
 let walkCutShort = false;    // the clock ran out during this walk: it was cut short at the next room
 
 const uiBusy = () => map.isOpen || hand.isOpen || discard.isOpen
-  || overlays.endOpen || overlays.noticeOpen || overlays.askOpen || handoff.isOpen || meeting.isOpen;
+  || overlays.endOpen || overlays.noticeOpen || askUp() || handoff.isOpen || meeting.isOpen;
 
 const discovery = createDiscovery({
   floor, grid, state, movers, cfg,
@@ -388,7 +409,7 @@ const searchSpot = createSearchSpot(document, { camera: view.camera, container, 
 // Cheap enough to run every frame; each only touches the page when something changed.
 function screenClear() {
   return running && !state.finished && !handoff.isOpen && !meeting.isOpen && !overlays.endOpen
-    && !overlays.noticeOpen && !overlays.askOpen && !map.isOpen && !discard.isOpen;
+    && !overlays.noticeOpen && !askUp() && !map.isOpen && !discard.isOpen;
 }
 function actionPhaseClear() { return screenClear() && myTurn() && inActionPhase; }
 function syncHandFan() {
@@ -470,6 +491,15 @@ function begin() {
   // A match: the player reads their secret role first, then the first turn begins.
   inActionPhase = false;
   handoff.revealRole(me(), {}, () => { me().roleSeen = true; beginTurn(); });
+  if (!DIRECT) matchMarker.set();      // (a real match, not a direct test link: if the browser cuts it short, the next start says so)
+}
+
+// At the start of the main menu: a match that was cut short (src/matchMarker.js: the marker was still there) is counted
+// once as left early and said so, once, on the game's notice card. A direct link never gets here.
+function noteLostMatch() {
+  if (DIRECT || !matchMarker.take()) return;
+  record.countLeft();
+  overlays.showNotice(LOST_MATCH.title, LOST_MATCH.body);
 }
 
 // A new turn: the player's own, or a computer guest's.
@@ -517,7 +547,7 @@ function stopTimer() { timerLeft = 0; hud.hideTimer(); }
 // The "turn your iPad sideways" card (pure CSS, styles.css) covers the game in portrait: the clock
 // waits while it is up.
 const sideways = window.matchMedia?.('(orientation: portrait), (max-width: 900px)');
-const timerPaused = () => handoff.isOpen || overlays.endOpen || overlays.noticeOpen || overlays.askOpen
+const timerPaused = () => handoff.isOpen || overlays.endOpen || overlays.noticeOpen || askUp()
   || meeting.isOpen || discard.isOpen || meetingLive || overlays.errorOpen || !!sideways?.matches;
 
 function tickTimer(dt) {
@@ -603,7 +633,7 @@ function passTurn() {
   rig.recentre();
   mood.snap(activePlayer(state).currentRoom);
   refresh();
-  hud.toast(`Turn ${state.turn} — ${rules.actionPointsPerTurn} action points.${relocked ? ` ${relocked}` : ''}`, relocked ? 5 : undefined);
+  hud.toast(`Turn ${state.turn} — ${actionsWord(rules.actionPointsPerTurn)}.${relocked ? ` ${relocked}` : ''}`, relocked ? 5 : undefined);
   sfx('yourTurn', { volume: 0.7 });
 }
 
@@ -678,6 +708,9 @@ let meetingLive = false;     // a meeting (or a proposed trade) is being played 
 
 // Run `fn` after `ms`, unless a new game has started (or the player went back to the menu) meanwhile.
 let gameToken = 0;
+// The game the player last looked round the hotel in (dragged, pinched, wheeled, or used a round camera
+// button), and the game they last used a round button in: the camera tips go by these (src/ui/tips.js).
+let camTouchedIn = -1, camButtonIn = -1;
 function after(ms, fn) {
   const token = gameToken;
   setTimeout(() => { if (token === gameToken && running) fn(); }, Math.max(0, ms));
@@ -913,7 +946,7 @@ function botTick(now) {
   const p = activePlayer(state);
   if (!isBot(p.index) || now < botNextAt || walkCutShort) return;
   if (meetingLive || pendingArrival || activeMover().walking || activeMover().path.length) return;
-  if (handoff.isOpen || overlays.noticeOpen || overlays.askOpen || overlays.endOpen || overlays.errorOpen || discard.isOpen || meeting.isOpen) return;
+  if (handoff.isOpen || overlays.noticeOpen || askUp() || overlays.endOpen || overlays.errorOpen || discard.isOpen || meeting.isOpen) return;
   botStep(p);
 }
 
@@ -1062,7 +1095,7 @@ const SEARCH_FAIL = {
   notSearchable: 'There is nothing to search in here.',
   searched: 'This room has already been searched.',
   dark: 'Too dark to search — you need a Flashlight.',
-  ap: 'No action points left to search.',
+  ap: 'No actions left to search.',
   empty: 'Nothing left to find here.',
 };
 
@@ -1125,7 +1158,7 @@ function faceTowards([x, z]) {
 function onUseBandage(cardId) {
   if (!myTurn() || !inActionPhase) return;
   const r = useBandage(state, activePlayer(state), cardId);
-  if (!r.ok) { hud.toast(r.reason === 'full' ? 'Already at full health.' : r.reason === 'ap' ? 'No action points left.' : 'Cannot use that now.'); return; }
+  if (!r.ok) { hud.toast(r.reason === 'full' ? 'Already at full health.' : r.reason === 'ap' ? 'No actions left.' : 'Cannot use that now.'); return; }
   hud.toast(`Bandaged — health ${r.health} of ${rules.maxHealth}.`);
   sfx('bandage');
   refresh();
@@ -1136,7 +1169,7 @@ function onUnlock(cardId, roomId) {
   const r = useUnlock(state, floor, activePlayer(state), cardId, roomId);
   const name = floor.rooms.get(roomId)?.name ?? 'locked room';
   if (!r.ok) {
-    hud.toast(r.reason === 'ap' ? 'No action points left.'
+    hud.toast(r.reason === 'ap' ? 'No actions left.'
       : r.reason === 'sealed' ? `The ${name} door is barricaded: a key or pick cannot get you through it until the barricade comes down.`
         : 'Cannot use that here.');
     return;
@@ -1150,7 +1183,7 @@ function onUnlock(cardId, roomId) {
 function onBarricade(cardId, doorwayId) {
   if (!myTurn() || !inActionPhase) return;
   const r = useBarricade(state, floor, activePlayer(state), cardId, doorwayId);
-  if (!r.ok) { hud.toast(r.reason === 'ap' ? 'No action points left.' : 'Cannot barricade that.'); return; }
+  if (!r.ok) { hud.toast(r.reason === 'ap' ? 'No actions left.' : 'Cannot barricade that.'); return; }
   hud.toast(`${cap(doorName(doorwayId, activePlayer(state).currentRoom))} barricaded until your next turn.`, 5);
   hand.close();
   syncViews(false); refresh();
@@ -1160,7 +1193,7 @@ function onBarricade(cardId, doorwayId) {
 function onEspresso(cardId) {
   if (!myTurn() || !inActionPhase) return;
   const r = useEspresso(state, activePlayer(state), cardId);
-  if (!r.ok) { hud.toast(r.reason === 'ap' ? 'No action points left.' : 'Cannot use that now.'); return; }
+  if (!r.ok) { hud.toast(r.reason === 'ap' ? 'No actions left.' : 'Cannot use that now.'); return; }
   hud.toast(`Espresso — ${r.gained} extra actions this turn.`);
   sfx('espresso');
   refresh();
@@ -1170,7 +1203,7 @@ function onEspresso(cardId) {
 // is PRIVATE and goes on the user's own screen; the others learn only that the mirror was used, and on
 // whom (the public log).
 const MIRROR_FAIL = {
-  ap: 'No action points left.',
+  ap: 'No actions left.',
   noTarget: 'Choose another guest in this room.',
   targetDead: 'That guest is dead.',
   notTogether: 'That guest is not in this room any more.',
@@ -1203,7 +1236,7 @@ function onHandMirror(cardId, targetId) {
 // table how many guests are possessed right now, never who. A Linen Store's job is in the search.
 const ROOM_FAIL = {
   full: 'Already at full health.',
-  ap: 'No action points left.',
+  ap: 'No actions left.',
   usedThisTurn: 'You have already rung the Switchboard this turn.',
   noJob: 'There is nothing to use in this room.',
 };
@@ -1244,6 +1277,7 @@ function onRoom() {
 
 // --- End of the match ----------------------------------------------------------------------
 function showEnd() {
+  if (!DIRECT) matchMarker.clear();         // (the match ended: it is not one the browser cut short)
   stopTimer();
   meetingLive = false;
   hud.hideConfirm(); selectedMove = null;
@@ -1272,8 +1306,8 @@ function showEnd() {
     title = 'The hotel keeps them';
     line = 'No clean guest is left.';
   }
-  const verdict = yourSideWon ? (you.possessed ? 'The possessed win — your side.' : 'The clean guests win — your side.')
-    : (you.possessed ? 'The clean guests win. Your side lost.' : 'The possessed win. Your side lost.');
+  // (the plain word for the player's side, Victory or Defeat, sits above the title; the summary says who won)
+  const winners = END_WORDS.winners(cleanWon);
   const reveal = state.players.map(p => ({
     name: p.name,                                   // (the username; your own row is marked "You")
     who: p.index === humanSeat ? 'You' : '',
@@ -1282,7 +1316,11 @@ function showEnd() {
     status: state.escaped.has(p.id) ? 'Escaped' : !p.alive ? 'Dead' : '',
     you: p.index === humanSeat,
   }));
-  overlays.showEnd(title, `${line}\n${verdict} · ${roundLabel(state)}`, { restartLabel: 'Play again', reveal, won: yourSideWon });
+  overlays.showEnd(title, `${line}\n${winners} · ${roundLabel(state)}`, {
+    restartLabel: 'Play again', reveal, won: yourSideWon,
+    verdict: yourSideWon ? END_WORDS.victory : END_WORDS.defeat,       // (whether or not you are alive or got out)
+    recap: endRecap(state, humanSeat),                                  // (who was possessed first, whom they possessed)
+  });
   countRecord({ won: yourSideWon, possessed: !!you.possessed, escaped: state.escaped.has(you.id) });
 }
 // Your record (src/record.js): each finished game is counted once, when its end screen shows (it can
@@ -1385,7 +1423,7 @@ async function planGame(choice) {
     return { practice: true, seats, cast: seats, humanSeat: 0, profiles: [null], possessedIndex: null, choice };
   }
   const mods = await loadBots();
-  const n = Math.max(3, Math.min(5, Math.round(choice.bots) || 5)) + 1;
+  const n = Math.max(rules.minBots, Math.min(rules.maxBots, Math.round(choice.bots) || rules.maxBots)) + 1;
   const rng = makeRng(Number.isFinite(forcedSeed) && forcedSeed > 0 ? (forcedSeed * 7919 + 13) >>> 0 : ((Date.now() ^ Math.floor(Math.random() * 1e9)) >>> 0) || 1);
   // (the 5 draws that shuffled the six named guests before are still drawn, so a ?seed= keeps its seat,
   // its bots and its possessed seat)
@@ -1424,7 +1462,7 @@ function setupGame(plan) {
   botProfiles = plan.profiles;
   applyMode(PRACTICE ? 'practice' : 'match', cast.length);
   if (TIMER_OFF) rules.turnTimerEnabled = false;
-  Object.assign(state, { roster: cast, mode: PRACTICE ? 'practice' : 'match', practice: PRACTICE, hotseat: false });
+  Object.assign(state, { roster: cast, mode: PRACTICE ? 'practice' : 'match', practice: PRACTICE });
   state.setup = { possessedIndex: plan.possessedIndex };
   movers.length = 0;
   cast.forEach((_, i) => movers.push(createPlayer(cfg, startSpot(i))));
@@ -1553,6 +1591,7 @@ async function startBots(choice) {
     username: x.s.name, color: x.s.color, avatar: x.s.avatar, you: false,
   })));
   portraits.prepare(tablePortraits(plan));     // (the table's portraits, drawn while it fills up)
+  audio.prefetch('game', { decode: false });   // (the night music's download, while the table fills up and the lift rises)
   menu.matchmake(seats, { onFull: () => enterGame(plan, { guests: 3 }), onCancel: () => {} });
 }
 // Every seat's two portraits, normal and possessed (a soul card's face, an ally's red eyes): drawn ahead,
@@ -1580,6 +1619,7 @@ async function playAgain() {
 
 // Back to the main menu (from the end screen or the Menu button).
 async function backToMenu() {
+  if (!DIRECT) matchMarker.clear();         // (left on purpose, from the Menu, the end screen or the problem card: not one the browser cut short)
   // (a match left before its end: counted as left early, never as a win or a loss)
   if (!PRACTICE && phase === 'game' && !state.finished && countedGame !== gameToken) { countedGame = gameToken; record.countLeft(); }
   audio.stopStinger();
@@ -1591,6 +1631,7 @@ async function backToMenu() {
   stopTimer();
   hud.hide();
   overlays.hideEnd(); overlays.hideNotice(); overlays.hideAsk(); overlays.hideStart();
+  gameMenu.close({ restoreFocus: false });
   hand.close(); map.close(); discard.close(); handoff.close(); meeting.close(); hud.hideConfirm();
   feed.reset(false);
   chat.reset(false);
@@ -1720,8 +1761,8 @@ function moveRefusal(plan, dest, player) {
   }
   if (plan.reason === 'barricaded') return next && isBarricaded(state, next.id) ? 'That doorway is barricaded.' : `A barricade is in the way to the ${dest.name}.`;
   if (plan.reason === 'notEnoughActionPoints') {
-    return player.actionPoints <= 0 ? 'Not enough action points — none left this turn.'
-      : `Not enough action points: the ${dest.name} is ${plan.cost} rooms away (${plan.cost} AP).`;
+    return player.actionPoints <= 0 ? 'Not enough actions — none left this turn.'
+      : `Not enough actions: the ${dest.name} is ${plan.cost} rooms away (${actionsWord(plan.cost)}).`;
   }
   return `There is no way through to the ${dest.name} right now.`;
 }
@@ -1742,14 +1783,14 @@ function offerMove(destId) {
     return;
   }
   const end = plan.waypoints[plan.waypoints.length - 1];
-  plan.preview = { label: `Move · ${plan.cost} AP`, anchor: end, room: floor.rooms.get(plan.dest) };
+  plan.preview = { label: `Move · ${actionsWord(plan.cost)}`, anchor: end, room: floor.rooms.get(plan.dest) };
   selectedMove = plan;
   const who = plan.meet.map(id => state.players.find(q => q.id === id)?.name).filter(Boolean);
   // (a guest waiting in the room the walk ends in forces a meeting there too: say so before the tap)
   const there = plan.stop ? [] : encountersIn(state, floor, player, plan.dest).map(q => q.name);
   const note = plan.stop ? ` You will stop in the ${floor.rooms.get(plan.stop).name} to meet ${andList(who)}.`
     : there.length ? ` You will meet ${andList(there)} there: a meeting is forced.` : '';
-  hud.showConfirm(`Move to ${dest.name}?${note}`, `Move · ${plan.cost} AP`);
+  hud.showConfirm(`Move to ${dest.name}?${note}`, `Move · ${actionsWord(plan.cost)}`);
 }
 
 // Set off on a confirmed walk (the player's, or a computer guest's). The view comes back to the guest
@@ -1817,7 +1858,7 @@ function layBodyClear(index) {
 // guest stays put. The new room is empty, so nothing else happens.
 const DOOR_FAIL = {
   jammed: 'The door is jammed shut — there is no way through here.',
-  ap: 'No action points left to open a door.',
+  ap: 'No actions left to open a door.',
   notYourDoor: 'You can only open a door of the room you are in.',
 };
 function onOpenDoor(doorId) {
@@ -1870,6 +1911,7 @@ createInput(view.renderer.domElement, {
   onTap(x, y) {
     if (chat.swallowTap()) return;     // (a tap that closes the chat panel does nothing else)
     if (tips.swallowTap()) return;     // (nor the second tap of a double tap on a tip's button)
+    if (gameMenu.swallowTap() || overlays.swallowTap()) return;     // (nor on the Menu panel or the Leave question closing)
     if (!running || state.finished || uiBusy()) return;
     if (!myTurn() || !inActionPhase) return;
     if (inDeadZone(x, y)) return;
@@ -1883,35 +1925,42 @@ createInput(view.renderer.domElement, {
     queuedTap = null;
     tapTarget(t);
   },
-  onPinch(factor) { if (running) rig.zoomBy(factor); },
+  onPinch(factor) { if (running) { rig.zoomBy(factor); camTouchedIn = gameToken; } },
   onDrag(fromX, fromY, toX, toY) {
     if (!running) return;
+    camTouchedIn = gameToken;
     const a = screenToGround(fromX, fromY, hitA);
     const b = screenToGround(toX, toY, hitB);
     if (a && b) rig.panByWorld(a.x - b.x, a.z - b.z);
   },
-  onWheel(deltaY) { if (running) rig.zoomBy(Math.exp(-deltaY * 0.0015)); },
+  onWheel(deltaY) { if (running) { rig.zoomBy(Math.exp(-deltaY * 0.0015)); camTouchedIn = gameToken; } },
   onGestureEnd() { rig.release(); },
 });
 
-hud.on('rotateLeft', () => rig.rotateLeft());
-hud.on('rotateRight', () => rig.rotateRight());
+hud.on('rotateLeft', () => { rig.rotateLeft(); camTouchedIn = camButtonIn = gameToken; });
+hud.on('rotateRight', () => { rig.rotateRight(); camTouchedIn = camButtonIn = gameToken; });
 // "Centre on me": back to the active guest, at the standard zoom.
 function onCentre() { if (running) rig.recentre(); }
-hud.on('centre', onCentre);
+hud.on('centre', () => { onCentre(); camTouchedIn = camButtonIn = gameToken; });
 hud.on('endTurn', doEndTurn);
 hud.on('roomJob', onRoom);
 hud.on('trade', onTrade);
 hud.on('private', () => { if (running && !uiBusy()) hand.open(state, floor); });
 hud.on('map', () => { if (!meeting.isOpen && !discard.isOpen && !overlays.endOpen && !handoff.isOpen) map.toggle(state, movers); });
-// The Menu button: back to the main menu, after asking (the game in progress is lost).
+// The Menu button opens the Menu panel (src/ui/gameMenu.js: Resume, Sound, How to play, Leave); its Leave asks the
+// question below, after which the game in progress is lost. On the end screen the button still goes straight back
+// to the main menu. While a screen of the game is up (or a meeting is live) it does nothing, as it always did.
+// The clock: unchanged. The question held it still (askUp), and so does the panel that now comes first.
 hud.on('leave', () => {
   if (overlays.endOpen) { backToMenu(); return; }
   if (uiBusy() || meetingLive) return;
+  gameMenu.open();
+});
+function askLeave() {
   overlays.ask(PRACTICE ? 'Leave practice?' : 'Leave the match?',
     PRACTICE ? 'This hotel and everything you have found will be lost.' : 'The others will carry on without you. This match will be lost.',
     { yes: 'Main menu', no: 'Keep playing', safe: 'no' }, backToMenu);
-});
+}
 hud.onConfirm(
   () => {
     if (!selectedMove) return;
@@ -1950,12 +1999,17 @@ const gameSounds = createGameSounds({
   // (an attack the player is in shows on the meeting screen, which plays its own blow: src/ui/meeting.js)
   skipAttack: e => e.by === humanSeat || e.target === humanSeat,
 });
+// From this round on, the four end fanfares are downloaded ahead (about 590 KB, bytes only, nothing decoded): a match runs
+// six rounds at the median and can end sooner, so fetching them only in round 7 left most matches to fetch at the end.
+const ENDING_FROM_ROUND = 3;
 function syncSound() {
   const playing = running && phase === 'game';
   gameSounds.update(playing);
   if (!playing || state.finished) return;
   audio.setScene(!PRACTICE && isFinal(state) ? 'final' : 'game');
-  if (!PRACTICE && state.round >= rules.roundLimit - 1) audio.prefetch('final');
+  if (PRACTICE) return;
+  if (state.round >= ENDING_FROM_ROUND) audio.prefetchEnding();
+  if (state.round >= rules.roundLimit - 1) audio.prefetch('final');      // (decoded ahead: the last round's music)
 }
 // The end screen: the round's music gives way to a stinger, from the player's side of the table (dawn
 // tolls its bell first).
@@ -1977,6 +2031,7 @@ const menu = createMenu(document, {
   onPractice: choice => startPractice(choice),
   onSettingChanged: name => applySettings(name),
   onScreenChange: (name, prev) => onMenuScreen(name, prev),
+  onHowToPlay: opts => howTo.open(opts),
 });
 // The wardrobe (src/ui/avatarEditor.js, the menu's 'avatar' screen): every pick shows at once on your
 // avatar in the lobby, which the lobby's wardrobe camera frames in the space right of the panel, sharp
@@ -2048,7 +2103,7 @@ if (DIRECT) {
   phase = 'game';
   const sub = document.getElementById('start-sub');
   const dealt = rules.lanternsDealtEach || 0;
-  const n = Math.max(3, Math.min(5, parseInt(params.get('bots'), 10) || 5));
+  const n = Math.max(rules.minBots, Math.min(rules.maxBots, parseInt(params.get('bots'), 10) || rules.maxBots));
   const role = ['random', 'clean', 'possessed'].includes(params.get('role')) ? params.get('role') : 'random';
   if (sub) {
     sub.textContent = DIRECT === 'practice'
@@ -2071,7 +2126,8 @@ if (DIRECT) {
 } else {
   // (the account first: a server account has no profile until it is ready, and the menu sends anyone
   // without one to the register)
-  account.ready.then(() => menu.show('main'), () => menu.show('main'));
+  const openMenu = () => { menu.show('main'); noteLostMatch(); };
+  account.ready.then(openMenu, openMenu);
   audio.setScene('menu');          // (heard from the first tap: browsers allow no sound before one)
   container.classList.add('blurred');
   import('./menu/lobbyScene.js')
@@ -2237,7 +2293,7 @@ window.__game = {
   unlock: (id, room) => onUnlock(id, room),
   barricade: (id, door) => onBarricade(id, door),
   trade: () => onTrade(),
-  mode: () => (PRACTICE ? 'practice' : 'match'), hotseat: false,
+  mode: () => (PRACTICE ? 'practice' : 'match'),
   // A match against computer guests (tests): the player's seat, whose seats are bots, the bots' brains,
   // whose turn, the menu and the lift.
   humanSeat: () => humanSeat,
@@ -2275,6 +2331,8 @@ window.__game = {
   record: () => record.get(),        // your record on this device (src/record.js)
   endOpen: () => overlays.endOpen,
   askOpen: () => overlays.askOpen,
+  menuPanelOpen: () => gameMenu.isOpen, howToOpen: () => howTo.isOpen,     // (tests: the in-match Menu panel, How to play)
+  showEnd: () => showEnd(),          // (tests: the end screen for the state as it is; it counts the game in your record)
   handoff, meeting, tradeReveal,
   // QA: the private trade reveal for one outcome (src/ui/tradeReveal.js: swap, blocked, blockedMe,
   // possessed, possessedThem, soulSpent, alreadyPossessed, soulsCrossed, noTrade, and the extra samples
@@ -2284,7 +2342,7 @@ window.__game = {
     const you = state.players[humanSeat] || cast[0];
     // (practice: a sample other guest, a bot's name in a look that is not yours)
     const them = state.players.find(p => p !== you)
-      || { ...seatTable({ me: { username: 'nightowl', avatar: botAvatars(['nightowl'], { avoid: [you.avatar] })[0] }, seat: 0 })[0], id: 'p2', index: 1, color: '#5ac8e6' };
+      || { ...seatTable({ me: { username: 'nightowl', avatar: botAvatars(['nightowl'], { avoid: [you.avatar] })[0] }, seat: 0 })[0], id: 'p2', index: 1, color: '#73d4e6' };
     return tradeReveal.preview(outcome, you, them);
   },
   tradeRevealOutcome: () => tradeReveal.outcome,

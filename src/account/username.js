@@ -99,7 +99,6 @@ export function checkUsername(raw, { reserved = reservedWords() } = {}) {
   if (isFiltered(name)) return fail('filtered');
   return { ok: true, name };
 }
-export const isValidUsername = raw => checkUsername(raw).ok;
 
 // A ready-made name: adjective_noun from hotel words ("velvet_owl"), always valid, never one of `avoid`.
 export function suggestUsername(rng = Math.random, { avoid = [] } = {}) {

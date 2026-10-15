@@ -47,7 +47,7 @@ A[y0:y1, x0:x1] = fill[y0:y1, x0:x1]
 face = Image.fromarray(np.clip(A, 0, 255).astype(np.uint8))
 
 # the illustration, lifted off its dark green backdrop (backdrop: green-leaning and dark)
-art = Image.open(REPO / 'assets' / 'cards' / 'lockPick.jpg').convert('RGB'); a = np.asarray(art).astype(float)
+art = Image.open(HERE / 'art' / 'lockPick.jpg').convert('RGB'); a = np.asarray(art).astype(float)
 r, g, b = a[..., 0], a[..., 1], a[..., 2]; v = a.max(2)
 bgness = np.clip(((g - r) + 6) / 14, 0, 1) * np.clip((120 - v) / 50, 0, 1)
 alpha = Image.fromarray(((1 - bgness) * 255).astype(np.uint8)).filter(ImageFilter.GaussianBlur(1.2))

@@ -1,12 +1,10 @@
-// Per-room "dressing" — how a room's greybox shell (floor + walls) is replaced with real
-// glTF pieces, plus decoration that has no collision (rugs, pillows) and where the lamp lights
-// sit. Keyed by room id, so dressing another room later is just another entry here; only rooms
-// listed are dressed, everything else stays greybox and untouched. With the random hotel every
-// room is an 8 m tile; only the lobby is dressed for now (room art comes later), and the generic
-// Kenney shell dressing in src/render/roomDressing.js is kept for when it does.
+// Per-room "dressing" — which baked glTF model replaces a room's greybox shell, floor and furniture
+// boxes, its light maps and exposure, and (the lobby) where the lamp lights sit. Keyed by room id; only
+// rooms listed are dressed, anything else would stay greybox and untouched. Every room of the hotel is
+// listed: the lobby below and every other tile in BAKED_TILES.
 //
-// The furniture MODELS themselves live in the room data (`furniture`, with a `model`), so
-// collision and visuals come from one place. This file is only the shell + non-colliding extras.
+// The furniture footprints stay in the room data (src/data/hotel.js), so collision comes from one place
+// and the baked model is built on exactly those footprints (tools/lobby-pipeline, tools/room-pipeline).
 
 export const roomDressings = {
   // The starting room is one baked model (tools/lobby-pipeline/, loaded by

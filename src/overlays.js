@@ -1,11 +1,14 @@
 // Full-screen overlays: "Tap to begin", a one-off notice (the exit opening), a yes/no question,
 // the end screen and the problem card (a load error, or "Something went wrong": src/ui/crash.js).
+import { GUARD_MS } from './ui/tapGuard.js';
 
 export function createOverlays(doc) {
   const start = doc.getElementById('start-overlay');
   const end = doc.getElementById('end-overlay');
   const endTitle = doc.getElementById('end-title');
+  const endVerdict = doc.getElementById('end-verdict');
   const endSummary = doc.getElementById('end-summary');
+  const endRecap = doc.getElementById('end-recap');
   const restartBtn = doc.getElementById('btn-restart');
   const keepBtn = doc.getElementById('btn-keep-exploring');
   const menuBtn = doc.getElementById('btn-end-menu');
@@ -30,6 +33,7 @@ export function createOverlays(doc) {
 
   let noticeNext = null;
   let askNext = null;
+  let askClosedAt = -Infinity;
   const apiTail = {
     // The 3D view has rendered: the begin button becomes usable.
     setReady() { beginBtn.disabled = false; beginBtn.textContent = 'Tap to begin'; },
@@ -42,10 +46,14 @@ export function createOverlays(doc) {
     // `opts.keepExploring` offers a way back into the hotel instead of only restarting —
     // practice has no losing side, so finishing should never force a new game. `opts.reveal` (a match):
     // every guest with their role, now that it is over — { name, who, color, possessed, status, you }.
-    // `opts.won`: whether the player's side won (colours the title).
+    // `opts.won`: whether the player's side won (colours the title). `opts.verdict`: the plain word for the
+    // player's side, "Victory" or "Defeat" (src/data/endScreen.js), above the title; `opts.recap`: one line on how
+    // the possession spread. Practice has no sides and passes neither.
     showEnd(title, summary, opts = {}) {
       endTitle.textContent = title;
       endSummary.textContent = summary || '';
+      endVerdict.textContent = opts.verdict || ''; endVerdict.hidden = !opts.verdict;
+      endRecap.textContent = opts.recap || ''; endRecap.hidden = !opts.recap;
       keepBtn.hidden = !opts.keepExploring;
       restartBtn.textContent = opts.restartLabel || 'Restart practice';
       end.classList.toggle('won', opts.won === true);
@@ -86,7 +94,10 @@ export function createOverlays(doc) {
       askYes.classList.toggle('primary', safe !== 'no'); askNo.classList.toggle('primary', safe === 'no');
       askNext = onYes; ask.hidden = false;
     },
-    hideAsk() { ask.hidden = true; askNext = null; },
+    hideAsk() { if (!ask.hidden) askClosedAt = performance.now(); ask.hidden = true; askNext = null; },
+    // The second tap of a double tap on Keep playing (or on the dark round the question) lands on the hotel: a tap on
+    // it just after the question closed does nothing (main.js onTap).
+    swallowTap() { return performance.now() - askClosedAt < GUARD_MS + 50; },
     get askOpen() { return !ask.hidden; },
     // The problem card (index.html #error-overlay: a Reload button always; Reload is plain HTML in the page).
     // `title`: its heading; `detail`: small print for a screenshot (the version, the last message);

@@ -12,6 +12,10 @@
 //   patience    as a possessed guest, how long it builds trust before trying a Possession card
 //   trust       how readily it trusts a guest who has been kind to it
 //   skill       how rarely it makes a slightly-worse-than-best choice (never an illegal one)
+//   curiosity   how keen it is to open doors and see new rooms (0: stays with what it knows; 1: first through
+//               a door), on whichever side it plays, so how much a guest explores says little about its role
+//               (it is worked out from the guest's name and the other traits, with no random draw of its own:
+//               the guests rolled for a given seed are the same as before the trait existed)
 //   pace        thinking speed: 0.7 quick … 1.4 slow (multiplies the pauses in src/bots/index.js)
 
 const NAMES = [
@@ -30,18 +34,29 @@ export const USERNAMES = NAMES;
 const STYLES = {
   //            centre of each trait (a guest's own value is rolled around it)
   medium: { label: 'Steady',
-    boldness: 0.5, caution: 0.5, greed: 0.5, aggression: 0.4, patience: 0.5, trust: 0.5, skill: 0.78, spread: 0.12 },
+    boldness: 0.5, caution: 0.5, greed: 0.5, aggression: 0.4, patience: 0.5, trust: 0.5, skill: 0.78, curiosity: 0.5, spread: 0.12 },
   bold: { label: 'Bold',
-    boldness: 0.8, caution: 0.3, greed: 0.45, aggression: 0.7, patience: 0.3, trust: 0.45, skill: 0.74, spread: 0.1 },
+    boldness: 0.8, caution: 0.3, greed: 0.45, aggression: 0.7, patience: 0.3, trust: 0.45, skill: 0.74, curiosity: 0.6, spread: 0.1 },
   careful: { label: 'Careful',
-    boldness: 0.22, caution: 0.78, greed: 0.6, aggression: 0.2, patience: 0.72, trust: 0.42, skill: 0.8, spread: 0.1 },
+    boldness: 0.22, caution: 0.78, greed: 0.6, aggression: 0.2, patience: 0.72, trust: 0.42, skill: 0.8, curiosity: 0.4, spread: 0.1 },
 };
 const TRAITS = ['boldness', 'caution', 'greed', 'aggression', 'patience', 'trust', 'skill'];
-export const STYLE_NAMES = Object.keys(STYLES);
 
 const clamp = (x, lo, hi) => Math.max(lo, Math.min(hi, x));
 // A rough bell curve from three uniform draws (-1 … 1).
 const bell = rng => (rng() + rng() + rng() - 1.5) / 1.5;
+// The same from a name instead of a generator (so a trait can be added without disturbing the draws).
+function hashUnit(...parts) {
+  let h = 2166136261 >>> 0;
+  for (const p of parts) {
+    const s = String(p);
+    for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619) >>> 0; }
+    h ^= 0x2f; h = Math.imul(h, 16777619) >>> 0;
+  }
+  h ^= h >>> 15; h = Math.imul(h, 2246822519) >>> 0; h ^= h >>> 13;
+  return (h >>> 0) / 4294967296;
+}
+const tentOf = (...parts) => hashUnit(...parts, 'a') + hashUnit(...parts, 'b') - 1;      // -1 … 1, most likely near 0
 
 // One profile. `style` may be forced ('medium' | 'bold' | 'careful'); otherwise rolled: about 60%
 // medium, 20% bold, 20% careful.
@@ -57,7 +72,9 @@ export function rollProfile(rng, { style = null, username = null } = {}) {
     traits[t] = Math.round(clamp(base[t] + bell(rng) * base.spread * 1.6, lo, hi) * 100) / 100;
   }
   const pace = Math.round(clamp(1.05 + bell(rng) * 0.3 - (s === 'bold' ? 0.12 : s === 'careful' ? -0.1 : 0), 0.7, 1.4) * 100) / 100;
-  return { username: username || NAMES[Math.floor(rng() * NAMES.length)], style: s, label: base.label, traits, pace };
+  const name = username || NAMES[Math.floor(rng() * NAMES.length)];
+  traits.curiosity = Math.round(clamp(base.curiosity + tentOf(name, s, ...TRAITS.map(t => traits[t]), pace) * 0.55, 0.05, 0.95) * 100) / 100;
+  return { username: name, style: s, label: base.label, traits, pace };
 }
 
 // `count` profiles for one match: no username twice, and none of `avoid` (the player's own name, case

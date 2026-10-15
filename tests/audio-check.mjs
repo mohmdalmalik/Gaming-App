@@ -9,8 +9,12 @@
 //    the computer guests' doors / searches heard from the public events, footsteps, the final-round
 //    music in round 8, the end screen's stinger
 // 5. practice: the game music, a walk with footsteps
+// 6. downloads (src/audio/index.js): the order of the requests (before the first tap only the menu's own music; the
+//    night music while the table fills up and the lift rises; the end fanfares from round 3, not at the end), and a
+//    download that fails once is tried again after a pause and the sound arrives
+//    (the logic of the retries to the millisecond, with the network and the clock faked: tests/audio-load-check.mjs)
 // The console must stay clean, and no audio file may 404.
-import { launch, giveCard } from './smoke-lib.mjs';
+import { launch, giveCard, settle, settleNode } from './smoke-lib.mjs';
 
 const args = process.argv.slice(2);
 const base = args.includes('--url') ? args[args.indexOf('--url') + 1] : 'http://127.0.0.1:8123/';
@@ -23,6 +27,8 @@ const bad = [];
 page.on('response', r => { if (r.status() >= 400) bad.push(`${r.status()} ${r.url()}`); });
 const audioFiles = new Set();
 page.on('response', r => { if (/assets\/audio\//.test(r.url())) audioFiles.add(r.url().split('/').pop()); });
+const audioReqs = [];            // every request for an audio file, in order: { file, t }
+page.on('request', r => { if (/assets\/audio\//.test(r.url())) audioReqs.push({ file: r.url().split('/').pop(), t: Date.now() }); });
 const ev = (fn, a) => page.evaluate(fn, a);
 const st = () => ev(() => window.__audio?.state());
 const cues = () => ev(() => (window.__audioLog || []).map(l => `${l.name}:${l.why}`));
@@ -64,6 +70,11 @@ let s = await st();
 check(s.ok && s.context === 'none' && !s.unlocked, `no audio context before a tap (${s.context})`);
 check(s.scene === 'menu', `scene is the menu (${s.scene})`);
 await waitFor(() => !document.getElementById('btn-menu-bots').disabled, null, 90000);
+{
+  // (iOS allows no sound before a tap: nothing new is fetched before one, only the menu's own music, as before)
+  const preTap = [...new Set(audioReqs.map(r => r.file))];
+  check(preTap.length === 1 && preTap[0] === 'music-lobby.mp3', `before the first tap only the menu's own music is fetched (${preTap.join(', ') || 'nothing'})`);
+}
 // the first tap: Settings
 await page.click('#btn-menu-settings');
 await waitFor(() => window.__audio.state().unlocked, null, 10000);
@@ -90,7 +101,7 @@ check(saved.music === 'low' && saved.sound === 'medium', `saved on the device ($
 const selLog = await played();
 check(selLog.includes('select'), 'the settings buttons click (select)');
 await page.click('#set-music .seg-btn[data-value="off"]');
-await page.waitForTimeout(1500);
+await settle(page, () => { const a = window.__audio.state(); return !a.playing.includes('lobby') && a.music === 0; });     // (the waltz fades out)
 s = await st();
 check(!s.playing.includes('lobby') && s.music === 0, `Music Off stops the waltz (${s.playing.join(',') || 'nothing'} playing)`);
 await page.click('#set-music .seg-btn[data-value="medium"]');
@@ -120,12 +131,21 @@ await waitFor(() => window.__audio.state().unlocked && window.__game.lobbyReady(
 await page.click('#btn-menu-bots');
 await page.waitForTimeout(400);
 await page.click('#opt-bots .seg-btn[data-value="3"]');
+const tFind = Date.now();
 await page.click('#btn-bots-find');
 await waitFor(() => window.__game.phase() === 'intro', null, 30000);
+const tIntro = Date.now();
+{
+  // the night music's download starts while the table fills up (not at the last moment, not in the menu before)
+  const g = audioReqs.filter(r => r.file === 'music-game.mp3');
+  check(g.length === 1 && g[0].t >= tFind - 50 && g[0].t <= tIntro + 250,
+    `the night music is fetched while the table fills up: ${g.length} request, ${g[0] ? Math.round((g[0].t - tFind) / 100) / 10 : '-'} s after "Find a table", ${g[0] ? Math.round((tIntro - g[0].t) / 100) / 10 : '-'} s before the lift`);
+}
 const mmPlayed = await played();
 check(mmPlayed.filter(n => n === 'joined').length >= 2, `the reception bell as guests join (${mmPlayed.filter(n => n === 'joined').length}x)`);
 await waitFor(() => window.__game.phase() === 'game', null, 30000);
-await page.waitForTimeout(1500);     // (headless: the slow lift may shut its doors as the picture fades)
+// (headless: the slow lift may shut its doors as the picture fades: wait for both sounds, not a guessed time)
+await settle(page, () => { const n = (window.__audioLog || []).filter(l => l.why === 'played').map(l => l.name); return n.includes('liftDing') && n.includes('liftDoors'); }, null, 8000);
 const liftPlayed = await played();
 check(liftPlayed.includes('liftDing'), 'the lift bell');
 // (the doors close ~4.6 s in; the headless lift is slow and may be cut short by the 9 s cap first)
@@ -136,7 +156,7 @@ check(s.playing.includes('game'), `the night music in the game (${s.playing.join
 const sceneLog = (await cues()).filter(c => c.startsWith('scene:') || c.startsWith('music:'));
 console.log('     ', sceneLog.join('  '));
 check(sceneLog.join(' ').includes('scene:intro') && sceneLog.join(' ').includes('scene:none') && sceneLog.join(' ').includes('scene:game'), 'scenes: menu -> intro -> none -> game');
-await page.waitForTimeout(3000);
+await settle(page, () => !window.__audio.state().playing.includes('lobby'), null, 20000);
 s = await st();
 check(!s.playing.includes('lobby'), `the lobby music has gone (${s.playing.join(',')})`);
 // back to the menu
@@ -144,13 +164,14 @@ await ev(() => window.__game.backToMenu());
 await waitFor(() => window.__game.phase() === 'menu', null, 20000);
 await waitFor(() => window.__audio.state().playing.includes('lobby'), null, 20000);
 check(true, 'back to the menu: the lobby waltz again');
-await page.waitForTimeout(4000);
+await settle(page, () => { const a = window.__audio.state(); return !a.playing.includes('game') && !a.decoded.some(f => f === 'music-game.mp3'); }, null, 20000);
 s = await st();
 check(!s.playing.includes('game') && !s.decoded.some(f => f === 'music-game.mp3'), `the game music stopped and released (${s.playing.join(',')})`);
 
 // --- 4. a direct-link match ---------------------------------------------------------------------------
+const FANFARES = ['music-win.mp3', 'music-winPossessed.mp3', 'music-lose.mp3', 'music-dawn.mp3'];
 console.log('4. a match (direct link, 3 bots, clean, seed 5)');
-await ev(() => window.__game.dressingDone());
+await settle(page, () => window.__game.settled(), null, 60000);       // (nothing still downloading: leaving the page cuts no download off, which the console check would count)
 await page.goto(`${base}?mode=bots&bots=3&role=clean&intro=off&botpace=0.1&seed=5`, { waitUntil: 'domcontentloaded' });
 await waitFor(() => window.__game && !document.getElementById('btn-begin').disabled, null, 90000);
 await ev(() => { window.__game.cfg.player.speed = 30; });
@@ -159,6 +180,7 @@ await waitFor(() => window.__game.handoffOpen(), null, 20000);
 await page.click('#btn-handoff-next');
 await waitFor(() => window.__audio.state().playing.includes('game'), null, 30000);
 check(true, 'the night music after Begin');
+check(!audioReqs.some(r => FANFARES.includes(r.file)), 'in round 1 no end fanfare has been fetched yet (they come from round 3)');
 // play some turns: the player searches and ends; the bots play
 const seen = new Set();
 const deadline = Date.now() + (quick ? 60000 : 150000);
@@ -215,11 +237,20 @@ if (!(await ev(() => window.__game.isFinished()))) {
   }
 }
 
-// round 8 of 8: the final-round music crossfades in (decoded ahead, in round 7)
+// the end fanfares are fetched ahead from round 3 (a match runs six rounds at the median, so round 7 was too late for most);
+// in round 8 of 8 the final-round music crossfades in (decoded ahead, in round 7)
 if (!(await ev(() => window.__game.isFinished()))) {
+  const round0 = await ev(() => window.__game.state.round);
+  if (round0 < 3) check(!audioReqs.some(r => FANFARES.includes(r.file)), `before round 3 no end fanfare has been fetched (round ${round0})`);
+  else console.log(`      (the match is already in round ${round0}: the "before round 3" check is skipped)`);
+  if (round0 < 3) await ev(() => { window.__game.state.round = 3; });
+  await settleNode(() => FANFARES.every(f => audioReqs.some(r => r.file === f)), 20000);
+  await page.waitForTimeout(500);       // (a request twice for the same file would come right behind the first)
+  const ahead = FANFARES.filter(f => audioReqs.filter(r => r.file === f).length === 1);
+  check(ahead.length === 4, `from round 3: the four end fanfares (about 590 KB) are fetched ahead, once each (${ahead.map(f => f.replace('music-', '').replace('.mp3', '')).join(', ')})`);
+  check(!(await ev(F => window.__audio.state().decoded.some(f => F.includes(f)), FANFARES)), '...bytes only: none of them is decoded until it is needed');
   await ev(() => { window.__game.state.round = window.__game.rules.roundLimit - 1; });
-  await page.waitForTimeout(2500);
-  const pre = await ev(() => window.__audio.state().decoded.includes('music-final.mp3'));
+  const pre = await settle(page, () => window.__audio.state().decoded.includes('music-final.mp3'), null, 20000);
   await ev(() => { window.__game.state.round = window.__game.rules.roundLimit; });
   await waitFor(() => window.__audio.state().playing.includes('final'), null, 30000);
   check(pre, 'round 7: the final-round music is decoded ahead');
@@ -227,16 +258,22 @@ if (!(await ev(() => window.__game.isFinished()))) {
 }
 
 // the end of the match: the rest is played out at once; the end screen's stinger
+const tEnd = Date.now();
 await ev(() => window.__game.skipToEnd());
 await waitFor(() => window.__game.endOpen() || window.__game.isFinished(), null, 60000);
-await page.waitForTimeout(2500);
+await settle(page, () => (window.__audioLog || []).some(l => l.why === 'stinger') && window.__audio.state().scene === 'end', null, 20000);
 const endLog = await ev(() => (window.__audioLog || []).filter(l => l.why === 'stinger').map(l => l.name));
 s = await st();
 check(s.scene === 'end' && endLog.length >= 1, `the end screen: a stinger (${endLog.join(', ')}), scene ${s.scene}`);
 check(!s.playing.includes('game'), `the night music gives way to it (${s.playing.join(',') || 'nothing looping'})`);
+{
+  const late = audioReqs.filter(r => r.t >= tEnd && /^music-(win|winPossessed|lose|dawn)\.mp3$/.test(r.file));
+  check(late.length === 0, `the fanfare at the end asks the network for nothing (${late.map(r => r.file).join(', ') || 'no request'})`);
+}
 
 // --- 5. practice -------------------------------------------------------------------------------------
 console.log('5. practice');
+await settle(page, () => window.__game.settled(), null, 60000);
 await page.goto(`${base}?mode=practice`, { waitUntil: 'domcontentloaded' });
 await waitFor(() => window.__game && !document.getElementById('btn-begin').disabled, null, 90000);
 await ev(() => { window.__game.cfg.player.speed = 30; });
@@ -269,6 +306,33 @@ const prPlayed = await played();
 console.log('      cues played:', [...new Set(prPlayed)].join(' '));
 check(prPlayed.includes('doorOpen'), 'the door creaks open');
 check(prPlayed.includes('step'), 'footsteps on the walk');
+
+// --- 6. a download that fails once ---------------------------------------------------------------------------
+// (its own browser: the aborted requests would otherwise put their errors in the console check below)
+console.log('6. a download that fails once is tried again');
+{
+  const b2 = await launch({ width: 1180, height: 820 });
+  const p2 = b2.page;
+  const reqs = [];
+  p2.on('request', r => { if (/assets\/audio\//.test(r.url())) reqs.push({ file: r.url().split('/').pop(), t: Date.now() }); });
+  const hit = { 'music-game.mp3': 0, 'sfx-search.mp3': 0 };
+  for (const f of Object.keys(hit)) await p2.route(`**/assets/audio/${f}`, route => { if (hit[f]++ === 0) route.abort('failed'); else route.continue(); });
+  const w2 = (fn, arg, timeout = 60000) => p2.waitForFunction(fn, arg, { timeout, polling: 250 });
+  await p2.goto(`${base}?mode=bots&bots=3&role=clean&intro=off&botpace=0.1&seed=5`, { waitUntil: 'domcontentloaded' });
+  await w2(() => window.__game && !document.getElementById('btn-begin').disabled, null, 90000);
+  await p2.click('#btn-begin');
+  await w2(() => window.__audio.state().playing.includes('game'), null, 60000);
+  const g = reqs.filter(r => r.file === 'music-game.mp3');
+  check(g.length === 2 && g[1].t - g[0].t >= 2800, `the night music: the first request failed, the second came ${g.length > 1 ? ((g[1].t - g[0].t) / 1000).toFixed(1) : '-'} s later and the music plays (${g.length} requests)`);
+  await w2(() => window.__audio.state().decoded.includes('sfx-search.mp3'), null, 60000);
+  const q = reqs.filter(r => r.file === 'sfx-search.mp3');
+  check(q.length === 2 && q[1].t - q[0].t >= 2800, `an effect (the rummage): failed once, tried again ${q.length > 1 ? ((q[1].t - q[0].t) / 1000).toFixed(1) : '-'} s later, then decoded (${q.length} requests)`);
+  const st2 = await p2.evaluate(() => window.__audio.state());
+  check(st2.failed.length === 0, `nothing is left marked failed (${st2.failed.join(', ') || 'none'})`);
+  const odd = b2.messages.filter(m => !/GPU stall due to ReadPixels|Automatic fallback to software WebGL|WebGL|ERR_FAILED|net::/.test(m));
+  check(odd.length === 0, `no other console message (${odd.length})`);
+  await b2.browser.close();
+}
 
 // --- the console and the network -----------------------------------------------------------------------
 const audioBad = bad.filter(b => /assets\/audio/.test(b));

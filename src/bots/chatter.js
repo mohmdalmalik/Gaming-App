@@ -176,7 +176,7 @@ export function createChatter(state, floor, seats = [], seed = 1, table = BOT_CH
       const friends = others.filter(s => !b.opinion.has(s) && !m.knowsMe.has(s) && (m.allies.has(s) || (m.friendly.get(s) || 0) >= 1));
       if (friends.length && moment(b, M.vouches, now, { turn, about: friends[Math.floor(b.rng() * friends.length)],
         chance: M.vouches.chance * M.vouches.possessedShare * b.chat })) return;
-      if (c.exitKnown && c.possCards > 0 && mind.campRoom(c) === c.me.room && moment(b, M.gather, now, { turn })) return;
+      if (c.exitKnown && c.possCards > 0 && mind.nearExit(c).has(c.me.room) && moment(b, M.gather, now, { turn })) return;
       if (short && view.round >= M.askLantern.fromRound
         && moment(b, M.askLantern, now, { turn, chance: M.askLantern.chance * M.askLantern.possessedShare * b.chat })) return;
     }

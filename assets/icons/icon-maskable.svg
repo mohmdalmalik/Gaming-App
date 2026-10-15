@@ -1,0 +1,98 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <!-- Hotel Escape: the app icon for round or squircle masks (Android): the same picture at 80 %. A brass lantern on deep navy inside a thin Art Deco ring, the
+       look of the Lantern card (assets/cards/face/lantern.jpg). Drawn by hand, no text; the lantern stays inside the
+       middle 80 % so a round or rounded mask never cuts it. assets/icons/README.md says how the PNGs are made. -->
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="42%" r="75%">
+      <stop offset="0" stop-color="#1d2748"/>
+      <stop offset="0.62" stop-color="#0f1424"/>
+      <stop offset="1" stop-color="#090c18"/>
+    </radialGradient>
+    <linearGradient id="brass" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#f6df96"/>
+      <stop offset="0.45" stop-color="#c9a24e"/>
+      <stop offset="1" stop-color="#7d5f20"/>
+    </linearGradient>
+    <linearGradient id="brassV" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#f1d788"/>
+      <stop offset="0.5" stop-color="#c9a24e"/>
+      <stop offset="1" stop-color="#86672a"/>
+    </linearGradient>
+    <linearGradient id="brassH" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#8a6a28"/>
+      <stop offset="0.3" stop-color="#e9cd82"/>
+      <stop offset="0.55" stop-color="#c9a24e"/>
+      <stop offset="1" stop-color="#7a5c20"/>
+    </linearGradient>
+    <radialGradient id="glass" cx="50%" cy="52%" r="62%">
+      <stop offset="0" stop-color="#fffdf0"/>
+      <stop offset="0.5" stop-color="#ffeaa6"/>
+      <stop offset="1" stop-color="#f0b648"/>
+    </radialGradient>
+    <radialGradient id="glow" cx="50%" cy="50%" r="50%">
+      <stop offset="0" stop-color="#ffc95e" stop-opacity="0.5"/>
+      <stop offset="0.55" stop-color="#ffb03a" stop-opacity="0.16"/>
+      <stop offset="1" stop-color="#ffb03a" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <rect width="1024" height="1024" fill="url(#bg)"/>
+
+  <g transform="translate(102.4 102.4) scale(0.8)">
+<!-- The Art Deco ring: two fine rings, a ring of short rays between them, a diamond at each quarter -->
+  <g fill="none" stroke="#c9a24e" stroke-linecap="round">
+    <circle cx="512" cy="512" r="468" stroke-width="7" opacity="0.62"/>
+    <circle cx="512" cy="512" r="440" stroke-width="2.5" opacity="0.4"/>
+    <g stroke-width="4" opacity="0.34">
+      <path id="ray" d="M512 60v26"/>
+      <use href="#ray" transform="rotate(15 512 512)"/><use href="#ray" transform="rotate(30 512 512)"/>
+      <use href="#ray" transform="rotate(45 512 512)"/><use href="#ray" transform="rotate(60 512 512)"/>
+      <use href="#ray" transform="rotate(75 512 512)"/><use href="#ray" transform="rotate(90 512 512)"/>
+      <use href="#ray" transform="rotate(105 512 512)"/><use href="#ray" transform="rotate(120 512 512)"/>
+      <use href="#ray" transform="rotate(135 512 512)"/><use href="#ray" transform="rotate(150 512 512)"/>
+      <use href="#ray" transform="rotate(165 512 512)"/><use href="#ray" transform="rotate(180 512 512)"/>
+      <use href="#ray" transform="rotate(195 512 512)"/><use href="#ray" transform="rotate(210 512 512)"/>
+      <use href="#ray" transform="rotate(225 512 512)"/><use href="#ray" transform="rotate(240 512 512)"/>
+      <use href="#ray" transform="rotate(255 512 512)"/><use href="#ray" transform="rotate(270 512 512)"/>
+      <use href="#ray" transform="rotate(285 512 512)"/><use href="#ray" transform="rotate(300 512 512)"/>
+      <use href="#ray" transform="rotate(315 512 512)"/><use href="#ray" transform="rotate(330 512 512)"/>
+      <use href="#ray" transform="rotate(345 512 512)"/>
+    </g>
+  </g>
+  <g fill="#c9a24e" opacity="0.7">
+    <path id="dia" d="M512 38l13 22-13 22-13-22z"/>
+    <use href="#dia" transform="rotate(90 512 512)"/><use href="#dia" transform="rotate(180 512 512)"/><use href="#dia" transform="rotate(270 512 512)"/>
+  </g>
+
+  <!-- The light the lantern gives -->
+  <circle cx="512" cy="640" r="330" fill="url(#glow)"/>
+
+  <!-- The lantern -->
+  <g stroke-linecap="round" stroke-linejoin="round">
+    <!-- carrying ring -->
+    <circle cx="512" cy="232" r="66" fill="none" stroke="url(#brass)" stroke-width="22"/>
+    <!-- side frame: two bars from the cap down to the base, with a little ear where each is fixed -->
+    <path d="M404 478 L376 566 C362 616 360 690 372 744 L394 800" fill="none" stroke="url(#brassV)" stroke-width="26"/>
+    <path d="M620 478 L648 566 C662 616 664 690 652 744 L630 800" fill="none" stroke="url(#brassV)" stroke-width="26"/>
+    <circle cx="396" cy="476" r="19" fill="url(#brass)" stroke="#6f531a" stroke-width="3"/>
+    <circle cx="628" cy="476" r="19" fill="url(#brass)" stroke="#6f531a" stroke-width="3"/>
+    <!-- the glass globe, lit -->
+    <path d="M414 528 C402 600 398 684 442 742 C474 782 550 782 582 742 C626 684 622 600 610 528 Z" fill="url(#glass)"/>
+    <path d="M436 560 C428 616 430 664 452 704" fill="none" stroke="#ffffff" stroke-opacity="0.7" stroke-width="12"/>
+    <!-- wires across the globe -->
+    <path d="M396 598 C452 650 562 690 630 716" fill="none" stroke="url(#brassV)" stroke-width="15"/>
+    <path d="M396 714 C452 664 562 624 630 592" fill="none" stroke="url(#brassV)" stroke-width="15"/>
+    <!-- top: knob, collar, cap -->
+    <rect x="486" y="314" width="52" height="26" rx="12" fill="url(#brassH)"/>
+    <rect x="452" y="334" width="120" height="66" rx="14" fill="url(#brassH)" stroke="#6f531a" stroke-width="3"/>
+    <path d="M404 404 H620 L676 480 H348 Z" fill="url(#brassH)" stroke="#6f531a" stroke-width="3"/>
+    <rect x="344" y="470" width="336" height="30" rx="15" fill="url(#brassH)" stroke="#6f531a" stroke-width="3"/>
+    <rect x="424" y="504" width="176" height="30" rx="10" fill="url(#brassH)" stroke="#6f531a" stroke-width="3"/>
+    <!-- bottom: collar, base, fuel cap -->
+    <rect x="428" y="770" width="168" height="32" rx="11" fill="url(#brassH)" stroke="#6f531a" stroke-width="3"/>
+    <rect x="556" y="780" width="50" height="26" rx="12" fill="url(#brassH)" stroke="#6f531a" stroke-width="3"/>
+    <path d="M388 812 H636 Q664 812 668 840 L672 868 Q672 894 644 896 H380 Q352 894 352 868 L356 840 Q360 812 388 812 Z" fill="url(#brassH)" stroke="#6f531a" stroke-width="3"/>
+    <path d="M372 846 H652" fill="none" stroke="#f1d788" stroke-opacity="0.55" stroke-width="5"/>
+  </g>
+</g>
+</svg>

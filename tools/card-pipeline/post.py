@@ -8,7 +8,7 @@ from scipy import ndimage
 SIZE = 640
 
 PALETTES = {
-    # centre (behind the object), mid, edge  — sampled from assets/cards/lantern.jpg
+    # centre (behind the object), mid, edge  — sampled from art/lantern.jpg
     'green':  ((31, 63, 45), (15, 37, 28), (8, 19, 16)),
     'purple': ((50, 26, 66), (24, 12, 34), (9, 5, 14)),
 }

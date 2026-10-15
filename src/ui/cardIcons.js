@@ -1,5 +1,5 @@
-// Drawn card icons: simple, recognisable vector illustrations for each card type, used in the
-// card's illustration area until a painted illustration is registered in CARD_ART. Each is an SVG
+// Drawn card icons: simple, recognisable vector illustrations for each card type, used in the feed's lines and
+// as the art of a card type that has no finished face picture (src/ui/cards.js). Each is an SVG
 // string on a 96×96 canvas drawn with currentColor (the tile's CSS picks the ink colour), so they
 // read the same on the ivory card faces in the hand, the encounter modal and the discard prompt.
 const wrap = body => `<svg class="icon" viewBox="0 0 96 96" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${body}</svg>`;

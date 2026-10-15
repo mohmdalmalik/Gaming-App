@@ -22,6 +22,12 @@ const boxDown = new THREE.BoxGeometry(1, 1, 1); boxDown.translate(0, -0.5, 0);
 const boxUp = new THREE.BoxGeometry(1, 1, 1); boxUp.translate(0, 0.5, 0);
 const sphere = new THREE.SphereGeometry(1, 14, 10);
 const ringGeo = new THREE.RingGeometry(1, 1.16, 32); ringGeo.rotateX(-Math.PI / 2);
+// A thin dark edge round every ring (a second, wider ring just under it, the same for every guest), so a seat's
+// colour still reads on a red rug, a cream floor or a dark one.
+const ringEdgeGeo = new THREE.RingGeometry(0.9, 1.26, 32); ringEdgeGeo.rotateX(-Math.PI / 2);
+// ...and a thin light edge outside that one: on a dark floor (the red rug) a dark edge shows nothing, and an orange or blue
+// ring hardly stood out from it (the dark and the light edge together read on a light floor, a rug and a dark one).
+const ringLightGeo = new THREE.RingGeometry(1.26, 1.35, 32); ringLightGeo.rotateX(-Math.PI / 2);
 const markerGeo = new THREE.OctahedronGeometry(0.09);
 
 // A faint light that only the guests get, so a navy suit still reads in a dark room: a warm rim
@@ -83,6 +89,16 @@ export function createCharacterView(playerDef, cfg, scene) {
   ring.position.y = 0.02;
   ring.renderOrder = 1;
   group.add(ring);
+  const edgeMat = new THREE.MeshBasicMaterial({ color: 0x0c0a08, transparent: true, opacity: c.ringEdgeOpacity, depthWrite: false, toneMapped: false });
+  const ringEdge = new THREE.Mesh(ringEdgeGeo, edgeMat);
+  ringEdge.position.y = -0.004;                    // (a child of the ring: it follows its scale, and goes with it when hidden)
+  ringEdge.renderOrder = 0.5;
+  ring.add(ringEdge);
+  const lightMat = new THREE.MeshBasicMaterial({ color: 0xf2ead8, transparent: true, opacity: c.ringLightOpacity, depthWrite: false, toneMapped: false });
+  const ringLight = new THREE.Mesh(ringLightGeo, lightMat);
+  ringLight.position.y = -0.004;
+  ringLight.renderOrder = 0.5;
+  ring.add(ringLight);
 
   // Marker floating just above the active player's head (for a model: re-measured from the model
   // once it has loaded, since modelHeight is only its nominal height).
@@ -358,14 +374,15 @@ export function createCharacterView(playerDef, cfg, scene) {
       dropPlaceholder();
       scene.remove(group);
       // (the shadow, the box figure's colours and the shared geometries are shared by every view: kept)
-      ringMat.dispose(); marker.material.dispose(); bloodMat.dispose();
+      ringMat.dispose(); edgeMat.dispose(); lightMat.dispose(); marker.material.dispose(); bloodMat.dispose();
       for (const d of blood.children) d.geometry.dispose();
       if (ownGltf) ownGltf.traverse(o => { if (o.isMesh) { o.geometry.dispose(); (Array.isArray(o.material) ? o.material : [o.material]).forEach(m => m.dispose()); } });
     },
     // Test/debug hook: what the animation is doing (stride in use, walk weight, walk phase 0..1).
     debug() {
       return { model: useModel, loaded: !!mixer, strideLength, walkDuration, walkW, walkPhase: walkAction ? walkAction.time / walkDuration : 0, possessedEyes: !!eyes?.on,
-        avatar: avatar ? { ...avatar } : null, glasses: !!model?.glasses, standIn: !!placeholderParts };
+        avatar: avatar ? { ...avatar } : null, glasses: !!model?.glasses, standIn: !!placeholderParts,
+        ring: { color: `#${ringMat.color.getHexString()}`, opacity: ringMat.opacity, edgeOpacity: edgeMat.opacity, lightOpacity: lightMat.opacity, visible: ring.visible } };
     },
     // The possessed look on this figure (red eyes). Cheap: does nothing unless it changes. Whose screen
     // shows it is main.js's decision (the player's own guest while possessed, and the guests a possessed
@@ -381,6 +398,12 @@ export function createCharacterView(playerDef, cfg, scene) {
       // The active guest's ring shows through anyone standing in front of them (crowded rooms).
       ringMat.depthTest = !active;
       ring.renderOrder = active ? 11 : 1;
+      edgeMat.opacity = active ? c.ringEdgeActiveOpacity : c.ringEdgeOpacity;
+      edgeMat.depthTest = !active;
+      ringEdge.renderOrder = active ? 10.5 : 0.5;
+      lightMat.opacity = active ? c.ringLightActiveOpacity : c.ringLightOpacity;
+      lightMat.depthTest = !active;
+      ringLight.renderOrder = active ? 10.5 : 0.5;
       ring.scale.set(c.ringRadius * (active ? 1.15 : 1), 1, c.ringRadius * (active ? 1.15 : 1));
     },
     setDead(v) {

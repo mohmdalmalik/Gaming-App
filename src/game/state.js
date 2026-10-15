@@ -9,18 +9,21 @@ import { rules } from '../data/rules.js';
 import {
   makeRng, buildDrawDeck, buildPossessionSupply, deal, shuffle, hasEscapeLanterns, countableCount,
 } from './cards.js';
-import { resetHotel, openDoors } from './hotel.js';
+import { resetHotel } from './hotel.js';
 
-// `opts.mode`: 'practice' (one guest, no hidden role, no meetings) or 'hotseat' (4-6 guests).
+// `opts.mode`: 'practice' (one guest, no hidden role, no meetings) or 'match' (the default: 4-6 guests).
 export function createState(floor, roster, seed = 1, opts = {}) {
-  const mode = opts.mode || (opts.practice ? 'practice' : 'hotseat');
-  const state = { roster, mode, practice: mode === 'practice', hotseat: mode === 'hotseat' };
+  const mode = opts.mode === 'practice' || opts.practice ? 'practice' : 'match';
+  const state = { roster, mode, practice: mode === 'practice' };
   resetState(state, floor, seed);
   return state;
 }
 
+// Deal a new game: the hotel, the deck, the hands and the hidden role all come from `seed`, so the same seed
+// plays the same game (the tests and a server rely on it). A seed is always given; a missing one is a bug.
 export function resetState(state, floor, seed) {
-  const rng = makeRng(seed ?? ((Math.floor(performance.now?.() ?? 0) || 1)));
+  if (!Number.isFinite(seed)) throw new Error('resetState needs a seed (a number)');
+  const rng = makeRng(seed);
   const practice = !!state.practice;
   state.seed = seed;
   state.rng = rng;                       // kept: reshuffles and Lock Picks draw from it later
@@ -317,19 +320,12 @@ export function usableDoorways(state, floor, player) {
     .filter(d => doorwayPassable(state, d, player.currentRoom) && player.actionPoints >= moveCostInto(state, d.otherRoom(player.currentRoom)));
 }
 
-// Closed doors, anywhere in the hotel: the places still to be explored.
-export function frontierDoorways(state, floor) {
-  return openDoors(floor);
-}
-
 // Closed doors of the guest's own room they can open this turn (1 AP each).
 export function openableDoors(state, floor, player) {
   if (state.finished || !player.alive) return [];
   if (player.actionPoints < rules.actionCost.open) return [];
   return (floor.rooms.get(player.currentRoom)?.frontier || []).filter(d => !d.jammed);
 }
-
-export const isDiscovered = (state, roomId) => state.discovered.has(roomId);
 
 // Locked rooms next door to where the guest is standing (where a key or pick could be used on the door
 // between them).

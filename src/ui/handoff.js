@@ -2,8 +2,7 @@
 // people on their own devices later). Nothing here ever shows another guest's role or hand, except a
 // hand the player looked at through a Hand Mirror.
 //
-//   PASS     — (the old hot-seat hand-over; kept for tools, unused in the game)
-//   ROLE     — the player's secret role (once at the start, again if converted).
+//   ROLE    — the player's secret role (once at the start, again if converted).
 //   TURN     — their private start-of-turn screen: role, news, health, hand, Lanterns.
 //   PICK     — a private card choice (which card to give in a trade): lift a card, then give it.
 //   CHOICE   — a private yes/no (accept a lobby trade?).
@@ -20,6 +19,14 @@ import { roundLabel, finalRoundNote, isFinal } from './roundLabel.js';
 import { makePortrait } from './portrait.js';
 import { soulsHeld, soulsChip } from './souls.js';
 import { tooSoon } from './tapGuard.js';
+import { actionsWord } from './actionsWord.js';
+import { ROLE_REVEAL } from '../data/howToPlay.js';
+import { LANTERN_TRADE_NOTE } from '../data/tips.js';
+
+// The Hand Mirror shows souls only while a guest still holds them, so "no Possession card" does not prove a guest is
+// clean (a possessed guest who has used or given away every soul shows none, about one look in three). The same words
+// for every viewer, whatever their role.
+export const MIRROR_NO_SOUL = 'No Possession card. A possessed guest who has used all their souls shows none.';
 
 export function createHandoff(doc) {
   const el = {
@@ -50,6 +57,8 @@ export function createHandoff(doc) {
     kind = which;
     openedAt = performance.now();
     el.card.className = `card handoff-card ${which}`;
+    el.card.scrollTop = 0; el.overlay.scrollTop = 0;     // (the same card serves every private screen: the next one starts at its top, not where a tall one was left;
+                                                         // a hidden box keeps its scroll position too, so close() puts it back to the top before it hides)
     el.role.hidden = true; el.role.className = 'role-badge'; el.role.innerHTML = '';
     el.notes.hidden = true; el.notes.innerHTML = '';
     el.hand.hidden = true; el.hand.innerHTML = ''; el.hand.style.removeProperty('--n');
@@ -73,10 +82,12 @@ export function createHandoff(doc) {
     el.role.className = `role-badge ${player.possessed ? 'evil' : 'good'}`;
     // The role word is the same badge pill as on the player panel (dark green CLEAN GUEST, or the dark
     // POSSESSED pill with its brass and crimson edge).
+    // After the words about your own side, ONE line about how the OTHER side wins (src/data/howToPlay.js).
     el.role.innerHTML = `<span class="role-word tell-pill">${player.possessed ? 'POSSESSED' : 'CLEAN GUEST'}</span>`
       + `<span class="role-line">${player.possessed
         ? 'Your Possession cards are your own souls. Give one in a trade to possess the other guest — unless they hand you a Lantern: then both cards are used up and they learn you are possessed. You can never escape.'
-        : `Find Lanterns, pass them to one clean guest, and get that guest out through the Fire Exit with ${rules.lanternsToEscape} Lanterns. Give a Lantern in a trade if you fear who you are trading with — it blocks possession, but is used up doing it.`}</span>`;
+        : `Find Lanterns, pass them to one clean guest, and get that guest out through the Fire Exit with ${rules.lanternsToEscape} Lanterns. Give a Lantern in a trade if you fear who you are trading with — it blocks possession, but is used up doing it.`}</span>`
+      + `<span class="role-other">${ROLE_REVEAL.otherSide(!!player.possessed, rules)}</span>`;
     if (!player.possessed) return;
     // The private tell (docs/GAME_RULES.md, Possession), as the crimson plate: their own possessed
     // portrait (the same face, red eyes), the POSSESSED badge with "Only you can see this" under it, and
@@ -137,18 +148,11 @@ export function createHandoff(doc) {
     // Every screen here is private or a hand-over; the turn timer must not run during any of them.
     get handingOver() { return !el.overlay.hidden; },
 
-    passTo(player, info, onContinue) {
-      reset('pass');
-      el.kicker.textContent = info || '';
-      el.title.textContent = `Pass the device to ${player.name}`;
-      el.sub.textContent = 'Everyone else: look away. Tap Continue only when they are holding it.';
-      show(`I am ${player.name} — continue`, onContinue);
-    },
-
     revealRole(player, opts, onContinue) {
       reset('role');
       el.kicker.textContent = opts?.changed ? 'Something has changed' : 'Your secret role';
-      el.title.textContent = opts?.changed ? 'You have been possessed' : player.name;
+      // The role itself is the headline: "You are clean" / "You are possessed" (src/data/howToPlay.js).
+      el.title.textContent = opts?.changed ? 'You have been possessed' : ROLE_REVEAL.headline(!!player.possessed);
       // (after a conversion, the guest whose soul did it knows too: their screen shows the player's red eyes)
       el.sub.textContent = !opts?.changed ? 'Only you know this. Nobody else at the table can see it.'
         : opts.by ? `Only ${opts.by}, whose soul possessed you, knows. From now on you play for the hotel.` : 'From now on you play for the hotel.';
@@ -159,7 +163,7 @@ export function createHandoff(doc) {
 
     privateTurn(state, floor, player, handlers) {
       reset('turn');
-      el.kicker.textContent = `${roundLabel(state)} · ${rules.actionPointsPerTurn} action points · health ${player.health} of ${rules.maxHealth}`;
+      el.kicker.textContent = `${roundLabel(state)} · ${actionsWord(rules.actionPointsPerTurn)} · health ${player.health} of ${rules.maxHealth}`;
       if (isFinal(state)) el.kicker.textContent = `${finalRoundNote} · ${el.kicker.textContent}`;
       el.title.textContent = `${player.name}'s turn`;
       const room = floor.rooms.get(player.currentRoom);
@@ -194,17 +198,23 @@ export function createHandoff(doc) {
         return;
       }
       el.pickSummary.classList.add('card-desc');
+      // (a Lantern in the choice: its summary gets a second sentence, so the room for it is kept from the start and
+      // lifting the Lantern never moves the Give button)
+      el.pickSummary.classList.toggle('with-note', cards.some(c => c.type === 'lantern'));
       el.pickSummary.setAttribute('aria-live', 'polite');
       el.give.hidden = false; el.give.disabled = true; el.give.textContent = 'Tap a card to give';
       pickNow = { chosen: null, chosenAt: 0, onPick };
       const tiles = new Map();     // card id -> its tile
       const lift = card => {
         pickNow.chosen = card; pickNow.chosenAt = performance.now();
-        for (const [id, t] of tiles) t.classList.toggle('selected', id === card.id);
+        for (const [id, t] of tiles) { t.classList.toggle('selected', id === card.id); t.setAttribute('aria-pressed', String(id === card.id)); }
         const meta = CARDS[card.type];
         const name = doc.createElement('b'); name.textContent = meta?.name ?? card.type;
         const words = doc.createElement('span'); words.textContent = cardDesc(card.type, card);
-        el.pickSummary.replaceChildren(name, ' ', words);
+        const parts = [name, ' ', words];
+        // The Lantern's other half, said where the choice is made (the same words for every role; src/data/tips.js).
+        if (card.type === 'lantern') { const note = doc.createElement('span'); note.className = 'pick-note'; note.textContent = LANTERN_TRADE_NOTE; parts.push(' ', note); }
+        el.pickSummary.replaceChildren(...parts);
         el.give.textContent = card.type === 'possession' ? 'Give your soul' : `Give the ${meta?.name ?? 'card'}`;
         el.give.disabled = false;
       };
@@ -265,6 +275,8 @@ export function createHandoff(doc) {
       el.kicker.textContent = kicker || 'Only you see this';
       el.title.textContent = title;
       el.sub.textContent = sub || '';
+      // (no soul in the hand: say what that does and does not show; with one, the caller's own line says who)
+      if (!cards.some(c => c.type === 'possession')) lines = [...lines, MIRROR_NO_SOUL];
       if (lines.length) {
         el.notes.hidden = false;
         for (const line of lines) {
@@ -295,7 +307,7 @@ export function createHandoff(doc) {
       show(button || (cards.length ? 'Add to my hand' : 'Continue'), onContinue);
     },
 
-    close() { el.overlay.hidden = true; onNext = null; pickNow = null; kind = null; },
+    close() { el.card.scrollTop = 0; el.overlay.scrollTop = 0; el.overlay.hidden = true; onNext = null; pickNow = null; kind = null; },
   };
 
   el.give.addEventListener('click', e => {

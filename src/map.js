@@ -2,6 +2,7 @@
 
 import { activePlayer, isLocked, isBarricaded } from './game/state.js';
 import { rules } from './data/rules.js';
+import { guestMarks } from './table.js';
 
 // Rooms with jobs are marked so they can be found again: Infirmary, Switchboard, Linen Store.
 // (The \uFE0E after the telephone asks for the plain symbol, not the colour emoji.)
@@ -183,27 +184,38 @@ export function createMap(doc, floor, cfg) {
       mark('?', d.center[0] + ox * 0.9, d.center[1] + oz * 0.9, BRASS_BRIGHT);
     }
 
-    // Players: a dot per player in their colour; the active one gets a heading arrow.
+    // Players: a round dot per guest in their colour with the guest's initial in it (so the plan does not rely on
+    // colour alone: src/table.js guestMarks); the active guest's dot has a pointer in the heading direction (the
+    // arrow in the legend). The guest whose turn it is is drawn last, so nothing covers it.
     const active = activePlayer(state);
-    for (const p of state.players) {
-      if (state.escaped?.has(p.id)) continue;   // out of the hotel, off the plan
+    const marks = guestMarks(state.players.map(p => p.name));
+    const sans = 'system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif';
+    const R = 10;
+    const here = state.players.filter(p => !state.escaped?.has(p.id));      // (out of the hotel: off the plan)
+    for (const p of [...here.filter(q => q !== active), ...here.filter(q => q === active)]) {
       const mover = movers[p.index];
       const px = X(mover.x), pz = Z(mover.z);
       const isActive = p === active;
       ctx.save();
       ctx.translate(px, pz);
+      ctx.globalAlpha = !p.alive ? 0.45 : 1;
       if (isActive) {
+        ctx.save();
         ctx.rotate(-mover.heading + Math.PI); // heading 0 faces +z (south) in world = down on the map
-        ctx.fillStyle = p.color;
+        ctx.fillStyle = p.color; ctx.strokeStyle = '#1d1509'; ctx.lineWidth = 1.5; ctx.lineJoin = 'round';
         ctx.beginPath();
-        ctx.moveTo(0, -11); ctx.lineTo(7, 7); ctx.lineTo(0, 3.5); ctx.lineTo(-7, 7); ctx.closePath();
-        ctx.fill();
-      } else {
-        ctx.globalAlpha = !p.alive ? 0.4 : 1;
-        ctx.fillStyle = p.color;
-        ctx.beginPath(); ctx.arc(0, 0, 5, 0, Math.PI * 2); ctx.fill();
-        ctx.strokeStyle = '#1d1509'; ctx.lineWidth = 1.5; ctx.stroke();
+        ctx.moveTo(0, -R - 15); ctx.lineTo(9, -R - 1); ctx.lineTo(-9, -R - 1); ctx.closePath();
+        ctx.fill(); ctx.stroke();
+        ctx.restore();
+        ctx.strokeStyle = BRASS_BRIGHT; ctx.lineWidth = 2.5;
+        ctx.beginPath(); ctx.arc(0, 0, R + 2, 0, Math.PI * 2); ctx.stroke();
       }
+      ctx.fillStyle = p.color;
+      ctx.beginPath(); ctx.arc(0, 0, R, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = '#1d1509'; ctx.lineWidth = 1.5; ctx.stroke();
+      ctx.fillStyle = '#16110a'; ctx.font = `700 ${marks[p.index].length > 1 ? 10 : 13}px ${sans}`;
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(marks[p.index], 0, 1);
       ctx.restore();
     }
   }

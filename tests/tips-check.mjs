@@ -1,6 +1,6 @@
 // Headless check of the first-match tips (src/ui/tips.js; the words: src/data/tips.js), with tips ON — every
 // other check starts with them Off (smoke-lib.mjs). Run from tests/ with the static server on 8123:
-//   node tips-check.mjs [--url http://127.0.0.1:8123/] [--size 1024x768] [--shots DIR]
+//   node tips-check.mjs [--url http://127.0.0.1:8123/] [--size 1024x768] [--shots DIR] [--new-only]
 //
 // One browser, its storage kept from step to step (as one iPad would):
 //   a match     no tip over the "Tap to begin" card or the role screen; then "Your turn" beside the player
@@ -16,10 +16,16 @@
 //   Hide tips   the card says tips are off (a double tap opens no door; the shorter card keeps its edge
 //               toward what it explained), goes, the setting is saved, and nothing more shows.
 //   Settings    Tips reads Off; "Show tips again" forgets the tips seen and turns tips on.
-//   practice    no tip while a question is up; then "Your turn" is back (it was forgotten).
+//   practice    no tip while the Menu panel or a question is up; then "Your turn" is back (it was forgotten).
+//   new tips    (Round 2) the safe zone (on the first WALK into one, not at the start in the Landing; once), pinch and
+//               drag (on the player's own turn while the camera has not been touched; a drag, a pinch or a round
+//               button counts as touched, so it never comes then), the round camera buttons (the first time one is
+//               used; says what all three do): each whole on screen over no part of the interface; the safe-zone
+//               tip is beside the room's badge, the camera tips above the camera buttons. (The first-meeting tip's
+//               words, both halves of the Lantern dilemma, are in tests/howto-check.mjs.)
 // And a clean console.
 import { launch } from './smoke-lib.mjs';
-import { TIPS_TIMING } from '../src/data/tips.js';
+import { TIPS, TIPS_TIMING } from '../src/data/tips.js';
 
 const args = process.argv.slice(2);
 const arg = (name, dflt) => (args.includes(name) ? args[args.indexOf(name) + 1] : dflt);
@@ -72,6 +78,7 @@ async function begin(query) {
 // A double tap on a tip's button (two clicks 140 ms apart at its middle): the card goes (or shrinks) at the
 // first, and the second must not reach the hotel under it and open a door. On a machine so slow that the
 // two taps arrive further apart than a double tap, the hotel check is skipped (said so).
+let slowTaps = false;       // (the last double tap came too slowly to be one: what follows from it is not judged)
 async function doubleTap(sel, what) {
   const b = await ev(s => { const r = document.querySelector(s).getBoundingClientRect(); return { x: (r.left + r.right) / 2, y: (r.top + r.bottom) / 2 }; }, sel);
   const state = () => ev(() => ({ rooms: window.__game.hotelRooms().length, ap: window.__game.activePlayer().actionPoints }));
@@ -81,13 +88,17 @@ async function doubleTap(sel, what) {
   await page.mouse.click(b.x, b.y); await page.waitForTimeout(140); await page.mouse.click(b.x, b.y);
   await page.waitForTimeout(600);
   const b1 = await state(), gap = await ev(() => (window.__taps.length > 1 ? window.__taps[1] - window.__taps[0] : Infinity));
+  slowTaps = gap >= TIPS_TIMING.guardMs - 50;
   if (gap < TIPS_TIMING.guardMs - 50) check(b1.rooms === b0.rooms && b1.ap === b0.ap, `...a double tap on ${what}: the second tap does nothing on the hotel (rooms ${b0.rooms} -> ${b1.rooms}, actions ${b0.ap} -> ${b1.ap})`);
   else console.log(`  (skipped: the double tap on ${what} arrived ${Math.round(gap)} ms apart on this slow machine)`);
   return ev(() => window.__tipAtTap);
 }
 const closeScreens = async () => { for (let i = 0; i < 4; i++) { if (await ev(() => window.__game.handoffOpen())) { await ev(() => window.__game.handoffNext()); await page.waitForTimeout(700); } } };
 
+let w = null;
+const NEW_ONLY = args.includes('--new-only');      // (only the section for the three new tips: faster while working on them)
 try {
+  if (!NEW_ONLY) {
   // --- a match ---------------------------------------------------------------------------------------------
   console.log(`\na match (${W}x${H})`);
   await begin('mode=bots&bots=3&role=clean&seed=7&seat=0&intro=off&botpace=0.1');
@@ -97,7 +108,7 @@ try {
   await closeScreens();
   check(!!await showing('firstTurn'), '"Your turn" comes up once the role screen has gone');
   await page.waitForTimeout(800);
-  let w = await where();
+  w = await where();
   check(!!w && w.inside && !w.over.length, `...whole on screen, over no part of the interface${w?.over.length ? `: ${w.over.join(', ')}` : ''}`);
   const panel = await ev(() => document.getElementById('player-panel').getBoundingClientRect().toJSON());
   check(!!w && w.box.b <= panel.top && panel.top - w.box.b < 200 && w.box.l < panel.right + 40, `...just above the player panel it explains (card ${Math.round(w?.box.t)}-${Math.round(w?.box.b)}, panel from ${Math.round(panel.top)})`);
@@ -202,8 +213,12 @@ try {
   const card0 = await doubleTap('#tip .tip-hide', 'Hide tips');
   const card1 = await ev(() => document.getElementById('tip').getBoundingClientRect().toJSON());
   const kept = side === 'above' ? Math.abs(card0.bottom - card1.bottom) < 2 : side === 'below' ? Math.abs(card0.top - card1.top) < 2 : Math.abs((card0.top + card0.bottom) - (card1.top + card1.bottom)) < 4;
-  check(kept, `...the shorter "Tips are off" card keeps its edge toward what it explained (${side}: ${Math.round(card0.top)}-${Math.round(card0.bottom)} -> ${Math.round(card1.top)}-${Math.round(card1.bottom)})`);
-  check(/Settings can turn them back on/.test(await ev(() => document.querySelector('#tip .tip-text').textContent)) && !await tipHidden(), 'Hide tips: the card says tips are off');
+  // (on a machine so slow that the taps were seconds apart the short "Tips are off" card may be gone before it is looked at: said, not judged)
+  if (slowTaps) console.log('  (skipped: the "Tips are off" card is judged only when the taps came as quickly as a double tap)');
+  else {
+    check(kept, `...the shorter "Tips are off" card keeps its edge toward what it explained (${side}: ${Math.round(card0.top)}-${Math.round(card0.bottom)} -> ${Math.round(card1.top)}-${Math.round(card1.bottom)})`);
+    check(/Settings can turn them back on/.test(await ev(() => document.querySelector('#tip .tip-text').textContent)) && !await tipHidden(), 'Hide tips: the card says tips are off');
+  }
   await shot('hidden');
   check(!!await poll(() => document.getElementById('tip').hidden, null, TIPS_TIMING.hiddenMs + 4000), '...then goes');
   check((await saved()).tips === 'off', '...and Settings > Tips is saved as Off');
@@ -233,8 +248,14 @@ try {
   // --- practice: no tip while a question is up; the tips seen before are back ------------------------------------
   console.log('\npractice');
   await begin('mode=practice&intro=off');
-  await page.waitForTimeout(600);
-  await page.click('#btn-leave');
+  // (the Menu button at once, by a click the page makes itself: "Your turn" needs a moment to come up, and on a slow machine a
+  // real tap may arrive after it has been on screen for seconds, which counts it as seen)
+  await ev(() => document.getElementById('btn-leave').click());
+  await poll(() => window.__game.menuPanelOpen(), null, 5000);
+  await page.waitForTimeout(3000);
+  check(await ev(() => window.__game.menuPanelOpen()) && await tipHidden(), 'no tip while the Menu panel is up');
+  await page.waitForTimeout(350);
+  await page.click('#btn-gm-leave');                  // (Leave: the game's own question follows)
   await poll(() => window.__game.askOpen(), null, 5000);
   await page.waitForTimeout(3000);
   check(await ev(() => window.__game.askOpen()) && await tipHidden(), 'no tip while a question is up ("Leave practice?")');
@@ -244,6 +265,105 @@ try {
   w = await where();
   check(!!w && w.inside && !w.over.length, `...over no part of the interface${w?.over.length ? `: ${w.over.join(', ')}` : ''}`);
   await shot('practice');
+  }
+
+  // --- the three new tips: the safe zone, pinch and drag, the round camera buttons -----------------------------------
+  console.log('\nthe new tips');
+  // Got it, if the card is still up (a slow machine may have let its nine seconds run out: it was shown, so it is seen all the same).
+  const gotIt = async () => { await page.waitForTimeout(TIPS_TIMING.guardMs + 100); if (!(await tipHidden())) await page.click('#tip .tip-ok', { timeout: 3000 }).catch(() => {}); };
+  const NEW = ['safeZone', 'camera', 'cameraButtons'];
+  const OLD = Object.keys(TIPS).filter(id => !NEW.includes(id));
+  // A new match with every OLD tip already seen (so only the new ones can come up) and tips on.
+  const fresh = async query => {
+    if (page.url() === 'about:blank') await page.goto(`${base}styles.css`, { waitUntil: 'domcontentloaded' });     // (a page of the game's own origin, to reach its storage)
+    await ev(old => {
+      localStorage.setItem('hotelEscape.tips.v1', JSON.stringify({ seen: old }));
+      const k = 'hotelEscape.settings.v1'; const s = JSON.parse(localStorage.getItem(k) || '{}'); s.tips = 'on'; localStorage.setItem(k, JSON.stringify(s));
+    }, OLD);
+    await begin(query);
+    await poll(() => window.__game.handoffOpen(), null, 20000);
+    await closeScreens();
+    await poll(() => window.__game.inActionPhase(), null, 10000);
+  };
+  const Q = 'mode=bots&bots=3&role=clean&seed=7&seat=0&intro=off&botpace=0.1&timer=off';
+  const textOf = () => ev(() => document.querySelector('#tip .tip-text').textContent);
+  // The tips look at the game a few times a second (every 200 ms, on a frame): wait until they surely have looked.
+  const looked = () => ev(() => new Promise(res => { let n = 0; const t0 = performance.now(); const f = () => { if (++n >= 3 && performance.now() - t0 > 600) res(); else requestAnimationFrame(f); }; requestAnimationFrame(f); }));
+  // Out of the Landing into the room next to it and back, by the game's own walk (the guest's room follows where it
+  // stands, so setting it by hand does not hold).
+  const walkOutAndBack = async () => {
+    const at = room => poll(r => window.__game.activePlayer().currentRoom === r && !window.__game.activeMover().walking && !window.__game.activeMover().path.length, room, 40000);
+    await ev(() => { const g = window.__game; if (!g.hotelRooms().includes('lounge')) g.revealTile('lounge', 'hall'); g.moveToRoom('lounge'); });
+    check(!!await at('lounge'), '(the guest walks into the Lounge)');
+    await looked();
+    await ev(() => window.__game.moveToRoom('hall'));
+    check(!!await at('hall'), '(and back into the Landing)');
+  };
+
+  // 1. a match with the camera untouched: "Look around" comes up; the Landing at the start is no arrival
+  await fresh(Q);
+  check(!(await tips()).seen.includes('safeZone') && !(await tips()).queued.includes('safeZone'), 'the start, in the Landing, is not a safe-zone arrival: no safe-zone tip');
+  check(!!await showing('camera'), 'pinch and drag: "Look around" comes up on the player\'s own turn while the camera is untouched');
+  await page.waitForTimeout(700);
+  w = await where();
+  check(!!w && w.inside && !w.over.length, `...whole on screen, over no part of the interface${w?.over.length ? `: ${w.over.join(', ')}` : ''}`);
+  const ctl = await ev(() => document.querySelector('.control-row').getBoundingClientRect().toJSON());
+  check(!!w && w.box.b <= ctl.top && ctl.top - w.box.b < 120, `...above the camera buttons (card ends ${Math.round(w?.box.b)}, the buttons start ${Math.round(ctl.top)})`);
+  const txt1 = await textOf();
+  check(/Drag/.test(txt1) && /[Pp]inch/.test(txt1), `...and says drag and pinch ("${txt1}")`);
+  await shot('camera');
+  // 2. the safe zone: a WALK into one
+  await gotIt();
+  check((await saved()).seen.includes('camera'), '"Look around" is remembered once put away');
+  await walkOutAndBack();
+  check(!!await showing('safeZone'), 'the safe zone: walking into one brings "Safe zone"');
+  await page.waitForTimeout(700);
+  w = await where();
+  const badge = await ev(() => document.getElementById('safe-badge').getBoundingClientRect().toJSON());
+  check(!!w && w.inside && !w.over.length, `...whole on screen, over no part of the interface${w?.over.length ? `: ${w.over.join(', ')}` : ''}`);
+  check(!!w && w.box.t >= badge.bottom - 1, `...below the badge it explains (card from ${Math.round(w?.box.t)}, the badge ends ${Math.round(badge.bottom)})`);
+  const txt2 = await textOf();
+  check(/No meetings and no attacks/.test(txt2) && /Fourth Floor Landing/.test(txt2) && /Fire Exit/.test(txt2), `...and says what a safe zone is ("${txt2}")`);
+  await shot('safe-zone');
+  await gotIt();
+  check((await saved()).seen.includes('safeZone'), '...remembered once put away');
+  await walkOutAndBack();
+  await page.waitForTimeout(5000);
+  check(await tipHidden() && !(await tips()).queued.includes('safeZone'), '...and it does not come again');
+
+  // 3. the round camera buttons: the first use says what all three do (and "Look around" is then not needed)
+  await fresh(Q);
+  await page.click('#btn-rotate-left');
+  check(!!await showing('cameraButtons'), 'the round buttons: the first use of one brings "The round buttons"');
+  await page.waitForTimeout(700);
+  w = await where();
+  check(!!w && w.inside && !w.over.length, `...whole on screen, over no part of the interface${w?.over.length ? `: ${w.over.join(', ')}` : ''}`);
+  const txt3 = await textOf();
+  check(/arrows/.test(txt3) && /target/.test(txt3), `...and says what the arrows and the target do ("${txt3}")`);
+  check(await underFinger('#btn-rotate-left') && await underFinger('#btn-rotate-right') && await underFinger('#btn-centre'), '...with all three buttons still under the finger');
+  await shot('camera-buttons');
+  await gotIt();
+  await page.waitForTimeout(TIPS_TIMING.gapMs + 4000);
+  check(!(await tips()).showing && (await saved()).seen.includes('camera') && !(await saved()).seen.includes('safeZone'), 'using a round button counts as touching the camera: "Look around" is seen, never shown');
+
+  // 4. a drag of the hotel counts too, and brings neither of the other two
+  await fresh(Q);
+  // (one gesture sent in one go, so no tip can come up between its first and last move)
+  await ev(([x, y]) => {
+    const c = document.querySelector('#view canvas');
+    const send = (type, dx, dy) => c.dispatchEvent(new PointerEvent(type, { pointerId: 7, pointerType: 'touch', isPrimary: true, clientX: x + dx, clientY: y + dy, button: 0, buttons: type === 'pointerup' ? 0 : 1, bubbles: true, cancelable: true }));
+    send('pointerdown', 0, 0);
+    for (let i = 1; i <= 6; i++) send('pointermove', i * 12, i * 7);
+    send('pointerup', 72, 42);
+  }, [W / 2, H * 0.45]);
+  await page.waitForTimeout(1500);
+  const afterDrag = await tips();
+  check(afterDrag.seen.includes('camera') && afterDrag.showing !== 'camera' && !afterDrag.queued.includes('cameraButtons'), 'a drag of the hotel counts as touching the camera: no "Look around", and no round-buttons tip');
+  await page.waitForTimeout(6000);
+  check((await tips()).showing !== 'camera' && (await tips()).showing !== 'cameraButtons', '...and it never comes up (6 s on)');
+  // the facts the new tips go by are the player's own and public (a flag for each): never anything hidden
+  const f2 = (await tips()).facts || [];
+  check(['safe', 'cameraTouched', 'cameraButton'].every(k => f2.includes(k)) && !f2.some(k => ['state', 'floor', 'players', 'bots', 'deck'].includes(k)), `the new tips go by three plain flags, never the game (safe, cameraTouched, cameraButton)`);
 } catch (err) {
   check(false, `tips check: ${err.message.split('\n')[0]}`);
 } finally {

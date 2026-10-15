@@ -24,11 +24,10 @@ function findChrome() {
   const candidates = [process.env.CHROME_PATH, '/opt/pw-browsers/chromium-1194/chrome-linux/chrome'].filter(Boolean);
   for (const c of candidates) if (fs.existsSync(c)) return c;
   const root = process.env.PLAYWRIGHT_BROWSERS_PATH || '/opt/pw-browsers';
-  if (!fs.existsSync(root)) throw new Error('chromium not found: set CHROME_PATH');
-  for (const d of fs.readdirSync(root)) for (const sub of ['chrome-linux/chrome', 'chrome-linux64/chrome']) {
+  if (fs.existsSync(root)) for (const d of fs.readdirSync(root)) for (const sub of ['chrome-linux/chrome', 'chrome-linux64/chrome']) {
     const p = path.join(root, d, sub); if (fs.existsSync(p)) return p;
   }
-  throw new Error('chromium not found');
+  return undefined;     // Playwright's own Chromium (npx playwright-core install chromium); it says so itself if there is none
 }
 
 const failures = [];
@@ -180,7 +179,7 @@ const info = await game(() => ({
 }));
 check(info.problems.length === 0, 'no floor problems');
 check(info.practice && info.players === 1, 'one guest, practice mode');
-check(info.ap === 4 && info.move === 1 && info.open === 1, '4 action points; opening a door costs 1, a move costs 1');
+check(info.ap === 4 && info.move === 1 && info.open === 1, '4 actions; opening a door costs 1, a move costs 1');
 check(info.dealt === 1 && info.hand === 4, 'the same deal as a match: the guest starts with 1 Lantern + 3 other cards');
 check(info.inPile === 13 && info.pile === 44, `the other 13 Lanterns are in the ${info.pile}-card deck (48 less a hand of 4), to be found by searching`);
 check(info.locked.length === 0 && info.rooms === 1, 'the hotel starts as just the lobby; nothing is locked yet');
@@ -217,7 +216,7 @@ check(lobbyDoors === 3 || lobbyDoors === 4, `the lobby has ${lobbyDoors} closed 
     `beyond each one lies a fogged, unknown room (${fogs.length}), all explorable from the lobby`);
   await page.waitForFunction(n => window.__game.fogLabels().length === n, lobbyDoors, { timeout: 10000 }).catch(() => {});
   const tags = await game(() => window.__game.fogLabels());
-  check(tags.length === lobbyDoors && tags.every(t => t.text === 'Explore · 1 AP'), `each says "Explore · 1 AP" (${tags.map(t => t.text).join(' | ')})`);
+  check(tags.length === lobbyDoors && tags.every(t => t.text === 'Explore · 1 action'), `each says "Explore · 1 action" (${tags.map(t => t.text).join(' | ')})`);
   check(await game(() => [...window.__game.doorways.views.values()].every(v => !('blink' in v))), 'there are no door rings to tap any more');
 }
 
@@ -332,13 +331,13 @@ await searchHere();
 await takeReveal();
 check(await game(() => window.__game.state.searchedRooms.has(window.__game.activePlayer().currentRoom)), 'with a Flashlight the dark room can be searched');
 check(await game(() => window.__game.activePlayer().hand.some(c => c.id === 'fl1')), 'and the Flashlight is kept');
-// No action points left: dimmed, and a tap explains.
+// No actions left: dimmed, and a tap explains.
 await game(() => window.__game.revealTile('dining'));
 await put('dining', 0);
 await page.waitForTimeout(300);
-check((await spot()).mode === 'ap', 'with no action points left the icon is dimmed');
+check((await spot()).mode === 'ap', 'with no actions left the icon is dimmed');
 await page.click('#search-spot'); await page.waitForTimeout(150);
-check(/No action points left/.test(await page.textContent('#toast')), 'and a tap explains why');
+check(/No actions left/.test(await page.textContent('#toast')), 'and a tap explains why');
 await game(() => { window.__game.activePlayer().actionPoints = 4; window.__game.refresh(); });
 
 console.log('\n4b. the hand, held as a fan of cards');
@@ -431,7 +430,7 @@ await page.waitForTimeout(150);
 check(await game(l => !window.__game.state.lockedRooms.has(l), locked), 'the room is unlocked');
 check(/door is open until the end of your turn/.test(await page.textContent('#toast')), 'and says it is open until the end of your turn');
 check(!(await visible('#hand-overlay')) && !(await fanIds()).includes('mk'), 'the used-up key leaves the hand and the card view closes');
-check(await game(() => window.__game.activePlayer().actionPoints) === 3, 'for 1 action point');
+check(await game(() => window.__game.activePlayer().actionPoints) === 3, 'for 1 action');
 await game(l => window.__game.moveToRoom(l), locked);
 await settle();
 check(await game(() => window.__game.activePlayer().currentRoom) === locked, 'and can now be entered');
@@ -487,7 +486,7 @@ console.log('\n5b. a door that opens onto a locked room (never stuck)');
     check(await tapAt({ fog: setup.fog }), 'the fogged room beyond that door can be tapped');
     const cb = await confirmBar();
     check(!cb.open && await game(() => window.__game.lockedRooms().includes('suite416')), 'tapping it opens the door at once (no question) onto a locked room');
-    check(await game(() => window.__game.activePlayer().actionPoints) === 3, 'for 1 action point');
+    check(await game(() => window.__game.activePlayer().actionPoints) === 3, 'for 1 action');
     await page.waitForTimeout(700);
     await page.evaluate(() => { document.getElementById('toast').textContent = ''; });
     check(await tapAt({ room: 'suite416' }), 'the locked room can be tapped');
@@ -513,7 +512,7 @@ await game(d => window.__game.barricade('bar', d), door);
 // (the planned walk to the lobby may go round through other rooms, but never through that doorway)
 const straightToLobby = () => game(() => { const g = window.__game, c = g.roomCenter('hall'); const p = g.discovery.plan(c[0], c[1]); return p.ok && p.rooms.length === 2; });
 check(!(await straightToLobby()), 'a barricaded doorway cannot be passed');
-check(await game(() => window.__game.activePlayer().actionPoints) === 3, 'a Barricade costs 1 action point');
+check(await game(() => window.__game.activePlayer().actionPoints) === 3, 'a Barricade costs 1 action');
 // (the cards given above can push the hand past the limit, and End turn would then ask for a discard)
 await game(() => { const p = window.__game.activePlayer(); p.hand = p.hand.slice(0, 5); window.__game.refresh(); });
 await game(() => window.__game.endTurn());
@@ -729,7 +728,7 @@ console.log('\n7b. playtest fixes');
       return { inView, guest: Math.abs(v.x) < 0.9 && Math.abs(v.y) < 0.9, go: g.tags('go:').map(t => `${t.key}|${t.text}`) };
     }, nr);
     check(g8.inView && g8.guest, 'the view eases so the room just opened is wholly in view, with the guest still in view');
-    check(g8.go.includes(`go:${nr}|Go · 1 AP`), `and the new room carries a quiet "Go · 1 AP" tag (${g8.go.join(', ')})`);
+    check(g8.go.includes(`go:${nr}|Go · 1 action`), `and the new room carries a quiet "Go · 1 action" tag (${g8.go.join(', ')})`);
     await tapAt({ room: nr });
     await frames(2);      // (the tags are laid out each frame: they step aside on the next one)
     check((await confirmBar()).open && (await game(() => window.__game.tags('go:'))).length === 0, 'the Go tags step aside while the Move/Cancel bar is up');

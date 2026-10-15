@@ -38,7 +38,7 @@ export function createMeeting(doc, cfg, { isViewer = () => false, redEyes = () =
     return b;
   }
   let shownAt = 0;   // when the current panel opened (every panel calls show())
-  const show = () => { overlay.hidden = false; shownAt = performance.now(); };
+  const show = () => { overlay.hidden = false; shownAt = performance.now(); const m = overlay.querySelector('.modal'); if (m) m.scrollTop = 0; };
   let cues = [];     // the attack's sound cues still to come (dropped if the panel closes first)
   const hide = () => { overlay.hidden = true; for (const t of cues) clearTimeout(t); cues = []; };
   const el = (tag, cls, parent) => { const e = doc.createElement(tag); if (cls) e.className = cls; if (parent) parent.appendChild(e); return e; };

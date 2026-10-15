@@ -5,13 +5,13 @@
 // remove or change a rule or a number here without the owner's explicit approval of a
 // before/after list (see CLAUDE.md, "Rules changes").
 //
-// Two ways to play the same ruleset, chosen by applyMode() at the bottom before each match:
+// Two ways to play the same ruleset, chosen by applyMode() at the bottom, which src/main.js calls each time a
+// game is dealt:
 //   'practice'  — one guest alone: find three Lanterns and escape. No meetings, no
 //                 hidden role, no timer. Everything else (dark rooms, locked rooms, cards) applies.
-//   'match'     — 4-6 guests, one of them secretly possessed: the real game. Today the player shares
-//                 the table with computer guests (bots, src/bots/); later, with people online, one device
-//                 each. ('hotseat', the old pass-one-iPad testing mode, is accepted as another name for it:
-//                 the balance simulator still asks for it.)
+//   'match'     — minPlayers to maxPlayers guests (4-6), one of them secretly possessed: the real game. Today
+//                 the player shares the table with computer guests (bots, src/bots/); later, with people
+//                 online, one device each. (Hot-seat, the old pass-one-iPad mode, is gone.)
 // There is no server and no networking anywhere in this project yet.
 
 export const rules = {
@@ -20,6 +20,10 @@ export const rules = {
   playerCount: 1,
   practiceMode: true,
   onlineMode: false,        // no server, no networking
+
+  // --- The table (docs/GAME_RULES.md > Players: "4-6", "you and 3-5 computer guests") ---------------
+  minPlayers: 4,            // guests at a match, you included. The menu offers minBots..maxBots computer guests
+  maxPlayers: 6,            // (minPlayers - 1 .. maxPlayers - 1), derived in derive() below
 
   // --- Systems on in this ruleset -------------------------------------------------------------
   healthEnabled: true,
@@ -153,16 +157,19 @@ function derive() {
     attack: rules.attackCost,
   };
   rules.handSize = rules.startingHandSize;
+  rules.minBots = rules.minPlayers - 1;      // the computer guests you can play with: everyone else at the table
+  rules.maxBots = rules.maxPlayers - 1;
 }
 derive();
 
-// Switch between the two ways of playing. Call ONCE at startup, before any state is built. It
-// mutates the shared `rules` object on purpose: every module reads values off it at call time,
-// so a number still lives in exactly one place.
+// Switch between the two ways of playing: call it each time a game is dealt, before its state is built (a match
+// of this size, or practice). It mutates the shared `rules` object on purpose: every module reads values off
+// it at call time, so a number still lives in exactly one place.
 export function applyMode(mode, playerCount = 1) {
-  if (mode === 'match' || mode === 'hotseat') {
+  if (mode !== 'match' && mode !== 'practice') throw new Error(`applyMode: unknown mode "${mode}" (practice or match)`);
+  if (mode === 'match') {
     rules.gameMode = 'match';
-    rules.playerCount = Math.max(4, Math.min(6, Math.round(playerCount) || 6));
+    rules.playerCount = Math.max(rules.minPlayers, Math.min(rules.maxPlayers, Math.round(playerCount) || rules.maxPlayers));
     rules.practiceMode = false;
     rules.turnTimerEnabled = true;
   } else {

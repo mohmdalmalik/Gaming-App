@@ -13,6 +13,7 @@
 import * as THREE from 'three';
 import { fogCells } from '../game/hotel.js';
 import { rules } from '../data/rules.js';
+import { actionsWord } from '../ui/actionsWord.js';
 
 const MAX_CELLS = 64;
 
@@ -196,7 +197,7 @@ export function createFog(scene, camera, cfg) {
         // when the fog room's far side is not)
         const d = e.doors.find(x => x.room === here) || e.doors[0];
         const p = [e.center[0] + (d.center[0] - e.center[0]) * 0.4, 0.9, e.center[1] + (d.center[1] - e.center[1]) * 0.4];
-        tags.put(`fog:${e.key}`, p, ap >= cost ? `Explore · ${cost} AP` : 'No actions left', ap >= cost ? 'fog-label' : 'fog-label dim');
+        tags.put(`fog:${e.key}`, p, ap >= cost ? `Explore · ${actionsWord(cost)}` : 'No actions left', ap >= cost ? 'fog-label' : 'fog-label dim');
       }
     },
     // A new match: every fog room goes at once (the new hotel's fog fades in).

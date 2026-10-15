@@ -3,7 +3,8 @@
 //   signup       "Sign the register": the first visit asks for a username (src/ui/register.js); the
 //                same screen changes it later ("Change name" on the avatar screen: showRename)
 //   main         your profile card ("Playing as <name> · Adjust avatar ›", src/ui/profileCard.js),
-//                Play with bots · Practice alone · Settings and Your record side by side
+//                Play with bots · Practice alone (with a hint under it for a player who has played nothing
+//                yet) · How to play, Settings and Your record side by side
 //   avatar       your avatar (the wardrobe: #menu-avatar, built by the avatar screen's own module)
 //   bots         how many other guests (3-5) and your role (random, clean, possessed)
 //   matchmaking  the table filling up, guest by guest, as in an online game
@@ -17,6 +18,7 @@
 // callbacks and starts the match. A guest joining the table rings the reception bell (the sound cue
 // bus, src/audio/bus.js). `onScreenChange(name, prev)` hears every change of screen (the lobby's camera
 // follows it: the wardrobe frames your avatar).
+import { rules } from '../data/rules.js';
 import { settings, SETTING_CHOICES } from '../settings.js';
 import { reducedMotion } from '../motion.js';
 import { sfx } from '../audio/bus.js';
@@ -27,21 +29,22 @@ import { createRecordScreen } from './record.js';
 import { record } from '../record.js';
 import { renderTipsAgain } from './tips.js';
 import { versionLine } from '../version.js';
+import { NEW_PLAYER_HINT } from '../data/howToPlay.js';
 
 const ROLE_CHOICES = [
   { value: 'random', label: 'Random', note: 'Like a real table: you are told your role when the game starts. Usually you are a clean guest.' },
   { value: 'clean', label: 'Clean guest', note: 'Find Lanterns, trust carefully, and get one clean guest out through the Fire Exit before dawn.' },
   { value: 'possessed', label: 'Possessed', note: 'You start possessed, with souls of your own (your face on each). Win their trust, then give one in a trade.' },
 ];
-const BOT_CHOICES = [3, 4, 5];
+const BOT_CHOICES = Array.from({ length: rules.maxBots - rules.minBots + 1 }, (_, i) => rules.minBots + i);     // the computer guests to play with: 3, 4 or 5 (rules.js: a table of 4 to 6)
 
-export function createMenu(doc, { onPlayBots, onPractice, onSettingChanged, onScreenChange, account = null } = {}) {
+export function createMenu(doc, { onPlayBots, onPractice, onSettingChanged, onScreenChange, onHowToPlay, account = null } = {}) {
   const $ = id => doc.getElementById(id);
   const root = $('menu');
   // (looked up when shown: a screen another module adds to the page, #menu-avatar, is found too)
   const SCREENS = ['signup', 'main', 'avatar', 'bots', 'matchmaking', 'settings', 'record'];
   const screenEl = name => $(`menu-${name}`);
-  const btn = { bots: $('btn-menu-bots'), practice: $('btn-menu-practice'), settings: $('btn-menu-settings'), record: $('btn-menu-record') };
+  const btn = { bots: $('btn-menu-bots'), practice: $('btn-menu-practice'), settings: $('btn-menu-settings'), record: $('btn-menu-record'), howto: $('btn-menu-howto') };
   const recordView = createRecordScreen(doc);
   let current = 'main';
   let ready = false;
@@ -67,7 +70,7 @@ export function createMenu(doc, { onPlayBots, onPractice, onSettingChanged, onSc
       requestAnimationFrame(() => root.classList.remove('snap'));
     }
     for (const k of SCREENS) { const el = screenEl(k); if (el) el.hidden = k !== name; }
-    if (name === 'main') card.render();
+    if (name === 'main') { card.render(); renderHint(); }
     if (name === 'bots') renderBots();
     if (name === 'settings') renderSettings();
     if (name === 'record') { recordView.confirm(false); recordView.render(); }
@@ -102,8 +105,19 @@ export function createMenu(doc, { onPlayBots, onPractice, onSettingChanged, onSc
     }
   }
 
+  // Under "Practice alone", for a player who has played no match and finished no practice yet (your record,
+  // src/record.js): the soft way in. It goes for good once either is counted.
+  function renderHint() {
+    const hint = $('menu-hint');
+    if (!hint) return;
+    const r = record.get();
+    const fresh = !r.played && !r.practiceEscapes;
+    hint.textContent = fresh ? NEW_PLAYER_HINT : '';
+    hint.hidden = !fresh;
+  }
+
   function renderBots() {
-    const n = BOT_CHOICES.includes(+settings.get('bots')) ? +settings.get('bots') : 5;
+    const n = BOT_CHOICES.includes(+settings.get('bots')) ? +settings.get('bots') : rules.maxBots;
     segment($('opt-bots'), BOT_CHOICES.map(v => ({ value: v, label: String(v) })), n, v => { settings.set('bots', v); renderBots(); });
     $('opt-bots-note').textContent = `A table of ${n + 1} guests: you and ${n} others.`;
     const role = ROLE_CHOICES.find(r => r.value === settings.get('role')) || ROLE_CHOICES[0];
@@ -187,9 +201,11 @@ export function createMenu(doc, { onPlayBots, onPractice, onSettingChanged, onSc
   click(btn.practice, () => { if (!ready) return; if (account && !account.profile) { show('main'); return; } onPractice?.({}); });
   click(btn.settings, () => show('settings'));
   click(btn.record, () => show('record'));
+  // How to play opens over the menu (src/ui/howToPlay.js); Close gives the focus back to this button.
+  click(btn.howto, () => onHowToPlay?.({ focusBack: btn.howto }));
   click($('btn-bots-back'), () => show('main'));
   click($('btn-bots-find'), () => {
-    const n = BOT_CHOICES.includes(+settings.get('bots')) ? +settings.get('bots') : 5;
+    const n = BOT_CHOICES.includes(+settings.get('bots')) ? +settings.get('bots') : rules.maxBots;
     onPlayBots?.({ bots: n, role: settings.get('role') || 'random' });
   });
   // Your record: Reset asks first, in place of the Back / Reset row (each step a fresh tap: shownAt).

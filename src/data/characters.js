@@ -1,4 +1,4 @@
-// Characters: body types, outfits and the five hot-seat players.
+// Characters: body types, outfits and the six named guests (now only a fixture for the Node tests and tools).
 //
 // Everything visual here is placeholder: outfits differ by silhouette and colour only.
 // When real glTF models arrive, an outfit gets a `model` field pointing at the file and
@@ -39,13 +39,14 @@ export const outfits = {
     model: 'assets/characters/eleanor.glb', modelHeight: 1.66, strideLength: 1.0344 },   // Eleanor (tools/char-pipeline/guests/eleanor.py)
 };
 
-// The guests in turn order. `color` is the marker ring / interface colour. A hot-seat match uses
-// the first 4-6 of them; practice uses the first one only. Names are still placeholders.
+// The guests in turn order. `color` is the marker ring / interface colour (the seat colours of src/table.js). A
+// match uses the first 4-6 of them in the Node tests and tools; the game seats players by username and avatar
+// (src/table.js); practice uses the first one only. Names are still placeholders.
 export const roster = [
-  { id: 'p1', name: 'Victor', outfit: 'tuxedo', color: '#e6b45a' },
-  { id: 'p2', name: 'Eleanor', outfit: 'dressMidnight', color: '#5ac8e6' },
-  { id: 'p3', name: 'Marcus', outfit: 'suit', color: '#a8e05a' },
-  { id: 'p4', name: 'Beatrice', outfit: 'dressEmerald', color: '#e67ab8' },
-  { id: 'p5', name: 'Henry', outfit: 'dinnerJacket', color: '#f0743c' },
-  { id: 'p6', name: 'Clara', outfit: 'dressBurgundy', color: '#b8a2f0' },
+  { id: 'p1', name: 'Victor', outfit: 'tuxedo', color: '#e6bc5c' },
+  { id: 'p2', name: 'Eleanor', outfit: 'dressMidnight', color: '#73d4e6' },
+  { id: 'p3', name: 'Marcus', outfit: 'suit', color: '#2f8cff' },
+  { id: 'p4', name: 'Beatrice', outfit: 'dressEmerald', color: '#e673ac' },
+  { id: 'p5', name: 'Henry', outfit: 'dinnerJacket', color: '#e6652e' },
+  { id: 'p6', name: 'Clara', outfit: 'dressBurgundy', color: '#b6b2ff' },
 ];

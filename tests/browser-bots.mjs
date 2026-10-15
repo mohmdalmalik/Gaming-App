@@ -361,6 +361,27 @@ console.log('\n5. out of the match, the end screen');
     const t = g.bots(), room = () => me.currentRoom;
     const orig = t.nextAction.bind(t), origAttack = t.attackWith.bind(t);
     window.__killer = null;
+    // The killer starts next door: the next guest to act, with a knife, in a room beside the player's (the lobby will do:
+    // it is only the player's room that must not be a safe one). The computer guests roam widely now: a killer picked by
+    // whoever happened to act first could be far away, or already in the player's room (a guest who is there already is not
+    // forced to meet them again, and walks off). This check is about what an attack looks like on the player's screen,
+    // not about how far a bot walks or where it starts.
+    {
+      const k = g.nextPlayer(), here = g.floor.rooms.get(room());
+      const nb = [...here.neighbours].find(id => g.state.discovered.has(id) && !g.lockedRooms().includes(id));
+      if (k && k.index !== me.index && k.alive && nb) {
+        k.currentRoom = nb;
+        const mid = g.roomCenter(nb); g.movers[k.index].reset(mid[0], mid[1]);
+        if (!k.hand.some(card => card.type === 'knife')) k.hand.push({ id: `test-knife-${k.index}`, type: 'knife' });
+        window.__killer = k.index;
+      }
+    }
+    // A guest of the clean side must be left alive when the player dies, or the match is over at once and there is no
+    // "You are out" question to check (by round 4 the computer guests may have possessed everyone else).
+    if (!me.possessed && !g.state.players.some(q => q.index !== me.index && q.alive && !q.possessed)) {
+      const spare = g.state.players.find(q => q.index !== me.index && q.index !== window.__killer && q.alive);
+      if (spare) { spare.possessed = false; spare.hand = spare.hand.filter(card => card.type !== 'possession'); }
+    }
     t.nextAction = i => {
       const p = g.state.players[i];
       if (window.__killer == null && p.alive && !g.floor.rooms.get(room()).safe) {
@@ -415,7 +436,9 @@ console.log('\n5. out of the match, the end screen');
   await waitFor(() => !window.__game.handoffOpen(), null, 30000);
   await answerScreens();
   await tap('#btn-leave');
-  check(await game(() => window.__game.askOpen()), 'the Menu button asks before leaving the match');
+  check(await game(() => window.__game.menuPanelOpen() && !window.__game.askOpen()), 'the Menu button opens the Menu panel (Resume, Sound, How to play, Leave)');
+  await tap('#btn-gm-leave');
+  check(await game(() => window.__game.askOpen() && !window.__game.menuPanelOpen()), 'Leave asks before leaving the match');
   await tap('#btn-ask-yes');
   await waitFor(() => window.__game.phase() === 'menu' && !document.getElementById('menu').hidden, null, 20000);
   check(true, 'and goes back to the main menu');
@@ -439,6 +462,7 @@ console.log('\n6. playing possessed');
   check(await game(() => window.__game.fanIds().some(id => window.__game.state.players[window.__game.humanSeat()].hand.find(c => c.id === id)?.type === 'possession')), 'your Possession cards are in your hand');
   await shot('16-possessed-turn');
   await tap('#btn-leave');
+  await tap('#btn-gm-leave');      // (Leave, on the Menu panel, asks the question)
   check(await game(() => { const q = document.getElementById('ask-title').textContent, no = document.getElementById('btn-ask-no'), yes = document.getElementById('btn-ask-yes');
     return q === 'Leave the match?' && no.textContent === 'Keep playing' && no.classList.contains('primary') && yes.textContent === 'Main menu' && !yes.classList.contains('primary'); }),
     '"Leave the match?": the safe answer, Keep playing, is the gold button; Main menu, which loses the match, is the plain one');

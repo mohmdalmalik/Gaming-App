@@ -27,7 +27,7 @@ const check = (cond, msg) => { console.log((cond ? '  ok   ' : '  FAIL ') + msg)
 const floor = createHotel(hotel, config);
 const lobby = hotel.lobby.id;
 const SIX = roster.slice(0, 6);
-applyMode('hotseat', 6);
+applyMode('match', 6);
 // Grow the hotel behind a closed door the way the game does (revealed; locked tiles lock).
 function grow(s, doorId) {
   const r = openFrontierDoor(floor, doorId, { isLocked: id => s.lockedRooms.has(id) });
@@ -43,7 +43,7 @@ function ensureRoom(s, id) {
 }
 // A six-guest match with a few familiar rooms already on the board for the rules checks below.
 const hs = (seed = 1) => {
-  const s = createState(floor, SIX, seed, { mode: 'hotseat' });
+  const s = createState(floor, SIX, seed, { mode: 'match' });
   for (const id of ['corridorE', 'corridorW', 'kitchen']) ensureRoom(s, id);
   return s;
 };
@@ -119,14 +119,14 @@ console.log('\nsetup');
   check(ok, 'over 200 six-player deals, every guest got exactly 1 Lantern + 3 other cards');
   check(pileOk, `every time, the other ${rules.deck.lantern - 6} Lanterns went into the draw pile`);
   for (const n of [4, 5]) {
-    applyMode('hotseat', n);
-    const f = createState(floor, roster.slice(0, n), 3, { mode: 'hotseat' });
+    applyMode('match', n);
+    const f = createState(floor, roster.slice(0, n), 3, { mode: 'match' });
     const V = f.players.find(p => p.possessed);
     check(f.players.every(p => lanternCount(p.hand) === 1 && countableCount(p.hand) === 4)
       && countType(f.drawPile, 'lantern') === rules.deck.lantern - n && V && countType(V.hand, 'possession') === 3,
       `${n} players: 1 Lantern + 3 other cards each (the possessed guest also holds 3 Possession cards); ${rules.deck.lantern - n} Lanterns left in the pile`);
   }
-  applyMode('hotseat', 6);
+  applyMode('match', 6);
   // The remaining Lanterns are shuffled into the remainder, not stacked at the bottom.
   let early = 0;
   for (let seed = 1; seed <= 200; seed++) if (hs(seed).drawPile.slice(0, 4).some(c => c.type === 'lantern')) early++;
@@ -143,7 +143,7 @@ console.log('\nthe random hotel');
   check(tiles.every(t => t.doors.length >= 1 && t.doors.length <= 4), 'every tile has 1 to 4 doorways');
   let lobbyOk = true, exitOk = true; const shapes = new Set(); const decks = new Set();
   for (let seed = 1; seed <= 300; seed++) {
-    const s = createState(floor, SIX, seed, { mode: 'hotseat' });
+    const s = createState(floor, SIX, seed, { mode: 'match' });
     const L = floor.rooms.get(lobby);
     if (floor.roomList.length !== 1 || (L.doorSides.size !== 3 && L.doorSides.size !== 4) || L.frontier.length !== L.doorSides.size) lobbyOk = false;
     shapes.add([...L.doorSides].sort().join());
@@ -156,15 +156,15 @@ console.log('\nthe random hotel');
   check(shapes.size === 5, `the lobby's doorways are chosen at random (${shapes.size} of the 5 possible layouts seen)`);
   check(exitOk, 'the Fire Exit is always shuffled into the last five tiles of the deck');
   check(decks.size === 300, 'the deck is shuffled differently every match');
-  const a = createState(floor, SIX, 77, { mode: 'hotseat' }); const d1 = floor.deck.map(t => t.id).join() + [...floor.rooms.get(lobby).doorSides];
-  const b = createState(floor, SIX, 77, { mode: 'hotseat' }); const d2 = floor.deck.map(t => t.id).join() + [...floor.rooms.get(lobby).doorSides];
+  const a = createState(floor, SIX, 77, { mode: 'match' }); const d1 = floor.deck.map(t => t.id).join() + [...floor.rooms.get(lobby).doorSides];
+  const b = createState(floor, SIX, 77, { mode: 'match' }); const d2 = floor.deck.map(t => t.id).join() + [...floor.rooms.get(lobby).doorSides];
   check(d1 === d2, 'the same seed builds the same starting hotel');
   void a; void b;
 }
 
 console.log('\ndoors: opening and entering');
 {
-  const s = createState(floor, SIX, 41, { mode: 'hotseat' });
+  const s = createState(floor, SIX, 41, { mode: 'match' });
   const p = activePlayer(s), q = s.players[1];
   const door = floor.rooms.get(lobby).frontier[0];
   check(openableDoors(s, floor, p).length === floor.rooms.get(lobby).doorSides.size, 'every closed door of your room can be opened');
@@ -184,7 +184,7 @@ console.log('\ndoors: opening and entering');
   // A locked tile is locked the moment it is revealed, and never joins the lobby.
   let lockedOk = true, neverLobby = true;
   for (let seed = 1; seed <= 60; seed++) {
-    const t = createState(floor, SIX, seed, { mode: 'hotseat' });
+    const t = createState(floor, SIX, seed, { mode: 'match' });
     ensureRoom(t, 'cloakroom'); ensureRoom(t, 'suite416');
     for (const id of ['cloakroom', 'suite416']) {
       if (floor.rooms.has(id) && !t.lockedRooms.has(id)) lockedOk = false;
@@ -198,7 +198,7 @@ console.log('\ndoors: opening and entering');
   // Every placement follows the tile rules; the hotel never closes itself off before the exit.
   let bad = 0, closed = 0, exits = 0, jamAp = true;
   for (let seed = 1; seed <= 400; seed++) {
-    const s = createState(floor, SIX, seed, { mode: 'hotseat' });
+    const s = createState(floor, SIX, seed, { mode: 'match' });
     const p = activePlayer(s);
     for (let step = 0; step < 120; step++) {
       const doors = openDoors(floor);
@@ -434,7 +434,7 @@ console.log('\nlocked rooms, keys and picks');
   // door, and every locked room stays a dead end with a single doorway.
   let closed = 0, exitReach = 0, exits = 0, lockedShape = true, exitLocked = false;
   for (let seed = 1; seed <= 400; seed++) {
-    const s = createState(floor, SIX, seed, { mode: 'hotseat' });
+    const s = createState(floor, SIX, seed, { mode: 'match' });
     const p = activePlayer(s);
     for (let step = 0; step < 120; step++) {
       const doors = openDoors(floor);
@@ -1035,7 +1035,7 @@ console.log('\nescape and winning');
   const ps = createState(floor, roster.slice(0, 1), 3, { mode: 'practice' });
   ps.round = 50;
   check(checkWin(ps, floor) === null && !dawnHasBroken(ps), 'practice: no deadline, even in round 50');
-  applyMode('hotseat', 6);
+  applyMode('match', 6);
 }
 {
   // Practice: alone, carry three Lanterns out. The same deal as a match: 1 Lantern + 3 other cards,
@@ -1062,7 +1062,7 @@ console.log('\nescape and winning');
   check(!escape(s, floor, p).ok && !s.finished, 'the exit does nothing without three Lanterns');
   p.hand.push({ id: 'b1', type: 'lantern' }, { id: 'b2', type: 'lantern' }, { id: 'b3', type: 'lantern' });
   check(escape(s, floor, p).ok && s.won === 'humans', 'with three Lanterns, Escape (1 action) completes practice');
-  applyMode('hotseat', 6);
+  applyMode('match', 6);
 }
 
 console.log('\nhand limit: settled only at the end of your turn');
@@ -1147,7 +1147,7 @@ console.log('\nconfiguration: rooms with jobs and the new cards');
     'neither new card is a weapon or a possession card');
   let mirrors = 0, espressos = 0, lanterns = 0, deckOk = true;
   for (let seed = 1; seed <= 200; seed++) {
-    const s = createState(floor, SIX, seed, { mode: 'hotseat' });
+    const s = createState(floor, SIX, seed, { mode: 'match' });
     for (const p of s.players) { mirrors += countType(p.hand, 'handMirror'); espressos += countType(p.hand, 'espresso'); lanterns += lanternCount(p.hand); }
     const all = [...s.drawPile, ...s.players.flatMap(p => p.hand.filter(c => c.type !== 'possession'))];
     if (all.length !== 48 || countType(all, 'handMirror') !== 3 || countType(all, 'espresso') !== 3) deckOk = false;
@@ -1186,7 +1186,7 @@ console.log('\nthe room deck: rooms with jobs');
   // On the board, each one carries its job.
   let placedOk = true, placedAll = true;
   for (let seed = 1; seed <= 30; seed++) {
-    const s = createState(floor, SIX, seed, { mode: 'hotseat' });
+    const s = createState(floor, SIX, seed, { mode: 'match' });
     for (const t of tiles.filter(x => x.job)) {
       if (!ensureRoom(s, t.id)) { placedAll = false; continue; }
       const room = floor.rooms.get(t.id);
@@ -1466,7 +1466,7 @@ console.log('\nnever stuck beside a door that cannot be used');
   // able to walk back into their room — and never through the doorway.
   let cases = 0, free = 0, through = 0, freeCost = true;
   for (let seed = 1; seed <= 120; seed++) {
-    const s = createState(floor, SIX, seed, { mode: 'hotseat' });
+    const s = createState(floor, SIX, seed, { mode: 'match' });
     const p = activePlayer(s);
     for (let step = 0; step < 40; step++) {
       const doors = openDoors(floor); if (!doors.length) break;

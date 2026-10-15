@@ -1,7 +1,10 @@
 // Side-by-side with the owner's references: each room in the REAL game, seen the way its reference is
 // (tools/room-pipeline/ref/<room>.jpg: the entrance, the tile's south doorway, at the bottom), with the
 // game's own camera (pitch, field of view, default zoom), then pasted next to the reference.
-//   node tools/room-pipeline/vsref.mjs [--rooms library,kitchen] [--out tools/room-pipeline/shots]
+//   node tools/room-pipeline/vsref.mjs [--rooms library,kitchen] [--out tools/room-pipeline/shots] [--url http://127.0.0.1:8123/]
+// Serve the repo first (python3 -m http.server 8123 --bind 127.0.0.1). It opens the practice direct link
+// (?mode=practice): the plain address opens the main menu, which has no "Tap to begin" card.
+// last verified: 14 Oct 2026 (after the main menu, Round 2)
 // Writes build/vsref/<room>-game.png (the game alone, full size) and, via vsref_sheet.py,
 // <out>/<room>-vs-ref.png and the contact sheet <out>/rooms-vs-refs.png (out: tools/room-pipeline/shots).
 //
@@ -36,7 +39,7 @@ const URL = String(opt('url', 'http://127.0.0.1:8123/'));
 const W = 1448, H = 1086;
 fs.mkdirSync(OUT, { recursive: true }); fs.mkdirSync(RAW, { recursive: true });
 const threeDir = path.join(REPO, 'tests/node_modules/three'), CDN = 'https://cdn.jsdelivr.net/npm/three@0.186.0/';
-const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome', headless: true,
+const browser = await chromium.launch({ executablePath: [process.env.CHROME_PATH, '/opt/pw-browsers/chromium-1194/chrome-linux/chrome'].filter(Boolean).find(fs.existsSync), headless: true,
   args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--no-sandbox'] });
 const errs = [];
 for (const room of ROOMS) {
@@ -47,7 +50,7 @@ for (const room of ROOMS) {
   await page.route(`${CDN}**`, r => { const f = path.join(threeDir, r.request().url().slice(CDN.length).split('?')[0]); r.fulfill(fs.existsSync(f) ? { status: 200, contentType: 'application/javascript', body: fs.readFileSync(f) } : { status: 404, body: 'x' }); });
   const [, yawRef, dist] = REFS[room];
   const yawDeg = opt('yaw', null) != null ? Number(opt('yaw')) : yawRef;   // --yaw 35: a corner-on trial view
-  await page.goto(`${URL}?seed=7`, { waitUntil: 'networkidle' });
+  await page.goto(`${URL}?mode=practice&seed=7`, { waitUntil: 'networkidle' });
   await page.waitForFunction(() => window.__game && !document.getElementById("btn-begin").disabled, null, { timeout: 60000 });
   await page.tap('#btn-begin');
   await page.waitForTimeout(300);

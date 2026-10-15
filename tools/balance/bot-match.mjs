@@ -79,8 +79,8 @@ for (const kv of String(arg('tune', '')).split(',').filter(Boolean)) {
 }
 
 export function playMatch(seed, players, { trace = false } = {}) {
-  applyMode('hotseat', players);
-  const state = S.createState(floor, roster.slice(0, players), seed, { mode: 'hotseat' });
+  applyMode('match', players);
+  const state = S.createState(floor, roster.slice(0, players), seed, { mode: 'match' });
   const rng = makeRng((seed * 2654435761 ^ 0xb075) >>> 0 || 1);
   const profiles = rollProfiles(players, rng);
   state.players.forEach((p, i) => { p.name = profiles[i].username; });

@@ -55,6 +55,19 @@ export async function launch({ width = 1180, height = 820, touch = true, tips = 
   return { browser, page, messages };
 }
 
+// Wait until something in the page is true (a function run in the page), for at most `timeout` ms. Resolves true when
+// it became true and false when it did not, and never throws: the check that comes next still reports a failure in its
+// own words. It replaces a fixed pause that guessed how long a slow (1-3 frames a second) machine needs: the check runs
+// the moment the thing is ready, and as late as `timeout`. NOT for "nothing happens" checks: those must wait the whole time.
+export const settle = (page, fn, arg, timeout = 15000) =>
+  page.waitForFunction(fn, arg, { timeout, polling: 100 }).then(() => true, () => false);
+// The same for a condition read in Node (a list of requests the test keeps, say).
+export async function settleNode(cond, timeout = 15000, every = 100) {
+  const end = Date.now() + timeout;
+  while (Date.now() < end) { if (await cond()) return true; await new Promise(r => setTimeout(r, every)); }
+  return !!(await cond());
+}
+
 // --- Taps that take two steps now (src/ui/handoff.js, src/hud.js) -------------------------------------------
 // A screen ignores a second tap that comes within 300 ms of the one before (src/ui/tapGuard.js), so a check
 // that taps twice in a row waits a little longer than that between them.

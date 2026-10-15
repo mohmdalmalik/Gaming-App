@@ -8,9 +8,19 @@
 // never written twice; `you` is the player's own situation: { practice, possessed }. Where practice needs
 // different words that matter (Lanterns, the Switchboard), it has its own tip, so seeing it in practice
 // never hides the match's.
+import { hotel } from './hotel.js';
+
 const actions = n => `${n} action${n === 1 ? '' : 's'}`;
 const word = n => ['no', 'one', 'two', 'three', 'four', 'five', 'six'][n] ?? String(n);
 const Word = n => word(n).charAt(0).toUpperCase() + word(n).slice(1);
+// The two safe zones, by the names the hotel's own data gives them.
+const LANDING = hotel.lobby.name;
+const EXIT = hotel.tiles.find(t => t.isExit)?.name ?? 'Fire Exit';
+
+// The Lantern dilemma, once, for everyone: the first-meeting tip says it, and so does the private pick screen
+// (src/ui/handoff.js) when a Lantern is lifted there: a computer guest who walks in on the player opens that screen
+// with no Trade / Attack panel, so the tip beside that panel never comes up before the first card is chosen.
+export const LANTERN_TRADE_NOTE = 'A Lantern blocks a soul, but is lost if the other guest gives you an ordinary card.';
 
 export const TIPS = {
   firstTurn: {
@@ -43,7 +53,9 @@ export const TIPS = {
   },
   meeting: {
     title: 'Trade or Attack',
-    text: () => 'In a trade you each give one card, in secret, and a Lantern handed over blocks a Possession card. To attack, you need a weapon.',
+    // (both halves of the Lantern dilemma, the same words for everyone: a Lantern blocks a soul, and is lost
+    // to the other guest if what they give you is an ordinary card)
+    text: () => `In a trade you each give one card, in secret. ${LANTERN_TRADE_NOTE} To attack, you need a weapon.`,
   },
   possessedStart: {
     title: 'You are possessed',
@@ -72,6 +84,21 @@ export const TIPS = {
   finalRound: {
     title: 'The final round',
     text: () => 'Dawn breaks when this round ends. If no clean guest has escaped by then, the hotel wins.',
+  },
+  // The first time the player walks into a safe zone (the badge by the room's name has never said what it means).
+  safeZone: {
+    title: 'Safe zone',
+    text: () => `No meetings and no attacks happen in a safe zone. The ${LANDING} and the ${EXIT} are safe.`,
+  },
+  // On the player's first own turn, if they have not touched the camera yet.
+  camera: {
+    title: 'Look around',
+    text: () => 'Drag to look around the hotel. Pinch with two fingers to zoom in and out.',
+  },
+  // The first time the player uses one of the three round buttons: what all three do.
+  cameraButtons: {
+    title: 'The round buttons',
+    text: () => 'The two arrows turn the view. The target button brings it back to your guest.',
   },
   map: {
     title: 'The map',

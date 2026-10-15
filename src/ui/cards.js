@@ -1,6 +1,6 @@
 // Render a card as a DOM tile, shared by the hand sheet, the encounter modal and the discard
-// prompt. Each tile has an illustrated "art" panel (a large tinted glyph placeholder now; a real
-// illustration drops in via CARD_ART without touching this code) plus the card's name.
+// prompt. A card shows its finished face (CARD_FACE below: every card type has one); a type with no face
+// would show a drawn icon (src/ui/cardIcons.js) in an "art" panel instead. The name is always there.
 import { CARDS, countableCount } from '../game/cards.js';
 import { rules } from '../data/rules.js';
 import { cardIcon } from './cardIcons.js';
@@ -17,24 +17,6 @@ export function handLimitWarning(player) {
   const over = n - rules.handLimit;
   return over > 0 ? `Cards ${n}/${rules.handLimit} · discard ${over} at end of turn` : '';
 }
-
-// Drop-in artwork: map a card type to an image path under assets/cards/. Left empty on purpose —
-// the glyph placeholder is used until real illustrations are supplied. Add entries like
-// `bandage: 'assets/cards/bandage.png'` once the files exist and the art appears automatically.
-export const CARD_ART = {
-  lantern: 'assets/cards/lantern.jpg',
-  // Rendered in Blender to match the Lantern (tools/card-pipeline/make_cards.py).
-  bandage: 'assets/cards/bandage.jpg',
-  flashlight: 'assets/cards/flashlight.jpg',
-  knife: 'assets/cards/knife.jpg',
-  revolver: 'assets/cards/revolver.jpg',
-  barricade: 'assets/cards/barricade.jpg',
-  lockPick: 'assets/cards/lockPick.jpg',
-  masterKey: 'assets/cards/masterKey.jpg',
-  handMirror: 'assets/cards/handMirror.jpg',
-  espresso: 'assets/cards/espresso.jpg',
-  possession: 'assets/cards/possession.jpg',
-};
 
 // Finished card faces (the owner's designs: frame, illustration and name in one image, 2:3). A card with a
 // face is shown as that image; the name stays in the DOM for screen readers and the revolver's shot
@@ -88,15 +70,13 @@ export function cardDesc(type, card = null) {
   return (practiceWording && PRACTICE_DESC[type]) || CARDS[type]?.desc || '';
 }
 
-// The art panel for a card type: a real illustration if one is registered, else a big glyph.
+// The art panel for a card type that has no face picture: its drawn icon, else a big glyph. (The older square
+// illustrations, CARD_ART, were never shown once every type had a face, and were removed on 14 Oct 2026.)
 function cardArt(doc, type) {
   const meta = CARDS[type] || {};
   const art = doc.createElement('div');
   art.className = 'art';
-  if (CARD_ART[type]) {
-    const img = doc.createElement('img'); img.alt = meta.name || type; img.src = CARD_ART[type];
-    art.appendChild(img);
-  } else if (cardIcon(type)) {
+  if (cardIcon(type)) {
     art.innerHTML = cardIcon(type);                      // drawn vector icon (src/ui/cardIcons.js)
   } else {
     const g = doc.createElement('span'); g.className = 'glyph'; g.textContent = meta.glyph || '?';
@@ -132,7 +112,14 @@ export function cardTile(doc, card, opts = {}) {
 
   // A tap on a card to choose it makes the 'select' sound (the screens that ignore a tap that is too soon
   // say so by returning false: a tap that did nothing is silent).
-  if (opts.selectable && opts.onSelect) el.addEventListener('click', e => { e.preventDefault(); if (opts.onSelect(card, el, e) !== false) sfx('select'); });
+  if (opts.selectable && opts.onSelect) {
+    el.addEventListener('click', e => { e.preventDefault(); if (opts.onSelect(card, el, e) !== false) sfx('select'); });
+    // A card that can be chosen is a button for the keyboard and for a screen reader too (Tab to it, Enter or Space
+    // to choose it); src/ui/focus.js keeps Tab inside the screen it is on.
+    el.tabIndex = 0; el.setAttribute('role', 'button'); el.setAttribute('aria-pressed', String(!!opts.selected));
+    el.setAttribute('aria-label', `${meta.name}${shots}`);
+    el.addEventListener('keydown', e => { if ((e.key === 'Enter' || e.key === ' ') && !e.repeat) { e.preventDefault(); el.click(); } });
+  }
   if (opts.action) {
     const btn = doc.createElement('button');
     btn.className = 'btn' + (opts.action.primary ? ' primary' : '');
@@ -174,16 +161,5 @@ export function bigCard(doc, card, opts = {}) {
     const nm = doc.createElement('div'); nm.className = 'bc-name'; nm.textContent = meta.name; el.appendChild(nm);
     const d = doc.createElement('div'); d.className = 'bc-desc'; d.textContent = CARDS[card.type] ? cardDesc(card.type, card) : meta.desc; el.appendChild(d);
   }
-  return el;
-}
-
-// A stacked tile summarising N copies of one card type (kept for possible overviews).
-export function countTile(doc, type, count) {
-  const meta = CARDS[type];
-  const el = doc.createElement('div');
-  el.className = 'card-tile count' + (meta.evil ? ' evil' : '');
-  el.style.setProperty('--card-tint', meta.tint);
-  el.appendChild(cardArt(doc, type));   // (overview tile: keeps the small art panel)
-  el.innerHTML += `<span class="cname">${meta.name}</span><span class="badge">×${count}</span><span class="cdesc">${meta.desc}</span>`;
   return el;
 }

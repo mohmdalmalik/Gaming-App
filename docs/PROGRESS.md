@@ -1,5 +1,105 @@
 # PROGRESS
 
+## Round 2 (v0.6): teaching, clearer screens, computer guests, accessibility, documents and tests (2026-10-14)
+
+The owner-approved list from the 13 Oct audit, round 2: F1, F2, F7, G5-G9, G11-G14, G17, G18. No rule and no number
+in `src/data/rules.js` changed (two new constants there, `minPlayers` 4 and `maxPlayers` 6, are the table sizes the code
+already used), and `docs/GAME_RULES.md` was not touched. Details in docs/DECISIONS.md: 'Round 2, learn', 'Round 2,
+polish', 'Round 2, computer guests and sound' and 'Round 2, docs and tests'. The learn items (F1, G6, G11, G17) have their
+own entry just below.
+
+- **Computer guests (F2)**: a possessed computer guest no longer gives itself away by what it does. It opens doors in
+  the first rounds almost as often as a clean one (the share of possessed among guests with no door opened by round 2
+  fell from 86-96% to 47-59%), wanders instead of standing still, guards only now and then, and each guest has a
+  "curiosity" so some clean guests are homebodies. The clean side's win rate did not move (46.7 to 47.7, 39.9 to 39.2,
+  31.1 to 32.1 percent at 6, 5 and 4 guests; no decision needed). Still a faint sign: a guest inside the Fire Exit is
+  clean about 94% of the time.
+- **Hand Mirror (G8)**: when a mirror shows no Possession card the screen says so ("No Possession card. A possessed
+  guest who has used all their souls shows none."); computer guests treat a mirror-cleared guest as likely clean, not
+  certain.
+- **Sound loading (G9)**: a failed sound download is tried again after 3 s, then 10 s; the night music starts
+  downloading while the table fills up and the end fanfares from round 3, so the lift and the ending do not wait for the
+  network.
+- **Small text, telling guests apart, keyboard focus, the app icon, a match the browser cut short (G5, G7, G12, G13,
+  G14)**: about 30 labels larger (nothing visible under 11 px); every guest's initial in the strip and the plan, more
+  separate seat colours and stronger floor rings; focus, Tab and Escape behave on every screen over the game and tall
+  pop-ups scroll by touch; a brass-lantern icon and a manifest for Add to Home Screen (a proposal for the owner to
+  approve); if the browser cut a match short the next start says so once and counts one "Left early".
+- **Documents (F7)**: docs/DECISIONS.md starts with "Read this first: what is current" and every stale early section
+  says SUPERSEDED and where the truth is (six wrong facts corrected; nothing moved); the README is up to date, has a
+  "Running the tests" section that works from a clean copy, and previews on `127.0.0.1` only; assets/README.md
+  no longer says the game has two images.
+- **Tests and clean-up (G18)**: new `tests/public-events-check.mjs` (a private fact can never leak into a public event),
+  `tests/record-check.mjs` (Your record, the counting, "Left early" and damaged saves, in Node, through an injectable store),
+  `tests/docs-check.mjs` (the documents' numbers, file lists and links), `tests/run-fast.mjs` (every fast suite in one
+  command); ten long fixed waits in the browser suites wait for what they mean; the old QA scripts moved to
+  `tests/old/`; the four room-pipeline tools work again (practice link, `--url`); the Kenney models (423,319 bytes in 48
+  files) and their loader, the dead exports and the hot-seat leftovers are gone; the table sizes are in `rules.js`; the
+  old card illustrations moved into `tools/card-pipeline/art/` (they are an input of a tool). The three new fast suites
+  are in the GitHub Action.
+- **Version**: `src/version.js` says v0.6 (14 Oct 2026); `docs/VERSIONS.md` has the v0.6 row with its commit to be written
+  in after publishing.
+- **Waiting for the owner**: how the possessed computer guests win (found by the review, measured again after it): the clean
+  side wins about as often, but the possessed side now wins more by possessing or killing everyone (6 guests: 9 to 14%
+  of matches; 4 guests: 26 to 36%) and less by waiting for dawn (45 to 39%; 42 to 30%), and a match runs about a round
+  shorter, because possessed guests now try a Possession card at their first trade more often (the table is in
+  docs/DECISIONS.md, "Round 2, fixes after review"); whether the clock may run while the Menu is open (today it stands still, as it did when the
+  button only asked "Leave the match?"); the Hand Mirror card's own text in `rules.js` (the audit found it "also fits":
+  not changed, the file is protected); whether the icon is the one wanted (a Home Screen copy must be removed and added
+  again to show a new one); whether the "match cut short" note should be a notice card (as now) or a toast; a "Text size"
+  setting (held); a ring shape per seat; whether `tools/` (26 MB) should stay in the published site; and the
+  one-line addition to CLAUDE.md proposed in the report ("when a decision changes, edit its DECISIONS section the same
+  day": CLAUDE.md is the owner's file, so it was not edited). One change to the computer guests' quick chat was made to
+  keep a test honest (the possessed "Meet me at the Fire Exit." is said near the exit, not only beside it): revert it if chat
+  must not move at all, and `tests/chat-check.mjs` then fails on that rate.
+- **Only a real iPad can say**: how the larger text, the new buttons and the How to play pages feel under a finger;
+  Safari's focus ring, Tab order and Escape with a keyboard, and VoiceOver; the icon at true size and whether a Home
+  Screen copy opens without Safari's bars; whether Safari ever discards the tab mid-match (the new note is how the owner
+  will know); a real network hiccup against the sound retries; and above all how the computer guests now feel to play
+  against.
+- **Tests**: node: rules-check, logic-check, bots-check, chat-check, profile-check, crash-check, audio-buttons-check,
+  audio-load-check, flicker-check, polish-check, howto-check, public-events-check, record-check, docs-check (all 14 run
+  by `node tests/run-fast.mjs` and by the GitHub Action); browser: avatar-check, audio-check, browser-learn,
+  browser-polish, tips-check, browser-lobby and the rest (README, "Running the tests"). **Run on the final code (14 Oct,
+  headless Chromium, software WebGL; all passed):** the 14 fast suites (also from a clean copy of the repo, with
+  `npm --prefix tests ci` and a Chromium named by `CHROME_PATH`); audio-check (50 checks), avatar-check,
+  browser-lobby (68), browser-practice (205), browser-bots (67), trade-reveal-check (159), browser-polish sections
+  reload, scroll and text (90), browser-learn section d; the four room-pipeline tools (walkcheck walked all 3 doorways of
+  the library, perf, shoot, vsref). A whole-game network log (menu, a match to the end screen, practice) asked for 247
+  files, none of them removed ones, with no 404 and a clean console. **Not run on the final code:** browser-polish
+  sections head, focus and seats, browser-learn a, b and c, tips-check, browser-profile, browser-reliability,
+  browser-build-fixes, menu-scene-shots. **Not provable here:** the download of Playwright's own Chromium (the
+  sandbox's proxy refuses cdn.playwright.dev; the command reaches the download and stops there).
+- **browser-bots**: the scripted attack in its section 5 had been failing since the computer guests started to roam (not
+  because of anything else in this round: a plain checkout of the last commit passes); the test now sets its scene so it
+  no longer depends on where a bot happened to walk (DECISIONS 'Round 2, docs and tests'). It passes (67 checks).
+
+## Round 2, learn: How to play, the Menu panel, the Lanterns count, Victory / Defeat, three tips (2026-10-14)
+
+From the 13 Oct audit (owner-approved list: F1, G17, G6, G11). Interface, tests and docs only; no rule or rule
+number changed. Details in docs/DECISIONS.md 'Round 2, learn'.
+
+- **One word for the action budget (F1)**: "1 action" / "3 actions" on the tags, the Move button, the toasts; no
+  "AP" or "action points" anywhere the player reads (tests/howto-check.mjs scans for them).
+- **How to play (F1)**: five short pages (the goal, your turn, meetings and trades, possession and Lanterns,
+  staying alive) with Back / Next / Close, from the main menu (a button beside Settings and Your record) and from
+  the Menu in a match. Every word is in src/data/howToPlay.js (the owner's draft), the numbers read from the
+  rules. A hint under "Practice alone" until you have finished a match or a practice. The role screen's
+  headline is "You are clean" / "You are possessed", its text is 16 px, and one line says how the other side wins.
+- **The Menu panel (G17)**: the Menu button opens Resume, Music and Sound effects, How to play and Leave (which
+  asks "Leave the match?" as before). The turn clock does exactly what it did when the button asked that
+  question: it stands still while the panel (or the question) is open. The owner's decision on pausing is
+  still pending; nothing was changed.
+- **The Lanterns count and the end screen (G6)**: a small "Lanterns 1/3" chip in your player panel (your own
+  count, the same for both sides); the end screen says Victory or Defeat for your side, whether or not you are
+  alive or got out, and one recap line ("oakhart was possessed first and possessed ari_v, birch and moth.").
+- **Tips (G11)**: the first-meeting tip says both halves of the Lantern dilemma; three new tips (the safe
+  zone, pinch and drag, what the round camera buttons do).
+- **Tests**: new tests/howto-check.mjs (node) and tests/browser-learn.mjs; tests/tips-check.mjs has a section
+  for the new tips; browser-bots and tips-check tap Menu, then Leave.
+- **Only a real iPad can say**: the feel of the new buttons and text sizes under a finger, Safari's focus ring,
+  and how the new tips sit beside the round buttons at the real size.
+
 ## Round 1: accidental taps, flicker and Reduce Motion, the small window, sounds, the Revolver, and the review's fixes (2026-10-14)
 
 From the 13 Oct audit (owner-approved list, round 1: F5, G1-G4, then the review's findings). Interface, tests

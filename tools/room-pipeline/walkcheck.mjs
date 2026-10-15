@@ -2,8 +2,11 @@
 // the tile is revealed next to the lobby (or, for a locked room the rules keep away from it, next to
 // another room), the guest walks in, then each of the tile's other doorways is opened and the guest
 // walks through it into the room behind and back again.
-//   node tools/room-pipeline/walkcheck.mjs [--rooms library,kitchen] [--seed 3]
+//   node tools/room-pipeline/walkcheck.mjs [--rooms library,kitchen] [--seed 3] [--url http://127.0.0.1:8123/]
 // Exits non-zero if any doorway could not be walked through (or the page logged an error).
+// Serve the repo first (python3 -m http.server 8123 --bind 127.0.0.1). It opens the practice direct link
+// (?mode=practice): the plain address opens the main menu, which has no "Tap to begin" card.
+// last verified: 14 Oct 2026 (after the main menu, Round 2)
 import fs from 'node:fs'; import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
@@ -16,7 +19,7 @@ const ALL = Object.keys(JSON.parse(fs.readFileSync(path.join(HERE, 'rooms.json')
 const ROOMS = String(opt('rooms', ALL.join(','))).split(',');
 const SEED = +opt('seed', 3), URL = String(opt('url', 'http://127.0.0.1:8123/'));
 const threeDir = path.join(REPO, 'tests/node_modules/three'), CDN = 'https://cdn.jsdelivr.net/npm/three@0.186.0/';
-const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome', headless: true,
+const browser = await chromium.launch({ executablePath: [process.env.CHROME_PATH, '/opt/pw-browsers/chromium-1194/chrome-linux/chrome'].filter(Boolean).find(fs.existsSync), headless: true,
   args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--no-sandbox'] });
 let failures = 0, walked = 0;
 const errs = [];
@@ -27,7 +30,7 @@ for (const room of ROOMS) {
   page.on('pageerror', e => errs.push(`${room}: ${e}`));
   page.on('console', m => { if (m.type() === 'error') errs.push(`${room}: ${m.text()}`); });
   await page.route(`${CDN}**`, r => { const f = path.join(threeDir, r.request().url().slice(CDN.length).split('?')[0]); r.fulfill(fs.existsSync(f) ? { status: 200, contentType: 'application/javascript', body: fs.readFileSync(f) } : { status: 404, body: 'x' }); });
-  await page.goto(`${URL}?seed=${SEED}&timer=off`, { waitUntil: 'networkidle' });
+  await page.goto(`${URL}?mode=practice&seed=${SEED}&timer=off`, { waitUntil: 'networkidle' });
   await page.waitForFunction(() => window.__game && !document.getElementById('btn-begin').disabled, null, { timeout: 60000 });
   await page.tap('#btn-begin');
   await page.waitForTimeout(300);

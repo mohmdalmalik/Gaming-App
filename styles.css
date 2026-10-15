@@ -118,7 +118,7 @@ html, body {
   box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.55), inset 0 0 0 2px var(--line-soft), 0 8px 22px rgba(0, 0, 0, 0.4);
   -webkit-backdrop-filter: blur(7px); backdrop-filter: blur(7px);
 }
-.label-caps { font-size: 10px; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; color: var(--brass); }
+.label-caps { font-size: 11px; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; color: var(--brass); }
 
 /* HUD */
 #hud { position: absolute; inset: 0; pointer-events: none; }
@@ -155,7 +155,7 @@ html, body {
 }
 .safe-badge {
   display: inline-flex; align-items: center; gap: 6px; padding: 4px 12px; border-radius: 999px;
-  font-size: 11px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase;
+  font-size: 12px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase;
   color: #bfe8c8; background: rgba(70, 150, 100, 0.16); border: 1px solid rgba(120, 200, 150, 0.4);
 }
 .safe-badge[hidden] { display: none; }
@@ -169,7 +169,7 @@ html, body {
   box-shadow: inset 0 0 0 1px rgba(0,0,0,0.5); -webkit-backdrop-filter: blur(7px); backdrop-filter: blur(7px);
 }
 .objectives .obj-label {
-  font-size: 10px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: var(--brass);
+  font-size: 11px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: var(--brass);
 }
 .obj-pips { display: inline-flex; gap: 5px; }
 .obj-pip {
@@ -222,7 +222,7 @@ html, body {
   -webkit-backdrop-filter: blur(7px); backdrop-filter: blur(7px);
 }
 .mini-player { display: flex; flex-direction: column; align-items: center; gap: 4px; width: 74px; }
-.mini-flag { height: 13px; font-size: 9px; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; color: transparent; white-space: nowrap; }
+.mini-flag { height: 14px; font-size: 11px; line-height: 14px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: transparent; white-space: nowrap; }
 .mini-player.active .mini-flag { color: var(--brass-bright); }
 .mini-player.next .mini-flag { color: var(--ivory-dim); }
 .mini-portrait {
@@ -285,7 +285,7 @@ html, body {
 .player-meta { display: flex; flex-direction: column; gap: 7px; min-width: 132px; justify-content: center; }
 .player-name { font-family: var(--serif); font-size: 20px; font-weight: 700; color: var(--ivory); letter-spacing: 0.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .stat { display: flex; align-items: center; gap: 8px; }
-.stat-label { min-width: 52px; font-size: 11px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: var(--muted); }
+.stat-label { min-width: 58px; font-size: 12px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: var(--muted); }
 
 .health { display: flex; gap: 5px; }
 .health .bar { width: 26px; height: 10px; border-radius: 2px; background: rgba(255,255,255,0.08); border: 1px solid var(--line-soft); }
@@ -308,7 +308,7 @@ html, body {
 .private-link {
   align-self: flex-start; margin: -10px 0 -10px -6px; padding: 0 6px; min-height: 48px; display: inline-flex; align-items: center;
   background: none; border: none; touch-action: manipulation;
-  color: var(--brass); font-size: 12px; font-weight: 600; letter-spacing: 0.04em; cursor: pointer; font-family: var(--sans);
+  color: var(--brass); font-size: 13px; font-weight: 600; letter-spacing: 0.04em; cursor: pointer; font-family: var(--sans);
 }
 .private-link:active { color: var(--brass-bright); }
 
@@ -346,7 +346,7 @@ html, body {
 /* The Revolver's shots, top LEFT: the next card in the fan covers each card's right-hand side. When
    the fan is crowded (.tight) only the number shows. */
 .fan-card .fan-badge {
-  position: absolute; top: 5%; left: 5%; padding: 1px 6px; border-radius: 999px; font-size: 10.5px; font-weight: 800;
+  position: absolute; top: 5%; left: 5%; padding: 1px 6px; border-radius: 999px; font-size: 12px; font-weight: 800;
   white-space: nowrap; color: #2a2016; background: var(--brass-bright); box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
 }
 .fan-card .fan-badge b { font-weight: 800; }
@@ -390,7 +390,7 @@ html, body {
 }
 .search-spot .ss-caption {
   padding: 2px 9px; border-radius: 999px; white-space: nowrap;
-  font: 700 11.5px/1.35 var(--sans); letter-spacing: 0.03em; color: var(--ivory);
+  font: 700 12.5px/1.35 var(--sans); letter-spacing: 0.03em; color: var(--ivory);
   background: rgba(14, 16, 22, 0.88); border: 1px solid var(--line);
 }
 .search-spot .ss-hint {
@@ -517,7 +517,7 @@ html, body {
   border-bottom: 1px solid var(--line-soft);
 }
 .panel-header .panel-title { font-family: var(--serif); font-size: 19px; font-weight: 700; color: var(--ivory); }
-.panel-header .lock { font-size: 11px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); display: inline-flex; align-items: center; gap: 5px; }
+.panel-header .lock { font-size: 12px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); display: inline-flex; align-items: center; gap: 5px; }
 .panel-header .spacer { flex: 1; }
 .panel-note { padding: 10px 20px 14px; color: var(--muted); font-size: 13px; }
 
@@ -686,7 +686,7 @@ html, body {
    The swatch is quartered in four of the guests' colours, so it reads as "a coloured dot", not one guest. */
 .map-legend .sw.guest {
   width: 12px; height: 12px; border-radius: 50%; border: 1.5px solid #1d1509;
-  background: conic-gradient(#e6b45a 0 25%, #5ac8e6 0 50%, #a8e05a 0 75%, #e67ab8 0);
+  background: conic-gradient(#e6bc5c 0 25%, #73d4e6 0 50%, #2f8cff 0 75%, #e673ac 0);
 }
 /* Rooms with jobs carry a small mark on the plan (drawn in src/map.js in the same colours). */
 .map-legend .mk-bar { width: 18px; height: 18px; flex: none; }
@@ -771,9 +771,9 @@ html, body {
 /* Public per-guest lines in the top strip: where they are (a short room name), then health. Never a
    role, and never a card count (card counts are private). Readable at arm's length; a long name ends in
    an ellipsis. The health line is only the hearts, so it sits close under the room. */
-.mini-where { display: flex; flex-direction: column; align-items: center; gap: 1px; font-size: 11.5px; line-height: 1.25; color: var(--ivory-dim); text-align: center; width: calc(100% + 8px); max-width: 82px; }
+.mini-where { display: flex; flex-direction: column; align-items: center; gap: 1px; font-size: 12px; line-height: 1.25; color: var(--ivory-dim); text-align: center; width: calc(100% + 8px); max-width: 82px; }
 .mini-where .mini-room, .mini-where .mini-stats { display: block; max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.mini-where .mini-stats { font-size: 11px; line-height: 1; letter-spacing: 0.5px; color: #e88178; }
+.mini-where .mini-stats { font-size: 12px; line-height: 1; letter-spacing: 0.5px; color: #e88178; }
 .mini-where .mini-stats:empty { display: none; }
 .mini-player.escaped { opacity: 0.55; }
 .mini-player.escaped .mini-name { color: #9fe3b8; }
@@ -918,7 +918,7 @@ html, body {
 .tell-badge[hidden] { display: none; }
 .tell-pill {
   display: inline-block; padding: 2px 10px 2px 11px; border-radius: 999px; white-space: nowrap;
-  font: 800 10.5px/1.45 var(--sans); letter-spacing: 0.16em; text-transform: uppercase; color: var(--ivory);
+  font: 800 12px/1.4 var(--sans); letter-spacing: 0.13em; text-transform: uppercase; color: var(--ivory);
   background: linear-gradient(180deg, #2a0d15, #13070b); border: 1px solid var(--brass);
   box-shadow: inset 0 0 0 1px rgba(163,38,58,0.95), 0 1px 4px rgba(0,0,0,0.5);
 }
@@ -926,7 +926,7 @@ html, body {
   background: linear-gradient(180deg, #17442f, var(--clean-pill)); border-color: rgba(201,162,78,0.85);
   box-shadow: inset 0 0 0 1px rgba(0,0,0,0.35), 0 1px 4px rgba(0,0,0,0.45);
 }
-.tell-note { font-family: var(--serif); font-size: 10.5px; line-height: 1.2; color: var(--ivory-dim); white-space: nowrap; letter-spacing: 0.01em; }
+.tell-note { font-family: var(--serif); font-size: 12px; line-height: 1.2; color: var(--ivory-dim); white-space: nowrap; letter-spacing: 0.01em; }
 
 .souls-chip {
   display: inline-flex; align-items: center; gap: 8px; align-self: center;
@@ -956,7 +956,7 @@ html, body {
 .role-badge .role-text { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; min-width: 0; }
 .role-badge .role-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; }
 .role-badge .role-head .tell-badge { align-items: center; }
-.role-badge .role-head .tell-note { font-size: 11.5px; }
+.role-badge .role-head .tell-note { font-size: 12.5px; }
 .role-badge .role-head .souls-chip { align-self: center; }
 .role-badge.with-portrait .role-text { gap: 6px; }
 .role-badge.evil .role-line { color: var(--ivory-dim); }
@@ -1383,7 +1383,7 @@ html, body {
 .atk-weapon.gone img { animation: atk-grey 0.8s ease 1.1s both; }
 .atk-empty {
   position: absolute; left: 50%; bottom: 9%; transform: translateX(-50%); padding: 2px 9px; border-radius: 999px; white-space: nowrap;
-  font: 800 11px/1.4 var(--sans); letter-spacing: 0.08em; text-transform: uppercase; color: var(--ivory-dim);
+  font: 800 12px/1.4 var(--sans); letter-spacing: 0.08em; text-transform: uppercase; color: var(--ivory-dim);
   background: rgba(20,16,12,0.92); border: 1px solid var(--brass-dim); opacity: 0; animation: atk-tag 0.4s ease 1.2s both;
 }
 .atk-slash {
@@ -1502,7 +1502,7 @@ html, body {
 @keyframes chatIn { from { opacity: 0; } to { opacity: 1; } }
 .chat-kicker {
   display: flex; align-items: center; gap: 8px; margin: 1px 2px 8px;
-  font-size: 10px; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; color: var(--brass);
+  font-size: 11px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: var(--brass);
 }
 .chat-kicker::before, .chat-kicker::after { content: ""; flex: 1; height: 1px; background: linear-gradient(90deg, transparent, var(--line)); }
 .chat-kicker::after { background: linear-gradient(90deg, var(--line), transparent); }
@@ -1600,21 +1600,21 @@ html, body {
   background: linear-gradient(180deg, #f6e2a8 0%, #e2bd67 55%, #a8812f 100%); -webkit-background-clip: text; background-clip: text;
   -webkit-text-fill-color: transparent; color: var(--brass-bright);
 }
-.rec-cap { font-size: 11px; font-weight: 700; letter-spacing: 0.2em; text-transform: uppercase; color: var(--ivory-dim); }
+.rec-cap { font-size: 12px; font-weight: 700; letter-spacing: 0.18em; text-transform: uppercase; color: var(--ivory-dim); }
 .rec-rate {
   grid-column: 1 / -1; display: flex; align-items: center; justify-content: center; gap: 12px;
   padding: 9px 12px 11px; border-top: 1px solid var(--line-soft);
 }
 .rec-rate::before, .rec-rate::after { content: ""; flex: 0 1 56px; height: 1px; background: linear-gradient(90deg, transparent, var(--brass)); }
 .rec-rate::after { background: linear-gradient(90deg, var(--brass), transparent); }
-.rec-rate-label { font-size: 11px; font-weight: 700; letter-spacing: 0.2em; text-transform: uppercase; color: var(--brass); }
+.rec-rate-label { font-size: 12px; font-weight: 700; letter-spacing: 0.18em; text-transform: uppercase; color: var(--brass); }
 .rec-rate-num { font-family: var(--serif); font-size: 24px; font-weight: 700; line-height: 1; color: var(--brass-bright); }
 .rec-rows { margin-top: 10px; }
 .rec-row {
   display: flex; justify-content: space-between; align-items: baseline; gap: 14px; padding: 8px 4px;
   border-bottom: 1px solid var(--line-soft);
 }
-.rec-label { font-size: 11px; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; color: var(--ivory-dim); white-space: nowrap; }
+.rec-label { font-size: 12px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ivory-dim); white-space: nowrap; }
 .rec-val { font-family: var(--serif); font-size: 16px; font-weight: 700; color: var(--ivory); text-align: right; white-space: nowrap; }
 #rec-note { margin-top: 10px; }
 #menu-record .menu-actions { margin-top: 16px; }
@@ -1669,7 +1669,7 @@ html, body {
 @keyframes tipIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: none; } }
 .tip-kicker {
   display: flex; align-items: center; gap: 8px; margin: 0 0 3px;
-  font-size: 10px; font-weight: 700; letter-spacing: 0.24em; text-transform: uppercase; color: var(--brass);
+  font-size: 11px; font-weight: 700; letter-spacing: 0.2em; text-transform: uppercase; color: var(--brass);
 }
 .tip-kicker::before, .tip-kicker::after { content: ""; flex: 1; height: 1px; background: linear-gradient(90deg, transparent, var(--line)); }
 .tip-kicker::after { background: linear-gradient(90deg, var(--line), transparent); }
@@ -1776,7 +1776,7 @@ html, body {
 .pc-portrait { flex: none; width: 54px; height: 72px; border-radius: 10px; overflow: hidden; border: 1px solid var(--brass); background: var(--panel-solid); }
 .pc-portrait img, .pc-portrait svg { width: 100%; height: 100%; object-fit: cover; display: block; -webkit-user-drag: none; }
 .pc-text { display: flex; flex-direction: column; gap: 3px; min-width: 0; flex: 1; }
-.pc-kicker { font-size: 10.5px; font-weight: 700; letter-spacing: 0.18em; text-transform: uppercase; color: var(--muted); }
+.pc-kicker { font-size: 12px; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; color: var(--muted); }
 .pc-name { font-family: var(--serif); font-size: clamp(18px, 2.2vw, 24px); font-weight: 700; color: var(--ivory); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .pc-edit { font-size: 13.5px; font-weight: 600; color: var(--brass); letter-spacing: 0.02em; }
 #menu-main .menu-tag { margin-bottom: 18px; }
@@ -1860,7 +1860,7 @@ html, body {
 .av-chip-main { display: inline-flex; align-items: center; gap: 5px; }
 .av-chip.locked { border-style: dashed; color: var(--muted); }
 .av-chip.locked .av-lock { color: var(--brass); }
-.av-chip-soon { font: 700 9.5px/1 var(--sans); letter-spacing: 0.1em; text-transform: uppercase; color: var(--brass-dim); }
+.av-chip-soon { font: 700 11px/1 var(--sans); letter-spacing: 0.08em; text-transform: uppercase; color: #bfae86; }   /* (was brass-dim, 3.85:1: now about 8:1) */
 .av-note { margin-top: 4px; font-size: 12.5px; line-height: 1.35; color: var(--muted); text-wrap: pretty; }
 #menu-avatar .av-actions { margin-top: 10px; }
 @media (max-height: 800px) {
@@ -1879,7 +1879,7 @@ html, body {
 .cp-tabs { display: grid; grid-template-columns: 1fr 1fr; margin: 0 0 8px; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
 .cp-tab {
   appearance: none; height: 44px; border: 0; background: transparent; color: var(--ivory-dim); cursor: pointer;
-  font: 700 11px/1 var(--sans); letter-spacing: 0.16em; text-transform: uppercase; touch-action: manipulation;
+  font: 700 12.5px/1 var(--sans); letter-spacing: 0.14em; text-transform: uppercase; touch-action: manipulation;
   -webkit-tap-highlight-color: transparent;
 }
 .cp-tab + .cp-tab { border-left: 1px solid var(--line); }
@@ -1899,7 +1899,7 @@ html, body {
 .cp-blank {
   /* (no space after it: "I trust WHO." — the right margin also takes back the last letter's spacing) */
   display: inline-block; min-width: 26px; margin: 0 -0.12em 0 1px; padding: 0 0 0 2px; border-bottom: 1.5px dotted var(--brass);
-  color: var(--brass-bright); font: 700 10px/1.5 var(--sans); letter-spacing: 0.12em; text-transform: uppercase; vertical-align: 1px;
+  color: var(--brass-bright); font: 700 12px/1.5 var(--sans); letter-spacing: 0.1em; text-transform: uppercase; vertical-align: 0;
 }
 /* the second step: Back, the line, "Choose a guest", the guests */
 .cp-whom-head { display: flex; align-items: center; gap: 8px; height: 44px; margin: 0 0 8px; }
@@ -1911,7 +1911,7 @@ html, body {
 .cp-back svg { width: 18px; height: 18px; }
 .cp-back:active { background: rgba(201, 162, 78, 0.22); border-color: var(--brass); }
 .cp-whom-line { font: 600 15px/1.2 var(--serif); color: var(--ivory); min-width: 0; }
-.cp-whom-hint { margin: 0 2px 8px; font-size: 10px; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; color: var(--brass); }
+.cp-whom-hint { margin: 0 2px 8px; font-size: 11.5px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: var(--brass); }
 .cp-guests { display: grid; grid-template-columns: repeat(3, 1fr); grid-auto-rows: 92px; gap: 6px; align-content: start; }
 .cp-guest {
   appearance: none; min-width: 0; height: 92px; padding: 6px 4px; border-radius: 10px; cursor: pointer;
@@ -1953,7 +1953,7 @@ html, body {
 .error-actions { margin-top: 4px; }
 .error-actions .btn[hidden] { display: none; }
 .error-card .error-detail {
-  margin: 20px 0 0; font-size: 11.5px; line-height: 1.4; color: var(--muted); opacity: 0.9; overflow-wrap: anywhere;
+  margin: 20px 0 0; font-size: 12px; line-height: 1.4; color: var(--muted); opacity: 0.9; overflow-wrap: anywhere;
   -webkit-user-select: text; user-select: text;
 }
 .error-card .error-detail[hidden] { display: none; }
@@ -1965,7 +1965,7 @@ html, body {
 }
 @media (max-height: 420px) { .rotate-icon { display: none; } }
 /* Settings > Version: quiet, at the bottom. */
-.set-version { margin-top: 10px; text-align: center; font-size: 11.5px; line-height: 1.2; letter-spacing: 0.05em; color: var(--muted); }
+.set-version { margin-top: 10px; text-align: center; font-size: 12px; line-height: 1.2; letter-spacing: 0.05em; color: var(--muted); }
 
 /* ==== Round 1, build fixes (accidental taps, found card and legend at 1024x694, Reduce Motion) ==== */
 
@@ -2030,3 +2030,117 @@ html, body {
   html.device-landscape .rotate-tall { display: none; }
   html.device-landscape .rotate-wide { display: block; }
 }
+
+/* ==== Round 2, build-learn: How to play, the Menu panel, the Lanterns chip, the role screen, the end screen ====
+   (src/ui/howToPlay.js, src/ui/gameMenu.js, src/hud.js, src/ui/handoff.js, src/overlays.js; the words: src/data/) */
+
+/* Main menu: How to play, Settings and Your record share one row (the three are narrower, so a little less
+   padding and a step smaller); a hint for a player who has played nothing yet sits just under Practice alone. */
+.menu-row2.three { gap: 10px; }
+.menu-row2.three .menu-btn { padding: 8px 6px; }
+.menu-row2.three .menu-btn .mb-main { font-size: 17px; white-space: nowrap; }
+.menu-hint { margin: -5px 4px 0; font-family: var(--serif); font-style: italic; font-size: 14.5px; line-height: 1.35; color: var(--brass); text-wrap: pretty; }
+.menu-hint[hidden] { display: none; }
+
+/* A keyboard user sees where they are (a finger never does: these show only for :focus-visible). */
+.howto .btn:focus-visible, .gamemenu .btn:focus-visible, .gamemenu .seg-btn:focus-visible { outline: 2px solid var(--brass-bright); outline-offset: 2px; }
+
+/* How to play: above the menu (40) and the Menu panel, under the problem card. Five pages; a page never needs
+   more than the screen, but if a window is very short the lines scroll inside the card (the buttons stay put). */
+.howto { position: fixed; z-index: 60; background: rgba(6, 7, 11, 0.86); }
+.howto-card { width: min(660px, 94vw); max-height: 94vh; display: flex; flex-direction: column; padding: 22px 30px 18px; text-align: left; }
+.howto-kicker { text-align: center; font-family: var(--serif); font-size: 12px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--brass); margin-bottom: 6px; }
+.howto-card h1 { text-align: center; margin: 0 0 12px; font-size: clamp(26px, 4vw, 34px); color: var(--brass-bright); }
+.howto-lines { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 11px; flex: 1 1 auto; min-height: 0; overflow-y: auto; touch-action: pan-y; }
+.howto-lines li { position: relative; padding-left: 22px; font-size: 16.5px; line-height: 1.45; color: var(--ivory); text-wrap: pretty; }
+.howto-lines li::before { content: '\25C6'; position: absolute; left: 0; top: 0.12em; font-size: 11px; color: var(--brass); }
+.howto-dots { display: flex; gap: 8px; justify-content: center; margin: 14px 0 12px; }
+.howto-dot { width: 8px; height: 8px; border-radius: 50%; background: rgba(255, 255, 255, 0.14); border: 1px solid var(--line-soft); }
+.howto-dot.on { background: var(--brass); border-color: var(--brass-bright); box-shadow: 0 0 6px rgba(201, 162, 78, 0.5); }
+.howto-actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.howto-nav { display: flex; gap: 12px; }
+.howto-actions .btn.big { font-size: 18px; padding: 10px 26px; min-height: 52px; }
+.howto-actions .btn:disabled { opacity: 0.4; }
+
+/* The in-match Menu panel: Resume (gold, the safe way on), the two sound rows, How to play and Leave. */
+.gamemenu { z-index: 12; }
+.gamemenu-card { width: min(470px, 94vw); padding: 22px 28px 24px; }
+.gamemenu-card .notice-rule { margin-bottom: 12px; }
+.gamemenu-card h1 { margin: 0 0 14px; font-size: clamp(26px, 4vw, 34px); }
+.gm-field { text-align: left; margin-bottom: 14px; }
+.gm-field .mf-label { margin-bottom: 7px; }
+.gm-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 18px; }
+.gm-actions .btn.big { width: 100%; font-size: 18px; padding: 10px 14px; min-height: 54px; }
+.gm-actions .btn.primary { grid-column: 1 / -1; }
+
+/* The Lanterns chip in the player panel: your own count out of the number that opens the Fire Exit. The same for
+   everyone (a possessed guest can hold Lanterns too), so it says nothing about a side. */
+.lantern-stat { display: flex; margin: -1px 0 -2px; }
+.lantern-chip {
+  display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 11px 0 8px; border-radius: 999px;
+  background: rgba(201, 162, 78, 0.13); border: 1px solid var(--brass-dim); white-space: nowrap;
+}
+.lantern-chip .lc-glyph { font-size: 13px; line-height: 1; color: #ffd66b; }
+.lantern-chip .lc-label { font-size: 11px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: var(--ivory-dim); }
+.lantern-chip .lc-count { font-size: 14px; font-weight: 800; color: var(--brass-bright); font-variant-numeric: tabular-nums; }
+
+/* The role screen: the paragraph at 16 px (it was 13), and ONE line below it about how the other side wins. */
+.role-badge .role-line { font-size: 16px; line-height: 1.5; color: var(--ivory); }
+.role-badge.evil .role-line { color: var(--ivory); }
+.role-badge .role-other { align-self: stretch; margin-top: 2px; padding-top: 8px; border-top: 1px solid var(--line-soft); font-size: 15px; line-height: 1.45; color: var(--ivory-dim); }
+.role-badge.with-portrait .role-other { align-self: stretch; }
+
+/* The end screen: "Victory" or "Defeat" for your side above the title, and the recap line under the summary. */
+.end-verdict { margin: 0 0 2px; font-family: var(--serif); font-size: 22px; font-weight: 700; letter-spacing: 0.32em; padding-left: 0.32em; text-transform: uppercase; color: var(--ivory-dim); }
+.end-verdict[hidden] { display: none; }
+#end-overlay.won .end-verdict { color: var(--brass-bright); }
+#end-overlay.lost .end-verdict { color: #eaa898; }
+#end-overlay .card p.end-recap { margin: -10px auto 18px; max-width: min(540px, 80vw); font-family: var(--serif); font-size: 15.5px; line-height: 1.4; color: var(--ivory); }
+#end-overlay .card p.end-recap[hidden] { display: none; }
+@media (max-height: 720px) {      /* (1024 x 694 with Safari's bars: six guests, the recap and the chat row still fit with room to spare) */
+  #end-overlay .card { padding-top: 20px; padding-bottom: 20px; }
+  .end-verdict { font-size: 19px; }
+  #end-overlay .card h1 { font-size: 34px; }
+}
+
+/* ==== Round 2, polish block (audit G5, G7, G12): small text, guests easier to tell apart, keyboard focus and tall
+   pop-ups. The text sizes themselves were changed in place above; these are the new rules. ==== */
+
+/* The guest's initial in a corner of their portrait in the top strip (src/hud.js sets data-mark; the colour is the
+   seat's, so the strip does not rely on colour alone). Drawn by CSS so it survives the portrait being swapped. */
+.mini-portrait[data-mark]::before {
+  content: attr(data-mark); content: attr(data-mark) / "";      /* (the second: no alternative text, so a screen reader does not read the initial as well as the name; a browser without it keeps the first) */
+  position: absolute; left: 3px; top: 3px; z-index: 1;
+  display: flex; align-items: center; justify-content: center; box-sizing: border-box;
+  min-width: 19px; height: 19px; padding: 0 4px; border-radius: 10px;
+  background: var(--player-color); color: #16110a; font: 800 12px/1 var(--sans); letter-spacing: 0;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.6);
+}
+
+/* The notice card also shows over the main menu (the one that says a match was cut short: src/main.js noteLostMatch),
+   so it sits above the menu (z-index 40) and under the black fade (90). In a game nothing else is at that height. */
+#notice-overlay { z-index: 45; }
+
+/* A card that can be chosen can be reached with the keyboard (src/ui/cards.js): a clear ring on it. */
+.card-tile.selectable:focus-visible { outline: 3px solid var(--brass-bright); outline-offset: 3px; }
+.card-tile.selectable:focus:not(:focus-visible) { outline: none; }
+/* The box that holds the focus when nothing in it can (src/ui/focus.js): no ring on the box itself. */
+.overlay [role="dialog"][tabindex="-1"]:focus, .overlay [role="alertdialog"][tabindex="-1"]:focus,
+.cv-panel:focus, .map-panel:focus { outline: none; }
+
+/* Tall pop-ups scroll by touch (index.html data-scrolls; src/input.js lets a finger move inside them): the scroll
+   stays inside the pop-up and never pulls the page. */
+.modal, .handoff-card, .hand-detail { overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
+
+/* The discard screen with a big hand (src/ui/discard.js: more than 8 cards): smaller cards, six to a row, so 11
+   cards fit without scrolling on the shortest iPad window (1024x694). */
+#discard-cards.dense { gap: 8px; }
+#discard-cards.dense .card-tile { width: 84px; }
+#discard-cards.dense .card-tile .art { min-height: 54px; }
+
+/* ==== Round 2, fixer ==== */
+
+/* The Lantern's second sentence on the card pick (src/ui/handoff.js privatePick): its own line under the card's words. */
+.offer-summary.card-desc .pick-note { display: block; margin-top: 4px; color: var(--brass-bright); }
+/* (room for it from the start, whichever card is lifted: choosing a card never moves the Give button) */
+.offer-summary.card-desc.with-note { min-height: calc(2.9em + 4px); }

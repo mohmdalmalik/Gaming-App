@@ -2034,11 +2034,8 @@ html, body {
 /* ==== Round 2, build-learn: How to play, the Menu panel, the Lanterns chip, the role screen, the end screen ====
    (src/ui/howToPlay.js, src/ui/gameMenu.js, src/hud.js, src/ui/handoff.js, src/overlays.js; the words: src/data/) */
 
-/* Main menu: How to play, Settings and Your record share one row (the three are narrower, so a little less
-   padding and a step smaller); a hint for a player who has played nothing yet sits just under Practice alone. */
-.menu-row2.three { gap: 10px; }
-.menu-row2.three .menu-btn { padding: 8px 6px; }
-.menu-row2.three .menu-btn .mb-main { font-size: 17px; white-space: nowrap; }
+/* Main menu: How to play and Cards share a row, Settings and Your record the one under it (the rows are the
+   .menu-row2 of the main menu, round 1); a hint for a player who has played nothing yet sits just under Practice alone. */
 .menu-hint { margin: -5px 4px 0; font-family: var(--serif); font-style: italic; font-size: 14.5px; line-height: 1.35; color: var(--brass); text-wrap: pretty; }
 .menu-hint[hidden] { display: none; }
 
@@ -2144,3 +2141,34 @@ html, body {
 .offer-summary.card-desc .pick-note { display: block; margin-top: 4px; color: var(--brass-bright); }
 /* (room for it from the start, whichever card is lifted: choosing a card never moves the Give button) */
 .offer-summary.card-desc.with-note { min-height: calc(2.9em + 4px); }
+
+/* ==== Round 4, learn: the Cards screen, and the Cards buttons (src/ui/cardsGuide.js, src/ui/howToPlay.js, src/ui/gameMenu.js) ====
+   Every kind of card with its face, its name and one short line; read-only. It opens above How to play (60), the Menu
+   panel (12) and the main menu (40), and under the black fade (90). Eleven cards are three columns of four rows; on a short
+   window the list scrolls inside the card (the Close button stays put). */
+.cardsguide { position: fixed; z-index: 62; background: rgba(6, 7, 11, 0.86); }
+.cardsguide-card { width: min(900px, 94vw); max-height: 94vh; display: flex; flex-direction: column; padding: 20px 30px 18px; text-align: left; }
+.cardsguide-card h1 { text-align: center; margin: 0 0 12px; font-size: clamp(26px, 4vw, 34px); color: var(--brass-bright); }
+.cardsguide-list {
+  list-style: none; margin: 0; padding: 2px 4px 6px; flex: 1 1 auto; min-height: 0; overflow-y: auto; touch-action: pan-y;
+  overscroll-behavior: contain; -webkit-overflow-scrolling: touch;
+  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px 22px; align-content: start;
+}
+.cardsguide-list:focus-visible, .cardsguide .btn:focus-visible { outline: 2px solid var(--brass-bright); outline-offset: 2px; }
+.cg-item { display: flex; align-items: center; gap: 13px; min-width: 0; }
+.cg-item .card-tile { width: 66px; flex: none; pointer-events: none; }
+.cg-item .card-tile:not(.face) .art { height: 70px; }
+.cg-words { min-width: 0; }
+.cg-name { font-family: var(--serif); font-weight: 700; font-size: 18px; line-height: 1.15; color: var(--brass-bright); margin-bottom: 3px; }
+.cg-desc { font-size: 14.5px; line-height: 1.35; color: var(--ivory); text-wrap: pretty; }
+.cg-item[data-type="possession"] .cg-name { color: var(--evil); }
+.cardsguide-actions { display: flex; justify-content: center; margin-top: 14px; }
+.cardsguide-actions .btn.big { font-size: 18px; padding: 10px 40px; min-height: 52px; }
+
+/* The small Cards button under the last How to play page's lines (no bullet, a touch target of 44 px or more). */
+.howto-lines li.howto-more { padding-left: 0; margin-top: 2px; }
+.howto-lines li.howto-more::before { content: none; }
+.howto-more .btn { font-size: 17px; font-family: var(--serif); font-weight: 700; padding: 8px 26px; min-height: 46px; }
+
+/* The Menu panel with Cards: Resume across the top, How to play and Cards side by side, Leave across the bottom. */
+.gm-actions #btn-gm-leave { grid-column: 1 / -1; }

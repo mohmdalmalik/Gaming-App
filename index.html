@@ -253,8 +253,13 @@
             <!-- Only until the player has played a match or finished a practice (src/ui/menu.js, the words:
                  src/data/howToPlay.js). -->
             <p id="menu-hint" class="menu-hint" hidden></p>
-            <div class="menu-row2 three">
+            <!-- Learn (How to play, Cards: src/ui/howToPlay.js, src/ui/cardsGuide.js) and then Settings and Your record:
+                 two rows of two, so the menu still fits without scrolling on the shortest iPad window. -->
+            <div class="menu-row2 learn">
               <button id="btn-menu-howto" class="menu-btn" type="button" data-sfx="open"><span class="mb-main">How to play</span></button>
+              <button id="btn-menu-cards" class="menu-btn" type="button" data-sfx="open"><span class="mb-main">Cards</span></button>
+            </div>
+            <div class="menu-row2">
               <button id="btn-menu-settings" class="menu-btn" type="button"><span class="mb-main">Settings</span></button>
               <button id="btn-menu-record" class="menu-btn" type="button"><span class="mb-main">Your record</span></button>
             </div>
@@ -426,6 +431,7 @@
         <div class="gm-actions">
           <button id="btn-gm-resume" class="btn primary big" type="button" data-sfx="close">Resume</button>
           <button id="btn-gm-howto" class="btn big" type="button" data-sfx="open">How to play</button>
+          <button id="btn-gm-cards" class="btn big" type="button" data-sfx="open">Cards</button>
           <button id="btn-gm-leave" class="btn big" type="button">Leave the match</button>
         </div>
       </div>
@@ -445,6 +451,20 @@
             <button id="btn-howto-back" class="btn big" type="button" data-sfx="click">Back</button>
             <button id="btn-howto-next" class="btn primary big" type="button" data-sfx="click">Next</button>
           </span>
+        </div>
+      </div>
+    </div>
+
+    <!-- The Cards screen (src/ui/cardsGuide.js; the words: src/data/cardsGuide.js and the cards' own lines in
+         src/data/rules.js): every kind of card and what it does, read-only. From the main menu, the in-match Menu
+         and the last How to play page; above all three. The list is drawn the first time it opens. -->
+    <div id="cards-overlay" class="overlay center cardsguide" role="dialog" aria-modal="true" aria-labelledby="cards-title" hidden>
+      <div class="card cardsguide-card">
+        <div id="cards-kicker" class="howto-kicker">Every card in the game</div>
+        <h1 id="cards-title">Cards</h1>
+        <ul id="cards-list" class="cardsguide-list" data-scrolls tabindex="0" aria-label="Every card and what it does"></ul>
+        <div class="cardsguide-actions">
+          <button id="btn-cards-close" class="btn primary big" type="button">Close</button>
         </div>
       </div>
     </div>

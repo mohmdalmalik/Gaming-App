@@ -48,16 +48,19 @@ export const config = {
   },
 
   player: {
-    speed: 2.5,           // walking speed (m/s). Guests walk only from room to room now (no wandering
-                          // inside a room), so a brisker pace keeps turns quick: 8 m between centres ≈ 3 s
+    speed: 2.9,           // walking speed (m/s). Guests walk only from room to room now (no wandering
+                          // inside a room), so a brisker pace keeps turns quick: 8 m between centres ≈ 2.8 s
+                          // (was 2.5 / 3.2 s: the owner asked for a bit quicker, 15 Oct 2026). The computer
+                          // guests walk a multiple of this (Settings: Bot speed), so they keep up with it
     turnSpeed: 9,         // how quickly a character turns to face the walking direction (per second)
     clearance: 0.3,       // minimum distance a character's centre keeps from walls and furniture
     arriveDistance: 0.06, // how close counts as "reached the waypoint"
   },
 
   character: {
-    strideFrequency: 1.85,    // walk cycles per second (one cycle = two steps) — the placeholder figure
-                              // only; the real guests match their stride to the distance walked
+    strideFrequency: 2.15,    // walk cycles per second (one cycle = two steps) — the placeholder figure
+                              // only (kept in step with player.speed: 1.85 at 2.5 m/s); the real guests
+                              // match their stride to the distance walked
     legSwing: 0.55,           // radians
     armSwing: 0.38,           // radians
     bobAmplitude: 0.03,       // vertical bob while walking

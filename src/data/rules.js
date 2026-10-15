@@ -102,29 +102,29 @@ export const rules = {
   // --- Card catalogue ------------------------------------------------------------------------
   cards: {
     lantern:    { name: 'Lantern',    glyph: '✦', tint: '#ffd66b',
-                  desc: 'Give it in a trade to block a possession attempt. Three of them let a clean guest escape.' },
+                  desc: 'Three let you escape through the Fire Exit. One protects you from a Possession card.' },
     bandage:    { name: 'Bandage',    glyph: '✚', tint: '#8fe0a8', heal: 1, active: true,
-                  desc: 'Restores 1 health bar. 1 action.' },
+                  desc: 'Restores 1 health.' },
     flashlight: { name: 'Flashlight', glyph: '▮', tint: '#8fd8ff',
-                  desc: 'Lets you search a dark room. Never used up.' },
+                  desc: 'Lets you search dark rooms, and is never used up.' },
     knife:      { name: 'Knife',      glyph: '†', tint: '#c8ccd4', weapon: true, damage: 1, reusable: true,
                   desc: 'Attack: 1 damage, reusable.' },
     revolver:   { name: 'Revolver',   glyph: '➶', tint: '#e0806a', weapon: true, damage: 2, shots: 2,
                   desc: 'Attack: 2 damage. Two shots, then it is gone.' },
     barricade:  { name: 'Barricade',  glyph: '▤', tint: '#c89a6a', active: true,
-                  desc: 'Seals one doorway of your room for one round. 1 action.' },
+                  desc: 'Seals one doorway of your room for one round.' },
     lockPick:   { name: 'Lock Pick',  glyph: '⚹', tint: '#b8b09a', active: true, unlock: true,
-                  desc: 'Use it next to a locked door: half the time it opens, for the rest of your turn. Used up either way. 1 action.' },
+                  desc: 'Opens a locked door half the time. Used up either way.' },
     masterKey:  { name: 'Master Key', glyph: '⚷', tint: '#e6cf8a', active: true, unlock: true,
-                  desc: 'Use it next to a locked door: it opens for the rest of your turn. Always works, then used up. 1 action.' },
+                  desc: 'Always opens a locked door, then is used up.' },
     handMirror: { name: 'Hand Mirror', glyph: '◐', tint: '#b9c8d8', active: true,
-                  desc: 'Choose a guest in your room: they show you their whole hand, in private. Used up. 1 action.' },
+                  desc: 'A guest in your room shows you their hand, in private. Used up.' },
     espresso:   { name: 'Espresso',   glyph: '☕', tint: '#c08a5a', active: true, extraActions: 2,
-                  desc: 'Free to use: gain 2 extra actions this turn. Used up.' },
+                  desc: 'Free to use: 2 extra actions this turn. Used up.' },
     // The possessed side's souls — never in the deck. Each card belongs to the guest who holds it
     // (card.owner, src/game/cards.js) and only they can give it.
     possession: { name: 'Possession', glyph: '☠', tint: '#b46bff', evil: true,
-                  desc: 'Your own soul. Give it in a trade to possess someone — unless they hand you a Lantern.' },
+                  desc: 'Your own soul. Give it in a trade to possess someone.' },
   },
 
   // --- The draw deck (48, tuned for 6 players) --------------------------------------------------

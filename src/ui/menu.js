@@ -4,7 +4,8 @@
 //                same screen changes it later ("Change name" on the avatar screen: showRename)
 //   main         your profile card ("Playing as <name> · Adjust avatar ›", src/ui/profileCard.js),
 //                Play with bots · Practice alone (with a hint under it for a player who has played nothing
-//                yet) · How to play, Settings and Your record side by side
+//                yet) · How to play and Cards side by side (both open a read-only screen above the menu:
+//                src/ui/howToPlay.js, src/ui/cardsGuide.js), then Settings and Your record side by side
 //   avatar       your avatar (the wardrobe: #menu-avatar, built by the avatar screen's own module)
 //   bots         how many other guests (3-5) and your role (random, clean, possessed)
 //   matchmaking  the table filling up, guest by guest, as in an online game
@@ -38,13 +39,13 @@ const ROLE_CHOICES = [
 ];
 const BOT_CHOICES = Array.from({ length: rules.maxBots - rules.minBots + 1 }, (_, i) => rules.minBots + i);     // the computer guests to play with: 3, 4 or 5 (rules.js: a table of 4 to 6)
 
-export function createMenu(doc, { onPlayBots, onPractice, onSettingChanged, onScreenChange, onHowToPlay, account = null } = {}) {
+export function createMenu(doc, { onPlayBots, onPractice, onSettingChanged, onScreenChange, onHowToPlay, onCards, account = null } = {}) {
   const $ = id => doc.getElementById(id);
   const root = $('menu');
   // (looked up when shown: a screen another module adds to the page, #menu-avatar, is found too)
   const SCREENS = ['signup', 'main', 'avatar', 'bots', 'matchmaking', 'settings', 'record'];
   const screenEl = name => $(`menu-${name}`);
-  const btn = { bots: $('btn-menu-bots'), practice: $('btn-menu-practice'), settings: $('btn-menu-settings'), record: $('btn-menu-record'), howto: $('btn-menu-howto') };
+  const btn = { bots: $('btn-menu-bots'), practice: $('btn-menu-practice'), settings: $('btn-menu-settings'), record: $('btn-menu-record'), howto: $('btn-menu-howto'), cards: $('btn-menu-cards') };
   const recordView = createRecordScreen(doc);
   let current = 'main';
   let ready = false;
@@ -203,6 +204,8 @@ export function createMenu(doc, { onPlayBots, onPractice, onSettingChanged, onSc
   click(btn.record, () => show('record'));
   // How to play opens over the menu (src/ui/howToPlay.js); Close gives the focus back to this button.
   click(btn.howto, () => onHowToPlay?.({ focusBack: btn.howto }));
+  // Cards opens the same way (src/ui/cardsGuide.js): a read-only list above the menu; Close gives the focus back here.
+  click(btn.cards, () => onCards?.({ focusBack: btn.cards }));
   click($('btn-bots-back'), () => show('main'));
   click($('btn-bots-find'), () => {
     const n = BOT_CHOICES.includes(+settings.get('bots')) ? +settings.get('bots') : rules.maxBots;

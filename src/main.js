@@ -78,6 +78,7 @@ import { createChatUI } from './ui/chat.js';
 import { createChatChannel } from './social/chat.js';
 import { createTips } from './ui/tips.js';
 import { createHowToPlay } from './ui/howToPlay.js';
+import { createCardsGuide } from './ui/cardsGuide.js';
 import { createGameMenu } from './ui/gameMenu.js';
 import { endRecap } from './ui/endRecap.js';
 import { END_WORDS } from './data/endScreen.js';
@@ -276,9 +277,12 @@ watchDialogs(document);      // the screens over the game take the keyboard focu
 // How to play (src/ui/howToPlay.js: five pages, from the main menu and from the Menu) and the in-match Menu
 // panel (src/ui/gameMenu.js). The panel holds the game still exactly as a question does (the clock, the computer
 // guests, the hand and the buttons): everywhere main.js asks "is a question up?" it asks askUp().
-const howTo = createHowToPlay(document);
+// The Cards screen (src/ui/cardsGuide.js: what every card does, read-only) opens from the main menu, from the Menu and
+// from the last How to play page, above all three; it holds nothing still and changes nothing.
+const cardsGuide = createCardsGuide(document);
+const howTo = createHowToPlay(document, { cards: cardsGuide });
 const gameMenu = createGameMenu(document, {
-  settings, howTo, practice: () => PRACTICE,
+  settings, howTo, cards: cardsGuide, practice: () => PRACTICE,
   onSettingChanged: name => applySettings(name),       // (Music and Sound effects, as in Settings)
   onLeave: () => askLeave(),
 });
@@ -2032,6 +2036,7 @@ const menu = createMenu(document, {
   onSettingChanged: name => applySettings(name),
   onScreenChange: (name, prev) => onMenuScreen(name, prev),
   onHowToPlay: opts => howTo.open(opts),
+  onCards: opts => cardsGuide.open(opts),
 });
 // The wardrobe (src/ui/avatarEditor.js, the menu's 'avatar' screen): every pick shows at once on your
 // avatar in the lobby, which the lobby's wardrobe camera frames in the space right of the panel, sharp
@@ -2331,7 +2336,7 @@ window.__game = {
   record: () => record.get(),        // your record on this device (src/record.js)
   endOpen: () => overlays.endOpen,
   askOpen: () => overlays.askOpen,
-  menuPanelOpen: () => gameMenu.isOpen, howToOpen: () => howTo.isOpen,     // (tests: the in-match Menu panel, How to play)
+  menuPanelOpen: () => gameMenu.isOpen, howToOpen: () => howTo.isOpen, cardsOpen: () => cardsGuide.isOpen,     // (tests: the in-match Menu panel, How to play, Cards)
   showEnd: () => showEnd(),          // (tests: the end screen for the state as it is; it counts the game in your record)
   handoff, meeting, tradeReveal,
   // QA: the private trade reveal for one outcome (src/ui/tradeReveal.js: swap, blocked, blockedMe,

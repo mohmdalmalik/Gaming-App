@@ -4,8 +4,12 @@
 // this wording, so every sentence lives here and nowhere else; a number is never written twice: `r` is the
 // rules (src/data/rules.js), so when a number there changes, the page changes with it.
 //
+// The pages teach the GAME (the goal, a turn, meetings, Possession and Lanterns, staying alive). What each
+// card does is NOT here: it is on the Cards screen (src/ui/cardsGuide.js, src/data/cardsGuide.js).
+//
 // A page is { title, lines }: `lines` are short sentences, each `r => text`. (The pages are the same in
-// practice and in a match: they teach the match. Practice has its own line on the first page.)
+// practice and in a match: they teach the match. Practice has its own line on the first page.) A page with
+// `cardsLink: true` (the last) also gets a small button to the Cards screen under its lines.
 import { hotel } from './hotel.js';
 
 const actions = n => `${n} action${n === 1 ? '' : 's'}`;
@@ -26,12 +30,11 @@ function costs(r) {
     : `Opening a door costs ${actions(r.openDoorCost)}, moving to the next room ${actions(r.moveCost)}, searching ${actions(r.searchCost)}`
       + ` and using a card ${actions(r.playCardCost)}. The Infirmary costs ${actions(r.infirmaryCost)} and the Switchboard ${actions(r.switchboardCost)}.`;
 }
-const espresso = r => `Espresso ${r.espressoCost ? `costs ${actions(r.espressoCost)}` : 'is free'} and gives you ${r.cards.espresso.extraActions} more.`;
 
 export const HOW_TO_PLAY = {
   title: 'How to play',
   // the buttons under the pages, and the little "2 of 5" above them
-  words: { back: 'Back', next: 'Next', close: 'Close', of: (n, total) => `${n} of ${total}` },
+  words: { back: 'Back', next: 'Next', close: 'Close', cards: 'Cards', of: (n, total) => `${n} of ${total}` },
   pages: [
     {
       title: 'The goal',
@@ -46,7 +49,7 @@ export const HOW_TO_PLAY = {
     {
       title: 'Your turn',
       lines: [
-        r => `You have ${actions(r.actionPointsPerTurn)} each turn. ${costs(r)} ${espresso(r)}`,
+        r => `You have ${actions(r.actionPointsPerTurn)} each turn. ${costs(r)}`,
         () => 'Tap a glowing door to open it. Tap a room you can reach to walk there. Tap the magnifier to search; only you see what you found.',
         () => 'Tap End turn when you are done; unused actions are lost.',
         r => `You have ${r.turnTimerSeconds} seconds. When the time runs out, your turn ends.`,
@@ -59,7 +62,7 @@ export const HOW_TO_PLAY = {
         () => 'Walk into a room with a guest you have not met there this round and you must meet. You choose Trade or Attack.',
         () => 'If a guest walks into your room, they choose; a trade then asks you for a card.',
         () => 'Trade: you each pick one card to give, in secret, and the cards swap together. Only you see what you got.',
-        r => `Attack: you need a weapon and ${actions(r.attackCost)}. A Knife takes ${r.cards.knife.damage} health; a Revolver takes ${r.cards.revolver.damage} and has ${r.cards.revolver.shots} shots.`,
+        r => `Attack: you need a weapon and ${actions(r.attackCost)}, and it takes health from the other guest.`,
         () => `The ${LANDING} and the ${EXIT} are safe zones: no meetings, no attacks.`,
       ],
     },
@@ -69,15 +72,18 @@ export const HOW_TO_PLAY = {
         () => 'A possessed guest can hand over a Possession card (a soul) in a trade. If you receive one, you become possessed too, and you now play for the hotel. Only you and the guest who possessed you know.',
         () => 'A Lantern is your shield: hand one over in that trade and the attempt fails. The Lantern and the soul burn, and you learn who tried.',
         r => `Everyone starts with ${word(r.lanternsDealtEach)} ${r.lanternsDealtEach === 1 ? 'Lantern' : 'Lanterns'}. The rest are found by searching. ${Word(r.lanternsToEscape)} open the ${EXIT}.`,
-        r => `Escaping costs ${actions(r.escapeCost)}: stand in the ${EXIT} and tap Escape.`,
+        r => `Escaping costs ${actions(r.escapeCost)}: stand in the ${EXIT} and tap the Exit icon.`,
       ],
     },
     {
       title: 'Staying alive',
+      cardsLink: true,
       lines: [
-        r => `You have ${r.maxHealth} health. A Bandage heals ${r.cards.bandage.heal}. The Infirmary heals ${r.infirmaryHeal} for ${actions(r.infirmaryCost)}. At 0 health you are out of the game and drop everything you carry, except Possession cards, which leave the game.`,
+        r => `You have ${r.maxHealth} health. At 0 health you are out of the game and drop everything you carry, except Possession cards, which leave the game.`,
+        r => `The Infirmary is a room where you can heal: it heals ${r.infirmaryHeal} for ${actions(r.infirmaryCost)}.`,
         r => `At the end of your turn you can keep ${r.handLimit} cards. Souls do not count.`,
-        () => "A Hand Mirror shows you one guest's cards. The Switchboard tells everyone how many guests are possessed, but not who.",
+        () => 'The Switchboard tells everyone how many guests are possessed, but not who.',
+        () => 'All the cards and what they do are on the Cards screen.',
       ],
     },
   ],

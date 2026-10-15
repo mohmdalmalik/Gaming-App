@@ -45,7 +45,7 @@ export const TIPS = {
   },
   lanternPractice: {
     title: 'Lanterns',
-    text: r => `Carry ${word(r.lanternsToEscape)} Lanterns to the Fire Exit, then tap Escape to get out.`,
+    text: r => `Carry ${word(r.lanternsToEscape)} Lanterns to the Fire Exit, then tap the Exit icon to get out.`,
   },
   timer: {
     title: 'The clock',

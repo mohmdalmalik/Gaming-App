@@ -237,7 +237,7 @@ if (only.includes('d')) {
   try {
     check(await untilMyTurn(), 'my turn has come');
     const me = await g(() => window.__game.humanSeat());
-    await g(() => { const G = window.__game, p = G.state.players[G.humanSeat()]; p.hand = p.hand.filter(c => c.type !== 'espresso'); p.actionPoints = 1; G.refresh(); G.revealTile('lounge'); });
+    await g(() => { const G = window.__game, p = G.state.players[G.humanSeat()]; p.hand = p.hand.filter(c => c.type !== 'espresso'); p.actionPoints = 1; G.refresh(); for (const r of ['lounge', 'dining', 'library']) G.revealTile(r); });     // (a few rooms to walk to and meet in)
     // the last action is a move: the turn passes to the next guest by itself
     const t0 = await turn(page);
     const nb = await g(() => { const G = window.__game, p = G.state.players[G.humanSeat()]; return [...G.floor.rooms.get(p.currentRoom).neighbours].find(r => !G.lockedRooms().includes(r) && G.state.discovered.has(r)); });
@@ -272,9 +272,10 @@ if (only.includes('d')) {
     // the Fire Exit with a guest there: a Trade costs nothing, so the player ends the turn themselves
     check(await untilMyTurn(), 'my turn again');
     const ex = await g(() => {
-      const G = window.__game, p = G.state.players[G.humanSeat()], id = G.floor.roomList.find(r => r.isExit)?.id;
+      const G = window.__game, p = G.state.players[G.humanSeat()];
+      G.revealTile('exit');                                  // (the Fire Exit is part of the hotel only once revealed)
+      const id = G.floor.roomList.find(r => r.isExit)?.id;
       if (!id) return null;
-      G.revealTile(id);
       const c = G.roomCenter(id);
       G.state.discovered.add(id); p.currentRoom = id; p.actionPoints = 0; G.movers[G.humanSeat()].reset(c[0], c[1]);
       p.hand = p.hand.filter(c => c.type !== 'espresso');

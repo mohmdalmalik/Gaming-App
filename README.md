@@ -173,9 +173,11 @@ readout at the top left (below the room name), for measuring speed on the iPad.
   have not met there this round stops the walk there for the meeting. Tapping your own room does
   nothing. A room tapped while walking is offered when you arrive (a fogged room or the search icon
   tapped while walking says "Wait until you arrive."). A tap just beside a button, the panel or the
-  hand does nothing (an 18 px margin), so a missed button never opens a door. A locked room says so; a Master Key or Lock Pick (tap it in your hand) opens
-  its one door from next door, until the end of your turn — then it locks again (the map shows 🔓 while
-  it is open). A guest inside can always walk out; the door stays locked behind them.
+  hand does nothing (an 18 px margin), so a missed button never opens a door. A locked room says so; a Master Key or Lock Pick opens
+  its one door from next door — tap the padlock on the door (drawn larger while you hold a card for it) and a small card asks which
+  to use (one button per kind you hold, and Not now), or tap the card in your hand — until the end of your turn, then it locks
+  again (the map shows 🔓 while it is open). The door shows the result: the padlock pops open and the door swings, or a pick that
+  snaps shakes the padlock and the door stays shut. A guest inside can always walk out; the door stays locked behind them.
 - **Search** (1 AP) — there is no Search button: a room that can still be searched shows a pulsing
   brass magnifier over its search spot (the drawer, the shelves, the trolley…). Tap it (or the
   furniture itself) and the guest searches it from where they stand, turning to face it; the card(s)
@@ -211,8 +213,13 @@ readout at the top left (below the room name), for measuring speed on the iPad.
   gives it, so one stray tap gives nothing. If either guest has no ordinary card (Possession cards don't count), the trade is
   skipped and each is told why (the others see only "no trade"). Give a Lantern and a Possession card
   cannot take you. The lobby is safe. The weapon picker has a Back button.
-- **Escape** — a clean guest carrying three Lanterns walks into the Fire Exit (1 AP) and taps
-  **Escape** (1 AP). Arrive with nothing left and you can escape on your next turn; the exit is safe.
+- **Escape** — a clean guest carrying three Lanterns walks into the Fire Exit (1 action) and taps the **Exit icon**
+  (a door with an arrow, "Exit the hotel · 1 action", over the exit's door; there is no Escape button in the bottom bar).
+  Every guest standing in the Fire Exit sees the icon on their own turn: green when this guest can leave, grey when not
+  (too few Lanterns, or the exit will not open for them: the same grey for both, nothing says why). A tap on grey says
+  what is missing and spends nothing ("You need 3 Lanterns to leave. You have 1." in practice; in a match "Only a clean
+  guest with 3 Lanterns can leave. You have 1." for everyone, so it never tells who is possessed). Arrive with nothing left
+  and you can escape on your next turn; the exit is safe.
 - **Dawn** (a match) — the header reads "Round 3 of 8"; round 8 is marked as the final round.
   If nobody has escaped when it ends, dawn breaks and the hotel wins. Practice has no deadline.
 - **End turn** — refills action points to 4; if you hold more than 6 ordinary cards you discard
@@ -417,17 +424,18 @@ src/
                       own renderer (cached by look; the stock picture until ready)
   camera.js input.js player.js discovery.js   camera rig (zoom to fit the hotel, free pan, centre on
                                                me), gestures, movement, room→walk glue
-  hud.js  map.js  overlays.js   HUD + action bar (room job / Escape, Trade, End turn), 2D map, overlays
+  hud.js  map.js  overlays.js   HUD + action bar (room job, Trade, End turn), 2D map, overlays
   ui/
     focus.js                          keyboard focus for the screens over the game (private screens, discard, meeting, questions, notice, end, problem card, card view, map): focus on the main button, Tab stays inside, role=dialog + aria-modal + a name, Escape never skips a private screen, focus goes back; reusable (watchDialog)
     cards.js                          card tiles, cards shown large, the order a hand is shown in (a card you can choose is a keyboard button too)
     cardIcons.js                      small drawn card icons (the feed's lines, and a card type that has no face picture)
     tapGuard.js                       a double tap must not answer the screen it opens: a click that comes too soon after a screen opened is ignored
-    roundLabel.js                     how the round is written everywhere ("Round 3 of 8", the final round marked)
+    roundLabel.js                     how the round is written everywhere ("Round 3 of 8", the final round marked), and the strip's "3 turns left in Round 2" line
     perfStats.js                      the ?stats=1 frame-rate / draw-call readout
     handFan.js                        the hand held as a fan of face-up cards (bottom centre)
     hand.js                           the card view: one card large, with Bandage / key / Barricade / … actions
-    searchSpot.js                     the search icon over the room's flagged search furniture
+    lockChoice.js                     tap the padlock of a locked door next to you: a small card to choose the Master Key or Lock Pick (or Not now)
+    searchSpot.js                     the room action icon over a room's furniture, from one small table of kinds: the magnifier (search) and, in the Fire Exit, the door-with-an-arrow (Exit the hotel; grey or green); more kinds are a few lines
     screenTags.js                     the one layer for tags over the 3D view: under the interface, never over it
     guestTags.js                      one name tag per room with guests, when zoomed far out
     goTags.js                         the quiet "Go · 1 action" tags on rooms next door
@@ -456,7 +464,8 @@ src/
                                       Lantern burn, possession smoke, a spent soul burning out, no trade) instead
                                       of sentences; tap to skip
     soulFace.js                       each guest's own soul card: their possessed face in the card's mirror
-    allies.js                         red eyes on the guests a possessed player KNOWS are possessed (knowledge.js)
+    allies.js                         red eyes on the guests a possessed player KNOWS are possessed (knowledge.js); the same knowledge, for either side, drives the strip's "Possessed" marker
+    stripModel.js                     what the top guest strip shows, as plain data: turn flags and the guests the viewer certainly knows are possessed (tests/strip-check.mjs)
     souls.js                          the possessed player's own "Souls to trade: N" count
     meeting.js                        the PUBLIC side of a meeting: who, Trade or Attack, weapon, outcome
     discard.js                        the end-of-turn discard down to the hand limit (the only hand-limit screen)
@@ -555,10 +564,12 @@ node tests/browser-profile.mjs    # the first-run register, the profile card, Ch
 node tests/tips-check.mjs         # first-match tips ON: where they sit, never blocking, the clock runs on, once per device, Hide tips, Show tips again, the safe-zone / pinch-and-drag / round-buttons tips [--size 1024x768] [--shots DIR] [--new-only: just the new tips]
 node tests/public-events-check.mjs # what the public events may carry (no browser, ~5 s): every public event of a few hundred bot matches has only its documented keys (a role, a hand, a card count or a private result can never ride along), and a new event type must be written down in the test
 node tests/record-check.mjs       # Your record (src/record.js, an injected store, no browser, ~1 s): counting, "Left early", reset, saving, a second tab, damaged saves, blocked or missing storage
+node tests/strip-check.mjs        # the top guest strip (no browser, ~2 s): the "Possessed" marker is exactly what the viewer's own knowledge says (either side, never a guess, never the viewer, nothing while a trade scene holds it back), and "3 turns left in Round 2" follows the engine's own turn order (the dead skipped, the final round says dawn)
 node tests/docs-check.mjs         # the documents' facts (no browser, ~1 s): the numbers in docs/DECISIONS.md "Read this first" are rules.js's, the README's file list names every src/ file, the paths the documents name exist, the GitHub Action runs every fast suite, a preview server is bound to 127.0.0.1
 node tests/run-fast.mjs           # every fast suite (the GitHub Action's list) in one command
 node tests/howto-check.mjs        # the words that teach the game (no browser): the How to play pages follow the rules' numbers (a copy of the rules with every number changed), the hint, the role screen's lines, the tips, the end screen's recap, no "AP" anywhere the player reads (~1 s)
 node tests/browser-learn.mjs      # How to play, the hint, the role screen, the Lanterns chip, the in-match Menu panel and what the clock does while it is open, the end screen's Victory / Defeat, at the four iPad sizes [--only a,b,c,d] [--sizes 1024x694,1180x820]
+node tests/browser-turnflow.mjs   # the turn flow (round 4): the turn passing by itself when the actions run out (not with an action left, an Espresso or a free Trade, a reveal, a meeting or the card view open; once only; Practice and a match), the discard screen that closes by itself (no "Keep these 6"), the short found-card reveal, the walking speed [--only a,b,c,d,e]. The other browser suites switch auto end off (tests/smoke-lib.mjs autoEndOff)
 python3 tools/audio/build.py      # rebuild every sound, ~6 min (tools/audio/README.md); needs numpy, scipy, ffmpeg
 python3 tools/audio/build.py revolver lobby   # rebuild only these (effect or music names); updates library.js + report.json
 node tools/balance/hotseat-sim.mjs 400 6   # 400 six-player matches under the rules as they stand (--before: same bots on the rules before Part 2; --compare: Lantern variants; --cautious)

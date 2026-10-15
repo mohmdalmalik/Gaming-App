@@ -2529,3 +2529,45 @@ changed, and what was left on purpose:
   edge looks right on the real display (a soft halo on the cream floor); the double tap on the dark round the panel with a
   real finger; Safari's focus handling after Leave > Keep playing (Safari does not focus a button on tap, so the focus
   return matters only with a keyboard).
+
+## Round 4, the guest strip: bigger, a clear "Possessed" marker, and where the round ends (15 Oct 2026 — interface and tests only; no rule or rule number changed)
+
+The owner asked for the top strip of guests to be clearer, bigger, to show better who is possessed once they know, and to
+show when the round will end ("a better indication that I'm going to the next round"). Nothing in `docs/GAME_RULES.md`,
+`src/data/rules.js` or the engine changed.
+
+- **What is drawn, and from where.** `src/ui/stripModel.js` (`stripGuests`) turns the state into plain data, one row per
+  guest in seat order: whose turn, who is next, out / dead, and `known`. `src/ui/roundLabel.js` (`roundReadout`) counts the
+  round. `src/hud.js` (`drawStrip`) only draws those rows, and touches a cell only when its row changed. Both are pure
+  (no page), so `tests/strip-check.mjs` (fast, in the GitHub Action) holds them to the information rules without a browser.
+- **The "Possessed" marker (a crimson card, an eye badge on the portrait, the word "Possessed" under it).** It is the
+  VIEWER's own knowledge and nothing else: `knownPossessed` (`src/game/knowledge.js`), the same set that already gave a
+  possessed player red eyes on their allies. It is for both sides now: a clean viewer who learned someone is possessed (a Hand
+  Mirror that showed a Possession card, a Lantern that blocked a Possession card) sees the marker too. Red eyes in the
+  portrait stay as approved on 10 Oct (a possessed viewer only; `redEyedAllies` is unchanged, it now asks the shared
+  `knownPossessedIds` in `src/ui/allies.js`). A guest a trade scene is still holding back is not marked until the scene lets
+  go (`holdAlly`), and the strip re-checks that every frame without allocating (`hud.syncStrip`, run with `syncTell`).
+  Never on a guest the viewer is unsure of, never in practice, and **never on the viewer's own tile**: their own role is on
+  their own panel, and the strip is the part of the screen that has always been role-free. The gold turn frame and the
+  crimson marker can both show on one card (gold card edge, crimson portrait ring, badge and word), and the colour is never
+  the only sign: the badge and the word carry it, and "Next" is a dashed card.
+- **Bigger.** Portraits 72 px (80 px on a 1024-tall screen, 64 px with Safari's bars: under 721 px tall), names 14 px,
+  hearts 15 px on a dark band across the portrait's lower edge (the last heart glows), the turn flag 13 px on the card's
+  top edge. A cell is as wide as the room between the room name and the Chat / Menu buttons allows, shared among the
+  guests (`--cw` in `styles.css`, 66 to 96 px); at 1024 wide the strip sits 30 px right of the middle for that reason, and
+  the feed under the room name is narrowed to stay clear of it (more for six guests than for four). Height: about 171 px at
+  1024x768 (was 143) and 160 px at 1024x694, 21 px more while a guest is marked. The cost to know: main.js's tap dead zone
+  covers the strip plus 18 px, so a taller strip means more of the top of the screen is not tappable. The round label in
+  the final round is now two lines ("Round 8 of 8" and "Final round" under it): the one-line "Round 8 of 8 · Final round" was
+  wider than the Chat / Menu buttons and ran under the wider strip at 1024 (the same slip as PROGRESS's "final-round label
+  never covers the guest strip").
+- **The round.** After the last guest a dashed divider ("Round ends", a loop arrow; "Dawn" with a sunrise in the final round)
+  and, under the guests, a line that loops back to the first guest with the words: "3 turns left in Round 2", "Last turn of
+  Round 2" (the divider, the line and the words turn bright and the arrow nudges, not under Reduce Motion), and in the final
+  round "3 turns left · Dawn after this round". Turns left = the active guest's own turn plus the living guests after them in
+  seat order, which is exactly where the engine wraps (`endTurn`: `to.index <= from.index`); the dead, and anyone out of the
+  game, are not counted. `strip-check` plays 6,750 real rounds (4, 5, 6 guests, some dead) and checks the count against the
+  engine's own wrap. In the final round nobody is marked "Next" after the last turn: dawn follows, not another turn.
+- **Changed in an existing suite:** `tests/browser-profile.mjs` capped a strip name at 76 px; a cell is up to 96 px now.
+- **Owner decision left open:** whether a possessed player's own tile should also carry the marker (it does not: the panel
+  already says it, and the strip stays role-free). One line in `stripGuests` would add it.

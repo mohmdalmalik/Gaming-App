@@ -24,7 +24,7 @@ import {
   discardCard, overHandLimit, tradeableCards, canTrade, skipTrade, openDoor,
   canUseRoom, useInfirmary, useSwitchboard, useHandMirror, useEspresso,
 } from './game/actions.js';
-import { CARDS, weaponsIn } from './game/cards.js';
+import { CARDS, weaponsIn, lanternCount } from './game/cards.js';
 import { createScene } from './render/scene.js';
 import { addRoomView, clearRoomViews, createDoorwayViews } from './render/roomView.js';
 import { dressRoom } from './render/roomDressing.js';
@@ -406,10 +406,11 @@ const discovery = createDiscovery({
   },
 });
 
-// The search icon over the room's search spot (the furniture flagged `search: true`).
-const searchSpot = createSearchSpot(document, { camera: view.camera, container, floor, state, onTap: onSearchSpot });
+// The room action icon (src/ui/searchSpot.js): the magnifier over the room's search spot (the furniture flagged
+// `search: true`), the door-with-an-arrow in the Fire Exit. A tap does what its kind says (a new kind adds a line here).
+const searchSpot = createSearchSpot(document, { camera: view.camera, container, floor, state, onTap: { search: onSearchSpot, exit: onEscape } });
 
-// The search icon is part of the player's own action phase only: never on another guest's turn, a
+// The room action icon is part of the player's own action phase only: never on another guest's turn, a
 // private screen, a meeting, a notice or the end screen (CSS also hides it the moment any of those is
 // up). The hand fan is the player's own hand: it shows on other guests' turns too (to look at — using a
 // card needs their own turn), but never under a private screen, a meeting, a notice or the end screen.
@@ -425,7 +426,8 @@ function syncHandFan() {
   hud.syncEndTurn(state);
 }
 function syncSearchSpot() {
-  searchSpot.update(me(), actionPhaseClear() && !hand.isOpen && !pendingArrival);
+  const m = activeMover();   // (on the player's own turn, the only time the icon is up, this is their own guest)
+  searchSpot.update(me(), actionPhaseClear() && !hand.isOpen && !pendingArrival, m.walking || m.path.length > 0);
 }
 // Quick chat: the Chat button only while nothing covers the game (other guests' turns and watching after
 // death included); the end screen has its own "Good game!". The computer guests' chatter is asked a few
@@ -647,7 +649,8 @@ function passTurn() {
   sfx('yourTurn', { volume: 0.7 });
 }
 
-// End the turn (the End turn button, or the 45-second clock running out). The hand limit is settled
+// End the turn (the End turn button, the turn passing by itself when the actions run out - tickAutoEnd
+// below - or the 45-second clock running out). The hand limit is settled
 // HERE and only here (approved rule): a guest holding more than 6 cards (Possession cards don't count)
 // chooses what to discard on the discard screen first, and the turn passes only once they are down to
 // 6. Nothing else is left open behind it. A computer guest chooses its discards itself.
@@ -728,7 +731,7 @@ function tickAutoEnd(now) {
 }
 
 // The active guest finished walking into a room. The Fire Exit is a safe zone (never a meeting);
-// escaping there is a separate action, the Escape button (1 AP).
+// escaping there is a separate action, the Exit icon (1 action: onEscape).
 function onArrive() {
   const player = activePlayer(state);
   const room = floor.rooms.get(player.currentRoom);
@@ -739,7 +742,7 @@ function onArrive() {
     // possessed. (Practice has nothing to hide: it says plainly what to do.)
     const cost = `${rules.actionCost.escape} action${rules.actionCost.escape === 1 ? '' : 's'}`;
     hud.toast(!state.practice ? `The Fire Exit — a clean guest carrying ${rules.lanternsToEscape} Lanterns can escape here (${cost}).`
-      : canEscape(state, floor, player) ? `You carry ${rules.lanternsToEscape} Lanterns: tap Escape (${cost}).`
+      : canEscape(state, floor, player) ? `You carry ${rules.lanternsToEscape} Lanterns: tap the Exit icon (${cost}).`
         : `The Fire Exit — bring ${rules.lanternsToEscape} Lanterns here to escape (${cost}).`);
   }
   const candidates = pendingEncounters(state, floor, player);
@@ -1334,18 +1337,34 @@ function switchboardLine(n) {
   if (n === 0) return 'No guest is possessed right now.';
   return `${n} ${n === 1 ? 'guest is' : 'guests are'} possessed right now — it doesn't say who.`;
 }
+// The Exit icon in the Fire Exit was tapped (src/ui/searchSpot.js, kind 'exit'): leave the hotel — the escape
+// the rules allow (a clean guest carrying the Lanterns, for 1 action), the very one a computer guest uses. If the
+// rules refuse, a short line says what is missing and nothing is spent. The icon is there for every guest in the
+// Fire Exit and the words never depend on the role, so a tap tells nobody (and no screen) who is possessed.
+function onEscape() {
+  if (!running || state.finished || uiBusy() || pendingArrival || activeMover().walking) return;
+  if (!myTurn() || !inActionPhase) return;
+  const player = activePlayer(state);
+  if (!floor.rooms.get(player.currentRoom)?.isExit) return;
+  const r = escape(state, floor, player);
+  if (r.ok) { syncViews(false); refresh(); showEnd(); return; }
+  hud.toast(escapeRefusal(player, r.reason));
+}
+// What a tap on the grey Exit icon says. No actions left is the same for everyone. Otherwise one sentence for
+// every guest the exit stays shut for, with their own Lantern count: a clean guest short of Lanterns and a
+// possessed one holding enough read the same words, and neither is told why. (Practice has no roles: it says
+// plainly what is missing.)
+function escapeRefusal(player, reason) {
+  if (reason === 'ap') return 'No actions left.';
+  const need = rules.lanternsToEscape, have = lanternCount(player.hand);
+  return state.practice ? `You need ${need} Lanterns to leave. You have ${have}.`
+    : `Only a clean guest with ${need} Lanterns can leave. You have ${have}.`;
+}
+
 function onRoom() {
   if (!running || state.finished || uiBusy() || activeMover().walking) return;
   if (!myTurn() || !inActionPhase) return;
   const player = activePlayer(state);
-  // The Fire Exit: escaping is its own action (1 AP). The refusal reads the same for everyone.
-  if (floor.rooms.get(player.currentRoom)?.isExit) {
-    const r = escape(state, floor, player);
-    if (r.ok) { syncViews(false); refresh(); showEnd(); return; }
-    hud.toast(r.reason === 'ap' ? 'No actions left — you can escape on your next turn.'
-      : `The fire exit opens only for a clean guest carrying ${rules.lanternsToEscape} Lanterns.`);
-    return;
-  }
   const gate = canUseRoom(state, floor, player);
   if (!gate.ok) { hud.toast(ROOM_FAIL[gate.reason] || 'Cannot use this room now.'); return; }
   if (gate.job === 'infirmary') {
@@ -2380,7 +2399,7 @@ window.__game = {
   search: () => onSearch(),
   // The search icon and the hand fan (tests).
   tapSearchSpot: () => onSearchSpot(),
-  searchSpot: () => ({ mode: searchSpot.mode, point: searchSpot.point, spot: searchSpot.spot && { center: searchSpot.spot.center, height: searchSpot.spot.size[1], kind: searchSpot.spot.kind } }),
+  searchSpot: () => ({ mode: searchSpot.mode, kind: searchSpot.kind, point: searchSpot.point, spot: searchSpot.spot && { center: searchSpot.spot.center, height: searchSpot.spot.size[1], kind: searchSpot.spot.kind } }),
   searchPending: () => false,      // (searching no longer walks anywhere first; kept for older scripts)
   fanIds: () => (fan.visible ? fan.ids : []),
   cardViewOpen: () => hand.isOpen,
@@ -2476,7 +2495,7 @@ window.__game = {
   lockedRooms: () => [...state.lockedRooms],
   openLocks: () => [...state.openLocks.keys()],       // locked doors a key opened this turn
   canEscape: () => canEscape(state, floor, activePlayer(state)),
-  escape: () => onRoom(),
+  escape: () => onEscape(),         // (the Exit icon's tap)
   openHand: cardId => hand.open(state, floor, cardId),
   rotate: steps => rig.rotate(steps),
   toggleMap: () => map.toggle(state, movers),

@@ -15,7 +15,7 @@ import { cardTile } from './cards.js';
 // shortest iPad window (1024x694) without scrolling; up to 8 fit at the usual size on every iPad.
 const DENSE_FROM = 8;
 // How long the last discarded card is seen leaving before the screen closes (ms). The card's own exit
-// animation (styles.css, "Turn flow") lasts the same time; with Reduce Motion it only fades.
+// animation (styles.css, "Round 4, turn flow") lasts the same time; with Reduce Motion it only fades.
 const LEAVE_MS = 520;
 
 export function createDiscard(doc, cfg, { onDiscard }) {

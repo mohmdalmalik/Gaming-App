@@ -2226,3 +2226,148 @@ html, body {
 .lock-cancel { align-self: center; min-width: 150px; min-height: 48px; margin-top: 2px; font-family: var(--serif); font-size: 17px; font-weight: 700; }
 .lock-opt:focus-visible, .lock-cancel:focus-visible { outline: 2px solid var(--brass-bright); outline-offset: 2px; }
 #app:has(#lock-overlay:not([hidden])) :is(#hand-fan, #search-spot) { display: none !important; }
+
+/* ==== Round 4, exiticon: the room action icon's second kind, the Exit icon (src/ui/searchSpot.js) ====
+   The same button as the search icon (#search-spot: its place, size, tap area, caption, press and click sound), with a
+   door-and-arrow on the badge. Its looks: .ready (green: this guest can leave; it pulses like the search icon), .grey
+   (cannot leave yet: dimmed, still tappable) and .ap (no actions left: dimmed, as for a search; styled above). The words under
+   the badge are the same for ready and grey, so the colour is the only difference. The class on the button is
+   "search-spot <kind> <look>". */
+.search-spot.ready .ss-badge {
+  color: #0d4326;
+  background: radial-gradient(circle at 38% 30%, #f4fff8 0%, #c4f2d5 45%, #8bd7ab 100%);
+  border-color: #52c486;
+  box-shadow: 0 0 0 2px rgba(8, 22, 14, 0.6), 0 6px 16px rgba(0, 0, 0, 0.55), inset 0 0 0 1px rgba(255, 255, 255, 0.6);
+  animation: ss-pulse-go 1.8s ease-in-out infinite;
+}
+.search-spot.ready .ss-caption { color: #dcf8e6; border-color: rgba(120, 224, 164, 0.65); }
+@keyframes ss-pulse-go {
+  0%, 100% { transform: scale(1); box-shadow: 0 0 0 2px rgba(8, 22, 14, 0.6), 0 6px 16px rgba(0, 0, 0, 0.55), 0 0 0 0 rgba(120, 224, 164, 0.6); }
+  50% { transform: scale(1.08); box-shadow: 0 0 0 2px rgba(8, 22, 14, 0.6), 0 6px 16px rgba(0, 0, 0, 0.55), 0 0 0 10px rgba(120, 224, 164, 0); }
+}
+.search-spot.grey .ss-badge { filter: grayscale(0.85) brightness(0.6); border-color: var(--brass-dim); }
+.search-spot.grey .ss-caption { color: var(--ivory-dim); border-color: var(--line-soft); }
+@media (prefers-reduced-motion: reduce) {
+  /* (Reduce Motion: no pulse; the green badge keeps a steady ring, so "ready" is still shown) */
+  .search-spot.ready .ss-badge { animation: none; box-shadow: 0 0 0 2px rgba(8, 22, 14, 0.6), 0 6px 16px rgba(0, 0, 0, 0.55), 0 0 0 4px rgba(120, 224, 164, 0.5); }
+}
+
+/* ==== Round 4, strip: a bigger guest strip, a clear "Possessed" marker, and where the round ends ====
+   The top strip (src/hud.js drawStrip, src/ui/stripModel.js, src/ui/roundLabel.js roundReadout, index.html #players-strip).
+   Bigger portraits, names of 14 px, hearts of 15 px on the portrait's lower edge, the turn clearly marked (a gold card and a gold tag),
+   and, ONLY for a guest the viewer certainly knows is possessed, a crimson card with an eye badge and the word "Possessed" under the
+   portrait (colour is never the only signal). After the last guest a dashed divider says where the round ends (a loop arrow; dawn in
+   the final round), and a line under the guests loops back to the first one with "3 turns left in Round 2". The cells' width comes
+   from the room the screen has between the room name (left) and the Chat / Menu buttons (right), shared among the guests. */
+#hud {
+  --n: 6;                                                              /* (how many guests: set by src/hud.js) */
+  --strip-shift: clamp(0px, calc((1180px - 100vw) * 0.3), 30px);       /* (at 1024 wide the strip sits a little right of the middle: the room name on the left is wider than the buttons on the right) */
+}
+.hud-top-center { left: calc(50% + var(--strip-shift)); max-width: calc(100vw - 2 * (var(--safe-left) + 14px)); }
+.players-strip {
+  --pt: 72px;                                                          /* a portrait's size */
+  --cw: clamp(66px, calc((100vw - 470px) / var(--n) - 4px), 96px);     /* a cell's width */
+  display: flex; flex-direction: column; align-items: stretch; gap: 0; padding: 12px 8px 5px;
+}
+.strip-row { display: flex; justify-content: center; align-items: stretch; }
+.strip-cards { display: flex; gap: 4px; align-items: flex-start; }
+
+.mini-player {
+  position: relative; flex: 0 0 var(--cw); width: var(--cw); min-width: 0; gap: 2px; padding: 12px 0 4px;
+  border: 2px solid transparent; border-radius: 13px;
+}
+.mini-pwrap { position: relative; flex: none; width: var(--pt); height: var(--pt); }
+.mini-player .mini-portrait { width: var(--pt); height: var(--pt); border-radius: 15px; border-width: 2px; }
+.mini-player .mini-portrait[data-mark]::before { left: 4px; top: 4px; min-width: 23px; height: 23px; padding: 0 5px; border-radius: 12px; font-size: 14px; }
+.mini-player .mini-name.u { max-width: 100%; font: 700 14px/17px var(--sans); letter-spacing: 0; }
+.mini-player .mini-where { width: 100%; max-width: none; gap: 0; }
+.mini-where .mini-room { font-size: 13px; line-height: 15px; }
+/* Health: hearts on a dark band over the portrait's lower edge (full ones bright, empty ones dim; the last one glows). */
+.mini-stats {
+  position: absolute; left: 3px; right: 3px; bottom: 4px; z-index: 2; padding: 9px 0 1px; border-radius: 0 0 11px 11px; pointer-events: none;
+  background: linear-gradient(rgba(8, 9, 14, 0), rgba(8, 9, 14, 0.86) 55%); text-align: center; white-space: nowrap; overflow: hidden;
+  font-size: 15px; line-height: 17px; letter-spacing: 1px; color: #ff8d83;
+}
+.mini-stats:empty { display: none; }
+.mini-stats .he { color: rgba(238, 232, 214, 0.45); }
+.mini-stats.low .hf { color: #ff5a4d; text-shadow: 0 0 7px rgba(255, 90, 77, 0.7); }
+
+/* The turn flag, sitting on the card's top edge: "Your turn" / "Playing" on a gold tag, "Next" dashed, "You" and "Out" plain. */
+.mini-player .mini-flag {
+  position: absolute; top: -10px; left: 50%; z-index: 4; transform: translateX(-50%);
+  display: flex; align-items: center; justify-content: center; max-width: calc(100% + 4px); height: 20px; padding: 0 8px;
+  border: 1px solid transparent; border-radius: 10px; font: 800 13px/1 var(--sans); letter-spacing: 0; text-transform: none; color: var(--ivory-dim);
+}
+.mini-player .mini-flag:not(:empty) { background: #1a1e2b; }
+.mini-player.me .mini-flag, .mini-player.active.me .mini-flag { color: var(--brass-bright); }
+.mini-player.next .mini-flag { color: var(--ivory); border: 1px dashed rgba(238, 232, 214, 0.6); }
+.mini-player.active .mini-flag, .mini-player.active.me .mini-flag { color: #1c1406; background: var(--brass-bright); border-color: var(--brass-bright); }
+.mini-player.escaped .mini-flag { color: #9fe3b8; }
+.mini-player.active { border-color: var(--brass); background: linear-gradient(180deg, rgba(201, 162, 78, 0.26), rgba(201, 162, 78, 0.07)); box-shadow: 0 0 14px rgba(201, 162, 78, 0.3); }
+.mini-player.next { border: 2px dashed rgba(238, 232, 214, 0.32); }
+.mini-player.active .mini-portrait { border-color: var(--brass-bright); box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.45), 0 0 18px rgba(232, 202, 128, 0.6); }
+
+/* A guest the viewer CERTAINLY knows is possessed (src/hud.js: never anyone else): a crimson card and portrait ring, the eye badge
+   on the portrait's corner and the word "Possessed" under it. The turn's gold frame stays on the card when it is their turn; the
+   crimson ring, the badge and the word stay on the portrait. While any guest is marked, every card has the row for the word. */
+.mini-player.known { border-color: var(--crimson); background: linear-gradient(180deg, rgba(160, 38, 34, 0.46), rgba(90, 20, 24, 0.3)); box-shadow: 0 0 12px rgba(207, 74, 64, 0.28); }
+.mini-player.known .mini-portrait { border-width: 3px; border-color: #e2574c; box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.55), 0 0 14px rgba(226, 87, 76, 0.6); }
+.mini-player.active.known { border-color: var(--brass-bright); }
+.mini-player.dead.known { opacity: 0.62; }
+.mini-eye {
+  position: absolute; top: -8px; right: -8px; z-index: 3; display: flex; align-items: center; justify-content: center;
+  width: 27px; height: 27px; border-radius: 50%; background: var(--poss-red); border: 2px solid #f6ddd8; box-shadow: 0 1px 5px rgba(0, 0, 0, 0.65);
+}
+.mini-eye svg { display: block; }
+.mini-known {
+  display: none; box-sizing: border-box; max-width: calc(100% + 2px); height: 20px; margin-top: 1px; padding: 0 8px; border-radius: 10px;
+  background: var(--poss-red); border: 1px solid #f6ddd8; color: #fff; font: 800 13px/18px var(--sans); white-space: nowrap; visibility: hidden;
+}
+.players-strip.has-known .mini-known { display: block; }
+.players-strip.has-known .mini-known.on { visibility: visible; }
+
+/* Where the round ends: a dashed divider after the last guest (the loop arrow, "Round ends" written up it)... */
+.strip-cap {
+  flex: none; display: flex; flex-direction: column; align-items: center; gap: 4px; width: 30px; margin: 0 0 0 6px; padding: 5px 0 5px 6px;
+  border-left: 2px dashed rgba(201, 162, 78, 0.7); color: var(--brass-bright);
+}
+.strip-cap .cap-icon { flex: none; display: block; }
+.strip-cap .ic-dawn { display: none; }
+.cap-word { writing-mode: vertical-rl; transform: rotate(180deg); font: 800 12px/1 var(--sans); letter-spacing: 0.05em; text-transform: uppercase; white-space: nowrap; }
+/* ...and a line under the guests that loops back to the first one, with the turns left written on it. */
+.strip-round { --sr: rgba(201, 162, 78, 0.7); display: flex; align-items: flex-end; gap: 8px; margin: 6px 29px 0 calc(var(--cw) / 2); }
+.sr-line { position: relative; flex: 1 1 0; min-width: 10px; height: 10px; margin-bottom: 7px; border-bottom: 2px solid var(--sr); }
+.sr-l { border-left: 2px solid var(--sr); border-bottom-left-radius: 8px; }
+.sr-r { border-right: 2px solid var(--sr); border-bottom-right-radius: 8px; }
+.sr-head { position: absolute; left: -6px; top: -7px; width: 0; height: 0; border: 5px solid transparent; border-bottom: 7px solid var(--sr); border-top: 0; }
+.sr-text { flex: none; font: 700 13px/18px var(--sans); color: var(--ivory); white-space: nowrap; }
+/* The last turn of the round: the divider, the line and the words turn bright, and the arrow back to the first guest nudges. */
+.players-strip.last-turn .strip-round { --sr: var(--brass-bright); }
+.players-strip.last-turn .sr-text { color: var(--brass-bright); }
+.players-strip.last-turn .sr-head { animation: sr-nudge 1.3s ease-in-out infinite; }
+@keyframes sr-nudge { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-3px); } }
+/* The final round has no next round: dawn instead of the loop arrow, in the final round's warning colour. */
+.players-strip.final .strip-cap { color: #f0b4ae; border-left-color: rgba(207, 74, 64, 0.8); }
+.players-strip.final .strip-cap .ic-loop { display: none; }
+.players-strip.final .strip-cap .ic-dawn { display: block; }
+.players-strip.final .strip-round { --sr: rgba(224, 120, 111, 0.85); }
+.players-strip.final .sr-text { color: #f6cfc9; }
+@media (prefers-reduced-motion: reduce) { .players-strip.last-turn .sr-head { animation: none; } }
+
+/* The final round's mark is on a second line of the round label ("Final round", src/hud.js), so the label is no wider than the
+   Chat / Menu buttons under it and never runs under the (wider) strip beside it. */
+.round-label { text-align: center; }
+.round-label .round-note { display: block; margin-top: 1px; font: 800 12px/1.25 var(--sans); letter-spacing: 0.12em; text-transform: uppercase; }
+
+/* The feed under the room name keeps clear of the (now wider) strip. */
+.feed { max-width: min(340px, calc(50vw + var(--strip-shift) - (min(100px * var(--n), 100vw - 470px) + 48px) / 2 - 26px)); }   /* (up to the strip's left edge: its width is its cells plus 48 px, see --cw) */
+
+/* Taller screens have room for bigger faces; the short ones (an iPad with Safari's bars) a smaller strip. */
+@media (min-height: 900px) { .players-strip { --pt: 80px; } }
+@media (max-height: 720px) {
+  .players-strip { --pt: 64px; padding-bottom: 4px; }
+  .mini-player { padding-top: 11px; }
+  .mini-stats { font-size: 14px; line-height: 15px; letter-spacing: 0; }
+  .strip-round { margin-top: 5px; }
+}
+/* ==== end of Round 4, strip ==== */

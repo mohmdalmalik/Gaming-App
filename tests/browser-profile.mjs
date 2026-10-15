@@ -257,7 +257,8 @@ console.log('\n6. a direct link with ?user=');
     const end = document.querySelector('#btn-end-turn .end-name');
     return { strip: Math.max(...names), panel: r('#active-player').width, end: end ? end.getBoundingClientRect().width : 0, endBtn: r('#btn-end-turn').width, endText: document.querySelector('#btn-end-turn .btn-main').textContent };
   });
-  check(caps.strip <= 76 && caps.panel <= 201, `a 16-letter name is cut with "…" in the strip (${Math.round(caps.strip)} px) and the panel (${Math.round(caps.panel)} px)`);
+  // (the strip's cells are up to 96 px wide now, round 4 "bigger strip": a name stays inside its cell, src/hud.js buildStrip / styles.css .players-strip --cw)
+  check(caps.strip <= 96 && caps.panel <= 201, `a 16-letter name is cut with "…" in the strip (${Math.round(caps.strip)} px) and the panel (${Math.round(caps.panel)} px)`);
   check(!caps.end || caps.end <= 151, `End turn's name is capped (${Math.round(caps.end)} px, the button ${Math.round(caps.endBtn)} px: "${caps.endText}")`);
   const overlaps = await game(() => {
     const sels = ['#player-panel', '#hand-fan', '.hud-bottom-right'];

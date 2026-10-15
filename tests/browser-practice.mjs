@@ -673,8 +673,11 @@ await game(() => window.__game.moveToRoom(window.__game.floor.exitRoom));
 await settle();
 await page.waitForTimeout(300);
 check(!(await game(() => window.__game.isFinished())), 'walking into the fire exit does not escape by itself');
-check(await page.evaluate(() => { const b = document.getElementById('btn-room'); return !b.hidden && !b.disabled && b.textContent.includes('Escape'); }), 'an Escape button (1 action) appears there');
-await tap('#btn-room');
+// (round 4: leaving is the Exit icon over the exit's door, the room action icon in its green look; no Escape button in the bottom bar)
+check(!(await visible('#btn-room')), 'there is no Escape button in the bottom bar any more');
+await page.waitForFunction(() => window.__game.searchSpot().mode === 'ready', null, { timeout: 15000, polling: 100 }).catch(() => {});
+check(await page.evaluate(() => { const s = window.__game.searchSpot(), b = document.getElementById('search-spot'); return s.kind === 'exit' && s.mode === 'ready' && !b.hidden && /^Exit the hotel · 1 action$/.test(b.querySelector('.ss-caption').textContent); }), 'the green Exit icon (1 action) appears there');
+await tap('#search-spot');
 await page.waitForTimeout(300);
 check(await game(() => window.__game.isFinished()), 'Escape with three Lanterns ends the practice run');
 check(await visible('#end-overlay') && /fire exit/i.test(await page.textContent('#end-title')), 'the end screen says so');

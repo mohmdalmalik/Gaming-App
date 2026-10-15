@@ -2464,9 +2464,11 @@ changed, and what was left on purpose:
   and none is an error: (a) no page, and not the match's Lantern tip, says how to get out: stand in the Fire Exit and
   tap Escape, 1 action; (b) End turn is never mentioned, nor that unused actions are lost; (e) nothing says what
   happens when a computer guest walks into you (it chooses, and a trade then asks you for a card). Sentences that would
-  fit, for the owner to approve: "Escaping costs 1 action: stand in the Fire Exit and tap Escape." / "Tap End turn when
+  fit: "Escaping costs 1 action: stand in the Fire Exit and tap Escape." / "Tap End turn when
   you are done; unused actions are lost." / "If a guest walks into your room, they choose; a trade then asks you for a
-  card." (d) The pages teach the match, so opened from Practice's Menu they still say 45 seconds and dawn: by design
+  card." **The owner approved all three on 15 Oct 2026 and they are on pages 4, 2 and 3** (the five pages, the
+  complete role-screen line for a clean guest, the lantern Home Screen icon and the possessed computer guests'
+  new, quicker feel were approved the same day). (d) The pages teach the match, so opened from Practice's Menu they still say 45 seconds and dawn: by design
   (the header of `src/data/howToPlay.js`; page 1 says practice has no deadline).
 - **Small ones.** The Menu button's accessible name is "Menu" (it said "Main menu", which is not where it goes). The map
   legend says "A guest (their initial, or seat number)" (two names that start alike get their seat numbers; three

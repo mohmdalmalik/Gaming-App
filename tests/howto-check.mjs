@@ -28,6 +28,9 @@ console.log('How to play');
 const pageText = r => HOW_TO_PLAY.pages.map(p => [p.title, ...p.lines.map(l => l(r))].join('\n'));
 const real = pageText(rules);
 check(HOW_TO_PLAY.pages.length === 5, 'five pages');
+// the owner's three added sentences (15 Oct 2026): how to escape, End turn, and a guest walking into you
+for (const text of ['Tap End turn when you are done; unused actions are lost.', 'If a guest walks into your room, they choose; a trade then asks you for a card.',
+  `Escaping costs ${rules.escapeCost === 1 ? '1 action' : `${rules.escapeCost} actions`}: stand in the`]) check(real.join('\n').includes(text), `the pages say "${text}"`);
 for (const [i, p] of HOW_TO_PLAY.pages.entries()) {
   const lines = p.lines.map(l => l(rules));
   check(!!p.title && lines.length >= 3 && lines.every(t => typeof t === 'string' && t.length > 10 && t.length < 330), `page ${i + 1} "${p.title}": ${lines.length} short lines`);

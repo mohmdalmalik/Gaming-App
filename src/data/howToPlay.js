@@ -48,6 +48,7 @@ export const HOW_TO_PLAY = {
       lines: [
         r => `You have ${actions(r.actionPointsPerTurn)} each turn. ${costs(r)} ${espresso(r)}`,
         () => 'Tap a glowing door to open it. Tap a room you can reach to walk there. Tap the magnifier to search; only you see what you found.',
+        () => 'Tap End turn when you are done; unused actions are lost.',
         r => `You have ${r.turnTimerSeconds} seconds. When the time runs out, your turn ends.`,
         r => `Once every guest has had a turn, a round is over. Dawn comes after round ${r.roundLimit}.`,
       ],
@@ -56,6 +57,7 @@ export const HOW_TO_PLAY = {
       title: 'Meetings and trades',
       lines: [
         () => 'Walk into a room with a guest you have not met there this round and you must meet. You choose Trade or Attack.',
+        () => 'If a guest walks into your room, they choose; a trade then asks you for a card.',
         () => 'Trade: you each pick one card to give, in secret, and the cards swap together. Only you see what you got.',
         r => `Attack: you need a weapon and ${actions(r.attackCost)}. A Knife takes ${r.cards.knife.damage} health; a Revolver takes ${r.cards.revolver.damage} and has ${r.cards.revolver.shots} shots.`,
         () => `The ${LANDING} and the ${EXIT} are safe zones: no meetings, no attacks.`,
@@ -67,6 +69,7 @@ export const HOW_TO_PLAY = {
         () => 'A possessed guest can hand over a Possession card (a soul) in a trade. If you receive one, you become possessed too, and you now play for the hotel. Only you and the guest who possessed you know.',
         () => 'A Lantern is your shield: hand one over in that trade and the attempt fails. The Lantern and the soul burn, and you learn who tried.',
         r => `Everyone starts with ${word(r.lanternsDealtEach)} ${r.lanternsDealtEach === 1 ? 'Lantern' : 'Lanterns'}. The rest are found by searching. ${Word(r.lanternsToEscape)} open the ${EXIT}.`,
+        r => `Escaping costs ${actions(r.escapeCost)}: stand in the ${EXIT} and tap Escape.`,
       ],
     },
     {

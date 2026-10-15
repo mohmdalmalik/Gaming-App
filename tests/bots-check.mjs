@@ -23,7 +23,7 @@ import { rules, applyMode } from '../src/data/rules.js';
 import { hotel } from '../src/data/hotel.js';
 import { roster } from '../src/data/characters.js';
 import { config } from '../src/config.js';
-import { createHotel } from '../src/game/hotel.js';
+import { createHotel, growTo } from '../src/game/hotel.js';
 import { makeRng, makeCard } from '../src/game/cards.js';
 import * as S from '../src/game/state.js';
 import * as A from '../src/game/actions.js';
@@ -331,12 +331,139 @@ function choices(state, seat, profile, heard = []) {
   check(mv.mem.mirrorClear.size === 0 && mv.mem.cleared.size === 0 && mv.mem.seenNoPoss.has(K2.index), "a possessed bot's Hand Mirror clears nobody (it only notes what it saw)");
 }
 
+// --- rooms with an action: the Infirmary (once per room) and the Switchboard (2 actions) -----------------------
+console.log('\nrooms with an action');
+{
+  const place = (state, id) => {
+    for (const room of growTo(floor, id, { isLocked: r => state.lockedRooms.has(r) })) { state.discovered.add(room.id); if (room.locked) state.lockedRooms.add(room.id); }
+    return floor.rooms.has(id);
+  };
+  // a fresh mind for `seat`, caught up on what that guest may know
+  const mindFor = (state, seat, seed = 5) => {
+    const mind = createMind(seat, rollProfile(makeRng(seat + seed)), seed);
+    mind.observe(botView(state, floor, seat, mind.cursor));
+    return mind;
+  };
+  // everything the bot would choose among, with its score (the very list nextAction picks the best of)
+  const optionsOf = (state, seat) => {
+    const mind = mindFor(state, seat);
+    const view = botView(state, floor, seat, mind.cursor);
+    mind.startTurn(view);
+    return mind.options(mind.context(view));
+  };
+  const jobs = o => o.filter(x => x.action?.k === 'job');
+  const ALL = ['infirmary1', 'infirmary2', 'switchboard', 'linenStore1'];
+
+  // --- the view: a spent Infirmary is public, and a job room is not searchable
+  {
+    const { state } = newMatch(910, 6);
+    ALL.forEach(id => place(state, id));
+    const p = state.players[0];
+    p.currentRoom = 'infirmary1'; p.health = 1; p.actionPoints = 4;
+    const roomIn = (seat, id) => botView(state, floor, seat).rooms.find(r => r.id === id);
+    check(!roomIn(3, 'infirmary1').spent && !roomIn(3, 'infirmary2').spent, 'before any use, no Infirmary is spent in a bot’s view');
+    A.useInfirmary(state, floor, p);
+    check(roomIn(3, 'infirmary1').spent && !roomIn(3, 'infirmary2').spent, 'after a use, that Infirmary shows as spent to every seat (public, like a searched room); the other does not');
+    const ev = state.events.at(-1);
+    check(ev.type === 'infirmary' && ev.room === 'infirmary1', '...and the public event says which room, so a bot that was not there learns it as it reads the events');
+    const v = botView(state, floor, 3);
+    check(['infirmary1', 'infirmary2', 'switchboard'].every(id => roomIn(3, id).searchable === false) && roomIn(3, 'linenStore1').searchable === true,
+      'the Infirmaries and the Switchboard are not searchable in the view; a Linen Store is');
+    check(v.switchboardCost === 2 && v.infirmaryCost === 1 && !('rangSwitchboardThisTurn' in v.me), 'the view carries the room action costs (Switchboard 2, Infirmary 1) and no once-a-turn flag');
+  }
+
+  // --- exploring: job rooms are never a search target; a Linen Store still is
+  {
+    const { state } = newMatch(911, 6);
+    ALL.forEach(id => place(state, id));
+    const p = state.players[0];
+    p.currentRoom = floor.start.room; p.actionPoints = 4;
+    const goals = optionsOf(state, 0).map(o => o.goal);
+    check(!goals.some(g => /^search:(infirmary|switchboard)/.test(g || '')), 'a bot does not count the Infirmaries or the Switchboard as places to search');
+    check(goals.includes('search:linenStore1'), '...but a Linen Store still is one');
+    for (const id of ['infirmary1', 'switchboard']) {
+      p.currentRoom = id;
+      check(!optionsOf(state, 0).some(x => x.action?.k === 'search'), `standing in ${id}, it never chooses to search`);
+    }
+    // a dead guest's things lying there can still be picked up (the engine allows it, and so do the bots)
+    state.roomDrops.set('switchboard', [{ id: 'dd', type: 'lantern' }]);
+    p.currentRoom = 'switchboard';
+    check(optionsOf(state, 0).some(x => x.action?.k === 'search'), 'but cards lying in the Switchboard from a guest who died there are worth picking up');
+  }
+
+  // --- the Infirmary: only when hurt, and only while it is not spent
+  {
+    const { state } = newMatch(912, 6);
+    ['infirmary1', 'infirmary2'].forEach(id => place(state, id));
+    const p = state.players[1];
+    p.currentRoom = 'infirmary1'; p.actionPoints = 4; p.health = 1;
+    const o = optionsOf(state, 1);
+    check(jobs(o).length === 1 && jobs(o)[0].score >= 9, 'a badly hurt bot standing in an unused Infirmary uses it (top score)');
+    p.health = rules.maxHealth;
+    check(jobs(optionsOf(state, 1)).length === 0, 'at full health it does not');
+    // another guest uses that Infirmary first
+    const q = state.players[2]; q.currentRoom = 'infirmary1'; q.health = 1; q.actionPoints = 4;
+    A.useInfirmary(state, floor, q);
+    p.health = 1; p.actionPoints = 4; p.hand.push(makeCard('bandage'));
+    const o2 = optionsOf(state, 1);
+    const band = o2.find(x => x.action?.k === 'card' && x.action.type === 'bandage');
+    check(jobs(o2).length === 0, 'in a Infirmary somebody else has used up, a hurt bot does not try it');
+    check(band && band.score >= 8, '...and uses its Bandage as it would anywhere (not held back for the room)');
+    // not walked to either, while another one is still unused
+    p.currentRoom = floor.start.room; p.hand = p.hand.filter(c => c.type !== 'bandage');
+    const toClinic = () => optionsOf(state, 1).filter(x => x.goal === 'heal' && x.action?.k === 'move');
+    check(toClinic().length > 0, 'hurt and away from it, a bot heads for an Infirmary that is still unused');
+    state.spentInfirmaries.add('infirmary2');
+    check(toClinic().length === 0, '...and for none once both are spent');
+    p.currentRoom = 'infirmary2';
+    check(jobs(optionsOf(state, 1)).length === 0, 'standing in the second one, spent too, it does not try it');
+  }
+
+  // --- the Switchboard: 2 actions, at most one ring a turn
+  {
+    const { state } = newMatch(913, 6);
+    place(state, 'switchboard');
+    const p = state.players[0];
+    p.currentRoom = 'switchboard';
+    for (let k = 0; k < 4; k++) S.emitPublic(state, { type: 'trade', a: 1 + (k % 2), b: 3 + (k % 2) });     // trades since the last count: worth ringing
+    p.actionPoints = 4;
+    check(jobs(optionsOf(state, 0)).length === 1, 'with trades since the last count and 4 actions, a bot at the Switchboard offers itself a ring');
+    p.actionPoints = 1;
+    check(jobs(optionsOf(state, 0)).length === 0, 'with 1 action it does not (the ring costs 2): no refused action');
+    p.actionPoints = 2;
+    check(jobs(optionsOf(state, 0)).length === 1, 'with exactly 2 it does');
+    // The whole turn through the engine, as the game plays it: it pays 2, and does not ring again that turn.
+    let rings = 0, most = 0, refused = 0, turns = 0, paid = true;
+    for (let trial = 0; trial < 60; trial++) {
+      const t = newMatch(2000 + trial, 6);
+      place(t.state, 'switchboard');
+      const q = t.state.players[0];
+      q.currentRoom = 'switchboard'; q.actionPoints = 4;
+      for (let k = 0; k < 4; k++) S.emitPublic(t.state, { type: 'trade', a: 1 + (k % 2), b: 3 + (k % 2) });
+      const evFrom = t.state.events.length;
+      let apSpentOnRings = 0;
+      const s = playBotTurn(t.state, floor, t.table, {
+        maxSteps: 40,
+        onStep: (a, r) => { if (a.k === 'job' && r?.ok && floor.rooms.get(q.currentRoom)?.job === 'switchboard') apSpentOnRings += 2; },
+      });
+      const mine = t.state.events.slice(evFrom).filter(e => e.type === 'switchboard' && e.by === 0).length;
+      rings += mine; most = Math.max(most, mine); turns++;
+      refused += s.refusals.filter(r => r.action.k === 'job').length;
+      if (apSpentOnRings !== 2 * mine) paid = false;
+    }
+    check(rings > 5 && most === 1 && refused === 0,
+      `over ${turns} turns standing in the Switchboard a bot rang it ${rings} times, never twice in a turn (most in one turn: ${most}), and was never refused (${refused})`);
+    check(paid, 'every ring is a job action the engine accepted at the 2-action price');
+  }
+}
+
 // --- 4. many matches ---------------------------------------------------------------------------------------
 console.log('\nall-bot matches');
 const stats = { matches: 0, unfinished: 0, crashes: 0, refusals: 0, maxRefusalsTurn: 0, jammed: 0, cleanWins: 0, escapes: 0, possessedWins: 0,
   conv: [], firstFriendly: 0, friendlyThenAttempt: 0, blockDecisions: 0, blocks: 0, attacks: 0, voluntary: 0, byPlayers: {},
   soulsToKnown: 0, soulsSpent: 0, knownWrong: 0, knownTotal: 0,
-  opens: { poss: { doors: 0, turns: 0 }, clean: { doors: 0, turns: 0 } }, noDoor: { poss: 0, all: 0 } };
+  opens: { poss: { doors: 0, turns: 0 }, clean: { doors: 0, turns: 0 } }, noDoor: { poss: 0, all: 0 },
+  jobRefusals: 0, searchRefusals: 0, spentTwice: 0, ringsInATurn: 0, rings: 0, heals: 0, jobRoomDraws: 0 };
 // Souls a guest handed to someone it already KNEW was possessed: its own private events replayed in order,
 // with what they make certain (src/game/knowledge.js reads the same events).
 function soulsToKnownAllies(state, p) {
@@ -363,8 +490,14 @@ for (let k = 0; k < 450; k++) {
     let round2Done = false;
     while (!state.finished && turns < 300) {
       const who = S.activePlayer(state), round = state.round, poss = who.possessed;
+      const evFrom = state.events.length;
       const s = playBotTurn(state, floor, table, { maxSteps: 40 });
       turns++;
+      // the rooms with an action: no refusal of a job or a search, at most one ring a turn
+      stats.jobRefusals += s.refusals.filter(r => r.action.k === 'job').length;
+      stats.searchRefusals += s.refusals.filter(r => r.action.k === 'search').length;
+      const ringsNow = state.events.slice(evFrom).filter(e => e.type === 'switchboard').length;
+      stats.rings += ringsNow; stats.ringsInATurn = Math.max(stats.ringsInATurn, ringsNow);
       const opened = s.actions.filter(a => a.k === 'open').length;
       doors[who.index] += opened;
       if (round <= 2) { const o = stats.opens[poss ? 'poss' : 'clean']; o.doors += opened; o.turns++; }
@@ -398,6 +531,15 @@ for (let k = 0; k < 450; k++) {
       if (!state.players.find(q => q.id === id)?.possessed) stats.knownWrong++;
     }
     stats.attacks += state.events.filter(e => e.type === 'attack').length;
+    {
+      // each Infirmary is used at most once in a match, and the room is always the one the event names
+      const used = state.events.filter(e => e.type === 'infirmary').map(e => e.room);
+      stats.heals += used.length;
+      if (new Set(used).size !== used.length || used.some(id => floor.rooms.get(id)?.job !== 'infirmary')) stats.spentTwice++;
+      if (used.length !== state.spentInfirmaries.size) stats.spentTwice++;
+      // a search in an Infirmary or the Switchboard is only ever picking up a dead guest's things: no card is drawn there
+      for (const id of ['infirmary1', 'infirmary2', 'switchboard']) if (state.searchedRooms.has(id)) stats.jobRoomDraws++;
+    }
     for (const p of state.players) {
       const seen = new Map();
       for (const d of table.decisions(p.index)) {
@@ -417,6 +559,11 @@ check(stats.crashes === 0, `no crash in ${stats.matches} matches`);
 check(stats.unfinished === 0, 'every match ends (an escape, everyone possessed or dead, or dawn)');
 check(stats.maxRefusalsTurn <= 2 && stats.refusals <= stats.matches * 0.05, `no refused-action loops: ${stats.refusals} refused actions in all, at most ${stats.maxRefusalsTurn} in one turn (doors that turned out jammed, tried once each: ${stats.jammed})`);
 const n = stats.matches - stats.crashes - stats.unfinished;
+check(stats.jobRefusals === 0 && stats.searchRefusals === 0,
+  `the rooms with an action: no bot was ever refused a heal, a ring or a search (jobs refused ${stats.jobRefusals}, searches refused ${stats.searchRefusals}), at 2 actions a ring and one use of each Infirmary`);
+check(stats.ringsInATurn <= 1 && stats.rings > n * 0.3, `a bot rings the Switchboard at most once a turn (${stats.rings} rings in ${n} matches, at most ${stats.ringsInATurn} in a turn)`);
+check(stats.spentTwice === 0 && stats.heals > n * 0.05 && stats.jobRoomDraws === 0,
+  `each Infirmary is used at most once a match (${stats.heals} treatments in ${n} matches; a repeat or a mismatch in ${stats.spentTwice}), and no card was ever drawn in an Infirmary or the Switchboard (${stats.jobRoomDraws})`);
 check(stats.escapes > n * 0.2, `bots escape: ${stats.escapes} of ${n} matches`);
 check(stats.possessedWins > n * 0.2, `the possessed side wins too: ${stats.possessedWins} of ${n}`);
 for (const [pl, b] of Object.entries(stats.byPlayers)) console.log(`         (${pl} players: clean side ${(100 * b.clean / b.n).toFixed(0)}% of ${b.n})`);

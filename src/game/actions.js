@@ -5,7 +5,7 @@ import { rules } from '../data/rules.js';
 import { CARDS, takeCard, isWeapon, countableCount, shuffle, makeCard, renewCard } from './cards.js';
 import {
   checkWin, canEscape, logPublic, convertToPossessed, isLocked, unlockRoom, placeBarricade, isBarricaded,
-  adjacentLockedRooms, doorBetween, emitPublic, emitPrivate,
+  adjacentLockedRooms, doorBetween, emitPublic, emitPrivate, isSpent, endTurn,
 } from './state.js';
 import { openFrontierDoor } from './hotel.js';
 
@@ -73,28 +73,32 @@ export function toDiscard(state, card) {
 }
 
 // --- Searching ---------------------------------------------------------------------------------
-// Whether the current room can be searched by `player` right now.
+// Whether the current room can be searched by `player` right now. A room that is not searchable (the lobby, the
+// Fire Exit, and — since round 4 — the Infirmary and the Switchboard, whose action takes the search's place)
+// gives no card draw, ever; only cards lying on its floor (a dead guest's hand) can still be picked up there,
+// so they are never stranded.
 export function canSearch(state, floor, player) {
   const room = floor.rooms.get(player.currentRoom);
   if (state.finished) return { ok: false, reason: 'finished' };
-  if (!room?.searchable) return { ok: false, reason: 'notSearchable' };
+  const drops = state.roomDrops.get(room?.id) || [];
+  if (!room?.searchable && !drops.length) return { ok: false, reason: 'notSearchable' };
   if (player.actionPoints < rules.actionCost.search) return { ok: false, reason: 'ap' };
   if (room.dark && rules.darkRoomsRequireLight && !player.hand.some(c => c.type === 'flashlight')) {
     return { ok: false, reason: 'dark' };
   }
-  const drops = state.roomDrops.get(room.id) || [];
   // A room gives up its card draw once; anything lying on its floor can always be picked up.
   if (!drops.length && state.searchedRooms.has(room.id)) return { ok: false, reason: 'searched' };
   if (!drops.length && !state.drawPile.length && !state.discardPile.length) return { ok: false, reason: 'empty' };
   return { ok: true };
 }
 
-// Whether a room still has something a search could give anyone: it is searchable and either its
-// one card draw is unused or cards are lying on its floor. (Who may search it right now, and why
-// not, is canSearch's job.) Pure; changes nothing.
+// Whether a room still has something a search could give anyone: cards lying on its floor, or (when it is
+// searchable) its one card draw still unused. A room that is not searchable has nothing but its floor.
+// (Who may search it right now, and why not, is canSearch's job.) Pure; changes nothing.
 export function searchLeft(state, room) {
-  if (!room?.searchable) return false;
-  return !state.searchedRooms.has(room.id) || (state.roomDrops.get(room.id) || []).length > 0;
+  if (!room) return false;
+  if ((state.roomDrops.get(room.id) || []).length > 0) return true;
+  return !!room.searchable && !state.searchedRooms.has(room.id);
 }
 
 // Search the current room (1 AP). If dropped cards are lying there you take them all (always
@@ -151,6 +155,39 @@ export function discardCard(state, player, cardId) {
 // simulator) discard first.
 export function overHandLimit(player) {
   return Math.max(0, countableCount(player.hand) - rules.handLimit);
+}
+
+// The discard clock ran out (approved rule, round 4: the end-of-turn discard has a time limit, and the 45 s
+// turn clock running out while the guest holds more than the limit does the same, at once): discard RANDOM
+// ordinary cards for `player` until they hold exactly rules.handLimit of them. Never a Possession card (they
+// do not count and can never be discarded), never more than needed, nothing when they are within the limit
+// already. A Lantern is an ordinary card and can go. Each card goes to the discard pile exactly as a chosen
+// discard does (discardCard), and like a chosen discard it makes NO log line and NO public event: the table
+// sees nothing it would not see for a normal discard, and learns nothing about the hand. Randomness comes
+// from the engine's own seeded generator (state.rng, the one reshuffles and Lock Picks use) unless `rng` is
+// given, so a seeded game replays the same. Returns the cards discarded, in the order they went (an empty
+// list when there was nothing to do). The caller (the interface, a server) shows the guest what went.
+export function discardRandomDown(state, player, rng = state.rng) {
+  const gone = [];
+  if (!player?.alive) return gone;
+  while (overHandLimit(player) > 0) {
+    const ordinary = player.hand.filter(c => c.type !== 'possession');
+    const card = ordinary[Math.min(ordinary.length - 1, Math.floor(rng() * ordinary.length))];
+    const r = discardCard(state, player, card.id);
+    if (!r.ok) break;               // cannot happen (an ordinary card in the hand); never loops forever
+    gone.push(r.card);
+  }
+  return gone;
+}
+
+// The clock ran out on the active guest: random discards down to the limit (above), then the turn ends.
+// Returns endTurn's result plus `discarded` (the cards that went). A guest within the limit simply loses
+// the rest of their turn, exactly as if they had ended it.
+export function endTurnByTimeout(state, floor, rng = state.rng) {
+  if (state.finished) return { ok: false, reason: 'finished', discarded: [] };
+  const p = state.players[state.activeIndex];
+  const discarded = p ? discardRandomDown(state, p, rng) : [];
+  return { ...endTurn(state, floor), discarded };
 }
 
 // --- Cards played on your turn ------------------------------------------------------------------
@@ -259,46 +296,62 @@ export function useBarricade(state, floor, player, cardId, doorwayId) {
 }
 
 // --- Rooms with jobs ---------------------------------------------------------------------------
-// Whether `player` can use the job of the room they stand in right now, and why not.
+// A room's ACTION takes the place of its search (approved rule, round 4): the Infirmary and the Switchboard
+// cannot be searched (src/data/hotel.js `searchable: false`), so a guest standing there has the room's action
+// and nothing to search. The Linen Store, whose job is its search, keeps it.
+//
+// Whether `player` can use the job of the room they stand in right now, and why not. Refusals spend nothing.
+//   reason 'finished' | 'dead'   the match is over / the guest is out
+//   reason 'noJob'               the room has no action to use (an ordinary room, a Linen Store)
+//   reason 'spent'               an Infirmary somebody has already used (once per room, whole match)
+//   reason 'full'                an Infirmary, and the guest is already at full health (nothing would heal,
+//                                so the room's one use is never wasted on them)
+//   reason 'ap'                  not enough action points (Infirmary 1, Switchboard 2: rules.actionCost)
+// When several are true the first of 'spent', 'full', 'ap' in that order is reported. `job` is the room's
+// job and `room` its id (both also on a refusal, for the interface).
 export function canUseRoom(state, floor, player) {
   const room = floor.rooms.get(player.currentRoom);
-  if (state.finished) return { ok: false, reason: 'finished' };
-  if (!player.alive) return { ok: false, reason: 'dead' };
+  const at = { job: room?.job || null, room: room?.id ?? null };
+  if (state.finished) return { ok: false, reason: 'finished', ...at };
+  if (!player.alive) return { ok: false, reason: 'dead', ...at };
   if (room?.job === 'infirmary') {
-    if (player.health >= rules.maxHealth) return { ok: false, reason: 'full', job: room.job };
-    if (player.actionPoints < rules.actionCost.infirmary) return { ok: false, reason: 'ap', job: room.job };
-    return { ok: true, job: room.job };
+    if (isSpent(state, room.id)) return { ok: false, reason: 'spent', ...at };
+    if (player.health >= rules.maxHealth) return { ok: false, reason: 'full', ...at };
+    if (player.actionPoints < rules.actionCost.infirmary) return { ok: false, reason: 'ap', ...at };
+    return { ok: true, ...at };
   }
   if (room?.job === 'switchboard') {
-    if (state.switchboardCalls?.get(player.id) === state.turn) return { ok: false, reason: 'usedThisTurn', job: room.job };
-    if (player.actionPoints < rules.actionCost.switchboard) return { ok: false, reason: 'ap', job: room.job };
-    return { ok: true, job: room.job };
+    if (player.actionPoints < rules.actionCost.switchboard) return { ok: false, reason: 'ap', ...at };
+    return { ok: true, ...at };
   }
-  return { ok: false, reason: 'noJob', job: room?.job || null };
+  return { ok: false, reason: 'noJob', ...at };
 }
 
-// Infirmary (1 AP): restore `infirmaryHeal` (2) health, never above the maximum.
+// Infirmary (1 AP): restore `infirmaryHeal` (2) health, never above the maximum. Each Infirmary room can be used
+// ONCE per match, by whoever uses it first: it is spent for everyone after that (state.spentInfirmaries, public).
+// Using it is public, as before: the log line and the 'infirmary' event (now with the room, so everyone knows
+// which one is spent). Returns { ok, health, healed, room }.
 export function useInfirmary(state, floor, player) {
   const gate = canUseRoom(state, floor, player);
   if (!gate.ok) return gate;
-  if (gate.job !== 'infirmary') return { ok: false, reason: 'noJob', job: gate.job };
+  if (gate.job !== 'infirmary') return { ok: false, reason: 'noJob', job: gate.job, room: gate.room };
   const before = player.health;
   player.actionPoints -= rules.actionCost.infirmary;
   player.health = Math.min(rules.maxHealth, player.health + rules.infirmaryHeal);
+  (state.spentInfirmaries ||= new Set()).add(gate.room);
   logPublic(state, `${player.name} was treated in the Infirmary.`);
-  emitPublic(state, { type: 'infirmary', seat: player.index });
-  return { ok: true, health: player.health, healed: player.health - before };
+  emitPublic(state, { type: 'infirmary', seat: player.index, room: gate.room });
+  return { ok: true, health: player.health, healed: player.health - before, room: gate.room };
 }
 
-// Switchboard (1 AP, once per player per turn): everyone learns how many guests are possessed right
-// now — living guests only, since the dead are out of the game — but never who. The count is PUBLIC:
-// it goes in the public log for the whole table.
+// Switchboard (2 AP, as often as the guest can pay: no once-a-turn limit any more): everyone learns how many
+// guests are possessed right now — living guests only, since the dead are out of the game — but never who. The
+// count is PUBLIC: it goes in the public log for the whole table.
 export function useSwitchboard(state, floor, player) {
   const gate = canUseRoom(state, floor, player);
   if (!gate.ok) return gate;
-  if (gate.job !== 'switchboard') return { ok: false, reason: 'noJob', job: gate.job };
+  if (gate.job !== 'switchboard') return { ok: false, reason: 'noJob', job: gate.job, room: gate.room };
   player.actionPoints -= rules.actionCost.switchboard;
-  state.switchboardCalls.set(player.id, state.turn);
   const count = state.players.filter(q => q.alive && q.possessed).length;
   logPublic(state, `${player.name} rang the Switchboard: ${count} ${count === 1 ? 'guest is' : 'guests are'} possessed.`);
   emitPublic(state, { type: 'switchboard', by: player.index, count });

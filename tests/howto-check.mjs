@@ -73,7 +73,11 @@ for (const sentence of [
   'At the end of your turn you can keep 6 cards. Souls do not count.',
 ]) check(all.includes(sentence), `the draft sentence is there: "${sentence.slice(0, 48)}..."`);
 check(/out of the game and drop everything you carry, except Possession cards, which leave the game\./.test(all), 'a guest who is out drops what they carry, but Possession cards leave the game (docs/GAME_RULES.md, Health)');
-check(/Opening a door, moving to the next room, searching, using a card and using a room's job cost 1 action each\./.test(all), 'the costs read as one sentence while they are all the same');
+// (the Switchboard costs 2 since round 4, so the costs are no longer all the same and are said one by one; the one-sentence form
+// is checked below with a copy of the rules in which they are all the same)
+check(new RegExp(`Opening a door costs ${rules.openDoorCost} action, moving to the next room ${rules.moveCost} action, searching ${rules.searchCost} action and using a card ${rules.playCardCost} action\\. The Infirmary costs ${rules.infirmaryCost} action and the Switchboard ${rules.switchboardCost} actions\\.`).test(all)
+  && !/cost 1 action each/.test(all), 'the costs differ (the Switchboard costs 2 actions), so each is said on its own');
+check(/cost 1 action each\./.test(pageText({ ...JSON.parse(JSON.stringify(rules)), switchboardCost: 1 }).join('\n')), '...and they read as one sentence again when they are all the same');
 
 // Every number changed: the pages follow the rules, nothing is typed in.
 const other = JSON.parse(JSON.stringify(rules));

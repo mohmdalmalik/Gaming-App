@@ -23,8 +23,11 @@
 // a guest is there) and an optional flicker.
 //
 // Rooms with jobs (`job`): 'linenStore' (its card draw gives 2 cards), 'infirmary' (1 AP: restore 2
-// health) and 'switchboard' (1 AP, once per player per turn: everyone learns how many guests are
-// possessed). What each job does, and its numbers, live in src/data/rules.js and src/game/actions.js.
+// health, once per room per match) and 'switchboard' (2 AP, as often as you like: everyone learns how many
+// guests are possessed). The Infirmary and the Switchboard have `searchable: false`: their action IS the
+// room's action, so they can never be searched (the Linen Store, whose job is its search, can). What each
+// job does, and its numbers, live in src/data/rules.js and src/game/actions.js. The `searchPoint` and the
+// `searchSpot` piece of furniture stay on those two as the place the interface puts the room's action icon.
 
 const DEAD = ['south'];
 const STRAIGHT = ['north', 'south'];
@@ -129,8 +132,8 @@ export const hotel = {
     { id: 'grandCorridor', name: 'Grand Corridor', short: 'Grand Corr.', doors: CROSS, searchPoint: 'the umbrella stand', mood: CORRIDOR,
       furniture: [at('plant', -3.35, -3.35, 0.6, 1.3, 0.6), at('bench', 2.0, -3.55, 1.3, 0.47, 0.55),
         searchSpot(at('umbrellaStand', 3.45, -3.45, 0.4, 0.93, 0.4)), at('plant', 3.35, 3.35, 0.6, 1.3, 0.6)] },
-    // Room with a job: 1 AP, once per player per turn — everyone learns how many guests are possessed.
-    { id: 'switchboard', name: 'Switchboard', doors: CROSS, job: 'switchboard', searchPoint: "the operator's desk", mood: WARM,
+    // Room with a job: 2 AP, as often as you like — everyone learns how many guests are possessed. Not searchable.
+    { id: 'switchboard', name: 'Switchboard', doors: CROSS, job: 'switchboard', searchable: false, searchPoint: "the operator's desk", mood: WARM,
       furniture: [searchSpot(at('switchDesk', -3.2, -2.3, 1.3, 1.43, 2.1)), at('switchDesk', 2.3, -3.2, 2.1, 1.43, 1.3),
         at('smallDesk', -2.6, 3.45, 1.3, 1.2, 0.7), at('plant', -1.5, 3.5, 0.55, 1.2, 0.55),
         at('filingCabinet', 3.5, 2.3, 0.65, 1.4, 1.1), at('box', 2.75, 2.05, 0.45, 0.4, 0.45), at('plant', 3.45, 3.45, 0.55, 1.2, 0.55)],
@@ -170,8 +173,8 @@ export const hotel = {
     { id: 'stairs', name: 'Service Stairs', doors: STRAIGHT, searchPoint: 'the stairwell bench', dark: true, mood: DARK,
       furniture: [searchSpot(at('slatBench', -3.45, -1.9, 0.62, 0.95, 1.8)), at('plant', -1.8, -3.5, 0.6, 1.3, 0.6),
         at('stairs', 2.45, -3.0, 2.8, 1.6, 1.7), at('binTrolley', 3.5, -1.4, 0.7, 1.0, 1.4)] },
-    // Room with a job: 1 AP to restore 2 health (never above the maximum, rules.maxHealth: 4).
-    { id: 'infirmary2', name: 'Infirmary', doors: STRAIGHT, job: 'infirmary', searchPoint: 'the medicine cabinet', mood: CLINIC,
+    // Room with a job: 1 AP to restore 2 health (never above the maximum, rules.maxHealth: 4), once per room per match. Not searchable.
+    { id: 'infirmary2', name: 'Infirmary', doors: STRAIGHT, job: 'infirmary', searchable: false, searchPoint: 'the medicine cabinet', mood: CLINIC,
       furniture: [at('infirmaryBed', -2.9, -2.75, 1.05, 1.0, 2.1), at('nightstand', -2.0, -3.5, 0.6, 1.1, 0.6), at('plant', -1.2, -3.5, 0.55, 1.2, 0.55),
         at('towelChest', -3.5, 2.5, 0.6, 0.8, 0.9), searchSpot(at('medicineCabinet', 2.0, -3.55, 1.4, 1.9, 0.55)),
         at('stool', 3.1, -2.4, 0.55, 0.6, 0.55), at('trayCabinet', 3.5, 2.0, 0.6, 0.85, 0.9), at('plant', 3.45, 3.2, 0.55, 1.2, 0.55)],
@@ -190,8 +193,8 @@ export const hotel = {
         at('console', 2.2, -3.6, 1.5, 0.82, 0.45), at('tuftedBench', 3.45, 2.4, 0.65, 0.47, 1.4)] },
     { id: 'cornerCorridor', name: 'Corner Corridor', short: 'Corner Corr.', doors: CORNER, searchPoint: 'the window seat', mood: CORRIDOR,
       furniture: [searchSpot(at('windowSeat', -3.1, -2.8, 1.3, 0.82, 1.3)), at('plant', -3.45, 3.35, 0.55, 1.2, 0.55), at('console', 1.6, -3.6, 1.5, 0.82, 0.45)] },
-    // Room with a job: 1 AP to restore 2 health (never above the maximum, rules.maxHealth: 4).
-    { id: 'infirmary1', name: 'Infirmary', doors: CORNER, job: 'infirmary', searchPoint: 'the medicine cabinet', mood: CLINIC,
+    // Room with a job: 1 AP to restore 2 health (never above the maximum, rules.maxHealth: 4), once per room per match. Not searchable.
+    { id: 'infirmary1', name: 'Infirmary', doors: CORNER, job: 'infirmary', searchable: false, searchPoint: 'the medicine cabinet', mood: CLINIC,
       furniture: [at('infirmaryBed', -2.9, -2.75, 1.05, 1.0, 2.1), at('nightstand', -2.0, -3.5, 0.6, 1.1, 0.6), at('plant', -1.2, -3.5, 0.55, 1.2, 0.55),
         searchSpot(at('medicineCabinet', 0.9, -3.55, 1.4, 1.9, 0.55)), at('stool', 1.9, -2.5, 0.55, 0.6, 0.55),
         at('trayCabinet', 3.5, -2.2, 0.6, 0.85, 0.9), at('plant', 3.4, -3.4, 0.55, 1.2, 0.55),

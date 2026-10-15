@@ -541,13 +541,14 @@ console.log('\nthe player at the table');
       const c0 = l0.mind.context(l0.view), before = l0.mind.pPoss(c0, X), liar0 = l0.mind.mem.liar.get(person) || 0;
       t.hear({ ...msg, at: 0 });
       const l1 = t.catchUp(L), c1 = l1.mind.context(l1.view);
-      return { d: l1.mind.pPoss(c1, X) - before, liar: (l1.mind.mem.liar.get(person) || 0) - liar0, known: l1.mind.mem.known.has(X), speakerP: l1.mind.pPoss(c1, person, 0) };
+      return { d: l1.mind.pPoss(c1, X) - before, liar: (l1.mind.mem.liar.get(person) || 0) - liar0, known: l1.mind.mem.known.has(X), cleared: l1.mind.isCleared(X), speakerP: l1.mind.pPoss(c1, person, 0) };
     };
     const line = { seat: person, id: 'stayAway', about: X };
     const trusted = listen(m => { m.mem.trust.set(person, 2); }, line);
     const doubted = listen(m => { m.mem.susp.set(person, (m.mem.susp.get(person) || 0) + 0.45); }, line);
-    // (a speaker the bot is all but sure is possessed is hardly believed, as it should be: little to compare)
-    if (trusted.known || trusted.speakerP > 0.7) continue;
+    // (a speaker the bot is all but sure is possessed is hardly believed, as it should be: little to compare; and a guest the
+    // Switchboard's count proved clean stays at 4% whatever is said about them, so there is nothing for talk to move)
+    if (trusted.known || trusted.cleared || trusted.speakerP > 0.7) continue;
     n++;
     if (trusted.d > 0.01) up++;
     if (trusted.d > doubted.d + 1e-9) believedMore++;

@@ -47,7 +47,7 @@ const SHAPES = {
   mirror:      [{ by: 'seat', target: 'seat' }],                                         // that a Hand Mirror was used, never what it showed
   unlock:      [{ by: 'seat', room: 'room', opened: 'flag' }],                           // a Master Key / Lock Pick: whether it worked
   barricade:   [{ by: 'seat', door: 'door' }],
-  infirmary:   [{ seat: 'seat' }],
+  infirmary:   [{ seat: 'seat', room: 'room' }],                                         // that an Infirmary was used (it is spent for everyone), never anything else
   switchboard: [{ by: 'seat', count: 'count' }],                                         // how many are possessed, not who
   noTrade:     [{ a: 'seat', b: 'seat' }],                                               // a meeting where nobody could trade
   trade:       [{ a: 'seat', b: 'seat' }],                                               // that two guests traded, never the cards
@@ -136,6 +136,7 @@ console.log('\nthe check itself');
     { ...base, type: 'attack', by: 0, target: 2, weapon: 'knife', damage: 1, killed: false, room },
     { ...base, type: 'open', seat: 0, room, door: 'a-b', jammed: true },
     { ...base, type: 'switchboard', by: 4, count: 1 },
+    { ...base, type: 'infirmary', seat: 2, room },
   ];
   check(good.every(e => problems(e, 6).length === 0), 'real-looking events pass');
   const leaks = [
@@ -151,6 +152,8 @@ console.log('\nthe check itself');
     ['a seat that is not at the table', { ...good[1], b: 9 }],
     ['a made-up event type', { ...base, type: 'whisper', seat: 1 }],
     ['a switchboard that names who', { ...good[4], who: 2 }],
+    ['an Infirmary event that says how much was healed', { ...good[5], healed: 2 }],
+    ['an Infirmary event without its room', { ...base, type: 'infirmary', seat: 2 }],
   ];
   for (const [what, ev] of leaks) check(problems(ev, 6).length > 0, `caught: ${what}`);
 }

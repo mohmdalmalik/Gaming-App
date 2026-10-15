@@ -42,6 +42,8 @@ export const rules = {
   turnTimerEnabled: false,  // practice: off. A match: on. ?timer=off disables it anywhere.
   turnTimerSeconds: 45,     // counts the active player's actions only; pauses in meetings and
                             // while a guest reads a private screen
+  discardMinSeconds: 10,    // APPROVED 15 Oct 2026: the end-of-turn discard runs on the turn clock but always gets at
+                            // least this long; when it runs out, random ordinary cards are discarded for the guest
   // Dawn deadline: if no clean guest has escaped when this round ends, dawn breaks and the hotel
   // wins. Matches only — practice has no deadline.
   roundLimit: 8,
@@ -84,17 +86,27 @@ export const rules = {
   barricadeRounds: 1,       // a Barricade seals one doorway of your room until your next turn starts
 
   // Rooms with jobs (which tiles have them is in src/data/hotel.js, `job`).
-  linenStoreDraws: 2,       // Linen Store: the first search here draws 2 cards instead of 1
+  linenStoreDraws: 2,       // Linen Store: the first search here draws 2 cards instead of 1 (it keeps its search)
+  // The Infirmary and the Switchboard have an ACTION instead of a search (APPROVED, round 4: "it should change
+  // the search icon to this action ... one of them is enough"): neither can be searched, ever (`searchable:
+  // false` in src/data/hotel.js), so no card is drawn from them.
   infirmaryCost: 1,         // Infirmary: 1 AP to restore health...
-  infirmaryHeal: 2,         // ...2 bars (never above maxHealth)
-  switchboardCost: 1,       // Switchboard: 1 AP, once per player per turn; everyone learns how many
-                            // guests are currently possessed, but not who
+  infirmaryHeal: 2,         // ...2 bars (never above maxHealth). APPROVED, round 4: each Infirmary room can be
+                            // used ONCE PER MATCH, by whoever uses it first (then it is spent for everyone, in
+                            // public); a guest at full health cannot use it, so a use is never wasted on them
+  switchboardCost: 2,       // Switchboard: 2 AP (APPROVED, round 4: was 1) and NO limit on how often (it was once
+                            // per player per turn): everyone learns how many living guests are currently
+                            // possessed, but not who
 
   // --- Hand ----------------------------------------------------------------------------------
   startingHandSize: 4,      // 1 Lantern (lanternsDealtEach) + 3 from the deck with the Lanterns taken out
   handLimit: 6,             // checked ONLY at the end of your own turn: during it you keep everything you
                             // find or receive, even past 6, then discard down to 6 when you end it.
-                            // Lanterns count, Possession cards don't
+                            // Lanterns count, Possession cards don't. APPROVED, round 4: the end-of-turn
+                            // discard has a time limit; when it (or the turn clock itself) runs out, random
+                            // ORDINARY cards are discarded down to the limit and the turn ends
+                            // (discardRandomDown / endTurnByTimeout, src/game/actions.js; never Possession
+                            // cards, never more than needed). The discard clock's LENGTH is not set yet: the owner has not given it.
 
   // --- Seeds ---------------------------------------------------------------------------------
   practiceSeed: null,       // null: a new random hotel every practice match (?seed= still forces one)
@@ -127,9 +139,9 @@ export const rules = {
                   desc: 'Your own soul. Give it in a trade to possess someone.' },
   },
 
-  // --- The draw deck (48, tuned for 6 players) --------------------------------------------------
+  // --- The draw deck (50, tuned for 6 players) --------------------------------------------------
   deck: {
-    lantern: 14,
+    lantern: 16,       // APPROVED 15 Oct 2026: 14 -> 16, to give back the Lanterns the Infirmaries and the Switchboard no longer find
     bandage: 7,
     flashlight: 5,
     knife: 4,

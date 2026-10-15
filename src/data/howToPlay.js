@@ -2,7 +2,9 @@
 // the main menu, the role screen's headline and its one line about how the OTHER side wins, and the little
 // Lanterns chip. Written from docs/GAME_RULES.md: it restates the rules and changes none. The owner reviews
 // this wording, so every sentence lives here and nowhere else; a number is never written twice: `r` is the
-// rules (src/data/rules.js), so when a number there changes, the page changes with it.
+// rules (src/data/rules.js), so when a number there changes, the page changes with it. (The Infirmary, Switchboard
+// and discard-clock lines on the last page follow the round-4 rules the owner approved on 15 Oct 2026; docs/GAME_RULES.md
+// gets them once the owner approves the before/after list in the scratchpad's gamerules-proposal.md.)
 //
 // The pages teach the GAME (the goal, a turn, meetings, Possession and Lanterns, staying alive). What each
 // card does is NOT here: it is on the Cards screen (src/ui/cardsGuide.js, src/data/cardsGuide.js).
@@ -21,12 +23,12 @@ const lanterns = n => `${n} Lantern${n === 1 ? '' : 's'}`;
 const LANDING = hotel.lobby.name;
 const EXIT = hotel.tiles.find(t => t.isExit)?.name ?? 'Fire Exit';
 
-// What opening a door, moving, searching, using a card and using a room's job cost: one sentence when they
-// all cost the same (they do today), the costs one by one if the rules ever say otherwise.
+// What opening a door, moving, searching, using a card and using a room's action cost: one sentence when they
+// all cost the same (they did until round 4: the Switchboard now costs more), the costs one by one otherwise.
 function costs(r) {
   const same = new Set([r.openDoorCost, r.moveCost, r.searchCost, r.playCardCost, r.infirmaryCost, r.switchboardCost]).size === 1;
   return same
-    ? `Opening a door, moving to the next room, searching, using a card and using a room's job cost ${actions(r.moveCost)} each.`
+    ? `Opening a door, moving to the next room, searching, using a card and using a room's action cost ${actions(r.moveCost)} each.`
     : `Opening a door costs ${actions(r.openDoorCost)}, moving to the next room ${actions(r.moveCost)}, searching ${actions(r.searchCost)}`
       + ` and using a card ${actions(r.playCardCost)}. The Infirmary costs ${actions(r.infirmaryCost)} and the Switchboard ${actions(r.switchboardCost)}.`;
 }
@@ -80,9 +82,11 @@ export const HOW_TO_PLAY = {
       cardsLink: true,
       lines: [
         r => `You have ${r.maxHealth} health. At 0 health you are out of the game and drop everything you carry, except Possession cards, which leave the game.`,
-        r => `The Infirmary is a room where you can heal: it restores ${r.infirmaryHeal} health for ${actions(r.infirmaryCost)}.`,
+        r => `The Infirmary restores ${r.infirmaryHeal} health for ${actions(r.infirmaryCost)}. Each one works once per match, for whoever gets there first, and everyone sees when it is used.`,
+        r => `The Switchboard costs ${actions(r.switchboardCost)} and can be used as often as you can pay for. It tells everyone how many living guests are possessed, but not who.`,
+        () => 'In these two rooms, the room\'s own action takes the place of searching.',
         r => `At the end of your turn you can keep ${r.handLimit} cards. Souls do not count.`,
-        () => 'The Switchboard tells everyone how many guests are possessed, but not who.',
+        r => `If you hold more, you discard down to ${r.handLimit} when you end your turn. The turn clock keeps running, but you always get at least ${r.discardMinSeconds} seconds. When time runs out, the game discards for you, at random.`,
         () => 'All the cards and what they do are on the Cards screen.',
       ],
     },

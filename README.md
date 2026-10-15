@@ -191,17 +191,31 @@ readout at the top left (below the room name), for measuring speed on the iPad.
   icon is dimmed with a flashlight mark and says so when tapped); with no actions left it is dimmed
   too. What you find is private: the table only sees that you searched. Everything found goes into
   the hand, even past 6. Every guest (practice included) starts with 1 Lantern + 3 other cards; the
-  other Lanterns are found by searching.
+  other Lanterns are found by searching. **The Infirmaries and the Switchboard cannot be searched** (approved, 15 Oct 2026:
+  their own action takes the search's place, `searchable: false` in `src/data/hotel.js`), so they give no card; only a dead
+  guest's cards lying there can still be picked up. The draw deck is **50 cards, 16 of them Lanterns** (`rules.deck`; it was 48
+  and 14 before 15 Oct 2026: two Lanterns were added to give back what those three rooms no longer find).
 - **Hand limit (6)** — settled only when you END your turn: over 6 (Possession cards don't count), the
   End turn button reads "Discard N first", a calm one-line "Cards 8/6 · discard 2 at end of turn" sits
-  above the fan, and End turn (or the 45 s clock running out) opens the discard screen before the turn
+  above the fan, and End turn opens the discard screen before the turn
   passes. Every discard is two taps (a card, then the button that names it), and the discard that brings the
   hand down to 6 finishes the screen by itself: the card is seen leaving for about half a second, then the turn
   passes (there is no "Keep these 6" step). Cards received on someone else's turn are settled at the end of your
-  own next turn.
-- **Rooms with jobs** — in an Infirmary or the Switchboard a room button appears by End turn:
-  Infirmary (1 AP, heal 2), Switchboard (1 AP, once a turn: the whole table learns how many guests
-  are possessed, not who). The map marks them (✚ ☎ ≡).
+  own next turn. **The discard has a time limit** (approved, 15 Oct 2026; a match, where the 45 s turn clock is on): the
+  turn clock keeps running while you choose and the screen shows it as a countdown, but you always get at least
+  10 seconds (`rules.discardMinSeconds`). At zero the game discards random ordinary cards for you (only as many as
+  needed, never a Possession card) and the turn ends; you are told which ones, privately, in a short notice ("Time ran
+  out. The game discarded your Knife and your Lantern."), and the table sees nothing. The same happens at once if the
+  45 s clock runs out in your action phase while you hold more than 6 (the discard screen then never opens).
+  Practice (and `?timer=off`) has no clock, so no limit. (`src/main.js` `endTurnNow` / `onTimeUp` / `endTurnByClock`,
+  `src/ui/discardClock.js`.)
+- **Rooms with jobs** — an Infirmary or the Switchboard has no Search: its action is the icon on its furniture
+  (`src/ui/searchSpot.js`, kinds `heal` and `switchboard`, same button as the search icon; no button in the bottom bar).
+  Infirmary (1 AP, heal 2, **once per match** for the whole table: the first guest to use it spends it for everyone; grey at
+  full health, nothing spent), Switchboard (2 AP, as often as you can pay: the whole table learns how many guests are
+  possessed, not who). A spent Infirmary is public: its icon turns grey with a tick, a grey cross hangs over its cabinet
+  (`src/render/searchMarks.js`) and its mark on the map is dimmed ("used"). A dead guest's cards lying in either room bring
+  the search icon back beside the action icon. The map marks the rooms (✚ ☎ ≡).
 - **Hand** — held as a fan of face-up cards at the bottom of the screen (resting partly below the
   edge; a card rises when touched). Tap a card to see it large with what it does and its action
   (‹ › step through the hand; tap outside or ✕ to close). Bandage (heal 1), Master Key / Lock Pick
@@ -480,7 +494,8 @@ src/
     stripModel.js                     what the top guest strip shows, as plain data: turn flags and the guests the viewer certainly knows are possessed (tests/strip-check.mjs)
     souls.js                          the possessed player's own "Souls to trade: N" count
     meeting.js                        the PUBLIC side of a meeting: who, Trade or Attack, weapon, outcome
-    discard.js                        the end-of-turn discard down to the hand limit (the only hand-limit screen)
+    discard.js                        the end-of-turn discard down to the hand limit (the only hand-limit screen), with its countdown (where the turn clock is on) and the private "the game discarded..." notice
+    discardClock.js                   the discard clock's seconds maths and words, as pure functions: how long the screen runs (what is left of the turn clock, never under rules.discardMinSeconds; none where the clock is off), what zero does, the "10 / 5 seconds left" announcements, the notice's sentence (tests/discard-clock-check.mjs)
 assets/audio/         the music and effects (MP3), generated by tools/audio/ (see tools/audio/README.md)
 assets/icons/         the app icon: a brass lantern on navy in an Art Deco ring. icon.svg is the master (1024), favicon.svg the simpler tab icon, icon-maskable.svg the same at 80 % for round masks;
                       the PNGs (icon-180 = apple-touch-icon, icon-192, icon-512, icon-maskable-512, favicon-32, favicon-16) are rasterised from them with headless Chromium (README in the folder)
@@ -558,6 +573,7 @@ node tests/logic-check.mjs        # floor, map topology, grid, pathfinding
 node tests/browser-practice.mjs   # practice mode in a real browser [--screens]
 node tests/browser-bots.mjs       # the main menu and matches against bots in a real browser: settings, the table filling up, the lift, bots' turns, privacy, meetings both ways, being attacked, the end screen, whole matches [--screens] [--matches 3]
 node tests/browser-lobby.mjs      # the baked starting room, fog rooms, tap to open / move, camera (big hotel), draw calls
+node tests/browser-rooms.mjs      # the Infirmary and Switchboard icons in a real browser: grey at full health, once per match, 2 actions a ring, the search icon beside them when a dead guest's cards lie there, the spent mark, in a match [--screens] [--practice-only]
 node tests/audio-check.mjs        # music and sound: unlock on the first tap, every file decodes, Settings, the menu -> lift -> game music, cues in a match and practice [--quick]
 node tests/audio-buttons-check.mjs # which sound every button makes (pure, no browser): a new button must be listed with its sound, so it cannot slip onto the wrong one; and every cue has its file (~1 s)
 node tests/audio-load-check.mjs    # how the sound files download, with the network and the clock faked: a failed download is tried again after 3 s, then 10 s (never in a loop), a 404 once, the night music's download starts with the lift, the end fanfares from round 3, nothing before the first tap (~3 s)
@@ -577,9 +593,10 @@ node tests/tips-check.mjs         # first-match tips ON: where they sit, never b
 node tests/public-events-check.mjs # what the public events may carry (no browser, ~5 s): every public event of a few hundred bot matches has only its documented keys (a role, a hand, a card count or a private result can never ride along), and a new event type must be written down in the test
 node tests/record-check.mjs       # Your record (src/record.js, an injected store, no browser, ~1 s): counting, "Left early", reset, saving, a second tab, damaged saves, blocked or missing storage
 node tests/strip-check.mjs        # the top guest strip (no browser, ~2 s): the "Possessed" marker is exactly what the viewer's own knowledge says (either side, never a guess, never the viewer, nothing while a trade scene holds it back), and "3 turns left in Round 2" follows the engine's own turn order (the dead skipped, the final round says dawn)
+node tests/discard-clock-check.mjs # the discard clock (no browser, ~1 s): 30 s left -> 30 s, 2 s left -> 10 s, clock off -> no limit; 6 cards no screen, 7 or 9 ask for exactly the number over; zero (or the 45 s clock out in the action phase) -> the engine's random discard of ordinary cards only, nothing public, then the turn passes; the countdown's words and the notice
 node tests/docs-check.mjs         # the documents' facts (no browser, ~1 s): the numbers in docs/DECISIONS.md "Read this first" are rules.js's, the README's file list names every src/ file, the paths the documents name exist, the GitHub Action runs every fast suite, a preview server is bound to 127.0.0.1
 node tests/run-fast.mjs           # every fast suite (the GitHub Action's list) in one command
-node tests/howto-check.mjs        # the words that teach the game (no browser): the How to play pages follow the rules' numbers (a copy of the rules with every number changed), the hint, the role screen's lines, the tips, the end screen's recap, no "AP" anywhere the player reads (~1 s)
+node tests/howto-check.mjs        # the words that teach the game (no browser): the How to play pages follow the rules' numbers (a copy of the rules with every number changed), the round-4 rules are in the words (Infirmary once per match, Switchboard 2 actions, the discard's time limit: pages and tips), the hint, the role screen's lines, the tips, the end screen's recap, no "AP" anywhere the player reads (~1 s)
 node tests/browser-learn.mjs      # How to play, the hint, the role screen, the Lanterns chip, the in-match Menu panel and what the clock does while it is open, the end screen's Victory / Defeat, at the four iPad sizes [--only a,b,c,d] [--sizes 1024x694,1180x820]
 node tests/browser-turnflow.mjs   # the turn flow (round 4): the turn passing by itself when the actions run out (not with an action left, an Espresso or a free Trade, a reveal, a meeting or the card view open; once only; Practice and a match), the discard screen that closes by itself (no "Keep these 6"), the short found-card reveal, the walking speed [--only a,b,c,d,e]. The other browser suites switch auto end off (tests/smoke-lib.mjs autoEndOff)
 python3 tools/audio/build.py      # rebuild every sound, ~6 min (tools/audio/README.md); needs numpy, scipy, ffmpeg

@@ -21,10 +21,10 @@ const quiet = messages => messages.filter(m => !/favicon/i.test(m));
 
 // A game page: practice (alone) or a match with bots, auto end turn ON. `speed` hurries the walking (software
 // rendering draws a few frames a second); the walking speed itself is measured in (e) without it.
-async function open(mode, { speed = 16 } = {}) {
+async function open(mode, { speed = 16, seed = null } = {}) {
   const run = await launch({ width: 1024, height: 768, autoEnd: true });
   const { page } = run;
-  const q = ['mode=' + mode, mode === 'practice' ? 'seed=20260917' : ''].filter(Boolean).join('&');
+  const q = ['mode=' + mode, mode === 'practice' ? 'seed=20260917' : seed ? `seed=${seed}` : ''].filter(Boolean).join('&');
   await page.goto(`${baseUrl}?${q}`, { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__game && !document.getElementById('btn-begin').disabled, null, { timeout: 90000, polling: 200 });
   await page.evaluate(s => { window.__game.setPixelRatio(0.5); if (s) window.__game.cfg.player.speed = s; }, speed);
@@ -213,7 +213,7 @@ if (only.includes('c')) {
 // --- d. auto end turn in a match with bots --------------------------------------------------------
 if (only.includes('d')) {
   console.log('\nd. auto end turn in a match with bots');
-  const { browser, page, messages } = await open('bots', { speed: 30 });
+  const { browser, page, messages } = await open('bots', { speed: 30, seed: 20260917 });     // (a fixed hotel, deal and computer guests: not a different random match each run)
   const g = (fn, a) => page.evaluate(fn, a);
   const myTurn = () => g(() => { const G = window.__game; return G.myTurn() && G.inActionPhase() && !G.handoffOpen() && !G.meetingOpen(); });
   async function answerScreens() {
@@ -231,7 +231,12 @@ if (only.includes('d')) {
   }
   async function untilMyTurn(timeout = 200000) {
     const end = Date.now() + timeout;
-    while (Date.now() < end) { if (await myTurn()) return true; await answerScreens(); await page.waitForTimeout(300); }
+    while (Date.now() < end) {
+      if (await myTurn()) return true;
+      // (the match is over, or the player is out: no turn will come, so say so now rather than after the whole wait)
+      if (await g(() => { const G = window.__game; return G.state.finished || !G.state.players[G.humanSeat()].alive; })) return false;
+      await answerScreens(); await page.waitForTimeout(300);
+    }
     return false;
   }
   try {

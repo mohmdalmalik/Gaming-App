@@ -113,8 +113,6 @@
             <button id="btn-map" class="ctl map" type="button" aria-label="Open map"><span class="ico">&#x25A4;</span> Map</button>
           </div>
           <div class="action-row">
-            <!-- A room with a job (Infirmary, Switchboard): shown only while standing in one. -->
-            <button id="btn-room" class="btn action room-job" type="button" hidden><span class="btn-main">Infirmary</span><span id="room-sub" class="btn-sub">1 action</span></button>
             <button id="btn-trade" class="btn action" type="button" hidden><span class="btn-main">Trade</span><span class="btn-sub">Safe zone</span></button>
             <button id="btn-end-turn" class="btn primary end" type="button"><span class="btn-main">End turn &#x203A;</span><span id="end-sub" class="btn-sub">Next: —</span></button>
           </div>
@@ -131,6 +129,8 @@
       </div>
 
       <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+      <!-- "Time ran out. The game discarded your ..." (the player's own screen only; src/ui/discard.js note) -->
+      <div id="discard-note" class="discard-note" role="status" aria-live="polite" hidden></div>
 
       <!-- The quick-chat panel (filled from src/data/chat.js by src/ui/chat.js): one tap sends and closes. -->
       <div id="chat-panel" class="chat-panel" role="dialog" aria-label="Quick chat" data-scrolls hidden></div>
@@ -142,6 +142,13 @@
       <div class="modal" data-scrolls>
         <div id="discard-kicker" class="discard-kicker" hidden></div>
         <div id="discard-title" class="modal-title">End of your turn: too many cards</div>
+        <!-- The countdown (only where the turn clock is on: src/ui/discard.js). The bar is only a picture; the words
+             are the text ("30 seconds left"), and the hidden status line below is what a screen reader is told at 10 and 5. -->
+        <div id="discard-clock" class="discard-clock" hidden>
+          <div class="dc-words"><span id="dc-secs" class="dc-secs">0</span> <span id="dc-label" class="dc-label">seconds left</span></div>
+          <div class="dc-track" aria-hidden="true"><div id="dc-fill" class="dc-fill"></div></div>
+        </div>
+        <div id="discard-live" class="discard-live" role="status" aria-live="polite"></div>
         <div id="discard-sub" class="modal-sub"></div>
         <div id="discard-cards" class="cards"></div>
         <div class="modal-actions">
@@ -198,7 +205,7 @@
           <span><span class="sw guest"></span> A guest (their initial, or seat number) &#183; the arrow is whose turn it is</span>
           <span><span class="mk drop">&#x25C6;</span> Something on the floor</span>
           <span><span class="sw frontier"></span> Closed door (?)</span>
-          <span><span class="mk infirmary">&#x271A;</span> Infirmary &#183; heal</span>
+          <span><span class="mk infirmary">&#x271A;</span> Infirmary &#183; heal, once per match (dimmed once used)</span>
           <span><span class="mk switchboard">&#x260E;&#xFE0E;</span> Switchboard &#183; count the possessed</span>
           <span><span class="mk linen">&#x2261;</span> Linen Store &#183; 2 cards</span>
           <span><span class="mk">&#x1F512;</span> Locked door &#183; &#x1F513; open this turn only</span>

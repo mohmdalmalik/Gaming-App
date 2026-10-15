@@ -411,7 +411,7 @@ html, body {
    hides them too). */
 #app:has(#handoff-overlay:not([hidden]), #encounter-overlay:not([hidden]), #end-overlay:not([hidden]),
   #notice-overlay:not([hidden]), #map-overlay:not([hidden]), #discard-overlay:not([hidden]),
-  #start-overlay:not([hidden]), #ask-overlay:not([hidden])) :is(#hand-fan, #search-spot) { display: none !important; }
+  #start-overlay:not([hidden]), #ask-overlay:not([hidden])) :is(#hand-fan, .search-spot) { display: none !important; }
 
 /* ---- Bottom-right: camera controls (separate) + action buttons ---- */
 .hud-bottom-right { display: flex; flex-direction: column; align-items: flex-end; gap: 12px; }
@@ -2225,7 +2225,7 @@ html, body {
 .lock-warn[hidden] { display: none; }
 .lock-cancel { align-self: center; min-width: 150px; min-height: 48px; margin-top: 2px; font-family: var(--serif); font-size: 17px; font-weight: 700; }
 .lock-opt:focus-visible, .lock-cancel:focus-visible { outline: 2px solid var(--brass-bright); outline-offset: 2px; }
-#app:has(#lock-overlay:not([hidden])) :is(#hand-fan, #search-spot) { display: none !important; }
+#app:has(#lock-overlay:not([hidden])) :is(#hand-fan, .search-spot) { display: none !important; }
 
 /* ==== Round 4, exiticon: the room action icon's second kind, the Exit icon (src/ui/searchSpot.js) ====
    The same button as the search icon (#search-spot: its place, size, tap area, caption, press and click sound), with a
@@ -2377,3 +2377,53 @@ html, body {
    pushes it down: a finger drag in it scrolls the lines and never the page or the hotel behind. */
 .chat-panel { overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
 /* ==== end of Round 4, fixer ==== */
+
+/* ==== Round 4, discard clock ==== */
+/* The discard screen's countdown (src/ui/discard.js; only where the turn clock is on): the seconds large and calm with a bar
+   running down beside them; the last 5 seconds turn crimson, and the number pulses gently (Reduce Motion: it only turns
+   crimson). The bar is a picture: the words are the text, and #discard-live (hidden, polite) says "10 seconds left" and "5 seconds left". */
+.discard-clock { display: flex; align-items: center; gap: 16px; margin: 2px 4px 10px; }
+.discard-clock[hidden] { display: none; }
+.dc-words { flex: none; display: flex; align-items: baseline; gap: 8px; font-family: var(--serif); white-space: nowrap; }
+.dc-secs { min-width: 2ch; text-align: right; font-size: 36px; font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums; color: var(--brass-bright); }
+.dc-label { font-size: 15px; color: var(--ivory-dim); }
+.dc-track { flex: 1 1 auto; height: 8px; border-radius: 999px; background: rgba(0, 0, 0, 0.45); overflow: hidden; }
+.dc-fill { width: 100%; height: 100%; background: linear-gradient(90deg, var(--brass), var(--brass-bright)); transform-origin: left center; }   /* (shrunk by discard.js: transform: scaleX) */
+.discard-clock.urgent .dc-secs { color: #f0b4ae; animation: dc-pulse 1.1s ease-in-out infinite; }
+.discard-clock.urgent .dc-fill { background: linear-gradient(90deg, #8c3a34, var(--crimson)); }
+@keyframes dc-pulse { 50% { opacity: 0.6; } }
+@media (prefers-reduced-motion: reduce) { .discard-clock.urgent .dc-secs { animation: none; } }
+#discard-sub { text-wrap: balance; }      /* (no lonely last word on the third line once the clock's sentence is added) */
+.discard-live { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+/* "Time ran out. The game discarded your ..." : a calm card over the game for a few seconds, on the player's own screen only.
+   It blocks nothing (taps go through it) and sits above the toast line. */
+.discard-note {
+  position: absolute; left: 50%; bottom: calc(var(--safe-bottom) + 262px); transform: translateX(-50%); z-index: 11;
+  width: max-content; max-width: min(520px, 90vw); padding: 12px 20px; border-radius: 14px; text-align: center; pointer-events: none;
+  font-family: var(--serif); font-size: 17px; line-height: 1.4; color: var(--ivory); text-wrap: balance;
+  background: var(--panel); border: 1px solid var(--line);
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.5), 0 8px 20px rgba(0, 0, 0, 0.5);
+  -webkit-backdrop-filter: blur(7px); backdrop-filter: blur(7px);
+}
+.discard-note[hidden] { display: none; }
+/* ==== end of Round 4, discard clock ==== */
+
+/* ==== Round 4, rooms: the Infirmary's and the Switchboard's icons (src/ui/searchSpot.js, kinds heal and switchboard) ====
+   The same button as the search icon (its place, size, tap area, caption, press and click sound). The cross is crimson and the
+   headset a deep blue on the brass badge (the colours of their marks on the Map). Looks: .live pulses like the search icon (the
+   rule above); .full (an Infirmary, and the guest is at full health: nothing is spent) and .spent (somebody has used this
+   Infirmary: it works once per match, for everyone) are dimmed and still tappable, .spent with a small green tick; .ap (too few
+   actions) is dimmed by the search icon's rule. A second icon, #search-spot-2, is the magnifier beside the room's own action
+   when a dead guest's cards lie in the room: it is the same button as the first, in its own clear place. */
+.search-spot.heal .ss-badge { color: #b3302a; }
+.search-spot.switchboard .ss-badge { color: #1f4a72; }
+.search-spot.full .ss-badge, .search-spot.spent .ss-badge { filter: grayscale(0.85) brightness(0.6); border-color: var(--brass-dim); }
+.search-spot.full .ss-caption, .search-spot.spent .ss-caption { color: var(--ivory-dim); border-color: var(--line-soft); }
+.search-spot .ss-tick {
+  display: none; position: absolute; left: calc(50% + 7px); top: 36px; width: 26px; height: 26px; border-radius: 50%;
+  align-items: center; justify-content: center; pointer-events: none;
+  background: #8bd7ab; border: 2px solid #1f6b45; box-shadow: 0 2px 5px rgba(0, 0, 0, 0.5);
+}
+.search-spot .ss-tick svg { width: 15px; height: 15px; }
+.search-spot.spent .ss-tick { display: flex; }
+/* ==== end of Round 4, rooms ==== */

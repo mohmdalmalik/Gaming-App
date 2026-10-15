@@ -45,7 +45,7 @@ const tipHidden = () => ev(() => document.getElementById('tip').hidden);
 const saved = () => ev(() => ({ seen: JSON.parse(localStorage.getItem('hotelEscape.tips.v1') || '{}').seen || [], tips: JSON.parse(localStorage.getItem('hotelEscape.settings.v1') || '{}').tips }));
 // The interface a tip must never cover, and whether the card is whole on screen.
 const PARTS = ['.hud-top-left', '#feed', '.hud-top-center', '.hud-top-right', '#player-panel', '#hand-fan .fan-card', '#hand-fan .fan-limit',
-  '.hud-bottom-right', '#btn-end-turn', '#confirm-bar', '#toast', '#search-spot', '.path-label', '#chat-panel'];
+  '.hud-bottom-right', '#btn-end-turn', '#confirm-bar', '#toast', '.search-spot .ss-badge, .search-spot .ss-caption', '.path-label', '#chat-panel'];
 const where = () => ev(parts => {
   const t = document.getElementById('tip');
   if (!t || t.hidden) return null;

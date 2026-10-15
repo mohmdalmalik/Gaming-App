@@ -21,7 +21,7 @@ import {
 } from './game/state.js';
 import {
   search, canSearch, escape, useBandage, useUnlock, useBarricade, resolveTrade, resolveAttack,
-  discardCard, overHandLimit, tradeableCards, canTrade, skipTrade, openDoor,
+  discardCard, discardRandomDown, overHandLimit, tradeableCards, canTrade, skipTrade, openDoor,
   canUseRoom, useInfirmary, useSwitchboard, useHandMirror, useEspresso,
 } from './game/actions.js';
 import { CARDS, weaponsIn, lanternCount } from './game/cards.js';
@@ -53,6 +53,7 @@ import { createLockChoice, lockWarning } from './ui/lockChoice.js';
 import { createHandFan } from './ui/handFan.js';
 import { createSearchSpot } from './ui/searchSpot.js';
 import { createDiscard } from './ui/discard.js';
+import { discardAllowance, discardedLine, atZero } from './ui/discardClock.js';
 import { createHandoff } from './ui/handoff.js';
 import { createMeeting } from './ui/meeting.js';
 import { createTradeReveal, tradeOutcome } from './ui/tradeReveal.js';
@@ -376,7 +377,7 @@ const tips = createTips(document, {
     safe: !!floor.rooms.get(me()?.currentRoom)?.safe,                  // (the player's own room is a safe zone: the badge says so to everyone)
     cameraTouched: camTouchedIn === gameToken, cameraButton: camButtonIn === gameToken,   // (the player's own use of the camera in this game)
     myTurn: myTurn(), acting: actionPhaseClear() && !hand.isOpen && !pendingArrival && !activeMover().walking && !activeMover().path.length,
-    clock: rules.turnTimerEnabled && timerLeft > 0 ? timerLeft : null, moveBar: hud.confirmKind === 'move', search: searchSpot.mode,
+    clock: rules.turnTimerEnabled && timerLeft > 0 ? timerLeft : null, moveBar: hud.confirmKind === 'move', search: searchSpot.kind === 'search' ? searchSpot.mode : null,
     meeting: meeting.isOpen, heard: PRACTICE ? 0 : chat.recent().reduce((t, m) => (m.seat !== humanSeat ? Math.max(t, m.at) : t), 0),   // (when another guest last spoke)
     covered: handoff.isOpen || tradeReveal.isOpen || hand.isOpen || discard.isOpen || map.isOpen || chat.isOpen
       || overlays.endOpen || overlays.noticeOpen || askUp() || !fadeEl.hidden || !!sideways?.matches,
@@ -407,8 +408,10 @@ const discovery = createDiscovery({
 });
 
 // The room action icon (src/ui/searchSpot.js): the magnifier over the room's search spot (the furniture flagged
-// `search: true`), the door-with-an-arrow in the Fire Exit. A tap does what its kind says (a new kind adds a line here).
-const searchSpot = createSearchSpot(document, { camera: view.camera, container, floor, state, onTap: { search: onSearchSpot, exit: onEscape } });
+// `search: true`), the door-with-an-arrow in the Fire Exit, the cross in an Infirmary, the headset in the Switchboard
+// (the last two stand on the same flagged furniture: those rooms are not searched). A tap does what its kind says (a new
+// kind adds a line here).
+const searchSpot = createSearchSpot(document, { camera: view.camera, container, floor, state, onTap: { search: onSearchSpot, exit: onEscape, heal: onRoom, switchboard: onRoom } });
 
 // The room action icon is part of the player's own action phase only: never on another guest's turn, a
 // private screen, a meeting, a notice or the end screen (CSS also hides it the moment any of those is
@@ -549,7 +552,12 @@ function beginTurn() {
 
 // --- Turn timer --------------------------------------------------------------------------
 // Counts the active guest's actions only. Meetings, hand-over screens, the end screen and every
-// blocking prompt pause it.
+// blocking prompt pause it. The end-of-turn DISCARD does not (approved rule, 15 Oct 2026): the clock runs on
+// while the guest chooses what to discard, but they always get at least rules.discardMinSeconds (endTurnNow);
+// when it reaches zero, or when the 45 seconds run out in the action phase holding more than the limit, the
+// game discards random ordinary cards for them and the turn ends (onTimeUp, endTurnByClock). The clock is
+// dt-based (a frame is never counted as more than 50 ms), and a hidden tab draws no frames: time away from
+// the page is not counted, so coming back never finds a discard made behind the guest's back.
 function startTimer() {
   if (!rules.turnTimerEnabled) { hud.hideTimer(); timerLeft = 0; return; }
   timerLeft = rules.turnTimerSeconds;
@@ -557,10 +565,11 @@ function startTimer() {
 }
 function stopTimer() { timerLeft = 0; hud.hideTimer(); }
 // The "turn your iPad sideways" card (pure CSS, styles.css) covers the game in portrait: the clock
-// waits while it is up.
+// waits while it is up. (The discard screen is not in this list: only the half second its last card spends
+// leaving, `discard.finishing`, when the choosing is over and the screen is closing by itself.)
 const sideways = window.matchMedia?.('(orientation: portrait), (max-width: 900px)');
 const timerPaused = () => handoff.isOpen || overlays.endOpen || overlays.noticeOpen || askUp()
-  || meeting.isOpen || discard.isOpen || meetingLive || overlays.errorOpen || !!sideways?.matches;
+  || meeting.isOpen || discard.finishing || meetingLive || overlays.errorOpen || !!sideways?.matches;
 
 function tickTimer(dt) {
   if (!rules.turnTimerEnabled || state.finished || timerLeft <= 0) return;
@@ -579,6 +588,7 @@ function tickTimer(dt) {
     timerLeft = 0.001;
   }
   hud.showTimer(timerLeft, rules.turnTimerSeconds);
+  if (discard.isOpen) discard.tick(timerLeft);      // (the discard screen's own countdown)
   if (timerLeft <= 0) onTimeUp();
 }
 
@@ -602,10 +612,35 @@ function cutWalkShort() {
 }
 
 function onTimeUp() {
+  // (a discard screen left over from another turn or game never ends this one: it just goes)
+  if (discard.isOpen && discardStamp !== turnStamp()) { discard.close(); stopTimer(); return; }
   stopTimer();
+  const p = activePlayer(state);
+  // The player's clock ran out holding more than the limit, on the discard screen or in the action phase (the
+  // screen then never opens): the game discards for them. A computer guest's clock is its own backstop (endTurnNow).
+  if (myTurn() && !isBot(p.index) && atZero(overHandLimit(p)) === 'random') { endTurnByClock(p); return; }
+  if (discard.isOpen) discard.close();
   if (myTurn()) { hud.toast('Time is up — your turn ends.'); sfx('timeUp'); }
   endTurnNow();
 }
+
+// The clock ran out while the player holds more than the hand limit: the game discards RANDOM ordinary cards for
+// them, only as many as needed (discardRandomDown, src/game/actions.js: never a Possession card, and no log line or
+// public event: the table learns nothing), and the turn passes the way any end of turn does (passTurn). The
+// player is told what went, privately and without blocking anything, on their own screen. Called once: the clock
+// is stopped first (onTimeUp), and the screen, if it was open, is closed here before anything else.
+function endTurnByClock(p) {
+  discard.close();
+  hand.close(); map.close(); hud.hideConfirm(); selectedMove = null;
+  if (activeMover().walking) activeMover().halt();
+  const gone = discardRandomDown(state, p);
+  sfx('timeUp');
+  passTurn();
+  if (gone.length && !state.finished) discard.note(discardedLine(gone));
+}
+// Which turn of which game a discard screen belongs to (a screen is only ever ended by its own turn's clock).
+const turnStamp = () => `${gameToken}:${state.turn}`;
+let discardStamp = '';
 
 // "the door to the Library" (seen from `fromRoom`), or "door between the Hall and the Library".
 function doorName(doorwayId, fromRoom = null) {
@@ -654,14 +689,20 @@ function passTurn() {
 // HERE and only here (approved rule): a guest holding more than 6 cards (Possession cards don't count)
 // chooses what to discard on the discard screen first, and the turn passes only once they are down to
 // 6. Nothing else is left open behind it. A computer guest chooses its discards itself.
+// The turn clock keeps running during the discard (approved rule, 15 Oct 2026): the screen gets what is left of
+// it, but never under rules.discardMinSeconds (src/ui/discardClock.js); at zero the game discards at random
+// (onTimeUp). Where the clock is off (Practice, ?timer=off) the discard has no time limit.
 function endTurnNow() {
   const p = activePlayer(state);
   if (overHandLimit(p) > 0) {
     if (isBot(p.index)) { botDiscardDown(p); passTurn(); return; }
     hand.close(); map.close(); hud.hideConfirm(); selectedMove = null;
     if (activeMover().walking) activeMover().halt();
-    stopTimer();
-    discard.open(p, passTurn);
+    const seconds = discardAllowance(timerLeft, rules.turnTimerEnabled);
+    if (seconds === null) stopTimer();
+    else { timerLeft = seconds; hud.showTimer(timerLeft, rules.turnTimerSeconds); }
+    discardStamp = turnStamp();
+    discard.open(p, passTurn, { seconds });
     return;
   }
   passTurn();
@@ -1204,6 +1245,13 @@ function onSearchSpot() {
   onSearch();
 }
 
+// The furniture the icon rests on was tapped: the same as tapping the icon. In an Infirmary or the Switchboard that
+// furniture is where the room's own action is (those rooms are not searched); anywhere else it is the search.
+function onSpotTap() {
+  const job = floor.rooms.get(activePlayer(state).currentRoom)?.job;
+  if (job === 'infirmary' || job === 'switchboard') onRoom(); else onSearchSpot();
+}
+
 // Turn the active guest to look at a point (the furniture they search).
 function faceTowards([x, z]) {
   const m = activeMover();
@@ -1327,14 +1375,17 @@ function onHandMirror(cardId, targetId) {
   }, () => refresh());
 }
 
-// A room with a job (src/data/hotel.js `job`). The Infirmary heals; the Switchboard tells the whole
-// table how many guests are possessed right now, never who. A Linen Store's job is in the search.
+// A room with a job (src/data/hotel.js `job`). The Infirmary heals (once per match, for the whole table: the first guest to
+// use it spends it for everyone); the Switchboard tells the whole table how many guests are possessed right now, never who
+// (2 actions, as often as the guest can pay). Each has its own icon on its furniture (src/ui/searchSpot.js, kinds 'heal' and
+// 'switchboard'); a refused tap says why here and spends nothing. A Linen Store's job is in the search.
 const ROOM_FAIL = {
-  full: 'Already at full health.',
-  ap: 'No actions left.',
-  usedThisTurn: 'You have already rung the Switchboard this turn.',
-  noJob: 'There is nothing to use in this room.',
+  full: () => 'You are at full health.',
+  spent: () => 'This Infirmary has already been used.',
+  ap: job => (job === 'switchboard' ? `The Switchboard needs ${actionsWord(rules.actionCost.switchboard)}.` : 'No actions left.'),
+  noJob: () => 'There is nothing to use in this room.',
 };
+const roomRefusal = r => (ROOM_FAIL[r.reason] || (() => 'Cannot use this room now.'))(r.job);
 function switchboardLine(n) {
   if (n === 0) return 'No guest is possessed right now.';
   return `${n} ${n === 1 ? 'guest is' : 'guests are'} possessed right now — it doesn't say who.`;
@@ -1363,20 +1414,22 @@ function escapeRefusal(player, reason) {
     : `Only a clean guest with ${need} Lanterns can leave. You have ${have}.`;
 }
 
+// The icon in an Infirmary or the Switchboard was tapped (or the furniture it stands on): the room's action, from where the
+// guest stands, for its cost. The rules settle it (useInfirmary / useSwitchboard); a refusal says why and spends nothing.
 function onRoom() {
-  if (!running || state.finished || uiBusy() || activeMover().walking) return;
+  if (!running || state.finished || uiBusy() || pendingArrival || activeMover().walking) return;
   if (!myTurn() || !inActionPhase) return;
   const player = activePlayer(state);
   const gate = canUseRoom(state, floor, player);
-  if (!gate.ok) { hud.toast(ROOM_FAIL[gate.reason] || 'Cannot use this room now.'); return; }
+  if (!gate.ok) { hud.toast(roomRefusal(gate)); return; }
   if (gate.job === 'infirmary') {
     const r = useInfirmary(state, floor, player);
-    if (!r.ok) { hud.toast(ROOM_FAIL[r.reason] || 'Cannot use this room now.'); return; }
+    if (!r.ok) { hud.toast(roomRefusal(r)); return; }
     hud.toast(`Treated in the Infirmary — health ${r.health} of ${rules.maxHealth}.`);
-    refresh();
+    refresh();     // (the icon turns to its "already used" look at once, for this Infirmary is spent for everyone)
   } else if (gate.job === 'switchboard') {
     const r = useSwitchboard(state, floor, player);
-    if (!r.ok) { hud.toast(ROOM_FAIL[r.reason] || 'Cannot use this room now.'); return; }
+    if (!r.ok) { hud.toast(roomRefusal(r)); return; }
     refresh();
     // PUBLIC, for every guest: it stays up until the player taps Continue (the clock waits).
     // Practice: nobody else is in the hotel, so there is nobody to count — say what it does in a match.
@@ -1390,6 +1443,7 @@ function onRoom() {
 function showEnd() {
   if (!DIRECT) matchMarker.clear();         // (the match ended: it is not one the browser cut short)
   stopTimer();
+  if (discard.isOpen) discard.close();      // (a discard screen open as the match ends goes; the stopped clock discards nothing)
   meetingLive = false;
   hud.hideConfirm(); selectedMove = null;
   endMusic();
@@ -1845,7 +1899,7 @@ function tapTargetAt(x, y) {
 // search (the magnifier) or use its job — a short hint says so.
 function tapTarget(t, { queued = false } = {}) {
   const player = activePlayer(state);
-  if (t.kind === 'search') { if (!queued) onSearchSpot(); return; }
+  if (t.kind === 'search') { if (!queued) onSpotTap(); return; }
   if (t.kind === 'lock') { if (!queued) onLockTap(t.id); return; }
   if (t.kind === 'fog') {
     // (your own door into it is jammed — even if another room's door into it is not: say so)
@@ -2010,7 +2064,8 @@ let queuedTap = null;   // { target, turn }
 // a toast, the search icon — grown by DEAD_ZONE px.
 const DEAD_ZONE = 18;
 const TAP_GUARD = ['.hud-top-left', '.hud-top-center', '.hud-top-right', '#player-panel', '#hand-fan', '#hand-fan .fan-card',
-  '#hand-fan .fan-limit', '.hud-bottom-right', '#btn-end-turn', '#confirm-bar', '#toast', '#search-spot', '.path-label', '#tip'];
+  '#hand-fan .fan-limit', '.hud-bottom-right', '#btn-end-turn', '#confirm-bar', '#toast', '.search-spot .ss-badge, .search-spot .ss-caption',
+  '.path-label', '#tip'];
 function inDeadZone(x, y) {
   const cr = container.getBoundingClientRect();
   const px = x - cr.left, py = y - cr.top;
@@ -2062,7 +2117,6 @@ hud.on('rotateRight', () => { rig.rotateRight(); camTouchedIn = camButtonIn = ga
 function onCentre() { if (running) rig.recentre(); }
 hud.on('centre', () => { onCentre(); camTouchedIn = camButtonIn = gameToken; });
 hud.on('endTurn', doEndTurn);
-hud.on('roomJob', onRoom);
 hud.on('trade', onTrade);
 hud.on('private', () => { if (running && !uiBusy()) hand.open(state, floor); });
 hud.on('map', () => { if (!meeting.isOpen && !discard.isOpen && !overlays.endOpen && !handoff.isOpen) map.toggle(state, movers); });
@@ -2401,7 +2455,7 @@ window.__game = {
   search: () => onSearch(),
   // The search icon and the hand fan (tests).
   tapSearchSpot: () => onSearchSpot(),
-  searchSpot: () => ({ mode: searchSpot.mode, kind: searchSpot.kind, point: searchSpot.point, spot: searchSpot.spot && { center: searchSpot.spot.center, height: searchSpot.spot.size[1], kind: searchSpot.spot.kind } }),
+  searchSpot: () => ({ mode: searchSpot.mode, kind: searchSpot.kind, point: searchSpot.point, second: searchSpot.second, spot: searchSpot.spot && { center: searchSpot.spot.center, height: searchSpot.spot.size[1], kind: searchSpot.spot.kind } }),
   searchPending: () => false,      // (searching no longer walks anywhere first; kept for older scripts)
   fanIds: () => (fan.visible ? fan.ids : []),
   cardViewOpen: () => hand.isOpen,

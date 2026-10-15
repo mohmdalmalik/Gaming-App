@@ -12,7 +12,7 @@
 
 // The parts of the interface a tag must never cover (whichever are showing).
 export const INTERFACE = ['.hud-top-left', '.hud-top-center', '.hud-top-right', '#player-panel', '#hand-fan .fan-card',
-  '#hand-fan .fan-limit', '.hud-bottom-right', '#confirm-bar', '#toast', '#search-spot', '.path-label', '#chat-panel',
+  '#hand-fan .fan-limit', '.hud-bottom-right', '#confirm-bar', '#toast', '.search-spot .ss-badge, .search-spot .ss-caption', '.path-label', '#chat-panel',
   '#feed .feed-line'];
 
 const shown = el => {

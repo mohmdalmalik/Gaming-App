@@ -23,7 +23,7 @@
 // a guest is there) and an optional flicker.
 //
 // Rooms with jobs (`job`): 'linenStore' (its card draw gives 2 cards), 'infirmary' (1 AP: restore 2
-// health, once per room per match) and 'switchboard' (2 AP, as often as you like: everyone learns how many
+// health, once per room per match) and 'switchboard' (2 AP, as often as you can pay for: everyone learns how many
 // guests are possessed). The Infirmary and the Switchboard have `searchable: false`: their action IS the
 // room's action, so they can never be searched (the Linen Store, whose job is its search, can). What each
 // job does, and its numbers, live in src/data/rules.js and src/game/actions.js. The `searchPoint` and the
@@ -132,7 +132,7 @@ export const hotel = {
     { id: 'grandCorridor', name: 'Grand Corridor', short: 'Grand Corr.', doors: CROSS, searchPoint: 'the umbrella stand', mood: CORRIDOR,
       furniture: [at('plant', -3.35, -3.35, 0.6, 1.3, 0.6), at('bench', 2.0, -3.55, 1.3, 0.47, 0.55),
         searchSpot(at('umbrellaStand', 3.45, -3.45, 0.4, 0.93, 0.4)), at('plant', 3.35, 3.35, 0.6, 1.3, 0.6)] },
-    // Room with a job: 2 AP, as often as you like — everyone learns how many guests are possessed. Not searchable.
+    // Room with a job: 2 AP, as often as you can pay for — everyone learns how many guests are possessed. Not searchable.
     { id: 'switchboard', name: 'Switchboard', doors: CROSS, job: 'switchboard', searchable: false, searchPoint: "the operator's desk", mood: WARM,
       furniture: [searchSpot(at('switchDesk', -3.2, -2.3, 1.3, 1.43, 2.1)), at('switchDesk', 2.3, -3.2, 2.1, 1.43, 1.3),
         at('smallDesk', -2.6, 3.45, 1.3, 1.2, 0.7), at('plant', -1.5, 3.5, 0.55, 1.2, 0.55),

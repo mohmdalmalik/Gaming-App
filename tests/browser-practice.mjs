@@ -176,13 +176,16 @@ const info = await game(() => ({
   dealt: window.__game.activePlayer().hand.filter(c => c.type === 'lantern').length,
   hand: window.__game.activePlayer().hand.length,
   inPile: window.__game.state.drawPile.filter(c => c.type === 'lantern').length, pile: window.__game.state.drawPile.length,
+  // (read from the rules, so the next deck change does not break this line again)
+  wantInPile: window.__game.rules.deck.lantern - window.__game.rules.lanternsDealtEach,
+  wantPile: Object.values(window.__game.rules.deck).reduce((a, n) => a + n, 0) - window.__game.rules.startingHandSize,
   locked: window.__game.lockedRooms(), timer: window.__game.rules.turnTimerEnabled,
 }));
 check(info.problems.length === 0, 'no floor problems');
 check(info.practice && info.players === 1, 'one guest, practice mode');
 check(info.ap === 4 && info.move === 1 && info.open === 1, '4 actions; opening a door costs 1, a move costs 1');
 check(info.dealt === 1 && info.hand === 4, 'the same deal as a match: the guest starts with 1 Lantern + 3 other cards');
-check(info.inPile === 13 && info.pile === 44, `the other 13 Lanterns are in the ${info.pile}-card deck (48 less a hand of 4), to be found by searching`);
+check(info.inPile === info.wantInPile && info.pile === info.wantPile, `the other ${info.inPile} Lanterns are in the ${info.pile}-card deck (the whole deck less a hand of 4), to be found by searching`);
 check(info.locked.length === 0 && info.rooms === 1, 'the hotel starts as just the lobby; nothing is locked yet');
 check(info.timer === false, 'no turn timer in practice');
 const startSub = (await page.textContent('#start-sub')).replace(/\s+/g, ' ').trim();
@@ -625,11 +628,12 @@ await tap('#btn-restart-practice');
 await tap('#btn-ask-yes');
 check(await game(() => window.__game.hotelRooms().length) === 1 && before7 > 1, 'Restart practice builds a new hotel: just the lobby again');
 await give(0, [{ id: 'fl7', type: 'flashlight' }]);
-for (const t of ['lounge', 'ballroom', 'grandCorridor', 'dining', 'library', 'kitchen', 'corridorE', 'corridorW', 'corridorN', 'corridorS', 'infirmary1', 'infirmary2', 'linenStore1', 'linenStore2', 'switchboard', 'cornerCorridor', 'storage', 'stairs', 'serviceCorridor', 'backCorridor', 'housekeeping']) {
+for (const t of ['lounge', 'ballroom', 'grandCorridor', 'dining', 'library', 'kitchen', 'corridorE', 'corridorW', 'corridorN', 'corridorS', 'infirmary1', 'infirmary2', 'linenStore1', 'linenStore2', 'switchboard', 'cornerCorridor', 'storage', 'stairs', 'serviceCorridor', 'backCorridor', 'housekeeping', 'cloakroom', 'suite416']) {
   await game(id => window.__game.revealTile(id), t);
 }
 const rooms = await game(() => window.__game.floor.roomList.filter(r => r.searchable).map(r => r.id));
-check(rooms.length >= 15, `the hotel has grown to ${rooms.length} searchable rooms`);
+// (a full hotel: 24 tiles less the Fire Exit and the three rooms whose action takes the search's place: both Infirmaries and the Switchboard)
+check(rooms.length === 20, `the hotel has grown to ${rooms.length} searchable rooms (20 in a full hotel)`);
 let searched = 0;
 const notes7 = [];
 for (const r of rooms) {
@@ -674,7 +678,7 @@ await settle();
 await page.waitForTimeout(300);
 check(!(await game(() => window.__game.isFinished())), 'walking into the fire exit does not escape by itself');
 // (round 4: leaving is the Exit icon over the exit's door, the room action icon in its green look; no Escape button in the bottom bar)
-check(!(await visible('#btn-room')), 'there is no Escape button in the bottom bar any more');
+check(!(await page.$('#btn-room')), 'there is no Escape button (and no room button) in the bottom bar any more');
 await page.waitForFunction(() => window.__game.searchSpot().mode === 'ready', null, { timeout: 15000, polling: 100 }).catch(() => {});
 check(await page.evaluate(() => { const s = window.__game.searchSpot(), b = document.getElementById('search-spot'); return s.kind === 'exit' && s.mode === 'ready' && !b.hidden && /^Exit the hotel · 1 action$/.test(b.querySelector('.ss-caption').textContent); }), 'the green Exit icon (1 action) appears there');
 await tap('#search-spot');
@@ -940,6 +944,8 @@ console.log('\n7b. playtest fixes');
   await page.evaluate(() => Object.defineProperty(window, 'orientation', { configurable: true, get: () => 0 }));
   for (const [w, h] of [[820, 1180], [768, 1024]]) {
     await page.setViewportSize({ width: w, height: h }); await page.waitForTimeout(250);
+    // (a busy machine may not have drawn the new words yet: wait for them rather than for a fixed time)
+    await page.waitForFunction(() => /turn your iPad sideways/i.test(document.getElementById('rotate-overlay').innerText), null, { timeout: 6000 }).catch(() => {});
     const r = await rot();
     check(r.shown && r.covers && /turn your iPad sideways/i.test(r.text), `${w}×${h}: "Please turn your iPad sideways" covers the game`);
     if (w === 820) await shot('ui-portrait-overlay');
@@ -1044,7 +1050,8 @@ for (const [name, w, h] of [['ipad-landscape', 1180, 820], ['ipad-small', 1024, 
   }
 }
 {
-  // A room button (here the Infirmary's) widens the action row: the fan makes room for it.
+  // In an Infirmary there is no room button any more (round 4: its action is the icon on the furniture, src/ui/searchSpot.js):
+  // the action row stays as narrow as ever and the fan keeps clear of it; the icon is there, and not over the cards.
   await page.setViewportSize({ width: 1024, height: 768 });
   await game(() => { window.__game.revealTile('infirmary2'); window.__game.state.lockedRooms.clear(); });
   await put('infirmary2', 4);
@@ -1052,11 +1059,13 @@ for (const [name, w, h] of [['ipad-landscape', 1180, 820], ['ipad-small', 1024, 
   await fanStill();
   const r = await page.evaluate(() => {
     const hit = (a, b) => a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
-    const btn = document.getElementById('btn-room'), act = document.querySelector('.action-row').getBoundingClientRect(), ctl = document.querySelector('.control-row').getBoundingClientRect();
+    const act = document.querySelector('.action-row').getBoundingClientRect(), ctl = document.querySelector('.control-row').getBoundingClientRect();
     const cards = [...document.querySelectorAll('#hand-fan .fan-card')].map(c => c.getBoundingClientRect());
-    return { shown: !btn.hidden && !!btn.offsetParent, n: cards.length, clear: cards.every(c => !hit(c, act) && !hit(c, ctl)) };
+    const icon = document.getElementById('search-spot'), ib = icon.querySelector('.ss-badge').getBoundingClientRect();
+    return { noBtn: !document.getElementById('btn-room'), icon: !icon.hidden && icon.dataset.kind === 'heal', n: cards.length,
+      clear: cards.every(c => !hit(c, act) && !hit(c, ctl) && !hit(c, ib)) };
   });
-  check(r.shown && r.n === 8 && r.clear, 'ipad-small, in an Infirmary: eight cards stay clear of the wider button row (with its Infirmary button)');
+  check(r.noBtn && r.icon && r.n === 8 && r.clear, 'ipad-small, in an Infirmary: eight cards stay clear of the button row and of the Infirmary icon (there is no room button)');
   await put('library', 4); await settle();
 }
 if (shots) {

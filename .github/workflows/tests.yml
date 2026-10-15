@@ -24,7 +24,7 @@ jobs:
     strategy:
       fail-fast: false        # every suite reports, even if another one failed
       matrix:
-        suite: [rules-check, logic-check, bots-check, chat-check, profile-check, crash-check, audio-buttons-check, audio-load-check, flicker-check, polish-check, howto-check, public-events-check, record-check, docs-check, strip-check]
+        suite: [rules-check, logic-check, bots-check, chat-check, profile-check, crash-check, audio-buttons-check, audio-load-check, flicker-check, polish-check, howto-check, public-events-check, record-check, docs-check, strip-check, discard-clock-check]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

@@ -182,8 +182,8 @@ export function createHandFan(doc, { onOpen }) {
     layout();
   }
 
-  // Re-place the cards whenever the strip's own width changes, not only when the window does: a room
-  // button (Infirmary, Switchboard, Trade) appearing on the right narrows the strip, and a resize can be
+  // Re-place the cards whenever the strip's own width changes, not only when the window does: a button
+  // (Trade) appearing on the right narrows the strip, and a resize can be
   // reported before the new width has settled. (The card size follows the window height.)
   window.addEventListener('resize', () => { if (visible) layout(); });
   let lastWidth = -1;

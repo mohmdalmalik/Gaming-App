@@ -9,8 +9,12 @@
 //     with its name and ONE short plain line; the numbers in those lines still match the rules; the Lantern's line
 //     is the owner's own; the screen and its three doors (main menu, Menu panel, last How to play page) are in index.html
 //   - the hint under "Practice alone", and the role screen's headline and its ONE line about how the other side wins
+//   - the round-4 rules (approved 15 Oct 2026) in the words: page 5 says each Infirmary works once per match (for whoever
+//     gets there first, and everyone sees), the Switchboard costs 2 actions, works as often as you can pay for and says how many
+//     living guests are possessed, never who, the room's action takes the place of searching, and the discard has a time limit
+//     (the turn clock keeps running, at least 10 seconds, then the game discards for you); the tips say the same
 //   - the tips (src/data/tips.js): the first-meeting tip says both halves of the Lantern dilemma; the new tips exist;
-//     every tip renders for every kind of player, in one or two short sentences, with no number typed in either
+//     every tip renders for every kind of player, in one or two short sentences, and its numbers follow a changed copy of the rules
 //   - the end screen's recap line (src/ui/endRecap.js) for the cases a match can end in, and its words
 //   - one word for the action budget: no "AP" and no "action points" in anything the player reads (src/ and
 //     index.html, comments left out)
@@ -53,7 +57,23 @@ for (const [what, text] of [
   [`${rules.maxHealth} health`, `${rules.maxHealth} health`],
   [`${rules.handLimit} cards`, `${rules.handLimit} cards`],
   [`the Infirmary's ${rules.infirmaryHeal} for ${rules.infirmaryCost} action`, `restores ${rules.infirmaryHeal} health for ${rules.infirmaryCost} action`],
+  [`the Switchboard's ${rules.switchboardCost} actions`, `The Switchboard costs ${rules.switchboardCost} actions`],
+  [`the discard's ${rules.discardMinSeconds} seconds`, `at least ${rules.discardMinSeconds} seconds`],
 ]) check(all.includes(text), `the pages say ${what}`);
+// The round-4 rules (approved 15 Oct 2026), sentence by sentence: each Infirmary once per match, the Switchboard, the room's
+// action in the place of the search, the discard's time limit. They live on the last page ("Staying alive").
+const staying = HOW_TO_PLAY.pages.at(-1).lines.map(l => l(rules)).join('\n');
+for (const [what, re] of [
+  ['each Infirmary works once per match, for whoever gets there first, and everyone sees when it is used', /Each one works once per match, for whoever gets there first, and everyone sees when it is used\./],
+  ['the Switchboard can be used as often as you can pay (no once-a-turn limit)', /can be used as often as you can pay for\./],
+  ['the Switchboard says how many living guests are possessed, but not who', /how many living guests are possessed, but not who\./],
+  ["the room's own action takes the place of searching", /In these two rooms, the room's own action takes the place of searching\./],
+  ['holding more than the limit means discarding down to it at the end of the turn', new RegExp(`you discard down to ${rules.handLimit} when you end your turn\\.`)],
+  ['the turn clock keeps running and the discard gets at least 10 seconds', new RegExp(`The turn clock keeps running, but you always get at least ${rules.discardMinSeconds} seconds\\.`)],
+  ['when time runs out the game discards for you, at random', /When time runs out, the game discards for you, at random\./],
+]) check(re.test(staying), `"Staying alive" says ${what}`);
+check(!/once a turn|once per turn|as you like|AP\b/.test(all), 'nothing on the pages still says "once a turn" (the old Switchboard rule), "as you like" or "AP"');
+check(!/search/i.test(staying.replace(/In these two rooms[^\n]*/, '')), 'the page says nothing else about searching the Infirmary or the Switchboard (the old rule gave them a card)');
 // The pages teach the game, not the cards (the owner: "we don't need to mention espresso and we don't need to mention
 // the hand mirror"; what each card does is on the Cards screen). The Lantern and the Possession card are the game itself.
 const cardNames = Object.entries(rules.cards).filter(([type]) => !['lantern', 'possession'].includes(type)).map(([, c]) => c.name);
@@ -82,11 +102,17 @@ check(/cost 1 action each\./.test(pageText({ ...JSON.parse(JSON.stringify(rules)
 // Every number changed: the pages follow the rules, nothing is typed in.
 const other = JSON.parse(JSON.stringify(rules));
 Object.assign(other, { actionPointsPerTurn: 7, turnTimerSeconds: 33, lanternsToEscape: 5, roundLimit: 11, maxHealth: 9, handLimit: 8,
-  attackCost: 3, escapeCost: 3, infirmaryHeal: 5, infirmaryCost: 2, lanternsDealtEach: 2, bandageHeal: 3, moveCost: 2, openDoorCost: 2, searchCost: 2, playCardCost: 2, switchboardCost: 2 });
+  attackCost: 3, escapeCost: 3, infirmaryHeal: 5, infirmaryCost: 2, lanternsDealtEach: 2, bandageHeal: 3, moveCost: 2, openDoorCost: 2, searchCost: 2, playCardCost: 2, switchboardCost: 2,
+  discardMinSeconds: 17 });
 const changed = pageText(other).join('\n');
 for (const text of ['7 actions each turn', '33 seconds', '5 Lanterns', 'round 11', '9 health', '8 cards', '3 actions', 'restores 5 health for 2 actions', 'Five open', 'two Lanterns',
-  'cost 2 actions each', 'Escaping costs 3 actions: stand in the Fire Exit and tap the Exit icon.', 'you need a weapon and 3 actions']) check(changed.includes(text), `with other rules the pages say "${text}"`);
-for (const text of ['4 actions', '45 seconds', '3 Lanterns', 'round 8', '4 health', '6 cards', 'restores 2 health for', 'cost 1 action each', 'Escaping costs 1 action', 'weapon and 1 action']) check(!changed.includes(text), `...and no longer "${text}"`);
+  'cost 2 actions each', 'Escaping costs 3 actions: stand in the Fire Exit and tap the Exit icon.', 'you need a weapon and 3 actions',
+  'you discard down to 8 when you end your turn', 'at least 17 seconds', 'The Switchboard costs 2 actions']) check(changed.includes(text), `with other rules the pages say "${text}"`);
+for (const text of ['4 actions', '45 seconds', '3 Lanterns', 'round 8', '4 health', '6 cards', 'restores 2 health for', 'cost 1 action each', 'Escaping costs 1 action', 'weapon and 1 action',
+  'discard down to 6', 'at least 10 seconds']) check(!changed.includes(text), `...and no longer "${text}"`);
+// (the Switchboard's price on its own: a copy of the rules where only it costs more than the rest)
+const dearer = JSON.parse(JSON.stringify(other)); dearer.switchboardCost = 3;
+check(pageText(dearer).join('\n').includes('The Switchboard costs 3 actions') && /the Switchboard 3 actions/.test(pageText(dearer).join('\n')), 'the Switchboard price follows the rules too (a copy where it costs 3: said on page 2 and on page 5)');
 // (the costs that differ are listed one by one, not squeezed into a false sentence)
 const mixed = JSON.parse(JSON.stringify(rules)); mixed.searchCost = 2;
 check(/searching 2 actions/.test(pageText(mixed).join('\n')) && !/cost 1 action each/.test(pageText(mixed).join('\n')), 'when the costs differ, each is said on its own');
@@ -160,6 +186,19 @@ for (const [id, tip] of Object.entries(TIPS)) {
 }
 const tipWords = (r) => Object.values(TIPS).map(t => t.text(r, { practice: false, possessed: false })).join('\n');
 check(!/\bAP\b/.test(tipWords(rules)) && !/action points/i.test(tipWords(rules)), 'no tip says AP or action points');
+// The round-4 rules in the tips (approved 15 Oct 2026): the numbers are the rules' (none typed in), and each tip says the new rule
+const YOU = { practice: false, possessed: false };
+const tipsOf = r => Object.fromEntries(Object.entries(TIPS).map(([id, t]) => [id, t.text(r, YOU)]));
+const realTips = tipsOf(rules), otherTips = tipsOf({ ...other, switchboardCost: 3 });
+check(/heal 2 health for 1 action/.test(realTips.infirmary) && /once per match, for whoever gets there first/.test(realTips.infirmary) && /Tap the cross/.test(realTips.infirmary), `the Infirmary tip: the cross heals ${rules.infirmaryHeal} health for ${rules.infirmaryCost} action, each Infirmary works once per match, for whoever gets there first ("${realTips.infirmary}")`);
+check(/heal 5 health for 2 actions/.test(otherTips.infirmary), '...and its numbers follow the rules');
+check(new RegExp(`costs ${rules.switchboardCost} actions, works as often as you can pay for, and tells the whole table how many guests are possessed, never who`).test(realTips.switchboard) && !/once a turn|once per turn/i.test(realTips.switchboard), `the Switchboard tip: ${rules.switchboardCost} actions, as often as you can pay for, the count and never who ("${realTips.switchboard}")`);
+check(/costs 3 actions/.test(otherTips.switchboard) && /costs 3 actions/.test(otherTips.switchboardPractice), '...and its price follows the rules (the practice tip too)');
+check(/the game discards cards for you, at random/.test(realTips.handLimit) && /if the clock runs out first/.test(realTips.handLimit), `the full-hand tip says the clock can run out and the game then discards cards at random ("${realTips.handLimit}")`);
+const handPractice = TIPS.handLimit.text(rules, { ...YOU, practice: true });
+check(!/clock|random/.test(handPractice) && /you choose what to discard/.test(handPractice), `...but not in practice, which has no clock ("${handPractice}")`);
+check(/You may keep 8 cards/.test(otherTips.handLimit), '...and the limit follows the rules');
+check(new RegExp(`more than ${rules.handLimit} cards, the game discards the extras at random`).test(realTips.timer) && /more than 8 cards/.test(otherTips.timer) && /33 seconds/.test(otherTips.timer), `the clock tip says what the clock does to a hand over the limit ("${realTips.timer}"), with the rules' numbers`);
 check(TIPS.safeZone.text(rules, {}).includes('Fourth Floor Landing') && TIPS.safeZone.text(rules, {}).includes('Fire Exit'), 'the safe-zone tip names the two safe rooms (from the hotel data)');
 check(/Drag/.test(TIPS.camera.text(rules, {})) && /[Pp]inch/.test(TIPS.camera.text(rules, {})), 'the camera tip says drag and pinch');
 check(/arrows/.test(TIPS.cameraButtons.text(rules, {})) && /target/.test(TIPS.cameraButtons.text(rules, {})), 'the round-buttons tip says what the arrows and the target do');

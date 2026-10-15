@@ -22,7 +22,7 @@ const EXPECT = {
   // the game's own buttons
   'btn-restart-practice': 'click', 'btn-chat': 'open', 'btn-leave': 'click', 'btn-private': 'open',
   'btn-rotate-left': 'click', 'btn-rotate-right': 'click', 'btn-centre': 'click', 'btn-map': 'open',
-  'btn-room': 'click', 'btn-trade': 'click', 'btn-end-turn': 'click',
+  'btn-trade': 'click', 'btn-end-turn': 'click',
   'btn-confirm-move': 'click', 'btn-confirm-cancel': 'close',
   'btn-discard-done': 'close',
   'btn-hand-close': 'close', 'btn-hand-prev': 'click', 'btn-hand-next': 'click', 'btn-map-close': 'close',

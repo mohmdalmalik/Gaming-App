@@ -10,7 +10,8 @@
 //   practice-<n>.png                                the 1-guest boarding (1024x768)
 //   reset.png                                       back to the calm tableau after a boarding
 // Checks: no console errors, draw calls within budget, the boarding resolves in ~4.5-6 s for 1 and 3
-// guests, reset() puts everyone back, and a rough frame time with the animation running.
+// guests, reset() puts everyone back, the floor dial's marks and where its needle comes to rest, the wall
+// clock's clearance from the pilasters, and a rough frame time with the animation running.
 import { chromium } from 'playwright-core';
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
@@ -149,7 +150,69 @@ console.log('\n3. practice (1 guest) at 1024x768');
   await page.close();
 }
 
-console.log('\n4. running for real (rough headless frame time, software rendering)');
+console.log('\n4. the floor dial over the lift, and the wall clock between the pilasters');
+{
+  const page = await openPage(1024, 694, 'pause=1');
+  await step(page, 2);
+  const d = await page.evaluate(() => {
+    const m = window.__menu, L = m.lobby, lay = L.debug.layout, lift = lay.lift;
+    const named = n => { let f; L.debug.set.group.traverse(o => { if (o.name === n) f = o; }); return f; };
+    const needle = named('lift-needle'), dial = named('lift-dial');
+    return { marks: lift.dial, floors: lift.floors, destination: lift.destination, rest: needle.rotation.z, map: [dial.material.map.image.width, dial.material.map.image.height] };
+  });
+  const nums = d.marks.slice(1).map(Number);
+  check(d.marks[0] === 'L' && nums.every((n, i) => Number.isInteger(n) && (i === 0 || n > nums[i - 1])), `the dial's marks start at L and climb: ${d.marks.join(' ')}`);
+  check(nums.at(-1) >= 20, `the dial reaches ${nums.at(-1)} or more (a tall hotel)`);
+  check(!d.marks.some(t => /13/.test(t)) && !nums.includes(13), 'no mark of the dial shows the unlucky floor');
+  const at12 = d.marks.indexOf('12'), at14 = d.marks.indexOf('14');
+  check(at12 > 0 && at14 === at12 + 1 && d.destination === at12 + 0.5 && d.floors === d.marks.length - 1, `the needle's resting place (${d.destination} steps from L) is the gap between the 12 and the 14`);
+  check(Math.abs(d.rest - Math.PI / 2) < 1e-6, 'at rest in the calm tableau the needle points at L');
+  check(d.map[0] <= 512 && d.map[1] <= 512, `the dial's picture stays small (${d.map.join(' x ')} px)`);
+  // the boarding: after the doors shut the needle swings round and stops in that gap
+  await page.evaluate(() => window.__menu.enter(3));
+  await page.evaluate(() => { const m = window.__menu; for (let t = 0; t < 12; t += 1 / 30) m.advance(1 / 30, 1 / 30); });
+  const end = await page.evaluate(() => { const m = window.__menu; m.step(0); let n; m.lobby.debug.set.group.traverse(o => { if (o.name === 'lift-needle') n = o; }); return n.rotation.z; });
+  const want = Math.PI / 2 - (d.destination / d.floors) * Math.PI;
+  check(Math.abs(end - want) < 0.01, `after the doors shut the needle rests at ${(want * 180 / Math.PI).toFixed(1)} degrees, between the 12 and the 14 (${(end * 180 / Math.PI).toFixed(1)})`);
+  await page.evaluate(() => window.__menu.lobby.reset());
+  const back = await page.evaluate(() => { window.__menu.step(0); let n; window.__menu.lobby.debug.set.group.traverse(o => { if (o.name === 'lift-needle') n = o; }); return n.rotation.z; });
+  check(Math.abs(back - Math.PI / 2) < 1e-6, 'reset() brings the needle back to L');
+  // the clock: centred between its two pilasters, off the brass frieze, and a clear gap to each pilaster on screen
+  // from the idle camera and all the way through the camera's push toward the lift (1024x694, the shortest iPad view)
+  const c = await page.evaluate(() => {
+    const m = window.__menu, L = m.lobby, lay = L.debug.layout, cam = L.camera, V = cam.position.constructor;
+    const ck = lay.reception.clock, z = lay.room.z0, b = ck.burst;
+    const pl = Math.max(...lay.pilasters.filter(p => p < ck.x)), pr = Math.min(...lay.pilasters.filter(p => p > ck.x));
+    const pts = [];
+    for (let i = 0; i < 12; i++) {
+      const a = (i / 11 - 0.5) * Math.PI * 0.9, cx = ck.x + Math.sin(a) * (ck.r + b.gap), cy = ck.y + Math.cos(a) * (ck.r + b.gap);
+      for (const [dx, dy] of [[-0.0175, -b.len / 2], [0.0175, -b.len / 2], [-0.0175, b.len / 2], [0.0175, b.len / 2]]) pts.push([cx + dx * Math.cos(a) + dy * Math.sin(a), cy - dx * Math.sin(a) + dy * Math.cos(a)]);
+    }
+    const x0 = Math.min(...pts.map(p => p[0]), ck.x - ck.r - 0.07), x1 = Math.max(...pts.map(p => p[0]), ck.x + ck.r + 0.07);
+    const sx = (x, y, zz) => { const v = new V(x, y, zz).project(cam); return (v.x + 1) / 2 * innerWidth; };
+    const gaps = [];
+    const sample = () => {
+      m.step(0);
+      const left = sx(pl + 0.3, ck.y, z + 0.2), right = sx(pr - 0.3, ck.y, z + 0.2);
+      const cl = Math.min(...pts.map(p => sx(p[0], p[1], z + 0.1))), cr = Math.max(...pts.map(p => sx(p[0], p[1], z + 0.1)));
+      const face = sx(ck.x + ck.r, ck.y, z + 0.1) - sx(ck.x - ck.r, ck.y, z + 0.1);
+      gaps.push({ l: (cl - left) / face, r: (right - cr) / face, offL: cl < 0, offR: cr > innerWidth });
+    };
+    for (let t = 0; t < 46; t += 4.6) { m.advance(4.6, 0.1); sample(); }
+    m.lobby.reset(); L.enter({ guests: 3 });
+    for (let t = 0, next = 0.9; t < 9; t += 1 / 30) { m.advance(1 / 30, 1 / 30); if (t >= next) { sample(); next += 0.9; } }
+    return { pl, pr, x: ck.x, x0, x1, bottom: ck.y - ck.r - 0.07, frieze: lay.room.panelTop + 0.12, gaps };
+  });
+  const mid = (c.pl + c.pr) / 2;
+  check(Math.abs(c.x - mid) < 0.03, `the clock is centred between its two pilasters (${c.x} against ${mid})`);
+  check(c.x0 - (c.pl + 0.3) >= 0.6 && (c.pr - 0.3) - c.x1 >= 0.6, `its sunburst stands ${(c.x0 - (c.pl + 0.3)).toFixed(2)} m and ${((c.pr - 0.3) - c.x1).toFixed(2)} m from the pilasters (at least 0.6)`);
+  check(c.bottom >= c.frieze + 0.1, `its brass rim clears the frieze below it by ${(c.bottom - c.frieze).toFixed(2)} m`);
+  const seen = c.gaps.filter(g => !g.offL && !g.offR), minL = Math.min(...seen.map(g => g.l)), minR = Math.min(...seen.map(g => g.r));
+  check(seen.length >= 10 && minL >= 0.7 && minR >= 0.7, `on screen (idle drift and the push-in, ${seen.length} looks) it keeps a gap of ${minL.toFixed(2)} and ${minR.toFixed(2)} clock faces to the pilasters (at least 0.7)`);
+  await page.close();
+}
+
+console.log('\n5. running for real (rough headless frame time, software rendering)');
 {
   const page = await openPage(1366, 1024, '');
   await page.waitForTimeout(1500);

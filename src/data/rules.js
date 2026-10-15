@@ -106,7 +106,7 @@ export const rules = {
                             // discard has a time limit; when it (or the turn clock itself) runs out, random
                             // ORDINARY cards are discarded down to the limit and the turn ends
                             // (discardRandomDown / endTurnByTimeout, src/game/actions.js; never Possession
-                            // cards, never more than needed). The discard clock's LENGTH is not set yet: the owner has not given it.
+                            // cards, never more than needed). The discard always gets at least discardMinSeconds (below).
 
   // --- Seeds ---------------------------------------------------------------------------------
   practiceSeed: null,       // null: a new random hotel every practice match (?seed= still forces one)

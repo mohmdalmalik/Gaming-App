@@ -1,10 +1,11 @@
 // 2D map overlay: discovered rooms, their doorways/connections and the player's position.
 
-import { activePlayer, isLocked, isBarricaded } from './game/state.js';
+import { activePlayer, isLocked, isBarricaded, isSpent } from './game/state.js';
 import { rules } from './data/rules.js';
 import { guestMarks } from './table.js';
 
-// Rooms with jobs are marked so they can be found again: Infirmary, Switchboard, Linen Store.
+// Rooms with jobs are marked so they can be found again: Infirmary, Switchboard, Linen Store. (An Infirmary that has been
+// used is dimmed: it works once per match.)
 // (The \uFE0E after the telephone asks for the plain symbol, not the colour emoji.)
 const JOB_MARKS = {
   infirmary: { mark: '✚', color: '#f08c84' },
@@ -115,12 +116,22 @@ export function createMap(doc, floor, cfg) {
         ctx.textAlign = 'left'; ctx.textBaseline = 'top';
         ctx.fillText('◆', x + 8, z + 6);
       }
-      // A room with a job: its mark in the lower-left corner (matching the legend in index.html).
+      // A room with a job: its mark in the lower-left corner (matching the legend in index.html). An Infirmary somebody has
+      // used is spent for everyone (public, like a searched room): its mark is dimmed and says "used".
       const job = JOB_MARKS[r.job];
       if (job) {
-        ctx.fillStyle = job.color; ctx.font = `bold ${Math.max(15, Math.min(20, scale * 0.6))}px ${serif}`;
+        const spent = isSpent(state, r.id);
+        const size = Math.max(15, Math.min(20, scale * 0.6));
+        ctx.save();
+        ctx.fillStyle = spent ? 'rgba(160,162,170,0.5)' : job.color; ctx.font = `bold ${size}px ${serif}`;
         ctx.textAlign = 'left'; ctx.textBaseline = 'bottom';
         ctx.fillText(job.mark, x + 9, z + h - 6);
+        if (spent) {
+          const markW = ctx.measureText(job.mark).width;
+          ctx.font = `12px ${serif}`; ctx.fillStyle = 'rgba(200,200,208,0.7)';
+          ctx.fillText('used', x + 9 + markW + 5, z + h - 7);
+        }
+        ctx.restore();
       }
     }
 

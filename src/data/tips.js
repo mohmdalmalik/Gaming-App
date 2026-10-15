@@ -7,7 +7,8 @@
 // `text(r, you)` is one or two short sentences. `r` is the rules (src/data/rules.js), so a number is
 // never written twice; `you` is the player's own situation: { practice, possessed }. Where practice needs
 // different words that matter (Lanterns, the Switchboard), it has its own tip, so seeing it in practice
-// never hides the match's.
+// never hides the match's. (Round 4, 15 Oct 2026: the Infirmary and the Switchboard tips, the clock tip and the full-hand tip
+// follow the approved rules: see src/data/rules.js.)
 import { hotel } from './hotel.js';
 
 const actions = n => `${n} action${n === 1 ? '' : 's'}`;
@@ -49,7 +50,7 @@ export const TIPS = {
   },
   timer: {
     title: 'The clock',
-    text: r => `Each turn lasts ${r.turnTimerSeconds} seconds. When the clock runs out, your turn ends.`,
+    text: r => `Each turn lasts ${r.turnTimerSeconds} seconds. When the clock runs out, your turn ends, and if you hold more than ${r.handLimit} cards, the game discards the extras at random.`,
   },
   meeting: {
     title: 'Trade or Attack',
@@ -67,19 +68,22 @@ export const TIPS = {
   },
   switchboard: {
     title: 'The Switchboard',
-    text: r => `Ring it to tell the whole table how many guests are possessed, never who. It costs ${actions(r.switchboardCost)}.`,
+    text: r => `Tap the headset to ring it. It costs ${actions(r.switchboardCost)}, works as often as you can pay for, and tells the whole table how many guests are possessed, never who.`,
   },
   switchboardPractice: {
     title: 'The Switchboard',
-    text: () => 'In a match, ringing it tells every guest how many are possessed, never who.',
+    text: r => `In a match, ringing it costs ${actions(r.switchboardCost)} and tells every guest how many are possessed, never who.`,
   },
+  // (the room's own action takes the place of searching here; the tip cannot know whether this Infirmary is used already,
+  // so it says the rule: the icon says "Already used" when it is)
   infirmary: {
     title: 'The Infirmary',
-    text: r => `Tap Infirmary to heal ${r.infirmaryHeal} health for ${actions(r.infirmaryCost)}.`,
+    text: r => `Tap the cross to heal ${r.infirmaryHeal} health for ${actions(r.infirmaryCost)}. Each Infirmary works only once per match, for whoever gets there first.`,
   },
+  // (in practice there is no clock, so no time limit: the discard waits for the guest)
   handLimit: {
     title: 'A full hand',
-    text: (r, you) => `You may keep ${r.handLimit} cards${you.possessed ? ', not counting your souls' : ''}. Hold more, and you choose what to drop when you end your turn.`,
+    text: (r, you) => `You may keep ${r.handLimit} cards${you.possessed ? ', not counting your souls' : ''}. Hold more, and you choose what to discard when you end your turn${you.practice ? '.' : '; if the clock runs out first, the game discards cards for you, at random.'}`,
   },
   finalRound: {
     title: 'The final round',

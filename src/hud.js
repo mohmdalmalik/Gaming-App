@@ -1,7 +1,8 @@
 // On-screen interface: the top guest strip (with current-turn / next indicators), the
 // bottom-left active-player panel (portrait, name, health segments, action pips), the turn-action
 // buttons (with costs / reasons), a move-confirm bar and toasts. (The hand is src/ui/handFan.js;
-// searching, and leaving through the Fire Exit, are the icon over the room's furniture, src/ui/searchSpot.js.) Portraits are
+// searching, leaving through the Fire Exit, healing in an Infirmary and ringing the Switchboard are the icon over the
+// room's furniture, src/ui/searchSpot.js.) Portraits are
 // illustrated placeholders (see ui/portrait.js) so real art can drop in later without changing
 // this logic. Possession is never revealed on the public strip: only the VIEWER's own knowledge shows, a crimson
 // "Possessed" marker on the guests they certainly know are possessed (either side; src/ui/stripModel.js,
@@ -14,7 +15,6 @@
 // other guests' turns the panel stays the player's own, the buttons wait, and the strip shows who is
 // playing.
 import { activePlayer, nextPlayer, playersInRoom, canTradeVoluntarily } from './game/state.js';
-import { canUseRoom } from './game/actions.js';
 import { rules } from './data/rules.js';
 import { countableCount } from './game/cards.js';
 import { makePortrait } from './ui/portrait.js';
@@ -27,22 +27,9 @@ import { tooSoon } from './ui/tapGuard.js';
 import { guestMarks } from './table.js';
 import { LANTERN_CHIP } from './data/howToPlay.js';
 
-// The room-job button (Infirmary, Switchboard): its label, what it does for its cost, and a plain
-// reason when it can't be used. A Linen Store has no button — its job is in the search itself.
 const plural = n => `${n} action${n === 1 ? '' : 's'}`;
 // The question before End turn, while actions are left (they are lost when the turn ends): the real number.
 export const endTurnAsk = n => `You still have ${plural(n)}. End turn?`;
-const ROOM_JOB = {
-  infirmary: { name: 'Infirmary', does: () => `Heal ${rules.infirmaryHeal} · ${plural(rules.actionCost.infirmary)}` },
-  switchboard: { name: 'Switchboard', does: () => `Call · ${plural(rules.actionCost.switchboard)}` },
-};
-const ROOM_REASON = {
-  full: 'Full health',
-  ap: 'No actions left',
-  usedThisTurn: 'Called this turn',
-  finished: '—',
-  dead: '—',
-};
 
 // The little eye on a guest the viewer certainly knows is possessed (the strip's badge; the same red eyes as the portraits).
 const EYE_BADGE = '<svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true"><path d="M1.6 12S5.6 5 12 5s10.4 7 10.4 7-4 7-10.4 7S1.6 12 1.6 12z" fill="#fff"/><circle cx="12" cy="12" r="4.4" fill="#c0242f"/><circle cx="12" cy="12" r="1.8" fill="#2a0508"/><circle cx="10.5" cy="10.5" r="1" fill="#fff"/></svg>';
@@ -82,10 +69,6 @@ export function createHud(doc, cfg) {
     apPips: doc.getElementById('ap-pips'),
     ap: doc.getElementById('action-points'),
     private: doc.getElementById('btn-private'),
-    // (`room` above is the room-name header; the room's job button is `roomJob`.)
-    roomJob: doc.getElementById('btn-room'),
-    roomJobMain: doc.querySelector('#btn-room .btn-main'),
-    roomJobSub: doc.getElementById('room-sub'),
     trade: doc.getElementById('btn-trade'),
     endTurn: doc.getElementById('btn-end-turn'),
     endMain: doc.querySelector('#btn-end-turn .btn-main'),
@@ -326,17 +309,8 @@ export function createHud(doc, cfg) {
       }
       hud.syncEndTurn(state);
 
-      // A room with a job: its button shows only while standing in one (Infirmary, Switchboard). The Fire Exit has no
-      // button: leaving the hotel is the Exit icon over its door (src/ui/searchSpot.js, main.js onEscape).
-      const job = ROOM_JOB[room?.job];
-      el.roomJob.hidden = !job || !mine;
-      if (job) {
-        const use = canUseRoom(state, floor, p);
-        el.roomJobMain.textContent = job.name;
-        el.roomJob.classList.remove('primary');
-        el.roomJob.disabled = !use.ok;
-        el.roomJobSub.textContent = use.ok ? job.does() : (ROOM_REASON[use.reason] || 'Unavailable');
-      }
+      // (No room button: searching, leaving through the Fire Exit, healing in an Infirmary and ringing the Switchboard are
+      // each the icon over the room's furniture, src/ui/searchSpot.js, main.js onEscape / onRoom.)
 
       // Voluntary trade: only in a safe zone that allows it (the Fire Exit, never the lobby), with
       // someone else there to trade with.

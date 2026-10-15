@@ -1,5 +1,41 @@
 # PROGRESS
 
+## Round 4 (2026-10-15): the owner's first iPad feedback, then the approved room, discard and deck rules
+
+Two halves. The screen changes the owner asked for that touch no rule (a bigger guest strip, the turn flow, the lock choice, the
+Exit icon, the Cards screen; DECISIONS.md 'Round 4, the guest strip' and 'Round 4, the turn flow, the lock choice'), and then the
+rule changes the owner approved on 15 Oct 2026, with their screens. The version number is not changed in this entry.
+
+- **The Infirmaries and the Switchboard are no longer searched.** The room's own action takes the place of the search icon: a cross
+  on the Infirmary's cabinet, a headset on the Switchboard's desk, on the same spot as the magnifier. These rooms give no card.
+  (A dead guest's cards lying there can still be picked up, and the magnifier shows again beside the room's icon.)
+- **Each Infirmary works once per match.** Whoever uses it first spends it for everyone, in public: its icon turns grey with a
+  tick ("Already used"), a grey cross hangs over its cabinet and its mark on the map says "used". Still 1 action for 2 health. A guest
+  at full health is turned away and nothing is spent.
+- **The Switchboard costs 2 actions** and has no once-a-turn limit: ring it as often as you can pay. It still tells the whole table
+  how many living guests are possessed, never who.
+- **The end-of-turn discard has a time limit.** The 45-second turn clock keeps running while you choose (it used to stand still),
+  but you always get at least 10 seconds, shown as a countdown. At zero the game discards random ordinary cards for you (only as many
+  as needed, never a Possession card, a Lantern can go), the turn ends, and you are told privately which cards went; the table sees
+  nothing. The same happens at once if the 45 seconds run out while you hold more than 6. Practice has no clock, so no limit.
+- **16 Lanterns in the deck** (was 14; 50 cards, was 48), to give back what those three rooms no longer find. With the room change
+  alone the clean side won 27 / 32 / 40% of all-bot matches at 4 / 5 / 6 guests (33.5 / 38.3 / 47.0 before); with 16 Lanterns 31.2 /
+  36.4 / 46.6 (10,000 matches each; bots are not people). The other options measured are in DECISIONS.md 'Round 4, rooms, the
+  discard clock and the lobby'.
+- **The words.** How to play page 5 and the tips for the Infirmary, the Switchboard, the clock and a full hand say all of this,
+  with every number read from `rules.js`; the owner's three sentences are unchanged. `tests/howto-check.mjs` holds the new
+  sentences and that the numbers follow a changed copy of the rules.
+- **The lobby's lift dial** now reads L, 2, 4 ... 20 (odd floors skipped, no 13), and the needle rests in the gap between the 12 and
+  the 14 as the doors shut: the hidden floor the guests are stuck on. The wall clock moved off the pillar.
+- **`docs/GAME_RULES.md` is not changed.** The exact old and new lines are a proposal for the owner (eight changed lines, two added).
+  Until they approve it the code is ahead of that document, which DECISIONS.md "Read this first" says.
+- **What to test on the iPad:** in a match, walk into an Infirmary hurt and tap the cross (2 health, 1 action), then see it grey for
+  everyone; tap it at full health (nothing happens, nothing used); ring the Switchboard twice in one turn (2 actions each); end a turn
+  with 8 cards and watch the countdown (it never shows less than 10 seconds), then let it run out and read the notice; open How to play
+  and read page 5 at both sizes.
+- **Waiting for the owner:** approval of the GAME_RULES proposal; whether the clean side should win more often (4 and 5 guests are still
+  about 2 points under the old figures); the lift dial's resting gap and whether the Fourth Floor Landing should be renamed to match.
+
 ## Round 2 (v0.6): teaching, clearer screens, computer guests, accessibility, documents and tests (2026-10-14)
 
 The owner-approved list from the 13 Oct audit, round 2: F1, F2, F7, G5-G9, G11-G14, G17, G18. No rule and no number

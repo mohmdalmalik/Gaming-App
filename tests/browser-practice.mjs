@@ -9,7 +9,7 @@
 import { chromium } from 'playwright-core';
 import fs from 'node:fs';
 import path from 'node:path';
-import { tipsOff, endTurn as endTurnTap, GUARD_WAIT } from './smoke-lib.mjs';
+import { tipsOff, autoEndOff, endTurn as endTurnTap, GUARD_WAIT } from './smoke-lib.mjs';
 
 const args = process.argv.slice(2);
 const baseUrl = args.includes('--url') ? args[args.indexOf('--url') + 1] : 'http://127.0.0.1:8123/';
@@ -37,6 +37,7 @@ const browser = await chromium.launch({ executablePath: findChrome(), headless: 
 // iPad-landscape sized viewport with touch enabled — the primary target.
 const context = await browser.newContext({ viewport: { width: 1180, height: 820 }, deviceScaleFactor: 2, hasTouch: true });
 await context.addInitScript(tipsOff);     // (first-match tips Off: none over what this suite taps)
+await context.addInitScript(autoEndOff);     // (the turn does not pass by itself: this suite taps End turn itself; tests/browser-turnflow.mjs checks the auto end)
 const page = await context.newPage();
 const consoleMessages = [];
 page.on('console', m => { if (['error', 'warning'].includes(m.type())) consoleMessages.push(`${m.type()}: ${m.text()}`); });

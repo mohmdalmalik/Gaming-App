@@ -18,13 +18,19 @@ design; `CLAUDE.md` says no rule or number changes without the owner's approval 
 list). The page opens on a **main menu** over an animated, blurred hotel lobby (reception and concierge,
 guests seated and strolling, the manager walking by): **Play with bots**, **Practice alone** (with a hint
 under it, "New to Hotel Escape? Practice alone is the best place to start.", until you have played a match or
-finished a practice), **How to play**, **Settings**, **Your record**.
+finished a practice), **How to play** and **Cards** side by side, then **Settings** and **Your record**.
 
 - **How to play** (`src/ui/howToPlay.js`; every word in `src/data/howToPlay.js`, with the numbers read from
   `src/data/rules.js` so it follows the rules): five short pages (the goal, your turn, meetings and trades,
   possession and Lanterns, staying alive) with Back / Next / Close, from the main menu and from the Menu
   panel in a match. The keyboard works (focus moves in, Tab stays inside, the arrow keys turn pages,
   Escape closes). The action budget is "actions" everywhere ("Explore · 1 action", "Move · 2 actions").
+  The pages teach the game, not the cards: what each card does is on the Cards screen.
+- **Cards** (`src/ui/cardsGuide.js`; words in `src/data/cardsGuide.js` and each card's one short line in
+  `src/data/rules.js`, `cards.<type>.desc`): a read-only list of every kind of card with its picture, name and
+  one line. It opens from the main menu, from the Menu panel in a match (next to How to play) and from a
+  small button on the last How to play page, above whichever is under it; Close comes back to it. It shows only
+  the kinds of cards, never anyone's hand, and changes nothing in a match (the Menu panel still holds the clock).
 - **The Menu button in a match** opens a small panel (`src/ui/gameMenu.js`): Resume, Music and Sound effects
   (the same choices and the same saved settings as Settings), How to play, and Leave, which asks "Leave the
   match?" as before. **The turn clock does exactly what it did when the button asked that question**: it
@@ -368,6 +374,7 @@ src/
     tips.js           the first-match tips' words (one or two sentences each) and their timing
     howToPlay.js      THE WORDS THAT TEACH THE GAME: the How to play pages (written from docs/GAME_RULES.md, the numbers read from rules.js at run time), the hint under "Practice alone", the role screen's headline and its one line about how the other side wins, the Lanterns chip
     gameMenu.js       the words of the in-match Menu panel
+    cardsGuide.js     the words of the Cards screen, and the list it shows (one entry per card type in the catalogue)
     lostMatch.js      the card shown once when the browser cut a match short ("The game was restarted by your browser…")
     endScreen.js      the end screen's Victory / Defeat, who won, and the recap line
     dressing.js       which baked model, light maps and exposure each room has (src/render/roomDressing.js and bakedRoom.js read it)
@@ -426,7 +433,8 @@ src/
     goTags.js                         the quiet "Go · 1 action" tags on rooms next door
     actionsWord.js                    "1 action" / "3 actions": the one word for the action budget wherever the player reads it (never "AP")
     howToPlay.js                      the How to play screen: five short pages, Back / Next / Close, from the main menu and the in-match Menu panel (words: src/data/howToPlay.js)
-    gameMenu.js                       the in-match Menu panel (the Menu button): Resume, Music and Sound effects, How to play, Leave; holds the clock and the bots still exactly as the Leave question did (words: src/data/gameMenu.js)
+    gameMenu.js                       the in-match Menu panel (the Menu button): Resume, Music and Sound effects, How to play, Cards, Leave; holds the clock and the bots still exactly as the Leave question did (words: src/data/gameMenu.js)
+    cardsGuide.js                     the Cards screen: every kind of card with its picture, name and one line, read-only; from the main menu, the Menu panel and the last How to play page (words: src/data/cardsGuide.js)
     endRecap.js                       the end screen's one-line recap: who was possessed first and whom they possessed (words: src/data/endScreen.js)
     menu.js                           the main menu screens: the register, the main menu, your avatar, Play with bots, the table, the guests joining, Settings, Your record
     register.js                       "Sign the register" (the first visit's username) and Change name

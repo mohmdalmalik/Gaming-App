@@ -2,7 +2,12 @@
 //
 //   - the How to play pages (src/data/howToPlay.js): five pages, each with a title and short lines; every line
 //     renders; and a number is NEVER typed in: the same pages drawn from a copy of the rules with every number
-//     changed say the new numbers and none of the old ones (so a change in src/data/rules.js reaches the page)
+//     changed say the new numbers and none of the old ones (so a change in src/data/rules.js reaches the page).
+//     The pages teach the game, not the cards: no card but the Lantern and the Possession card is named on them
+//     (the owner's feedback, 15 Oct 2026); the last page points to the Cards screen
+//   - the Cards screen (src/data/cardsGuide.js, src/data/rules.js): one entry for EVERY card type in the catalogue,
+//     with its name and ONE short plain line; the numbers in those lines still match the rules; the Lantern's line
+//     is the owner's own; the screen and its three doors (main menu, Menu panel, last How to play page) are in index.html
 //   - the hint under "Practice alone", and the role screen's headline and its ONE line about how the other side wins
 //   - the tips (src/data/tips.js): the first-meeting tip says both halves of the Lantern dilemma; the new tips exist;
 //     every tip renders for every kind of player, in one or two short sentences, with no number typed in either
@@ -16,6 +21,8 @@ import { HOW_TO_PLAY, NEW_PLAYER_HINT, ROLE_REVEAL, LANTERN_CHIP } from '../src/
 import { TIPS, LANTERN_TRADE_NOTE } from '../src/data/tips.js';
 import { END_WORDS } from '../src/data/endScreen.js';
 import { GAME_MENU } from '../src/data/gameMenu.js';
+import { CARDS_GUIDE, cardEntries } from '../src/data/cardsGuide.js';
+import { CARDS, makeCard } from '../src/game/cards.js';
 import { endRecap } from '../src/ui/endRecap.js';
 import { actionsWord } from '../src/ui/actionsWord.js';
 
@@ -28,9 +35,10 @@ console.log('How to play');
 const pageText = r => HOW_TO_PLAY.pages.map(p => [p.title, ...p.lines.map(l => l(r))].join('\n'));
 const real = pageText(rules);
 check(HOW_TO_PLAY.pages.length === 5, 'five pages');
-// the owner's three added sentences (15 Oct 2026): how to escape, End turn, and a guest walking into you
+// the owner's three added sentences (15 Oct 2026): how to escape, End turn, and a guest walking into you (the escape
+// one has "tap the Exit icon" in place of "tap Escape" since the Escape button became an icon in the Fire Exit)
 for (const text of ['Tap End turn when you are done; unused actions are lost.', 'If a guest walks into your room, they choose; a trade then asks you for a card.',
-  `Escaping costs ${rules.escapeCost === 1 ? '1 action' : `${rules.escapeCost} actions`}: stand in the`]) check(real.join('\n').includes(text), `the pages say "${text}"`);
+  `Escaping costs ${rules.escapeCost === 1 ? '1 action' : `${rules.escapeCost} actions`}: stand in the Fire Exit and tap the Exit icon.`]) check(real.join('\n').includes(text), `the pages say "${text}"`);
 for (const [i, p] of HOW_TO_PLAY.pages.entries()) {
   const lines = p.lines.map(l => l(rules));
   check(!!p.title && lines.length >= 3 && lines.every(t => typeof t === 'string' && t.length > 10 && t.length < 330), `page ${i + 1} "${p.title}": ${lines.length} short lines`);
@@ -44,10 +52,18 @@ for (const [what, text] of [
   [`round ${rules.roundLimit}`, `round ${rules.roundLimit}`],
   [`${rules.maxHealth} health`, `${rules.maxHealth} health`],
   [`${rules.handLimit} cards`, `${rules.handLimit} cards`],
-  [`Knife ${rules.cards.knife.damage} health`, `Knife takes ${rules.cards.knife.damage} health`],
-  [`Revolver ${rules.cards.revolver.damage} and ${rules.cards.revolver.shots} shots`, `Revolver takes ${rules.cards.revolver.damage} and has ${rules.cards.revolver.shots} shots`],
-  ['Espresso gives its extra actions', `gives you ${rules.cards.espresso.extraActions} more`],
+  [`the Infirmary's ${rules.infirmaryHeal} for ${rules.infirmaryCost} action`, `heals ${rules.infirmaryHeal} for ${rules.infirmaryCost} action`],
 ]) check(all.includes(text), `the pages say ${what}`);
+// The pages teach the game, not the cards (the owner: "we don't need to mention espresso and we don't need to mention
+// the hand mirror"; what each card does is on the Cards screen). The Lantern and the Possession card are the game itself.
+const cardNames = Object.entries(rules.cards).filter(([type]) => !['lantern', 'possession'].includes(type)).map(([, c]) => c.name);
+for (const name of cardNames) check(!new RegExp(`\\b${name}\\b`, 'i').test(all), `the pages no longer mention the ${name}`);
+check(!/Espresso/i.test(all) && !/Hand Mirror/i.test(all), 'no Espresso and no Hand Mirror on any page (the owner\'s own examples)');
+check(!/\bdamage\b/i.test(all) && !/\bshots?\b/i.test(all), 'no card numbers (damage, shots) on the pages');
+const lastLines = HOW_TO_PLAY.pages.at(-1).lines.map(l => l(rules));
+check(lastLines.at(-1) === 'All the cards and what they do are on the Cards screen.', 'the last page ends with the pointer to the Cards screen');
+check(HOW_TO_PLAY.pages.at(-1).cardsLink === true && HOW_TO_PLAY.pages.slice(0, -1).every(p => !p.cardsLink) && HOW_TO_PLAY.words.cards === 'Cards', '...and only the last page has the small Cards button');
+check(HOW_TO_PLAY.pages.every(p => p.lines.length >= 3), 'no page is left empty or thin: every page keeps at least three lines');
 // the draft's own words, to the letter (the owner is reviewing them; a change is on purpose)
 for (const sentence of [
   'You are trapped on a hotel floor at night. Lanterns are the way out. One guest is secretly possessed.',
@@ -62,15 +78,56 @@ check(/Opening a door, moving to the next room, searching, using a card and usin
 // Every number changed: the pages follow the rules, nothing is typed in.
 const other = JSON.parse(JSON.stringify(rules));
 Object.assign(other, { actionPointsPerTurn: 7, turnTimerSeconds: 33, lanternsToEscape: 5, roundLimit: 11, maxHealth: 9, handLimit: 8,
-  attackCost: 3, infirmaryHeal: 5, infirmaryCost: 2, lanternsDealtEach: 2, bandageHeal: 3, moveCost: 2, openDoorCost: 2, searchCost: 2, playCardCost: 2, switchboardCost: 2 });
-other.cards.knife.damage = 3; other.cards.revolver.damage = 6; other.cards.revolver.shots = 5; other.cards.espresso.extraActions = 9; other.cards.bandage.heal = 3;
+  attackCost: 3, escapeCost: 3, infirmaryHeal: 5, infirmaryCost: 2, lanternsDealtEach: 2, bandageHeal: 3, moveCost: 2, openDoorCost: 2, searchCost: 2, playCardCost: 2, switchboardCost: 2 });
 const changed = pageText(other).join('\n');
 for (const text of ['7 actions each turn', '33 seconds', '5 Lanterns', 'round 11', '9 health', '8 cards', '3 actions', 'heals 5 for 2 actions', 'Five open', 'two Lanterns',
-  'takes 3 health', 'takes 6 and has 5 shots', 'gives you 9 more', 'heals 3', 'cost 2 actions each']) check(changed.includes(text), `with other rules the pages say "${text}"`);
-for (const text of ['4 actions', '45 seconds', '3 Lanterns', 'round 8', '4 health', '6 cards', '2 shots', 'cost 1 action each']) check(!changed.includes(text), `...and no longer "${text}"`);
+  'cost 2 actions each', 'Escaping costs 3 actions: stand in the Fire Exit and tap the Exit icon.', 'you need a weapon and 3 actions']) check(changed.includes(text), `with other rules the pages say "${text}"`);
+for (const text of ['4 actions', '45 seconds', '3 Lanterns', 'round 8', '4 health', '6 cards', 'heals 2 for', 'cost 1 action each', 'Escaping costs 1 action', 'weapon and 1 action']) check(!changed.includes(text), `...and no longer "${text}"`);
 // (the costs that differ are listed one by one, not squeezed into a false sentence)
 const mixed = JSON.parse(JSON.stringify(rules)); mixed.searchCost = 2;
 check(/searching 2 actions/.test(pageText(mixed).join('\n')) && !/cost 1 action each/.test(pageText(mixed).join('\n')), 'when the costs differ, each is said on its own');
+
+// --- the Cards screen --------------------------------------------------------------------------------------
+console.log('\nthe Cards screen');
+const entries = cardEntries(CARDS);
+const types = Object.keys(CARDS);
+check(entries.length === types.length && entries.map(e => e.type).join() === types.join(), `one entry for every card type in the catalogue, in its order (${types.join(', ')})`);
+check(types.includes('lantern') && types.includes('possession') && entries.every(e => e.name === CARDS[e.type].name && e.desc === CARDS[e.type].desc && e.name && e.desc), 'each entry is its name and its line from src/data/rules.js, none empty (the Lantern and the Possession card are in it)');
+check(Object.keys(rules.deck).every(t => types.includes(t)) && new Set(entries.map(e => e.name)).size === entries.length, 'every card of the draw deck is in the list, and no two have the same name');
+check(['Lantern', 'Bandage', 'Flashlight', 'Knife', 'Revolver', 'Barricade', 'Lock Pick', 'Master Key', 'Hand Mirror', 'Espresso', 'Possession'].every(n => entries.some(e => e.name === n)), 'all eleven cards are there by name');
+// a card type added to the catalogue is listed by itself (and a copy of the rules is read as it is)
+const extra = { ...JSON.parse(JSON.stringify(CARDS)), torch: { name: 'Torch', desc: 'A test card.' } };
+check(cardEntries(extra).length === types.length + 1 && cardEntries(extra).at(-1).type === 'torch' && cardEntries(extra).at(-1).desc === 'A test card.', 'a new card type added to the catalogue shows up in the list with no other change');
+check(CARDS_GUIDE.title === 'Cards' && CARDS_GUIDE.close === 'Close', 'the screen is called "Cards" and has a Close button');
+// ONE short plain line each, about 12 words at most (the owner: "very detailed ... let us keep it simpler"); the Lantern's two
+// short sentences are the owner's own words, so it may run to 15
+const sentences = t => t.split(/(?<=[.!?])\s+/).filter(Boolean);
+const words = t => t.trim().split(/\s+/).length;
+for (const e of entries) {
+  check(sentences(e.desc).length <= 2 && words(e.desc) <= (e.type === 'lantern' ? 15 : 12) && e.desc.length <= 90, `${e.name}: short and plain (${words(e.desc)} words): "${e.desc}"`);
+  check(!/\bAP\b|action points|\n/.test(e.desc) && !/\b1 action\b/.test(e.desc), `${e.name}: no "AP", and no action cost typed in (the Use button says it)`);
+}
+check(CARDS.lantern.desc === 'Three let you escape through the Fire Exit. One protects you from a Possession card.', "the Lantern's line is the owner's own words");
+// the numbers in the lines are the rules' numbers (a line that says a number must agree with rules.js)
+const w = n => ['no', 'one', 'two', 'three', 'four', 'five', 'six'][n];
+check(new RegExp(`\\b${w(rules.lanternsToEscape)}\\b`, 'i').test(CARDS.lantern.desc), `Lantern: "${w(rules.lanternsToEscape)}" is lanternsToEscape`);
+check(CARDS.bandage.desc.includes(`${rules.cards.bandage.heal}`) && /health/.test(CARDS.bandage.desc), `Bandage: heals ${rules.cards.bandage.heal}`);
+check(CARDS.knife.desc.includes(`${rules.cards.knife.damage} damage`) && (rules.cards.knife.reusable ? /reusable/.test(CARDS.knife.desc) : true), `Knife: ${rules.cards.knife.damage} damage, reusable`);
+check(CARDS.revolver.desc.includes(`${rules.cards.revolver.damage} damage`) && new RegExp(`\\b${w(rules.cards.revolver.shots)} shots`, 'i').test(CARDS.revolver.desc), `Revolver: ${rules.cards.revolver.damage} damage, ${w(rules.cards.revolver.shots)} shots`);
+check(CARDS.espresso.desc.includes(`${rules.cards.espresso.extraActions} extra actions`) && (rules.espressoCost === 0 ? /Free/.test(CARDS.espresso.desc) : true), `Espresso: ${rules.cards.espresso.extraActions} extra actions${rules.espressoCost === 0 ? ', free' : ''}`);
+check(/half the time/.test(CARDS.lockPick.desc) === (rules.lockPickChance === 0.5) && /^Always opens/.test(CARDS.masterKey.desc), `Lock Pick: half the time (lockPickChance ${rules.lockPickChance}); Master Key: always`);
+check(new RegExp(`\\b${w(rules.barricadeRounds)} round\\b`).test(CARDS.barricade.desc), `Barricade: for ${w(rules.barricadeRounds)} round`);
+// what a player reads when a card is made (a card of every type can be built)
+check(types.every(t => makeCard(t).type === t), 'a card of every listed type can be made');
+// the screen and its doors are in the page: the overlay, and a button in the main menu, the Menu panel and the last How to play page
+const page = fs.readFileSync(path.join(root, 'index.html'), 'utf8').replace(/<!--[\s\S]*?-->/g, '');
+check(/id="cards-overlay"/.test(page) && /id="cards-list"/.test(page) && /id="btn-cards-close"/.test(page) && /id="btn-menu-cards"[^>]*data-sfx="open"/.test(page) && /id="btn-gm-cards"[^>]*data-sfx="open"/.test(page), 'index.html has the Cards screen, its Close button, and the Cards buttons of the main menu and the Menu panel');
+const howtoUi = fs.readFileSync(path.join(root, 'src/ui/howToPlay.js'), 'utf8');
+check(/btn-howto-cards/.test(howtoUi) && /cardsBtn\.dataset\.sfx = 'open'/.test(howtoUi) && /cards\?\.open\(/.test(howtoUi), 'the last How to play page has a Cards button that opens the screen (with the opening sound)');
+const guideUi = fs.readFileSync(path.join(root, 'src/ui/cardsGuide.js'), 'utf8');
+check(/cardEntries\(CARDS\)/.test(guideUi) && /cardTile\(/.test(guideUi), 'the screen is drawn from the whole catalogue with the shared card tile (src/ui/cards.js)');
+// it only reads: no game state, no hand, no timer is touched by the screen's code
+check(!/state\b|\.hand\b|setTimeout|setInterval|timer/i.test(guideUi.replace(/\/\/.*$/gm, '')), 'the screen never touches a game state, a hand or a clock');
 
 // --- the hint, the role screen, the chip --------------------------------------------------------------------
 console.log('\nthe hint, the role screen, the Lanterns chip');
@@ -82,7 +139,7 @@ check(ROLE_REVEAL.otherSide(true, rules) === `The clean guests win if one of the
 check(ROLE_REVEAL.otherSide(true, other) === 'The clean guests win if one of them escapes with 5 Lanterns.', '...and the number follows the rules');
 check(LANTERN_CHIP.text(2, rules.lanternsToEscape) === `2/${rules.lanternsToEscape}` && LANTERN_CHIP.label === 'Lanterns', 'the chip reads "Lanterns 2/3": your own count out of the number the rules ask for');
 check(/1 Lantern /.test(LANTERN_CHIP.aria(1, 3)) && /2 Lanterns /.test(LANTERN_CHIP.aria(2, 3)), 'its spoken words say "Lantern" for one and "Lanterns" for more');
-check(GAME_MENU.leave(false) === 'Leave the match' && GAME_MENU.leave(true) === 'Leave practice' && GAME_MENU.resume === 'Resume' && GAME_MENU.howTo === 'How to play', 'the Menu panel: Resume, How to play, Leave the match / Leave practice');
+check(GAME_MENU.leave(false) === 'Leave the match' && GAME_MENU.leave(true) === 'Leave practice' && GAME_MENU.resume === 'Resume' && GAME_MENU.howTo === 'How to play' && GAME_MENU.cards === 'Cards', 'the Menu panel: Resume, How to play, Cards, Leave the match / Leave practice');
 
 // --- the tips ---------------------------------------------------------------------------------------------------
 console.log('\nthe tips');

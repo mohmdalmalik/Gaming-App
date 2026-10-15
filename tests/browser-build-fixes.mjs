@@ -153,7 +153,7 @@ if (only.includes('a')) {
     await page.click('#offer-cards .card-tile[data-card-id="tL"]'); await page.waitForTimeout(250);
     p = await pickState();
     check(p.picked === null && p.sel.join() === 'tL' && p.give === 'Give the Lantern' && !p.giveOff, `one tap lifts the Lantern and gives nothing: "${p.give}"`);
-    check(/^Lantern /.test(p.words) && /block a possession/.test(p.words), `it says what the card does ("${p.words.slice(0, 70)}…")`);
+    check(/^Lantern /.test(p.words) && /protects you from a Possession card/.test(p.words), `it says what the card does ("${p.words.slice(0, 70)}…")`);
     await page.screenshot({ path: path.join(outDir, 'a-pick-lantern.png') });
     await page.click('#offer-cards .card-tile[data-card-id="tR"]'); await page.waitForTimeout(250);
     p = await pickState();

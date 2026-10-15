@@ -24,7 +24,7 @@ import {
   discardCard, overHandLimit, tradeableCards, canTrade, skipTrade, openDoor,
   canUseRoom, useInfirmary, useSwitchboard, useHandMirror, useEspresso,
 } from './game/actions.js';
-import { CARDS, weaponsIn, countableCount } from './game/cards.js';
+import { CARDS, weaponsIn } from './game/cards.js';
 import { createScene } from './render/scene.js';
 import { addRoomView, clearRoomViews, createDoorwayViews } from './render/roomView.js';
 import { dressRoom } from './render/roomDressing.js';
@@ -682,6 +682,45 @@ function doEndTurn({ ask = true } = {}) {
   endTurnNow();
 }
 
+// --- Auto end turn -----------------------------------------------------------------------
+// When the player's last action is spent, the turn passes by itself a beat later: the same path as the
+// End turn button (endTurnNow: the discard screen first if the hand is over the limit, stopTimer, ...),
+// without the "End turn?" question. The beat (AUTO_END_MS) only runs while nothing else is going on - no
+// walk, door, reveal, meeting, private screen or menu - and starts over if something does start, so the
+// result of the last action is always seen first. It never runs on a computer guest's turn, for a guest
+// who is out, once the match is over, while the clock is paused, or after the clock cut a walk short.
+// While the player could still do something FREE with no actions left (an Espresso in hand gives +2
+// actions; a Trade in the Fire Exit costs nothing) it does not run at all: End turn glows instead, and
+// the player taps it themselves. The End turn button stays for ending early.
+const AUTO_END_MS = 900;
+let autoEndOn = !window.__noAutoEnd;       // (the browser checks that tap End turn themselves switch it off before the page loads: tests/smoke-lib.mjs)
+let autoEndKey = '', autoEndSince = 0;     // the turn the beat is running for (game + turn number) and when it began
+let autoEndFired = 0;                      // how many turns have passed this way (tests)
+const endTurnBtn = document.getElementById('btn-end-turn');
+
+// 'out': no actions left and nothing free to do; 'free': no actions left but something free remains;
+// 'no': anything else (actions left, not the player's turn, over, ...).
+function autoEndState() {
+  if (!running || state.finished || phase !== 'game' || !myTurn() || !inActionPhase) return 'no';
+  const p = me();
+  if (!p.alive || p.actionPoints > 0) return 'no';
+  return p.hand.some(c => c.type === 'espresso') || canTradeVoluntarily(state, floor, p) ? 'free' : 'out';
+}
+const autoEndBusy = () => uiBusy() || timerPaused() || tradeReveal.isOpen || chat.isOpen || howTo.isOpen || cardsGuide.isOpen
+  || crash.shown || meetingLive || !!pendingArrival || walkCutShort || activeMover().walking || activeMover().path.length > 0;
+
+function tickAutoEnd(now) {
+  const s = autoEndState();
+  if (endTurnBtn && endTurnBtn.classList.contains('nudge') !== (s === 'free')) endTurnBtn.classList.toggle('nudge', s === 'free');
+  if (!autoEndOn || s !== 'out' || autoEndBusy()) { autoEndKey = ''; return; }
+  const key = `${gameToken}:${state.turn}`;
+  if (key !== autoEndKey) { autoEndKey = key; autoEndSince = now; return; }    // (the beat starts now)
+  if (now - autoEndSince < AUTO_END_MS) return;
+  autoEndKey = '';                          // (once: a new beat needs a new quiet moment)
+  autoEndFired++;
+  endTurnNow();
+}
+
 // The active guest finished walking into a room. The Fire Exit is a safe zone (never a meeting);
 // escaping there is a separate action, the Escape button (1 AP).
 function onArrive() {
@@ -1111,31 +1150,32 @@ function onSearch() {
   const where = r.searchPoint || 'the room';
   syncViews(false);
   // Everything found goes into the hand, even past the limit of 6 (approved rule): the limit is
-  // settled only when the turn ends (endTurnNow -> the discard screen). Over it, the reveal adds a
-  // calm reminder, and the hand fan shows "Cards 8/6 · discard 2 at end of turn".
+  // settled only when the turn ends (endTurnNow -> the discard screen). The reveal says nothing about
+  // it: the hand fan shows "Cards 8/6 · discard 2 at end of turn" the moment the reveal closes.
   const found = r.kind === 'found' || r.kind === 'cards' ? r.cards : r.kind === 'card' ? [r.card] : [];
-  const line = r.kind === 'found'
-    ? `Lying in ${where}: ${r.cards.map(c => CARDS[c.type].name).join(', ')}. You take it all.`
-    : r.kind === 'nothing' ? `You search ${where}. Nothing.`
-      : r.kind === 'cards' ? `You search ${where} and find ${andList(r.cards.map(c => aCard(c.type)))}.`
-        : `You search ${where} and find ${aCard(r.card.type)}.`;
-  const lanterns = player.hand.filter(c => c.type === 'lantern').length;
-  const tally = lanterns ? ` You now hold ${lanterns} Lantern${lanterns === 1 ? '' : 's'}.` : '';
-  const over = r.over || 0;
-  const limitNote = over > 0
-    ? ` You hold ${countableCount(player.hand)} cards, more than ${rules.handLimit}: keep them all for now, and discard ${over} when you end your turn.` : '';
   const then = () => refresh();
   // Search results are PRIVATE: the others learn only that a search happened (the public log). The
   // found cards are shown large on the player's own screen, on a light backdrop with the room still in
-  // view (only the player looks at this screen).
+  // view (only the player looks at this screen), each kind with its one short line (src/ui/handoff.js).
   handoff.privateFound(player, {
     kicker: `You search ${where}`,
-    title: !found.length ? 'Nothing here' : r.kind === 'found' ? `You pick up ${andList(found.map(c => aCard(c.type)))}` : `You found ${andList(found.map(c => aCard(c.type)))}`,
+    title: !found.length ? 'Nothing here' : `${r.kind === 'found' ? 'You pick up' : 'You found'} ${foundPhrase(found)}`,
     cards: found,
-    lines: [line + tally + limitNote],
     soft: true,
   }, then);
   if (found.length) sfx('cardFound', { delay: 0.55 });
+}
+
+// What was found, in a few words: "a Lantern", "2 Lanterns", "a Bandage and a Knife". A big pile off the
+// floor (a guest's dropped hand) is just counted, so the title stays short.
+function foundPhrase(cards) {
+  if (cards.length > 3) return `${cards.length} cards`;
+  const counts = new Map();
+  for (const c of cards) counts.set(c.type, (counts.get(c.type) || 0) + 1);
+  return andList([...counts].map(([type, n]) => {
+    const name = CARDS[type]?.name ?? type;
+    return n === 1 ? aCard(type) : `${n} ${name.endsWith('fe') ? `${name.slice(0, -2)}ves` : `${name}s`}`;
+  }));
 }
 
 // The search icon (or its furniture) was tapped: search it from where the guest stands — they do not
@@ -2200,6 +2240,7 @@ function frameLoop(now) {
     step('queued tap', replayQueuedTap);
     step('bots', () => botTick(now));
   }
+  step('auto end', () => tickAutoEnd(now));      // (after the walk: an arrival and its meeting have started by now)
   step('camera', () => { rig.setFocus(...followPoint()); rig.update(dt); });
   step('rooms', () => { for (const rv of roomViews.values()) rv.update(dt); });
   step('doorways', () => doorways.update(time, dt, roomViews));
@@ -2273,6 +2314,7 @@ window.__game = {
   cfg, rules, hotel, floor, grid, state, movers, rig, roomViews, doorways, characters, discovery, view, pathPreview, fog, screenTags,
   crash,        // the safety net (src/ui/crash.js): ring(), shown, limits, step(), note()
   begin, restart, endTurn: () => doEndTurn({ ask: false }),     // (tests: End turn with the question answered; the button asks)
+  autoEnd: on => { if (on !== undefined) { autoEndOn = !!on; autoEndKey = ''; } return autoEndOn; }, autoEndFired: () => autoEndFired,     // (tests: the turn passing by itself when the actions run out, on or off)
   refresh,
   activePlayer: () => activePlayer(state),
   nextPlayer: () => nextPlayer(state),

@@ -2155,10 +2155,10 @@ html, body {
   display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px 22px; align-content: start;
 }
 .cardsguide-list:focus-visible, .cardsguide .btn:focus-visible { outline: 2px solid var(--brass-bright); outline-offset: 2px; }
-.cg-item { display: flex; align-items: center; gap: 13px; min-width: 0; }
+.cg-item { display: flex; align-items: flex-start; gap: 13px; min-width: 0; }
 .cg-item .card-tile { width: 66px; flex: none; pointer-events: none; }
 .cg-item .card-tile:not(.face) .art { height: 70px; }
-.cg-words { min-width: 0; }
+.cg-words { min-width: 0; padding-top: 4px; }
 .cg-name { font-family: var(--serif); font-weight: 700; font-size: 18px; line-height: 1.15; color: var(--brass-bright); margin-bottom: 3px; }
 .cg-desc { font-size: 14.5px; line-height: 1.35; color: var(--ivory); text-wrap: pretty; }
 .cg-item[data-type="possession"] .cg-name { color: var(--evil); }
@@ -2172,3 +2172,31 @@ html, body {
 
 /* The Menu panel with Cards: Resume across the top, How to play and Cards side by side, Leave across the bottom. */
 .gm-actions #btn-gm-leave { grid-column: 1 / -1; }
+
+/* ==== Round 4, turn flow (src/ui/discard.js, src/ui/handoff.js privateFound, src/main.js auto end turn) ==== */
+
+/* The found-card reveal: one column per KIND of card (two Lanterns share one), its card or cards large and
+   under them the name and one short line, said once. The second column's card comes in a beat after the first. */
+.handoff-found .found-type { display: flex; flex-direction: column; align-items: center; gap: 8px; min-width: 0; }
+.handoff-found .found-faces { display: flex; justify-content: center; gap: 14px; min-width: 0; max-width: 100%; }
+.handoff-found .found-faces .big-card { min-width: 0; flex: 0 1 auto; }     /* (a big pile off the floor: the columns, and the cards in them, share the width) */
+/* Three or more kinds (a pile off the floor): every card gets the same share of the row. */
+.handoff-found .found-type:first-child:nth-last-child(n+3),
+.handoff-found .found-type:first-child:nth-last-child(n+3) ~ .found-type { flex: var(--n, 1) 1 0; }
+.handoff-found .found-type:nth-child(2) .found-faces .big-card:first-child { animation-delay: 0.12s; }
+.found-type .ft-name { font-family: var(--serif); font-size: 20px; font-weight: 700; color: var(--brass-bright); }
+.found-type .ft-desc { font-size: 14px; line-height: 1.45; color: var(--ivory); max-width: 34ch; text-align: center; text-wrap: balance; }
+
+/* The discard screen: the discard that brings the hand down to the limit finishes it. The card is seen
+   leaving for about half a second (nothing can be tapped meanwhile), then the screen closes by itself. */
+#discard-overlay.leaving .card-tile { pointer-events: none; }
+#discard-cards .card-tile.leaving { animation: discard-away 0.52s ease-in forwards; }
+@keyframes discard-away { from { opacity: 1; transform: none; } to { opacity: 0; transform: translateY(-34px) scale(0.86) rotate(-5deg); } }
+@keyframes discard-fade { from { opacity: 1; } to { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { #discard-cards .card-tile.leaving { animation-name: discard-fade; } }   /* (it fades, it does not fly) */
+
+/* End turn when it is the one thing left (no actions, but a free Espresso or Trade could still be used, so
+   the turn does not end by itself): a slow, gentle glow so the button is easy to find. */
+#btn-end-turn.nudge { animation: end-nudge 1.9s ease-in-out infinite; }
+@keyframes end-nudge { 0%, 100% { box-shadow: 0 0 0 0 rgba(233, 201, 143, 0); } 50% { box-shadow: 0 0 0 5px rgba(233, 201, 143, 0.5); } }
+@media (prefers-reduced-motion: reduce) { #btn-end-turn.nudge { animation: none; box-shadow: 0 0 0 3px rgba(233, 201, 143, 0.55); } }   /* (a steady ring) */

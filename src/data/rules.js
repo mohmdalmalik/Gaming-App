@@ -118,7 +118,7 @@ export const rules = {
     masterKey:  { name: 'Master Key', glyph: '⚷', tint: '#e6cf8a', active: true, unlock: true,
                   desc: 'Always opens a locked door, then is used up.' },
     handMirror: { name: 'Hand Mirror', glyph: '◐', tint: '#b9c8d8', active: true,
-                  desc: 'A guest in your room shows you their hand, in private. Used up.' },
+                  desc: 'A guest in your room privately shows you their hand. Used up.' },
     espresso:   { name: 'Espresso',   glyph: '☕', tint: '#c08a5a', active: true, extraActions: 2,
                   desc: 'Free to use: 2 extra actions this turn. Used up.' },
     // The possessed side's souls — never in the deck. Each card belongs to the guest who holds it

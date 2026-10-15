@@ -36,7 +36,7 @@ export function createCardsGuide(doc) {
       // (the face carries no guest's picture: no owner is given to a Possession card; the words beside it name the card)
       const tile = cardTile(doc, { id: `guide-${e.type}`, type: e.type }, { hideDesc: true });
       tile.setAttribute('aria-hidden', 'true');
-      for (const img of tile.querySelectorAll('img')) { img.decoding = 'async'; img.draggable = false; }
+      for (const img of tile.querySelectorAll('img')) { img.draggable = false; }
       const words = doc.createElement('div'); words.className = 'cg-words';
       const name = doc.createElement('div'); name.className = 'cg-name'; name.textContent = e.name;
       const desc = doc.createElement('div'); desc.className = 'cg-desc'; desc.textContent = e.desc;
@@ -77,6 +77,9 @@ export function createCardsGuide(doc) {
   doc.addEventListener('keydown', e => {
     if (el.root.hidden || e.defaultPrevented) return;
     if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); api.close(); return; }
+    // (the list is the one thing here that scrolls: with the focus on it, the arrow, page and Home / End keys move it)
+    const l = el.list, jump = { ArrowDown: 48, ArrowUp: -48, PageDown: l.clientHeight * 0.9, PageUp: -l.clientHeight * 0.9, Home: -l.scrollHeight, End: l.scrollHeight }[e.key];
+    if (jump !== undefined && doc.activeElement === l) { e.preventDefault(); l.scrollTop += jump; return; }
     if (e.key !== 'Tab') return;
     // (Tab stays inside: the list, Close, and round again)
     const ring = [el.list, el.close];

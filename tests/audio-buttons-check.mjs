@@ -29,11 +29,13 @@ const EXPECT = {
   'btn-handoff-next': 'click', 'btn-offer-give': 'click',
   'btn-chat-gg': 'select',
   // the in-match Menu panel (src/ui/gameMenu.js) and How to play (src/ui/howToPlay.js)
-  'btn-gm-resume': 'close', 'btn-gm-howto': 'open', 'btn-gm-leave': 'click',
-  'btn-howto-close': 'close', 'btn-howto-back': 'click', 'btn-howto-next': 'click',
+  'btn-gm-resume': 'close', 'btn-gm-howto': 'open', 'btn-gm-cards': 'open', 'btn-gm-leave': 'click',
+  'btn-howto-close': 'close', 'btn-howto-back': 'click', 'btn-howto-next': 'click', 'btn-howto-cards': 'open',
+  // the Cards screen (src/ui/cardsGuide.js): opened from the main menu, the Menu panel and the last How to play page
+  'btn-cards-close': 'close',
   // the menu
   'btn-su-suggest': 'click', 'btn-su-go': 'click', 'btn-profile': 'open',
-  'btn-menu-bots': 'open', 'btn-menu-practice': 'click', 'btn-menu-settings': 'open', 'btn-menu-record': 'open', 'btn-menu-howto': 'open',
+  'btn-menu-bots': 'open', 'btn-menu-practice': 'click', 'btn-menu-settings': 'open', 'btn-menu-record': 'open', 'btn-menu-howto': 'open', 'btn-menu-cards': 'open',
   'btn-av-rename': 'click', 'btn-av-done': 'close', 'btn-bots-back': 'close', 'btn-bots-find': 'click',
   'btn-mm-cancel': 'close', 'btn-tips-again': 'select', 'btn-settings-done': 'close',
   'btn-record-back': 'close', 'btn-record-reset': 'click', 'btn-record-keep': 'click', 'btn-record-yes': 'click',

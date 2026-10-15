@@ -20,6 +20,12 @@ export const tipsOff = () => {
   } catch { /* no storage on this page */ }
 };
 
+// The turn passes by itself a beat after the player's last action (auto end turn, src/main.js). A check
+// that spends all the actions and then taps End turn itself would race that beat, so before each page loads
+// the page is told not to (window.__noAutoEnd) unless the check asks for it (`autoEnd: true`, as
+// tests/browser-turnflow.mjs does). Browsers a check opens itself add this script the way they add tipsOff.
+export const autoEndOff = () => { window.__noAutoEnd = true; };
+
 // A player profile (src/account/account.js) in every check unless it asks for none (`profile: false`, as
 // tests/browser-profile.mjs does for the first-run register): before each page loads, a saved profile
 // 'tester' (a fixed free look: the Tuxedo in its own colours) is put in place if there is none yet, so the
@@ -36,11 +42,12 @@ export const profileOn = (profile) => {
   } catch { /* no storage on this page */ }
 };
 
-export async function launch({ width = 1180, height = 820, touch = true, tips = false, profile = true, reducedMotion = null } = {}) {
+export async function launch({ width = 1180, height = 820, touch = true, tips = false, profile = true, reducedMotion = null, autoEnd = false } = {}) {
   const browser = await chromium.launch({ executablePath: chrome, headless: true, args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--no-sandbox'] });
   // (`reducedMotion: 'reduce'`: the device's Reduce Motion setting is on, prefers-reduced-motion: src/motion.js)
   const context = await browser.newContext({ viewport: { width, height }, deviceScaleFactor: 1, hasTouch: touch, ...(reducedMotion ? { reducedMotion } : {}) });
   if (!tips) await context.addInitScript(tipsOff);
+  if (!autoEnd) await context.addInitScript(autoEndOff);
   if (profile) await context.addInitScript(profileOn, profile === true ? TEST_PROFILE : { ...TEST_PROFILE, ...profile });
   const page = await context.newPage();
   const messages = [];

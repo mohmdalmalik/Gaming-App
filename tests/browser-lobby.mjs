@@ -506,7 +506,8 @@ console.log('\n7b. locked rooms look locked');
 
 console.log('\n8. console');
 await dressed();
-const noisy = consoleMessages.filter(x => !/favicon/i.test(x));
+// (a download cut off because the test itself moved on, a sound or the music still on its way, is not the game's fault: the other suites skip it too)
+const noisy = consoleMessages.filter(x => !/favicon/i.test(x) && !/^requestfailed: .*net::ERR_ABORTED/.test(x));
 check(noisy.length === 0, noisy.length ? `console noise:\n    ${noisy.slice(0, 6).join('\n    ')}` : 'no console errors or failed requests (clean)');
 await browser.close();
 console.log(failures.length ? `\n${failures.length} FAILED` : '\nALL LOBBY BROWSER CHECKS PASSED');

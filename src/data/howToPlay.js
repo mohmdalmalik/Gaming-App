@@ -80,7 +80,7 @@ export const HOW_TO_PLAY = {
       cardsLink: true,
       lines: [
         r => `You have ${r.maxHealth} health. At 0 health you are out of the game and drop everything you carry, except Possession cards, which leave the game.`,
-        r => `The Infirmary is a room where you can heal: it heals ${r.infirmaryHeal} for ${actions(r.infirmaryCost)}.`,
+        r => `The Infirmary is a room where you can heal: it restores ${r.infirmaryHeal} health for ${actions(r.infirmaryCost)}.`,
         r => `At the end of your turn you can keep ${r.handLimit} cards. Souls do not count.`,
         () => 'The Switchboard tells everyone how many guests are possessed, but not who.',
         () => 'All the cards and what they do are on the Cards screen.',

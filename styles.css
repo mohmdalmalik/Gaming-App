@@ -2371,3 +2371,9 @@ html, body {
   .strip-round { margin-top: 5px; }
 }
 /* ==== end of Round 4, strip ==== */
+
+/* ==== Round 4, fixer ==== */
+/* The Chat panel is held above the camera buttons (src/ui/chat.js place) and scrolls inside itself when the (taller) guest strip
+   pushes it down: a finger drag in it scrolls the lines and never the page or the hotel behind. */
+.chat-panel { overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
+/* ==== end of Round 4, fixer ==== */

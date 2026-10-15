@@ -238,7 +238,8 @@ if (only.includes('b')) {
     check(log.length === 0, 'tapping the chosen card again, which does nothing, is silent');
     await page.waitForTimeout(GUARD_WAIT);
     log = await cue(() => page.click('#btn-offer-give'));
-    check(log.join() === 'click', `the Give button clicks (${log.join()})`);
+    // (a computer guest's chat line sounds its own quiet click: one in this window must not fail the check)
+    check(log.length >= 1 && log.every(n => n === 'click'), `the Give button clicks (${log.join()})`);
     // the weapon picker
     await ev(() => {
       const g = window.__game, p = g.state.players[g.humanSeat()], q = g.state.players.find(x => x !== p);

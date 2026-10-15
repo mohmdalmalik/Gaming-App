@@ -169,7 +169,9 @@ readout at the top left (below the room name), for measuring speed on the iPad.
   A fogged room further off says "Walk to the room next to it first."
 - **Move** (1 AP per room) — tap any revealed room (anywhere on it): a dotted path, an outline round it
   and a "Move · N actions" tag show the walk, and **Move** confirms it. The guest walks there by the fewest
-  rooms and stands in its middle (round it when others are there). Walking into a room with a guest you
+  rooms and stands in its middle (round it when others are there). A guest walks at 2.9 m/s
+  (`cfg.player.speed`; 2.5 before Round 4), so a walk of about 8 m between two rooms takes under 3 seconds; the computer
+  guests walk a multiple of the same speed (the Bot speed setting). Walking into a room with a guest you
   have not met there this round stops the walk there for the meeting. Tapping your own room does
   nothing. A room tapped while walking is offered when you arrive (a fogged room or the search icon
   tapped while walking says "Wait until you arrive."). A tap just beside a button, the panel or the
@@ -181,7 +183,9 @@ readout at the top left (below the room name), for measuring speed on the iPad.
 - **Search** (1 AP) — there is no Search button: a room that can still be searched shows a pulsing
   brass magnifier over its search spot (the drawer, the shelves, the trolley…). Tap it (or the
   furniture itself) and the guest searches it from where they stand, turning to face it; the card(s)
-  found are shown large, then go into the hand.
+  found are shown large with a short title ("You found a Lantern") and one short line per kind of card (no tally
+  of what you now hold, no limit note: the hand strip already says "Cards 7/6 · discard 1 at end of turn"), then go
+  into the hand.
   It takes anything lying in the room (a dead guest's cards); otherwise draws one card, once per room
   (two in a Linen Store) — once searched, the icon is gone. Dark rooms need a Flashlight in hand (the
   icon is dimmed with a flashlight mark and says so when tapped); with no actions left it is dimmed
@@ -191,7 +195,10 @@ readout at the top left (below the room name), for measuring speed on the iPad.
 - **Hand limit (6)** — settled only when you END your turn: over 6 (Possession cards don't count), the
   End turn button reads "Discard N first", a calm one-line "Cards 8/6 · discard 2 at end of turn" sits
   above the fan, and End turn (or the 45 s clock running out) opens the discard screen before the turn
-  passes. Cards received on someone else's turn are settled at the end of your own next turn.
+  passes. Every discard is two taps (a card, then the button that names it), and the discard that brings the
+  hand down to 6 finishes the screen by itself: the card is seen leaving for about half a second, then the turn
+  passes (there is no "Keep these 6" step). Cards received on someone else's turn are settled at the end of your
+  own next turn.
 - **Rooms with jobs** — in an Infirmary or the Switchboard a room button appears by End turn:
   Infirmary (1 AP, heal 2), Switchboard (1 AP, once a turn: the whole table learns how many guests
   are possessed, not who). The map marks them (✚ ☎ ≡).
@@ -228,7 +235,12 @@ readout at the top left (below the room name), for measuring speed on the iPad.
   `src/game/state.js`), so a future server enforces it too. With actions left, End turn asks first ("You still
   have 3 actions. End turn?", with End turn and Keep playing in the same bar as Move); no question with none
   left, when the clock runs out, or for a computer guest. A double tap on End turn only asks, never ends two
-  turns. *Leave the match?*, *Leave practice?* and *Restart practice?* put Keep playing in gold and the
+  turns. **The turn also passes by itself** a short quiet beat (900 ms) after your last action, the same way End turn
+  does (so a hand over the limit opens the discard screen first), once per turn: not while anything is going on
+  (a walk, a door, a reveal, a meeting, a trade, a private screen, the menu, the card view, the chat panel), and not
+  while you hold an Espresso or stand in the Fire Exit with a guest (a free Trade is still possible): then End turn
+  glows gently and you tap it. End turn still ends early, with the question. (`src/main.js`, `autoEndState`; the
+  tests switch it off with `window.__noAutoEnd`, see `tests/smoke-lib.mjs`.) *Leave the match?*, *Leave practice?* and *Restart practice?* put Keep playing in gold and the
   leaving answer plain.
 - **Landscape only** — a window taller than wide (an iPad held upright) shows a card asking you to turn the
   iPad sideways; a wide but small window (page zoom, a small browser window) says "Make this window wider, or

@@ -787,7 +787,7 @@ Target: `docs/art-reference.jpg` (style, palette and finish; not its layout or i
   hit-tested where the finger lifts, after a re-layout may have moved the card). The click that follows
   is swallowed once so it cannot land on (and close) the card view just opened. Cards already drawn are
   kept (keyed by id), so a pressed card is never replaced mid-tap.
-- **Escape button**: enabled only when `canEscape` would let the guest out. Disabled reads "Clean + 3
+- **Escape button** (**SUPERSEDED in Round 4: there is no Escape button now, the Fire Exit has an Exit icon, see "Round 4, the turn flow, the lock choice, the Exit icon and the Cards screen"; the reasoning about what grey and green may tell still holds**): enabled only when `canEscape` would let the guest out. Disabled reads "Clean + 3
   Lanterns" for everyone barred (hot-seat), so a possessed guest's button looks exactly like a clean guest
   short of Lanterns; with no actions it reads "No actions left" for all. Enabled means the guest can win
   this instant, so it reveals nothing that pressing it would not.
@@ -1064,7 +1064,7 @@ Target: `docs/art-reference.jpg` (style, palette and finish; not its layout or i
   `tagsFrom`, where the guests' name tags take over).
 - **Doors**: no rings; closed doors of the active guest's room keep a soft threshold glow (dimmer than
   before) linking each to its brighter fog. Padlocks, barricades and swinging leaves are unchanged.
-- `cfg.player.speed` 2.0 → 2.5 m/s (rooms only now; 8 m ≈ 3 s), placeholder stride frequency to match.
+- `cfg.player.speed` 2.0 → 2.5 m/s (rooms only now; 8 m ≈ 3 s), placeholder stride frequency to match. (**2.5 → 2.9 m/s in Round 4**, 8 m ≈ 2.75 s; see "Round 4, the turn flow, ...".)
 
 ## Camera: see the whole hotel (Oct 2026)
 - **Zoom out to fit** (`src/camera.js` `fitDistance`): the zoom-out limit is the distance at which every
@@ -2464,7 +2464,7 @@ changed, and what was left on purpose:
   and none is an error: (a) no page, and not the match's Lantern tip, says how to get out: stand in the Fire Exit and
   tap Escape, 1 action; (b) End turn is never mentioned, nor that unused actions are lost; (e) nothing says what
   happens when a computer guest walks into you (it chooses, and a trade then asks you for a card). Sentences that would
-  fit: "Escaping costs 1 action: stand in the Fire Exit and tap Escape." / "Tap End turn when
+  fit: "Escaping costs 1 action: stand in the Fire Exit and tap Escape." (since Round 4: "...and tap the Exit icon.") / "Tap End turn when
   you are done; unused actions are lost." / "If a guest walks into your room, they choose; a trade then asks you for a
   card." **The owner approved all three on 15 Oct 2026 and they are on pages 4, 2 and 3** (the five pages, the
   complete role-screen line for a clean guest, the lantern Home Screen icon and the possessed computer guests'
@@ -2546,7 +2546,7 @@ show when the round will end ("a better indication that I'm going to the next ro
   Mirror that showed a Possession card, a Lantern that blocked a Possession card) sees the marker too. Red eyes in the
   portrait stay as approved on 10 Oct (a possessed viewer only; `redEyedAllies` is unchanged, it now asks the shared
   `knownPossessedIds` in `src/ui/allies.js`). A guest a trade scene is still holding back is not marked until the scene lets
-  go (`holdAlly`), and the strip re-checks that every frame without allocating (`hud.syncStrip`, run with `syncTell`).
+  go (`holdAlly`; for a clean viewer too, whose Lantern block the scene shows: `markBefore` / `markAfter` in `tradeReveal.show`), and the strip re-checks that every frame without allocating (`hud.syncStrip`, run with `syncTell`).
   Never on a guest the viewer is unsure of, never in practice, and **never on the viewer's own tile**: their own role is on
   their own panel, and the strip is the part of the screen that has always been role-free. The gold turn frame and the
   crimson marker can both show on one card (gold card edge, crimson portrait ring, badge and word), and the colour is never
@@ -2571,3 +2571,60 @@ show when the round will end ("a better indication that I'm going to the next ro
 - **Changed in an existing suite:** `tests/browser-profile.mjs` capped a strip name at 76 px; a cell is up to 96 px now.
 - **Owner decision left open:** whether a possessed player's own tile should also carry the marker (it does not: the panel
   already says it, and the strip stays role-free). One line in `stripGuests` would add it.
+
+## Round 4, the turn flow, the lock choice, the Exit icon and the Cards screen (15 Oct 2026 — interface and tests only; no rule or rule number changed)
+
+The owner's first iPad feedback of Round 4. Nothing in `docs/GAME_RULES.md`, the engine or any number in `src/data/rules.js`
+changed (the one edit in `rules.js` is the short card text, `cards.<type>.desc`, which the owner is asked to approve; the
+before/after list is in the scratchpad's `round4/learn/card-text.md`). Bots do exactly what they did.
+
+- **How to play and the Cards screen.** How to play now teaches the game, not the cards (no Espresso, Hand Mirror, Bandage, Knife or
+  Revolver numbers); five pages, the numbers still read from `rules.js`. What each card does is on a new read-only **Cards**
+  screen (`src/ui/cardsGuide.js`, list in `src/data/cardsGuide.js`: one entry per type in `CARDS`, so a new card appears by itself,
+  picture from the shared card tile, one line from `rules.cards.<type>.desc`). It opens from the main menu (now two rows of two
+  buttons), from the in-match Menu panel next to How to play, and from a small button on the last How to play page; it sits above
+  whatever opened it, owns the keys while it is up, holds the clock exactly as How to play does, and shows only kinds of cards
+  (the Possession card is plain, no guest's face). The escape sentence on page 4 now says "tap the Exit icon".
+- **The discard finishes itself.** The discard that brings the hand down to the limit shows the card leaving (about half a
+  second; only a fade under Reduce Motion; nothing can be tapped meanwhile) and then closes and passes the turn. There is no
+  "Keep these 6" step. Every discard is still two taps. `discard.open` refuses a hand that is not over the limit.
+- **The found-card reveal is short.** A kicker, a title ("You found a Lantern"), the cards large, and one line per KIND of card taken
+  from the description. No "You now hold N" tally and no "more than 6" note: the hand strip already says it.
+- **Walking 2.5 → 2.9 m/s** (`cfg.player.speed`; a walk between rooms about 14% shorter). The computer guests walk a multiple of the
+  same value, so they follow and keep their relation to the player; their thinking pauses are untouched. The real guests' walk cycle
+  and the footstep sounds follow the distance walked; the stand-in figure's stride rate went 1.85 → 2.15 in proportion. 3.0 would
+  give a clearer step (about 17% shorter): one number.
+- **The turn passes by itself** 900 ms after the human guest's last action, through exactly the path of the End turn button
+  (`endTurnNow`: the discard screen first when over the limit), once per turn (keyed on the game and the turn number), only when nothing
+  is going on (`autoEndBusy` in `src/main.js`) and never on a bot's turn, for a dead guest or after the clock cut a walk short. It waits
+  while the guest holds an **Espresso** (a free card to play) or stands in the Fire Exit with a guest (a free Trade is possible): End turn
+  then glows (a steady ring under Reduce Motion) and the player taps it. A test global, `window.__noAutoEnd`, switches it off
+  (`autoEndOff` in `tests/smoke-lib.mjs`, in every `launch()`); only `tests/browser-turnflow.mjs` turns it on. **For online play later:**
+  a guest who stays at 0 actions after the beat probably holds an Espresso or has a free Trade, a timing tell; the server flow should
+  end every turn the same way (same beat for everyone, or no tell). Nothing shows or plays it today.
+- **The lock choice** (`src/ui/lockChoice.js`). Tap the padlock on a locked door next to you (or the shut door) and a small card asks
+  which card to use: one button per KIND held ("Use Master Key", "Use Lock Pick"), one honest line each ("Always opens it. Used up." /
+  "Opens it half the time, or snaps. Used up either way.", the chance read from `rules.lockPickChance`), "Costs 1 action." and "Not
+  now". It works only in your action phase from the room next to the door (`adjacentLockedRooms`, the hand's Open condition); other
+  cases give the existing toasts and spend nothing. The choice goes through `onUnlock` (`useUnlock`), the same path as the hand's
+  Open button, and the door shows the result (`roomView.playUnlock`): the padlock pops and the door swings open after a held beat, or a
+  snapped pick shakes the padlock and the door stays shut; the door looks the same for either successful card. The sound is the
+  public unlock event plus `doorOpen` 0.45 s later. The padlock is hit-tested in screen space (at least 30 px), the door by ray; the
+  padlock is drawn about 35% larger while you hold a card for it. A double tap answers once (clicks in the first 300 ms are ignored and
+  a tap right after it closes is swallowed: `lockChoice.swallowTap`). A bot's unlock is not animated.
+- **The Exit icon replaces the Escape button.** In the Fire Exit, on the player's own turn, a door-with-an-arrow icon sits on the exit
+  door where a Search icon would sit ("Exit the hotel · 1 action"): green when this guest can leave (a tap escapes, as before, no
+  confirmation), grey when not (a tap says what is missing and spends nothing; with no actions: "No actions left."). Every guest in the
+  Fire Exit sees it, green or grey, and a possessed guest sees exactly what a clean guest short of Lanterns sees (same classes, drawing,
+  tag, label and toast sentence), so its existence tells nothing. The toast in a match is "Only a clean guest with 3 Lanterns can leave.
+  You have N." for everyone (so a possessed guest with 3 never reads "You need 3... You have 3."); in Practice "You need 3 Lanterns to
+  leave. You have N.". One table, `KINDS` in `src/ui/searchSpot.js`, defines every room action icon (search and exit today): the
+  drawing, the furniture it rests on, when it is offered, its looks and their words, its label; a new kind (Infirmary, Switchboard) is
+  one entry, a few CSS lines and one line in `main.js`'s `onTap` table. The exit kind hides while walking. Grey with 3 Lanterns is a
+  possessed player's own tell, the same information the old disabled button gave.
+- **Fixer round (after review).** The Lock Pick line on the lock card says "half the time" like the card does; the How to play line
+  says the Infirmary "restores 2 health"; the Practice end screen says "Fire Exit"; every toast is now in a live region
+  (`role="status"`) so a refusal is spoken; the Chat panel is held above the Rotate / Centre / Map buttons and scrolls inside itself when
+  the taller strip (a marked guest) pushes it down; and a clean viewer's strip marker waits for the trade scene that reveals it.
+- **Open for the owner:** the card wording (`round4/learn/card-text.md`; the Lantern line is the owner's own), whether a clean viewer's strip
+  should show the "Possessed" marker (see the strip section), and whether the top of the hotel feels too covered by the taller strip.

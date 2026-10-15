@@ -252,6 +252,11 @@ export function createChatUI(doc, { channel, feed, nameOf, colorOf, mySeat, gues
     let top = cluster.bottom + 8;
     if (s && s.width && cluster.right - w < s.right + 8) top = Math.max(top, s.bottom + 8);
     el.panel.style.top = `${Math.round(top)}px`;
+    // ...and never down over the camera buttons (Rotate, Centre, Map) at the bottom right: when the strip pushes the panel
+    // down (a guest marked "Possessed" makes it taller), the panel is held above them and its lines scroll inside it.
+    const ctl = doc.querySelector('.control-row')?.getBoundingClientRect();
+    const floor = ctl && ctl.height ? ctl.top : doc.documentElement.clientHeight - 130;
+    el.panel.style.maxHeight = `${Math.max(180, Math.round(floor - 8 - top))}px`;
     el.panel.style.right = `${Math.round(Math.max(8, doc.documentElement.clientWidth - cluster.right))}px`;
   }
   el.button.addEventListener('click', e => {

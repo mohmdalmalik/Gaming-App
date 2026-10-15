@@ -429,8 +429,10 @@ export function createHud(doc, cfg) {
     hideTimer() { el.timer.hidden = true; el.timer.classList.remove('low'); },
     // `seconds`: how long it stays (default cfg.ui.toastDuration); a longer message asks for longer.
     toast(message, seconds = cfg.ui.toastDuration) {
-      el.toast.textContent = message;
+      // (shown first, then written: a screen reader speaks text that appears in a live region it can already reach,
+      // so a refusal like "No actions left." is heard, not only seen)
       el.toast.hidden = false;
+      el.toast.textContent = message;
       clearTimeout(toastTimer);
       toastTimer = setTimeout(() => { el.toast.hidden = true; }, seconds * 1000);
     },

@@ -64,7 +64,7 @@ import { createGoTags } from './ui/goTags.js';
 import { createScreenTags, interfaceRects } from './ui/screenTags.js';
 import { standable } from './game/moves.js';
 import { usePracticeWording, prepareSoulCards } from './ui/cards.js';
-import { redEyedAllies } from './ui/allies.js';
+import { redEyedAllies, knownPossessedIds } from './ui/allies.js';
 import { createMenu } from './ui/menu.js';
 // (avatars: the wardrobe screen, the runtime portraits and the soul cards' faces from each seat's avatar)
 import { createAvatarEditor } from './ui/avatarEditor.js';
@@ -856,6 +856,7 @@ function runTrade(A, B, onDone = afterMeeting, { voluntary = false } = {}) {
         const wasPossessed = human.possessed;
         // (whether the player sees red eyes on the other guest before the trade, and after it: src/ui/allies.js)
         const allyBefore = redEyedAllies(state, human).has(other.id);
+        const markBefore = knownPossessedIds(state, human).has(other.id);   // (the strip's marker: for a clean guest too)
         const events = resolveTrade(state, floor, A, B, cA, cB);
         if (!events.ok) { refresh(); handoff.privateNote(human, ['The trade could not be made.'], onDone); return; }
         const newly = events.possessed?.find(e => e.newly === human.id);
@@ -866,7 +867,8 @@ function runTrade(A, B, onDone = afterMeeting, { voluntary = false } = {}) {
         const held = human.hand.filter(c => c.type === 'possession').length;
         tradeReveal.show({
           outcome: tradeOutcome(events, human, other), me: human, other, mine, theirs: given,
-          held, wasPossessed, allyBefore, allyAfter: redEyedAllies(state, human).has(other.id), notes: events.notes?.[human.id],
+          held, wasPossessed, allyBefore, allyAfter: redEyedAllies(state, human).has(other.id),
+          markBefore, markAfter: knownPossessedIds(state, human).has(other.id), notes: events.notes?.[human.id],
         }, () => (newly ? handoff.revealRole(human, { changed: true, by: other.name }, onDone) : onDone()));
         refresh();   // (once the scene is up: a guest it shows to be possessed turns red only as it shows it)
       });
@@ -1392,7 +1394,7 @@ function showEnd() {
   hud.hideConfirm(); selectedMove = null;
   endMusic();
   if (state.practice) {
-    overlays.showEnd('You reached the fire exit',
+    overlays.showEnd('You reached the Fire Exit',
       `Practice complete: ${rules.lanternsToEscape} Lanterns carried out.\n${floor.roomList.length} rooms of the hotel revealed, on round ${state.round}.`,
       { keepExploring: false, restartLabel: 'Restart practice' });
     countRecord({ practice: true });

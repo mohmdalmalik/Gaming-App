@@ -397,9 +397,20 @@ console.log('\n5. out of the match, the end screen');
   const safeNow = await game(() => { const g = window.__game; return g.floor.rooms.get(g.state.players[g.humanSeat()].currentRoom).safe; });
   if (!safeNow) {
     await game(() => window.__game.endTurn());
-    await waitFor(() => !document.getElementById('encounter-overlay').hidden || window.__game.isFinished(), null, 400000).catch(() => {});
-    const hit = await game(() => /hit you/.test(document.getElementById('encounter-body').innerText));
-    check(hit, 'a bot attacks you: the result says "hit you"');
+    // (another computer guest can walk in on the player before the scripted one does, and its meeting opens the same
+    // panel: that one is answered, and the wait goes on for the attack. What the screen said is told if none comes.)
+    let hit = false;
+    const seen = [];
+    for (const end = Date.now() + 400000; Date.now() < end && !hit;) {
+      await waitFor(() => !document.getElementById('encounter-overlay').hidden || window.__game.isFinished(), null, Math.max(1000, end - Date.now())).catch(() => {});
+      const s = await game(() => ({ title: document.getElementById('encounter-title').innerText, body: document.getElementById('encounter-body').innerText, fin: window.__game.isFinished() }));
+      hit = /hit you/.test(s.body);
+      if (!hit) seen.push(`${s.title.replace(/\s+/g, ' ')}: ${s.body.replace(/\s+/g, ' ').slice(0, 80)}`);
+      if (hit || s.fin) break;
+      await answerScreens();
+      await page.waitForTimeout(300);
+    }
+    check(hit, `a bot attacks you: the result says "hit you"${hit ? '' : ` (the screens that came instead: ${seen.slice(-3).join(' | ') || 'none'})`}`);
     await shot('12-attacked');
     if (hit) {
       await settle();

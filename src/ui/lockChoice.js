@@ -17,9 +17,13 @@ import { cardIcon } from './cardIcons.js';
 import { watchDialog } from './focus.js';
 import { GUARD_MS, tooSoon } from './tapGuard.js';
 
-// One line on what a card does here, in words: the numbers are the rules' own.
+// One line on what a card does here, in words: the numbers are the rules' own ("half the time" when the chance is
+// one in two, the way the Lock Pick card says it).
 export function lockHint(type) {
-  if (type === 'lockPick') return `Opens it ${Math.round(rules.lockPickChance * 100)}% of the time, or snaps. Used up either way.`;
+  if (type === 'lockPick') {
+    const chance = rules.lockPickChance === 0.5 ? 'half the time' : `${Math.round(rules.lockPickChance * 100)}% of the time`;
+    return `Opens it ${chance}, or snaps. Used up either way.`;
+  }
   return 'Always opens it. Used up.';
 }
 

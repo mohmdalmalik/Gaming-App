@@ -52,7 +52,7 @@ for (const [what, text] of [
   [`round ${rules.roundLimit}`, `round ${rules.roundLimit}`],
   [`${rules.maxHealth} health`, `${rules.maxHealth} health`],
   [`${rules.handLimit} cards`, `${rules.handLimit} cards`],
-  [`the Infirmary's ${rules.infirmaryHeal} for ${rules.infirmaryCost} action`, `heals ${rules.infirmaryHeal} for ${rules.infirmaryCost} action`],
+  [`the Infirmary's ${rules.infirmaryHeal} for ${rules.infirmaryCost} action`, `restores ${rules.infirmaryHeal} health for ${rules.infirmaryCost} action`],
 ]) check(all.includes(text), `the pages say ${what}`);
 // The pages teach the game, not the cards (the owner: "we don't need to mention espresso and we don't need to mention
 // the hand mirror"; what each card does is on the Cards screen). The Lantern and the Possession card are the game itself.
@@ -80,9 +80,9 @@ const other = JSON.parse(JSON.stringify(rules));
 Object.assign(other, { actionPointsPerTurn: 7, turnTimerSeconds: 33, lanternsToEscape: 5, roundLimit: 11, maxHealth: 9, handLimit: 8,
   attackCost: 3, escapeCost: 3, infirmaryHeal: 5, infirmaryCost: 2, lanternsDealtEach: 2, bandageHeal: 3, moveCost: 2, openDoorCost: 2, searchCost: 2, playCardCost: 2, switchboardCost: 2 });
 const changed = pageText(other).join('\n');
-for (const text of ['7 actions each turn', '33 seconds', '5 Lanterns', 'round 11', '9 health', '8 cards', '3 actions', 'heals 5 for 2 actions', 'Five open', 'two Lanterns',
+for (const text of ['7 actions each turn', '33 seconds', '5 Lanterns', 'round 11', '9 health', '8 cards', '3 actions', 'restores 5 health for 2 actions', 'Five open', 'two Lanterns',
   'cost 2 actions each', 'Escaping costs 3 actions: stand in the Fire Exit and tap the Exit icon.', 'you need a weapon and 3 actions']) check(changed.includes(text), `with other rules the pages say "${text}"`);
-for (const text of ['4 actions', '45 seconds', '3 Lanterns', 'round 8', '4 health', '6 cards', 'heals 2 for', 'cost 1 action each', 'Escaping costs 1 action', 'weapon and 1 action']) check(!changed.includes(text), `...and no longer "${text}"`);
+for (const text of ['4 actions', '45 seconds', '3 Lanterns', 'round 8', '4 health', '6 cards', 'restores 2 health for', 'cost 1 action each', 'Escaping costs 1 action', 'weapon and 1 action']) check(!changed.includes(text), `...and no longer "${text}"`);
 // (the costs that differ are listed one by one, not squeezed into a false sentence)
 const mixed = JSON.parse(JSON.stringify(rules)); mixed.searchCost = 2;
 check(/searching 2 actions/.test(pageText(mixed).join('\n')) && !/cost 1 action each/.test(pageText(mixed).join('\n')), 'when the costs differ, each is said on its own');

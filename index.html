@@ -130,10 +130,10 @@
         </span>
       </div>
 
-      <div id="toast" class="toast" hidden></div>
+      <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
 
       <!-- The quick-chat panel (filled from src/data/chat.js by src/ui/chat.js): one tap sends and closes. -->
-      <div id="chat-panel" class="chat-panel" role="dialog" aria-label="Quick chat" hidden></div>
+      <div id="chat-panel" class="chat-panel" role="dialog" aria-label="Quick chat" data-scrolls hidden></div>
     </div>
 
     <!-- Discard-down-to-the-hand-limit modal: the ONLY place the hand limit is settled, when a guest

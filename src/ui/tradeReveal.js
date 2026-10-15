@@ -28,6 +28,9 @@
 // Red eyes on the other guest only as src/ui/allies.js allows (the player possessed, and certain of
 // them): `allyBefore` (already known: red from the start) and `allyAfter` (this trade showed it: they
 // turn at the moment it is shown). Your own possessed portrait only when you are possessed.
+// The guest strip's "Possessed" marker is for either side (`markBefore` / `markAfter`, the same two questions asked of
+// src/ui/allies.js knownPossessedIds): a guest this trade shows to be possessed is held back from the strip, red eyes or
+// not, until the scene shows it.
 //
 // Everything moves with CSS (styles.css, "Trade reveal" blocks); embers, ash and smoke are drawn on one
 // small canvas, and the burning card is a per-pixel dissolve of its own face on a card-sized canvas.
@@ -177,7 +180,7 @@ export function createTradeReveal(doc, { handoff }) {
 
   function stop() {
     if (!cur) return;
-    if (cur.morphThem) releaseAlly(cur.otherId);
+    if (cur.holdThem) releaseAlly(cur.otherId);
     for (const t of cur.timers) clearTimeout(t);
     cur.fx.stop();
     for (const b of cur.burns) b.cancel();
@@ -214,7 +217,8 @@ export function createTradeReveal(doc, { handoff }) {
   function finish() {
     if (!cur) return;
     cur.playing = false;
-    if (cur.morphThem) { cur.themSeat.classList.add('known', 'turned'); releaseAlly(cur.otherId); }   // (whatever the outcome's own timing)
+    if (cur.morphThem) cur.themSeat.classList.add('known', 'turned');   // (whatever the outcome's own timing)
+    if (cur.holdThem) releaseAlly(cur.otherId);
     cur.cap.classList.add('on');
     box.classList.remove('tr-playing');
     clearTimeout(armT);
@@ -500,7 +504,7 @@ export function createTradeReveal(doc, { handoff }) {
     // src/ui/allies.js) their eyes turn red, with a crimson pulse; on a clean player's, only the crimson
     // line round their portrait (the Lantern block).
     const revealThem = (pulse = true) => () => {
-      if (P.morphThem) releaseAlly(P.otherId);
+      if (P.holdThem) releaseAlly(P.otherId);
       themSeat.classList.add('known');
       if (P.morphThem) themSeat.classList.add('turned', ...(pulse ? ['pulse'] : []));
     };
@@ -605,7 +609,8 @@ export function createTradeReveal(doc, { handoff }) {
     // spec: { outcome, me, other, mine (the card you gave), theirs (the card they gave), held (the souls
     // you hold now — all new, all yours; 'possessed'), empty (ids with no ordinary card; 'noTrade'),
     // wasPossessed (you were possessed before this trade), allyBefore / allyAfter (whether you see red
-    // eyes on them before and after it: src/ui/allies.js), notes (this trade's own private notes: this
+    // eyes on them before and after it: src/ui/allies.js), markBefore / markAfter (whether the guest strip marks
+    // them before and after it: the same, for either side), notes (this trade's own private notes: this
     // screen says them, so they are taken off the waiting list) }.
     show(spec, onContinue) {
       stop();
@@ -630,12 +635,14 @@ export function createTradeReveal(doc, { handoff }) {
       const meSeat = seat(me, { you: true, possessedLook: spec.wasPossessed, morph: outcome === 'possessed' && !spec.wasPossessed, side: 'me' });
       // (their red eyes: only as src/ui/allies.js allows — already known, or turning when this trade shows it)
       const morphThem = !!spec.allyAfter && !spec.allyBefore;
+      // (a clean player's strip marks a guest this trade shows to be possessed, with no red eyes: held back the same way)
+      const holdThem = morphThem || (!!spec.markAfter && !spec.markBefore);
       const themSeat = seat(other, { you: false, possessedLook: !!spec.allyBefore, morph: morphThem, side: 'them' });
       if (spec.allyBefore) themSeat.classList.add('known');
       stage.append(meSeat, themSeat);
 
-      const P = { meSeat, themSeat, held: [], empties: [], mine: null, theirs: null, morphThem, otherId: other.id };
-      if (morphThem) holdAlly(other.id);   // (no red eyes on them anywhere until this scene shows it)
+      const P = { meSeat, themSeat, held: [], empties: [], mine: null, theirs: null, morphThem, holdThem, otherId: other.id };
+      if (holdThem) holdAlly(other.id);   // (no red eyes or strip marker on them anywhere until this scene shows it)
       if (outcome === 'noTrade') {
         const empty = spec.empty || [];
         if (empty.includes(me.id)) { const e = emptySlot('l'); P.empties.push(e); stage.appendChild(e); }
@@ -670,7 +677,7 @@ export function createTradeReveal(doc, { handoff }) {
       if (anchor && anchor.parentNode === box) anchor.before(stage, cap); else box.querySelector('.modal-actions')?.before(stage, cap);
 
       const fx = createFx(canvas, !reduced);
-      cur = { outcome, stage, cap, fx, timers: [], steps: [], burns: [], playing: true, instant: false, mainPlayed: false, particles: !reduced, themSeat, morphThem, otherId: other.id };
+      cur = { outcome, stage, cap, fx, timers: [], steps: [], burns: [], playing: true, instant: false, mainPlayed: false, particles: !reduced, themSeat, morphThem, holdThem, otherId: other.id };
       fx.fit();
       overlay.addEventListener('click', onTap);
 

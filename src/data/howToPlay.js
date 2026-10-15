@@ -72,7 +72,7 @@ export const HOW_TO_PLAY = {
     {
       title: 'Staying alive',
       lines: [
-        r => `You have ${r.maxHealth} health. A Bandage heals ${r.cards.bandage.heal}. The Infirmary heals ${r.infirmaryHeal} for ${actions(r.infirmaryCost)}. At 0 health you are out of the game and drop everything you carry.`,
+        r => `You have ${r.maxHealth} health. A Bandage heals ${r.cards.bandage.heal}. The Infirmary heals ${r.infirmaryHeal} for ${actions(r.infirmaryCost)}. At 0 health you are out of the game and drop everything you carry, except Possession cards, which leave the game.`,
         r => `At the end of your turn you can keep ${r.handLimit} cards. Souls do not count.`,
         () => "A Hand Mirror shows you one guest's cards. The Switchboard tells everyone how many guests are possessed, but not who.",
       ],
@@ -89,7 +89,7 @@ export const ROLE_REVEAL = {
   headline: possessed => (possessed ? 'You are possessed' : 'You are clean'),
   otherSide: (possessed, r) => (possessed
     ? `The clean guests win if one of them escapes with ${lanterns(r.lanternsToEscape)}.`
-    : 'The possessed win if everyone is possessed, or dawn breaks before anyone escapes.'),
+    : 'The possessed win if every living guest is possessed, or no clean guest is left, or dawn breaks before anyone escapes.'),
 };
 
 // The Lanterns chip on the match screen (src/hud.js): the player's OWN count out of the number needed.

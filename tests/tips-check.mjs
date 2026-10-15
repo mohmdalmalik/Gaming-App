@@ -78,6 +78,7 @@ async function begin(query) {
 // A double tap on a tip's button (two clicks 140 ms apart at its middle): the card goes (or shrinks) at the
 // first, and the second must not reach the hotel under it and open a door. On a machine so slow that the
 // two taps arrive further apart than a double tap, the hotel check is skipped (said so).
+let slowTaps = false;       // (the last double tap came too slowly to be one: what follows from it is not judged)
 async function doubleTap(sel, what) {
   const b = await ev(s => { const r = document.querySelector(s).getBoundingClientRect(); return { x: (r.left + r.right) / 2, y: (r.top + r.bottom) / 2 }; }, sel);
   const state = () => ev(() => ({ rooms: window.__game.hotelRooms().length, ap: window.__game.activePlayer().actionPoints }));
@@ -87,6 +88,7 @@ async function doubleTap(sel, what) {
   await page.mouse.click(b.x, b.y); await page.waitForTimeout(140); await page.mouse.click(b.x, b.y);
   await page.waitForTimeout(600);
   const b1 = await state(), gap = await ev(() => (window.__taps.length > 1 ? window.__taps[1] - window.__taps[0] : Infinity));
+  slowTaps = gap >= TIPS_TIMING.guardMs - 50;
   if (gap < TIPS_TIMING.guardMs - 50) check(b1.rooms === b0.rooms && b1.ap === b0.ap, `...a double tap on ${what}: the second tap does nothing on the hotel (rooms ${b0.rooms} -> ${b1.rooms}, actions ${b0.ap} -> ${b1.ap})`);
   else console.log(`  (skipped: the double tap on ${what} arrived ${Math.round(gap)} ms apart on this slow machine)`);
   return ev(() => window.__tipAtTap);
@@ -211,8 +213,12 @@ try {
   const card0 = await doubleTap('#tip .tip-hide', 'Hide tips');
   const card1 = await ev(() => document.getElementById('tip').getBoundingClientRect().toJSON());
   const kept = side === 'above' ? Math.abs(card0.bottom - card1.bottom) < 2 : side === 'below' ? Math.abs(card0.top - card1.top) < 2 : Math.abs((card0.top + card0.bottom) - (card1.top + card1.bottom)) < 4;
-  check(kept, `...the shorter "Tips are off" card keeps its edge toward what it explained (${side}: ${Math.round(card0.top)}-${Math.round(card0.bottom)} -> ${Math.round(card1.top)}-${Math.round(card1.bottom)})`);
-  check(/Settings can turn them back on/.test(await ev(() => document.querySelector('#tip .tip-text').textContent)) && !await tipHidden(), 'Hide tips: the card says tips are off');
+  // (on a machine so slow that the taps were seconds apart the short "Tips are off" card may be gone before it is looked at: said, not judged)
+  if (slowTaps) console.log('  (skipped: the "Tips are off" card is judged only when the taps came as quickly as a double tap)');
+  else {
+    check(kept, `...the shorter "Tips are off" card keeps its edge toward what it explained (${side}: ${Math.round(card0.top)}-${Math.round(card0.bottom)} -> ${Math.round(card1.top)}-${Math.round(card1.bottom)})`);
+    check(/Settings can turn them back on/.test(await ev(() => document.querySelector('#tip .tip-text').textContent)) && !await tipHidden(), 'Hide tips: the card says tips are off');
+  }
   await shot('hidden');
   check(!!await poll(() => document.getElementById('tip').hidden, null, TIPS_TIMING.hiddenMs + 4000), '...then goes');
   check((await saved()).tips === 'off', '...and Settings > Tips is saved as Off');
@@ -242,8 +248,9 @@ try {
   // --- practice: no tip while a question is up; the tips seen before are back ------------------------------------
   console.log('\npractice');
   await begin('mode=practice&intro=off');
-  await page.waitForTimeout(600);
-  await page.click('#btn-leave');
+  // (the Menu button at once, by a click the page makes itself: "Your turn" needs a moment to come up, and on a slow machine a
+  // real tap may arrive after it has been on screen for seconds, which counts it as seen)
+  await ev(() => document.getElementById('btn-leave').click());
   await poll(() => window.__game.menuPanelOpen(), null, 5000);
   await page.waitForTimeout(3000);
   check(await ev(() => window.__game.menuPanelOpen()) && await tipHidden(), 'no tip while the Menu panel is up');

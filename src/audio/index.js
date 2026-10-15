@@ -9,12 +9,19 @@
 //   audio.stinger('win');              // (or sfx('win') through the bus)
 //   audio.applySettings();             // after the Music / Sound effects setting changes
 //   audio.prefetch('final');           // decode a track ahead of its scene
+//   audio.prefetch('game', { decode: false });   // (or only download it: the bytes wait until its scene starts)
+//   audio.prefetchEnding();            // download the end-of-match fanfares ahead (main.js: from round 3)
 //
 // Browsers (iOS Safari above all) allow no sound until the page is touched: the audio context is
 // created on the first touch, click or key, which also starts the scene's music. Until then cues are
 // dropped. Music files are decoded only while their scene is near (a decoded minute of music is
 // ~20 MB); the short effects are all decoded once, after that first touch. When the page is hidden
 // the sound pauses. Nothing here ever throws: without Web Audio the game is simply silent.
+//
+// A download that fails (a Wi-Fi hiccup) is tried again after a pause, never in a tight loop and never holding
+// the game up: the game goes on without that sound meanwhile and it arrives when the file does. A file that is
+// really not there (404) is not asked for again. A file that failed every try is asked for afresh after a rest,
+// the next time something wants it (an effect used again, the scene's music, the next scene).
 import { onSfx } from './bus.js';
 import { MUSIC, EFFECTS } from './library.js';
 import { CUES, SCENES, TRACK_GAIN, STINGER_GAIN, MAX_VOICES } from './sounds.js';
@@ -23,7 +30,13 @@ import { cueForButton } from './buttonCues.js';
 const BASE = new URL('../../assets/audio/', import.meta.url);
 const dbGain = d => Math.pow(10, d / 20);
 const LIMITER_TRIM = dbGain(-1.71);   // undoes the limiter's own make-up gain (see ensureContext)
-const SILENT = { setScene() {}, stinger() {}, stopStinger() {}, applySettings() {}, prefetch() {}, play() {}, scene: 'none', state: () => ({ ok: false }) };
+// The pauses before the second and the third try of a download that failed (ms), and how long a file that failed
+// every try is left alone before it is asked for afresh.
+export const RETRY_PAUSES = [3000, 10000];
+export const COOL_OFF_MS = 60000;
+// The scene whose music follows (its download starts as this scene begins).
+const NEXT_TRACK = { intro: 'game' };
+const SILENT = { setScene() {}, stinger() {}, stopStinger() {}, applySettings() {}, prefetch() {}, prefetchEnding() {}, play() {}, scene: 'none', state: () => ({ ok: false }) };
 
 export function createAudio({ settings, doc = document, win = window } = {}) {
   const AC = win.AudioContext || win.webkitAudioContext;
@@ -37,7 +50,7 @@ export function createAudio({ settings, doc = document, win = window } = {}) {
   let scene = 'none';
   const buffers = new Map();     // file -> AudioBuffer
   const loading = new Map();     // file -> Promise<AudioBuffer|null>
-  const failed = new Set();
+  const failed = new Map();      // file -> { at: when it failed its last try, gone: it is not there (404) }
   const tracks = new Map();      // music track name -> { src, gain, fading, timer }
   let current = null;            // the track the scene wants (playing or loading)
   const voices = [];             // effects sounding now: { name, src, low, out, gain }
@@ -134,22 +147,44 @@ export function createAudio({ settings, doc = document, win = window } = {}) {
       if (p && typeof p.then === 'function') p.then(resolve, reject);
     });
   }
-  // The file's bytes: fetched ahead (before the first tap, see setScene) or now.
-  const bytes = new Map();       // file -> Promise<ArrayBuffer>
-  const fetchBytes = file => fetch(new URL(file, BASE)).then(r => { if (!r.ok) throw new Error(`${r.status} ${file}`); return r.arrayBuffer(); });
+  // The file's bytes: fetched ahead (before the first tap, see setScene; or a scene ahead) or now.
+  const bytes = new Map();       // file -> Promise<{ data } | { err }>
+  const fetchBytes = file => fetch(new URL(file, BASE)).then(r => {
+    if (!r.ok) { const e = new Error(`${r.status} ${file}`); e.gone = r.status === 404 || r.status === 410; throw e; }
+    return r.arrayBuffer();
+  });
+  // ...and if the request fails, again after a pause (RETRY_PAUSES), then given up on for now. Only the waiting
+  // is slow: nothing waits for it.
+  async function fetchRetrying(file) {
+    for (let i = 0; ; i++) {
+      try { return await fetchBytes(file); } catch (err) {
+        if (err.gone || i >= RETRY_PAUSES.length) throw err;
+        note(file, 'download failed', { again: RETRY_PAUSES[i] });
+        await new Promise(r => setTimeout(r, RETRY_PAUSES[i]));
+      }
+    }
+  }
+  // Left alone for now? (it is not there, or it failed every try a short while ago)
+  const restingFile = file => { const f = failed.get(file); return !!f && (f.gone || performance.now() - f.at < COOL_OFF_MS); };
   function prefetchBytes(file) {
-    if (!bytes.has(file) && !buffers.has(file) && !failed.has(file)) bytes.set(file, fetchBytes(file).catch(() => null));
+    if (!bytes.has(file) && !buffers.has(file) && !loading.has(file) && !restingFile(file)) bytes.set(file, fetchRetrying(file).then(data => ({ data }), err => ({ err })));
   }
   function load(file) {
     if (buffers.has(file)) return Promise.resolve(buffers.get(file));
     if (loading.has(file)) return loading.get(file);
-    if (!ctx || failed.has(file)) return Promise.resolve(null);
+    if (!ctx || restingFile(file)) return Promise.resolve(null);
     const early = bytes.get(file);
     bytes.delete(file);
-    const p = (early ? early.then(b => b || fetchBytes(file)) : fetchBytes(file))
+    // (bytes fetched ahead that failed every try are not asked for again at once: the file rests, below)
+    const p = (early ? early.then(r => { if (r.err) throw r.err; return r.data; }) : fetchRetrying(file))
       .then(decode)
-      .then(buf => { buffers.set(file, buf); loading.delete(file); return buf; })
-      .catch(err => { failed.add(file); loading.delete(file); console.warn('a sound could not be loaded:', file, err?.message || err); return null; });
+      .then(buf => { buffers.set(file, buf); failed.delete(file); loading.delete(file); return buf; })
+      .catch(err => {
+        failed.set(file, { at: performance.now(), gone: !!err?.gone });
+        loading.delete(file);
+        console.warn('a sound could not be loaded:', file, err?.message || err);
+        return null;
+      });
     loading.set(file, p);
     return p;
   }
@@ -160,8 +195,11 @@ export function createAudio({ settings, doc = document, win = window } = {}) {
     const files = [...new Set(Object.values(EFFECTS).map(e => e.file))];
     // a few at a time, the interface first (they are the first heard)
     const queue = files.sort((a, b) => (/click|select|open|close|joined|lift/.test(b) ? 1 : 0) - (/click|select|open|close|joined|lift/.test(a) ? 1 : 0));
-    const worker = async () => { while (queue.length) await load(queue.shift()); };
+    // (three in a row failing every try: the connection is down; the rest are asked for when they are needed)
+    let lost = 0;
+    const worker = async () => { while (queue.length && lost < 3) { const b = await load(queue.shift()); lost = b ? 0 : lost + 1; } };
     await Promise.all([worker(), worker(), worker()]);
+    if (queue.length) preloading = false;
   }
 
   // --- music -------------------------------------------------------------------------------------
@@ -229,10 +267,21 @@ export function createAudio({ settings, doc = document, win = window } = {}) {
     current = want;
     if (!want || tracks.has(want)) { release(); return; }
     load(MUSIC[want].file).then(buf => {
-      if (!buf || current !== want || tracks.has(want) || !ctx) return;
+      if (!buf) { askAgainLater(want); return; }
+      if (current !== want || tracks.has(want) || !ctx) return;
+      askedAgain.delete(want);
       startTrack(want, buf, fadeOverride ?? sc.fadeIn ?? 2);
       release();
     });
+  }
+  // The scene's music failed every try (no connection for a while): once the file's rest is over, if the scene
+  // is still on and wants it, ask again (at most twice; a scene that starts again asks again by itself).
+  const askedAgain = new Map();
+  function askAgainLater(name) {
+    const f = failed.get(MUSIC[name].file);
+    if (!f || f.gone || (askedAgain.get(name) || 0) >= 2) return;
+    askedAgain.set(name, (askedAgain.get(name) || 0) + 1);
+    setTimeout(() => { if (ctx && unlocked && current === name && !tracks.has(name)) { try { syncMusic(); } catch { /* ignore */ } } }, COOL_OFF_MS + 500);
   }
 
   function setScene(name) {
@@ -243,6 +292,9 @@ export function createAudio({ settings, doc = document, win = window } = {}) {
     // before the first tap nothing can play, but the music can already be on its way
     const track = SCENES[name]?.track;
     if (!unlocked && track && level('music') > 0) prefetchBytes(MUSIC[track].file);
+    // the lift: a match is being set up and the night music is next, so its download starts now (after the first
+    // tap only: before it, nothing but the scene's own track is fetched)
+    if (NEXT_TRACK[name]) prefetch(NEXT_TRACK[name], { decode: false });
     try { syncMusic(); } catch (err) { console.warn('music:', err); }
   }
 
@@ -386,18 +438,25 @@ export function createAudio({ settings, doc = document, win = window } = {}) {
     }
   }
 
-  function prefetch(track) {
-    if (ctx && unlocked && level('music') > 0 && MUSIC[track]) load(MUSIC[track].file);
+  // A track (or fanfare) ahead of the scene that needs it: decoded now, or (decode: false) only downloaded and
+  // decoded when it is wanted. Only after the first tap (before it, only the scene's own track is fetched: setScene).
+  function prefetch(track, { decode = true } = {}) {
+    if (!unlocked || level('music') <= 0 || !MUSIC[track]) return;
+    if (decode && ctx) load(MUSIC[track].file); else prefetchBytes(MUSIC[track].file);
   }
+  // The end-of-match fanfares (about 590 KB in all), whichever side the guest is on: so the end screen's music
+  // never waits on the network (a fanfare that arrives later than 2.5 s after the end is dropped: see stinger).
+  const ENDINGS = ['win', 'winPossessed', 'lose', 'dawn'];
+  function prefetchEnding() { for (const name of ENDINGS) prefetch(name, { decode: false }); }
 
   const api = {
-    setScene, stinger, stopStinger, applySettings, prefetch, play,
+    setScene, stinger, stopStinger, applySettings, prefetch, prefetchEnding, play,
     get scene() { return scene; },
     // tests / debugging
     state: () => ({
       ok: true, context: ctx?.state ?? 'none', unlocked, scene, track: current,
       playing: [...tracks].filter(([, t]) => !t.fading).map(([n]) => n), fading: [...tracks].filter(([, t]) => t.fading).map(([n]) => n),
-      decoded: [...buffers.keys()], failed: [...failed], voices: voices.map(v => v.name), sampleRate: ctx?.sampleRate ?? 0,
+      decoded: [...buffers.keys()], failed: [...failed.keys()], resting: [...failed.keys()].filter(restingFile), voices: voices.map(v => v.name), sampleRate: ctx?.sampleRate ?? 0,
       music: level('music'), sound: level('sound'),
     }),
   };

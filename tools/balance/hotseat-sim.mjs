@@ -80,7 +80,7 @@ import * as A from '../../src/game/actions.js';
 
 const N = parseInt(process.argv[2], 10) || 400;
 const PLAYERS = parseInt(process.argv[3], 10) || 6;
-applyMode('hotseat', PLAYERS);
+applyMode('match', PLAYERS);
 const floor = createHotel(hotel, config);   // rebuilt for every match by createState
 
 // PERSONALITIES (tools/balance/personalities.mjs): a separate mode, so the default run below is
@@ -482,7 +482,7 @@ function botTurn(st, p, m) {
 const DECK_TYPES = Object.keys(rules.deck);
 
 function match(seed) {
-  const st = S.createState(floor, roster.slice(0, PLAYERS), seed, { mode: 'hotseat' });
+  const st = S.createState(floor, roster.slice(0, PLAYERS), seed, { mode: 'match' });
   memo = freshMemo();
   botRng = makeRng((seed * 2654435761) ^ 0xb07b07);
   const m = { meetings: 0, trades: 0, attacks: 0, deaths: 0, attempts: 0, possessed: 0, blocked: 0, burned: 0, found: 0, stuckTurns: 0, opened: 0, jammed: 0, closedOff: 0,

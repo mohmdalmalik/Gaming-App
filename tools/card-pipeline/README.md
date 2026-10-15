@@ -1,11 +1,14 @@
-# Card-art pipeline (Blender → assets/cards/*.jpg)
+# Card-art pipeline (Blender → tools/card-pipeline/art/*.jpg)
 
-Makes the illustrations for every card except the Lantern. `assets/cards/lantern.jpg` is the
+Makes the illustrations for every card except the Lantern. `art/lantern.jpg` is the
 painted reference and this pipeline never touches it. Each card shows one object, centred, in a
 three-quarter view, lit by a warm key light with a soft fill and a rim light, on the Lantern's dark
 mottled green backdrop with a vignette. The evil Possession card uses a purple/black backdrop and
-violet light. This is a dev tool. The game only loads the finished JPEGs, which are registered in
-`CARD_ART` in `src/ui/cards.js`.
+violet light. This is a dev tool. **The game does not show these 640 x 640 pictures any more**: every card has
+a finished face (`assets/cards/face/`, the owner's designs, made by `import_owner_cards.py`; the Lock Pick's by
+`make_lockpick_face.py`, which reads `art/lockPick.jpg`). The pictures were moved out of `assets/cards/` into `art/`
+on 14 Oct 2026 and `CARD_ART` was removed from `src/ui/cards.js`; what is left of this pipeline is the reference for
+new illustrations and the input of the Lock Pick face.
 
 ## Run
 ```bash

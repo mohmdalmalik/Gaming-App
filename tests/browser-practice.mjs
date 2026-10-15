@@ -24,11 +24,10 @@ function findChrome() {
   const candidates = [process.env.CHROME_PATH, '/opt/pw-browsers/chromium-1194/chrome-linux/chrome'].filter(Boolean);
   for (const c of candidates) if (fs.existsSync(c)) return c;
   const root = process.env.PLAYWRIGHT_BROWSERS_PATH || '/opt/pw-browsers';
-  if (!fs.existsSync(root)) throw new Error('chromium not found: set CHROME_PATH');
-  for (const d of fs.readdirSync(root)) for (const sub of ['chrome-linux/chrome', 'chrome-linux64/chrome']) {
+  if (fs.existsSync(root)) for (const d of fs.readdirSync(root)) for (const sub of ['chrome-linux/chrome', 'chrome-linux64/chrome']) {
     const p = path.join(root, d, sub); if (fs.existsSync(p)) return p;
   }
-  throw new Error('chromium not found');
+  return undefined;     // Playwright's own Chromium (npx playwright-core install chromium); it says so itself if there is none
 }
 
 const failures = [];

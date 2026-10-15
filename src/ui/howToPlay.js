@@ -41,12 +41,14 @@ export function createHowToPlay(doc, { onClose = null } = {}) {
   // Every page gets the height of the tallest one, so Back and Next stay where the finger found them
   // while the pages turn (measured when it opens, and again if the window changes shape).
   function fit() {
-    const keep = page;
+    const keep = page, had = doc.activeElement;
     el.lines.style.height = '';
     let tallest = 0;
     for (let i = 0; i <= last; i++) { page = i; render(); tallest = Math.max(tallest, el.lines.scrollHeight); }
     page = keep; render();
     el.lines.style.height = `${tallest}px`;
+    // (measuring turned Next off on the last page, and a button that goes dim drops the focus: the one that had it gets it back)
+    if (had && had !== doc.body && had !== doc.activeElement && had.isConnected && !had.disabled) { try { had.focus({ preventScroll: true }); } catch { /* no focus here */ } }
   }
   function turn(to) {
     if (to < 0 || to > last || to === page) return;

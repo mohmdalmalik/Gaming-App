@@ -115,7 +115,7 @@ if (params.get('camera') === 'diagonal') Object.assign(cfg.camera, cfg.cameraDia
 // with the same number of guests, the player in the first seat.)
 if (params.get('mode') === 'hotseat') {
   params.set('mode', 'bots');
-  if (!params.has('bots')) params.set('bots', String(Math.max(3, Math.min(5, (parseInt(params.get('players'), 10) || 6) - 1))));
+  if (!params.has('bots')) params.set('bots', String(Math.max(rules.minBots, Math.min(rules.maxBots, (parseInt(params.get('players'), 10) || rules.maxPlayers) - 1))));
   if (!params.has('seat')) params.set('seat', '0');
 }
 const DIRECT = ['practice', 'bots'].includes(params.get('mode')) ? params.get('mode') : null;
@@ -1423,7 +1423,7 @@ async function planGame(choice) {
     return { practice: true, seats, cast: seats, humanSeat: 0, profiles: [null], possessedIndex: null, choice };
   }
   const mods = await loadBots();
-  const n = Math.max(3, Math.min(5, Math.round(choice.bots) || 5)) + 1;
+  const n = Math.max(rules.minBots, Math.min(rules.maxBots, Math.round(choice.bots) || rules.maxBots)) + 1;
   const rng = makeRng(Number.isFinite(forcedSeed) && forcedSeed > 0 ? (forcedSeed * 7919 + 13) >>> 0 : ((Date.now() ^ Math.floor(Math.random() * 1e9)) >>> 0) || 1);
   // (the 5 draws that shuffled the six named guests before are still drawn, so a ?seed= keeps its seat,
   // its bots and its possessed seat)
@@ -1462,7 +1462,7 @@ function setupGame(plan) {
   botProfiles = plan.profiles;
   applyMode(PRACTICE ? 'practice' : 'match', cast.length);
   if (TIMER_OFF) rules.turnTimerEnabled = false;
-  Object.assign(state, { roster: cast, mode: PRACTICE ? 'practice' : 'match', practice: PRACTICE, hotseat: false });
+  Object.assign(state, { roster: cast, mode: PRACTICE ? 'practice' : 'match', practice: PRACTICE });
   state.setup = { possessedIndex: plan.possessedIndex };
   movers.length = 0;
   cast.forEach((_, i) => movers.push(createPlayer(cfg, startSpot(i))));
@@ -1591,6 +1591,7 @@ async function startBots(choice) {
     username: x.s.name, color: x.s.color, avatar: x.s.avatar, you: false,
   })));
   portraits.prepare(tablePortraits(plan));     // (the table's portraits, drawn while it fills up)
+  audio.prefetch('game', { decode: false });   // (the night music's download, while the table fills up and the lift rises)
   menu.matchmake(seats, { onFull: () => enterGame(plan, { guests: 3 }), onCancel: () => {} });
 }
 // Every seat's two portraits, normal and possessed (a soul card's face, an ally's red eyes): drawn ahead,
@@ -1910,6 +1911,7 @@ createInput(view.renderer.domElement, {
   onTap(x, y) {
     if (chat.swallowTap()) return;     // (a tap that closes the chat panel does nothing else)
     if (tips.swallowTap()) return;     // (nor the second tap of a double tap on a tip's button)
+    if (gameMenu.swallowTap() || overlays.swallowTap()) return;     // (nor on the Menu panel or the Leave question closing)
     if (!running || state.finished || uiBusy()) return;
     if (!myTurn() || !inActionPhase) return;
     if (inDeadZone(x, y)) return;
@@ -1997,12 +1999,17 @@ const gameSounds = createGameSounds({
   // (an attack the player is in shows on the meeting screen, which plays its own blow: src/ui/meeting.js)
   skipAttack: e => e.by === humanSeat || e.target === humanSeat,
 });
+// From this round on, the four end fanfares are downloaded ahead (about 590 KB, bytes only, nothing decoded): a match runs
+// six rounds at the median and can end sooner, so fetching them only in round 7 left most matches to fetch at the end.
+const ENDING_FROM_ROUND = 3;
 function syncSound() {
   const playing = running && phase === 'game';
   gameSounds.update(playing);
   if (!playing || state.finished) return;
   audio.setScene(!PRACTICE && isFinal(state) ? 'final' : 'game');
-  if (!PRACTICE && state.round >= rules.roundLimit - 1) audio.prefetch('final');
+  if (PRACTICE) return;
+  if (state.round >= ENDING_FROM_ROUND) audio.prefetchEnding();
+  if (state.round >= rules.roundLimit - 1) audio.prefetch('final');      // (decoded ahead: the last round's music)
 }
 // The end screen: the round's music gives way to a stinger, from the player's side of the table (dawn
 // tolls its bell first).
@@ -2096,7 +2103,7 @@ if (DIRECT) {
   phase = 'game';
   const sub = document.getElementById('start-sub');
   const dealt = rules.lanternsDealtEach || 0;
-  const n = Math.max(3, Math.min(5, parseInt(params.get('bots'), 10) || 5));
+  const n = Math.max(rules.minBots, Math.min(rules.maxBots, parseInt(params.get('bots'), 10) || rules.maxBots));
   const role = ['random', 'clean', 'possessed'].includes(params.get('role')) ? params.get('role') : 'random';
   if (sub) {
     sub.textContent = DIRECT === 'practice'
@@ -2286,7 +2293,7 @@ window.__game = {
   unlock: (id, room) => onUnlock(id, room),
   barricade: (id, door) => onBarricade(id, door),
   trade: () => onTrade(),
-  mode: () => (PRACTICE ? 'practice' : 'match'), hotseat: false,
+  mode: () => (PRACTICE ? 'practice' : 'match'),
   // A match against computer guests (tests): the player's seat, whose seats are bots, the bots' brains,
   // whose turn, the menu and the lift.
   humanSeat: () => humanSeat,

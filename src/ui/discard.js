@@ -57,6 +57,7 @@ export function createDiscard(doc, cfg, { onDiscard }) {
       ctx = { player, onComplete }; picked = null;
       if (kicker) { kicker.hidden = true; kicker.textContent = ''; }
       overlay.hidden = false;
+      const modal = overlay.querySelector('.modal'); if (modal) modal.scrollTop = 0;
       render();
     },
     // Nothing of this guest's hand waits in the hidden screen for the next guest.

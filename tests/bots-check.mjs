@@ -16,6 +16,8 @@
 //      soul spent on a guest already possessed, two souls crossed) and never hands a soul to a guest it
 //      knows is possessed; profiles and thinking pauses look right
 //   7. the table feed (src/ui/feed.js) gives every public line of those matches its icon
+//   (and: a possessed bot opens doors in the first two rounds nearly as often as a clean one, so "who has not opened a
+//   door yet?" does not give the possessed away; the Hand Mirror shows "likely clean", not "certainly clean")
 import fs from 'node:fs';
 import { rules, applyMode } from '../src/data/rules.js';
 import { hotel } from '../src/data/hotel.js';
@@ -41,8 +43,8 @@ const check = (cond, msg) => { console.log((cond ? '  ok   ' : '  FAIL ') + msg)
 const floor = createHotel(hotel, config);
 
 function newMatch(seed, players, opts = {}) {
-  applyMode('hotseat', players);
-  const state = S.createState(floor, roster.slice(0, players), seed, { mode: 'hotseat' });
+  applyMode('match', players);
+  const state = S.createState(floor, roster.slice(0, players), seed, { mode: 'match' });
   const rng = makeRng((seed * 2654435761 ^ 0xb075) >>> 0 || 1);
   const profiles = rollProfiles(players, rng);
   state.players.forEach((p, i) => { p.name = profiles[i].username; });
@@ -119,13 +121,13 @@ console.log('\nengine: events, inboxes, forced role');
 }
 {
   const seed = 4242;
-  applyMode('hotseat', 6);
-  const a = S.createState(floor, roster.slice(0, 6), seed, { mode: 'hotseat' });
+  applyMode('match', 6);
+  const a = S.createState(floor, roster.slice(0, 6), seed, { mode: 'match' });
   const deckA = floor.deck.map(t => t.id).join(), drawA = a.drawPile.map(c => c.type).join();
   const handsA = a.players.map(p => p.hand.filter(c => c.type !== 'possession').map(c => c.type).join());
   const randomSeat = a.players.findIndex(p => p.possessed);
   const forced = (randomSeat + 2) % 6;
-  const b = { roster: roster.slice(0, 6), mode: 'hotseat', practice: false, hotseat: true, setup: { possessedIndex: forced } };
+  const b = { roster: roster.slice(0, 6), mode: 'match', practice: false, setup: { possessedIndex: forced } };
   S.resetState(b, floor, seed);
   check(b.players[forced].possessed && b.players.filter(p => p.possessed).length === 1, 'state.setup.possessedIndex forces the possessed seat');
   check(b.players[forced].hand.filter(c => c.type === 'possession').length === rules.possessionSupply
@@ -281,11 +283,60 @@ function choices(state, seat, profile, heard = []) {
   check(tries > 200 && toAlly === 0, `a bot never chooses to hand a soul to a guest it knows is possessed (${toAlly} of ${tries} choices)`);
 }
 
+{
+  // A Hand Mirror that shows no Possession card makes a guest only LIKELY clean (about 25%): a possessed guest who has
+  // used or given away every soul shows none too (about one look in three). The Switchboard's count still makes one
+  // certain (4%), and a possessed guest's own look clears nobody.
+  const { state } = newMatch(6161, 6);
+  const V = state.players.find(q => q.possessed);
+  const [K, L, M] = state.players.filter(q => !q.possessed);
+  V.hand = V.hand.filter(c => c.type !== 'possession');                  // V has spent every soul
+  const mirror = X => { const c = makeCard('handMirror'); X.hand.push(c); X.actionPoints = 3; return c.id; };
+  const mindOf = (X, seed = 7) => createMind(X.index, rollProfile(makeRng(X.index + seed)), seed);
+  const look = (mind, X) => { const view = botView(state, floor, X.index, mind.cursor); mind.observe(view); return { view, c: mind.context(view) }; };
+  const mk = mindOf(K);
+  look(mk, K);
+  const r = A.useHandMirror(state, floor, K, mirror(K), V.id);
+  check(r.ok && !r.unmasked, "(a possessed guest with no soul left shows none in a Hand Mirror)");
+  let { c } = look(mk, K);
+  const pMirror = mk.pPoss(c, V.index);
+  check(mk.isLikelyClean(V.index) && !mk.isCleared(V.index), 'a guest shown to hold no Possession card is "likely clean", not certainly clean');
+  check(pMirror > 0.2 && pMirror < 0.32, `...a clean bot's estimate for them is about 25%, not 4% (${pMirror.toFixed(2)})`);
+  // ...but they cannot possess anyone: no soul, and a soul never comes back until they trade. So a bot does not spend a
+  // Lantern blocking them, and does not refuse their trade as it might a stranger's (the role estimate is another matter).
+  check(mk.holdsNoSoul(V.index) && !mk.holdsNoSoul(L.index), 'a guest shown no soul, with no trade since, holds none: nothing to fear in a trade with them');
+  const blocks = (who, n = 400) => { let k = 0; for (let i = 0; i < n; i++) if (mk.wantsToBlock(c, who)) k++; return k; };
+  const bV = blocks(V.index), bL = blocks(L.index);
+  check(c.lanterns > 0 && bV === 0 && bL > 0, `...so it never hands them a Lantern to block (${bV} of 400), as it sometimes does a stranger (${bL} of 400)`);
+  const view0 = botView(state, floor, K.index, mk.cursor);
+  const accepts = (who, n = 600) => { let k = 0; for (let i = 0; i < n; i++) if (mk.acceptTrade(view0, who)) k++; return k / n; };
+  const aV = accepts(V.index), aL = accepts(L.index);
+  check(aV > aL + 0.08 && aV > 0.55, `...and agrees to their trade more readily than a stranger's (${aV.toFixed(2)} against ${aL.toFixed(2)})`);
+  mk.mem.cleared.set(M.index, 0);
+  ({ c } = look(mk, K));
+  check(mk.isCleared(M.index) && Math.abs(mk.pPoss(c, M.index) - 0.04) < 1e-9, 'a guest the Switchboard cleared stays certainly clean (4%)');
+  // they trade: what the mirror showed is out of date
+  const plain = X => X.hand.find(c2 => c2.type !== 'possession' && c2.type !== 'lantern');
+  A.resolveTrade(state, floor, V, L, plain(V).id, plain(L).id);
+  ({ c } = look(mk, K));
+  check(!mk.isLikelyClean(V.index), '...until they trade again (then it is out of date)');
+  // a possessed bot's own look at a guest clears nobody
+  const state2 = newMatch(6161, 6).state;
+  const V2 = state2.players.find(q => q.possessed), K2 = state2.players.find(q => !q.possessed);
+  const mv = mindOf(V2);
+  mv.observe(botView(state2, floor, V2.index, mv.cursor));
+  const mc = makeCard('handMirror'); V2.hand.push(mc); V2.actionPoints = 3;
+  A.useHandMirror(state2, floor, V2, mc.id, K2.id);
+  mv.observe(botView(state2, floor, V2.index, mv.cursor));
+  check(mv.mem.mirrorClear.size === 0 && mv.mem.cleared.size === 0 && mv.mem.seenNoPoss.has(K2.index), "a possessed bot's Hand Mirror clears nobody (it only notes what it saw)");
+}
+
 // --- 4. many matches ---------------------------------------------------------------------------------------
 console.log('\nall-bot matches');
 const stats = { matches: 0, unfinished: 0, crashes: 0, refusals: 0, maxRefusalsTurn: 0, jammed: 0, cleanWins: 0, escapes: 0, possessedWins: 0,
   conv: [], firstFriendly: 0, friendlyThenAttempt: 0, blockDecisions: 0, blocks: 0, attacks: 0, voluntary: 0, byPlayers: {},
-  soulsToKnown: 0, soulsSpent: 0, knownWrong: 0, knownTotal: 0 };
+  soulsToKnown: 0, soulsSpent: 0, knownWrong: 0, knownTotal: 0,
+  opens: { poss: { doors: 0, turns: 0 }, clean: { doors: 0, turns: 0 } }, noDoor: { poss: 0, all: 0 } };
 // Souls a guest handed to someone it already KNEW was possessed: its own private events replayed in order,
 // with what they make certain (src/game/knowledge.js reads the same events).
 function soulsToKnownAllies(state, p) {
@@ -308,9 +359,20 @@ for (let k = 0; k < 450; k++) {
   try {
     const { state, table } = newMatch(seed, players);
     let turns = 0;
+    const doors = new Array(players).fill(0);
+    let round2Done = false;
     while (!state.finished && turns < 300) {
+      const who = S.activePlayer(state), round = state.round, poss = who.possessed;
       const s = playBotTurn(state, floor, table, { maxSteps: 40 });
       turns++;
+      const opened = s.actions.filter(a => a.k === 'open').length;
+      doors[who.index] += opened;
+      if (round <= 2) { const o = stats.opens[poss ? 'poss' : 'clean']; o.doors += opened; o.turns++; }
+      // the guests who have opened no door by the end of round 2: how many of them are possessed (the strip and the feed show it all)
+      if (!round2Done && state.round > 2) {
+        round2Done = true;
+        for (const p of state.players) if (p.alive && doors[p.index] === 0) { stats.noDoor.all++; if (p.possessed) stats.noDoor.poss++; }
+      }
       const real = s.refusals.filter(r => r.reason !== 'jammed');
       stats.jammed += s.refusals.length - real.length;
       stats.refusals += real.length;
@@ -363,6 +425,13 @@ check(stats.conv.length > n * 0.5 && r1 < stats.conv.length * 0.4, `possessions 
 check(stats.firstFriendly > n * 0.3 && stats.friendlyThenAttempt > n * 0.15, `possessed bots build trust first: ${stats.firstFriendly} friendly first trades, ${stats.friendlyThenAttempt} later followed by an attempt on the same guest`);
 check(stats.blockDecisions > n && stats.blocks > n * 0.3, `clean bots block with a Lantern: ${stats.blockDecisions} Lanterns handed over to block, ${stats.blocks} attempts actually blocked`);
 check(stats.attacks > 0, `bots attack now and then (${stats.attacks} attacks in ${n} matches)`);
+{
+  const rate = o => o.doors / Math.max(1, o.turns);
+  check(rate(stats.opens.poss) >= 0.3 * rate(stats.opens.clean) && rate(stats.opens.poss) >= 0.3,
+    `a possessed bot opens doors in rounds 1-2 (${rate(stats.opens.poss).toFixed(2)} a turn) at least a third as often as a clean one (${rate(stats.opens.clean).toFixed(2)}): not "never", which gave the possessed away`);
+}
+check(stats.noDoor.all > 150 && stats.noDoor.poss <= 0.7 * stats.noDoor.all,
+  `a guest who has opened no door by the end of round 2 is possessed ${(100 * stats.noDoor.poss / Math.max(1, stats.noDoor.all)).toFixed(0)}% of the time (${stats.noDoor.poss} of ${stats.noDoor.all}; a person looking for the possessed one by the feed would have been right 86-96% of the time before)`);
 check(stats.knownWrong === 0 && stats.knownTotal > n, `everything knownPossessed says a guest knows is true (${stats.knownTotal} certainties at the ends of the matches, ${stats.knownWrong} wrong)`);
 check(stats.soulsToKnown === 0, `a possessed bot never hands a soul to a guest it knows is possessed (${stats.soulsToKnown}; souls spent on a guest not yet known to be possessed: ${(stats.soulsSpent / Math.max(1, n)).toFixed(2)} a match)`);
 
@@ -428,6 +497,21 @@ console.log('\nprofiles and pace');
   check(styles.medium / total > 0.5 && styles.bold / total > 0.1 && styles.careful / total > 0.1,
     `mostly medium, some bold, some careful: ${Object.entries(styles).map(([k, v]) => `${k} ${(100 * v / total).toFixed(0)}%`).join(', ')}`);
   check(badTraits === 0 && badPace === 0, 'every trait is between 0 and 1, every pace between 0.7 and 1.4');
+  {
+    // curiosity (how keen a guest is to open doors, whichever side it plays) varies from guest to guest and takes no random
+    // draw of its own, so the guests rolled for a seed are the same ones as before the trait existed
+    const cur = [];
+    const r2 = makeRng(77);
+    for (let k = 0; k < 200; k++) for (const p of rollProfiles(6, r2)) cur.push(p.traits.curiosity);
+    const mean = cur.reduce((a, b) => a + b, 0) / cur.length, sd = Math.sqrt(cur.reduce((a, b) => a + (b - mean) ** 2, 0) / cur.length);
+    check(cur.every(c => c >= 0.05 && c <= 0.95) && mean > 0.4 && mean < 0.6 && sd > 0.15, `curiosity: every guest has some, from shy to eager (mean ${mean.toFixed(2)}, spread ${sd.toFixed(2)})`);
+    let draws = 0;
+    const base = makeRng(9);
+    rollProfile(() => { draws++; return base(); }, { username: 'zed' });
+    check(draws === 25, `rolling a guest takes the same ${draws} random draws as before the curiosity trait (25): the same seed still seats the same guests`);
+    const a = rollProfile(makeRng(4), { style: 'medium', username: 'zed' }), b = rollProfile(makeRng(4), { style: 'medium', username: 'zed' });
+    check(JSON.stringify(a) === JSON.stringify(b), '...and a profile is the same every time it is rolled from the same numbers');
+  }
   const { table } = newMatch(3, 6);
   const kinds = ['turn', 'act', 'move', 'meet', 'attack', 'trade', 'reply', 'discard'];
   let lo = Infinity, hi = 0; const per = {};

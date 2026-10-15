@@ -1,5 +1,6 @@
 // Full-screen overlays: "Tap to begin", a one-off notice (the exit opening), a yes/no question,
 // the end screen and the problem card (a load error, or "Something went wrong": src/ui/crash.js).
+import { GUARD_MS } from './ui/tapGuard.js';
 
 export function createOverlays(doc) {
   const start = doc.getElementById('start-overlay');
@@ -32,6 +33,7 @@ export function createOverlays(doc) {
 
   let noticeNext = null;
   let askNext = null;
+  let askClosedAt = -Infinity;
   const apiTail = {
     // The 3D view has rendered: the begin button becomes usable.
     setReady() { beginBtn.disabled = false; beginBtn.textContent = 'Tap to begin'; },
@@ -92,7 +94,10 @@ export function createOverlays(doc) {
       askYes.classList.toggle('primary', safe !== 'no'); askNo.classList.toggle('primary', safe === 'no');
       askNext = onYes; ask.hidden = false;
     },
-    hideAsk() { ask.hidden = true; askNext = null; },
+    hideAsk() { if (!ask.hidden) askClosedAt = performance.now(); ask.hidden = true; askNext = null; },
+    // The second tap of a double tap on Keep playing (or on the dark round the question) lands on the hotel: a tap on
+    // it just after the question closed does nothing (main.js onTap).
+    swallowTap() { return performance.now() - askClosedAt < GUARD_MS + 50; },
     get askOpen() { return !ask.hidden; },
     // The problem card (index.html #error-overlay: a Reload button always; Reload is plain HTML in the page).
     // `title`: its heading; `detail`: small print for a screenshot (the version, the last message);

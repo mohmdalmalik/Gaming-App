@@ -15,7 +15,8 @@
 //      Victory or Defeat for your side whether or not you are alive or got out, the recap, fitting, both sides
 //   c  a possessed player's role screen, chip and end screen (the same form and words as a clean guest's)
 //   d  practice: the Menu panel says Leave practice, the end screen has no Victory or Defeat
-import { launch, GUARD_WAIT } from './smoke-lib.mjs';
+import { launch, GUARD_WAIT, settle } from './smoke-lib.mjs';
+import { LANTERN_TRADE_NOTE } from '../src/data/tips.js';
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -118,6 +119,11 @@ if (only.includes('a')) {
       await page.mouse.click(nextAt[0].x + nextAt[0].w / 2, nextAt[0].y + nextAt[0].h / 2); await page.waitForTimeout(500);
       const after = await page.evaluate(() => document.getElementById('howto-kicker').textContent);
       check(at === 'The goal' && /2 OF 5/i.test(after), `the second tap of a double tap on Next does not skip a page (${at} -> ${after})`);
+      // the window changes shape (an iPad turned, Split View) while the focus is on Next: it stays there, on the same page
+      await page.focus('#btn-howto-next');
+      await page.setViewportSize({ width: W, height: H + 6 }); await page.waitForTimeout(500);
+      check(await page.evaluate(() => document.activeElement?.id) === 'btn-howto-next' && /2 OF 5/i.test(await page.textContent('#howto-kicker')), 'the window changing shape keeps the focus on Next, and the page where it was');
+      await page.setViewportSize({ width: W, height: H }); await page.waitForTimeout(400);
       await page.waitForTimeout(GUARD_WAIT);
       await page.click('#btn-howto-close'); await page.waitForTimeout(300);
       check(!(await page.evaluate(() => window.__game.howToOpen())) && await page.evaluate(() => document.activeElement?.id) === 'btn-menu-howto', 'Close puts it away and the focus goes back to the How to play button');
@@ -180,7 +186,7 @@ async function matchChecks(W, H, role) {
     check(rs.head === (mine ? 'You are possessed' : 'You are clean') && rs.kicker === 'Your secret role', `the role screen's headline: "${rs.head}"`);
     check(/^(POSSESSED|CLEAN GUEST)$/.test(rs.badge), `...the badge stays ("${rs.badge}")`);
     check(rs.size >= 15.5 && rs.size <= 17, `...the paragraph is about 16 px (${rs.size}px; it was 13)`);
-    check(rs.other === (mine ? 'The clean guests win if one of them escapes with 3 Lanterns.' : 'The possessed win if everyone is possessed, or dawn breaks before anyone escapes.'), `...and ONE line about how the other side wins: "${rs.other}"`);
+    check(rs.other === (mine ? 'The clean guests win if one of them escapes with 3 Lanterns.' : 'The possessed win if every living guest is possessed, or no clean guest is left, or dawn breaks before anyone escapes.'), `...and ONE line about how the other side wins: "${rs.other}"`);
     check(rs.top >= 0 && rs.bottom <= H && !rs.scroll && rs.btnBottom <= H, `...and it fits (card ${Math.round(rs.top)}-${Math.round(rs.bottom)} of ${H}, the button ends at ${Math.round(rs.btnBottom)}, no scrolling)`);
     await page.screenshot({ path: `${outDir}/b-role-${role}-${W}x${H}.png` });
     await pastRole(page);
@@ -211,6 +217,27 @@ async function matchChecks(W, H, role) {
     check((await chip()).text === '✦ Lanterns 3/3', 'and 3/3 with three: the same words for a clean and a possessed guest');
     await page.screenshot({ path: `${outDir}/b-hud-${role}-${W}x${H}.png` });
     await ev(() => { const g = window.__game, p = g.state.players[g.humanSeat()]; p.hand = p.hand.filter(x => !/^learn[LM]/.test(x.id)); g.refresh(); });
+
+    // --- the card pick (a trade): lifting a Lantern says its other half, the same words for either side, and moves nothing
+    // (the screen a computer guest opens when it walks in on you: no Trade / Attack panel, so the first-meeting tip is not up)
+    await ev(() => {
+      const g = window.__game, p = g.state.players[g.humanSeat()];
+      const cards = [{ id: 'pickL', type: 'lantern' }, { id: 'pickB', type: 'bandage' }, { id: 'pickK', type: 'knife' }];
+      g.handoff.privatePick(p, { kicker: 'A computer guest walked in — a trade', title: 'Give one card to a guest', sub: '', cards, onPick: () => {} });
+    });
+    await page.waitForTimeout(GUARD_WAIT + 150);
+    const give0 = await box(page, '#btn-offer-give');
+    await page.click('#offer-cards .card-tile[data-card-id="pickB"]'); await page.waitForTimeout(250);
+    const plain = await ev(() => ({ note: !!document.querySelector('#offer-summary .pick-note'), text: document.getElementById('offer-summary').textContent }));
+    check(!plain.note && /Bandage/.test(plain.text), 'the card pick: an ordinary card lifted says what it does and nothing more');
+    await page.waitForTimeout(GUARD_WAIT);
+    await page.click('#offer-cards .card-tile[data-card-id="pickL"]'); await page.waitForTimeout(250);
+    const lant = await ev(() => ({ note: document.querySelector('#offer-summary .pick-note')?.textContent, give: document.getElementById('btn-offer-give').textContent }));
+    const give1 = await box(page, '#btn-offer-give'), pcard = await box(page, '#handoff-card');
+    check(lant.note === LANTERN_TRADE_NOTE && lant.give === 'Give the Lantern', `...a Lantern lifted also says "${lant.note}" (the same for a clean and a possessed guest)`);
+    check(give1.t === give0.t && pcard.b <= H, `...and the Give button stays where it was (${give0.t} -> ${give1.t}), the screen fits (ends ${pcard.b} of ${H})`);
+    await page.screenshot({ path: `${outDir}/b-pick-lantern-${role}-${W}x${H}.png` });
+    await ev(() => window.__game.handoff.close());
 
     // --- the Menu panel, and the clock
     await ev(() => window.__game.setTimeLeft(40));
@@ -274,12 +301,59 @@ async function matchChecks(W, H, role) {
     await page.click('#btn-leave'); await page.waitForTimeout(500);
     await page.click('#btn-gm-resume'); await page.waitForTimeout(300);
     check(await ev(() => !window.__game.menuPanelOpen()) && await ev(() => document.activeElement?.id) === 'btn-leave', 'Resume closes the panel and the focus goes back to the Menu button');
+    // the keyboard, Menu > Leave the match > Keep playing: the focus comes back to the Menu button (it did before the panel
+    // existed; the question remembers where the focus was when it opened: src/ui/focus.js)
+    await page.focus('#btn-leave'); await page.keyboard.press('Enter'); await page.waitForTimeout(500);
+    await page.focus('#btn-gm-leave'); await page.keyboard.press('Enter'); await page.waitForTimeout(500);
+    check(await ev(() => window.__game.askOpen() && document.activeElement?.id === 'btn-ask-no'), 'by keyboard: Leave opens the question with the focus on Keep playing');
+    await page.keyboard.press('Escape'); await page.waitForTimeout(400);
+    check(await ev(() => !window.__game.askOpen() && !window.__game.menuPanelOpen() && document.activeElement?.id === 'btn-leave'), 'by keyboard: Keep playing (Escape) puts the focus back on the Menu button, not on the page');
     await page.click('#btn-leave'); await page.waitForTimeout(500);
     await page.keyboard.press('Escape'); await page.waitForTimeout(300);
     check(await ev(() => !window.__game.menuPanelOpen()), 'Escape resumes too');
     await page.click('#btn-leave'); await page.waitForTimeout(500);
     await page.mouse.click(8, Math.round(H / 2)); await page.waitForTimeout(300);
     check(await ev(() => !window.__game.menuPanelOpen()), 'a tap on the dark round the card resumes too');
+    // ...and the second tap of a double tap on the dark round it does NOT go on to open a door under it (src/main.js onTap)
+    {
+      await ev(() => window.__game.setTimeLeft(9999));
+      const doors = await ev(() => window.__game.closedDoors().map(d => ({ fog: d.fog, pt: window.__game.tapPointFor({ fog: d.fog }) })).filter(d => d.pt));
+      await page.click('#btn-leave'); await page.waitForTimeout(500);
+      const card = await box(page, '.gamemenu-card');
+      const out = doors.find(d => d.pt.x < card.l - 4 || d.pt.x > card.r + 4 || d.pt.y < card.t - 4 || d.pt.y > card.b + 4);
+      if (!out) check(true, 'a double tap on the dark round the Menu (skipped: no closed door lies outside the card at this size)');
+      else {
+        const before = await ev(() => ({ ap: window.__game.activePlayer().actionPoints, closed: window.__game.closedDoors().length, rooms: window.__game.hotelRooms().length }));
+        await page.mouse.click(out.pt.x, out.pt.y); await page.waitForTimeout(80);
+        await page.mouse.click(out.pt.x, out.pt.y); await page.waitForTimeout(1200);
+        const after = await ev(() => ({ open: window.__game.menuPanelOpen(), ap: window.__game.activePlayer().actionPoints, closed: window.__game.closedDoors().length, rooms: window.__game.hotelRooms().length }));
+        check(!after.open && after.ap === before.ap && after.closed === before.closed && after.rooms === before.rooms,
+          `a double tap on the dark round the Menu, over a closed door, closes it and opens no door (actions ${before.ap} -> ${after.ap}, doors ${before.closed} -> ${after.closed})`);
+        // (and once the moment has passed, the same tap does open it: the guard only covers the second tap of a double tap)
+        await page.waitForTimeout(GUARD_WAIT + 200);
+        await page.mouse.click(out.pt.x, out.pt.y); await page.waitForTimeout(1500);
+        const later = await ev(() => ({ ap: window.__game.activePlayer().actionPoints, closed: window.__game.closedDoors().length }));
+        check(later.ap < before.ap || later.closed < before.closed, 'a tap a moment later on the same spot is the game\'s again');
+        // (the Leave question closes the same way: the dark round it, then the door under the second tap)
+        if (later.ap < before.ap || later.closed < before.closed) {
+          // (the door just opened is gone from the plan: another closed door, or the same spot over the new room: either way it must do nothing)
+          const again = await ev(() => window.__game.closedDoors().map(d => ({ fog: d.fog, pt: window.__game.tapPointFor({ fog: d.fog }) })).filter(d => d.pt));
+          await ev(() => window.__game.setTimeLeft(9999));
+          await page.click('#btn-leave'); await page.waitForTimeout(500);
+          await page.click('#btn-gm-leave'); await page.waitForTimeout(500);
+          const ask = await box(page, '#ask-overlay .card');
+          const pick = again.find(d => d.pt.x < ask.l - 4 || d.pt.x > ask.r + 4 || d.pt.y < ask.t - 4 || d.pt.y > ask.b + 4);
+          if (!pick) { await page.click('#btn-ask-no'); await page.waitForTimeout(300); }
+          else {
+            const b2 = await ev(() => ({ ap: window.__game.activePlayer().actionPoints, closed: window.__game.closedDoors().length }));
+            await page.mouse.click(pick.pt.x, pick.pt.y); await page.waitForTimeout(80);
+            await page.mouse.click(pick.pt.x, pick.pt.y); await page.waitForTimeout(1200);
+            const a2 = await ev(() => ({ ask: window.__game.askOpen(), ap: window.__game.activePlayer().actionPoints, closed: window.__game.closedDoors().length }));
+            check(!a2.ask && a2.ap === b2.ap && a2.closed === b2.closed, `a double tap on the dark round the Leave question closes it and opens no door either (actions ${b2.ap} -> ${a2.ap})`);
+          }
+        }
+      }
+    }
     await ev(() => window.__game.setTimeLeft(9999));
 
     // --- the end screens (the match's own state set to how it could have ended; the end screen is the game's own)
@@ -344,7 +418,7 @@ if (only.includes('d')) {
     await page.goto(`${baseUrl}?mode=practice&intro=off`, { waitUntil: 'domcontentloaded' });
     await waitFor(page, () => window.__game && !document.getElementById('btn-begin').disabled, null, 120000);
     await page.click('#btn-begin');
-    await page.waitForTimeout(1500);
+    await settle(page, () => { const c = document.getElementById('lantern-chip'); return c.children.length > 0 && c.getClientRects().length > 0; }, null, 30000);
     const c = await ev(() => ({ text: [...document.getElementById('lantern-chip').children].map(e => e.textContent).join(' '), shown: document.getElementById('lantern-chip').getClientRects().length > 0 }));
     check(c.shown && /^✦ Lanterns \d\/3$/.test(c.text), `practice has the Lanterns chip too ("${c.text}")`);
     await page.click('#btn-leave'); await page.waitForTimeout(500);

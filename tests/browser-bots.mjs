@@ -361,6 +361,27 @@ console.log('\n5. out of the match, the end screen');
     const t = g.bots(), room = () => me.currentRoom;
     const orig = t.nextAction.bind(t), origAttack = t.attackWith.bind(t);
     window.__killer = null;
+    // The killer starts next door: the next guest to act, with a knife, in a room beside the player's (the lobby will do:
+    // it is only the player's room that must not be a safe one). The computer guests roam widely now: a killer picked by
+    // whoever happened to act first could be far away, or already in the player's room (a guest who is there already is not
+    // forced to meet them again, and walks off). This check is about what an attack looks like on the player's screen,
+    // not about how far a bot walks or where it starts.
+    {
+      const k = g.nextPlayer(), here = g.floor.rooms.get(room());
+      const nb = [...here.neighbours].find(id => g.state.discovered.has(id) && !g.lockedRooms().includes(id));
+      if (k && k.index !== me.index && k.alive && nb) {
+        k.currentRoom = nb;
+        const mid = g.roomCenter(nb); g.movers[k.index].reset(mid[0], mid[1]);
+        if (!k.hand.some(card => card.type === 'knife')) k.hand.push({ id: `test-knife-${k.index}`, type: 'knife' });
+        window.__killer = k.index;
+      }
+    }
+    // A guest of the clean side must be left alive when the player dies, or the match is over at once and there is no
+    // "You are out" question to check (by round 4 the computer guests may have possessed everyone else).
+    if (!me.possessed && !g.state.players.some(q => q.index !== me.index && q.alive && !q.possessed)) {
+      const spare = g.state.players.find(q => q.index !== me.index && q.index !== window.__killer && q.alive);
+      if (spare) { spare.possessed = false; spare.hand = spare.hand.filter(card => card.type !== 'possession'); }
+    }
     t.nextAction = i => {
       const p = g.state.players[i];
       if (window.__killer == null && p.alive && !g.floor.rooms.get(room()).safe) {

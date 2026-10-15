@@ -118,7 +118,7 @@ html, body {
   box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.55), inset 0 0 0 2px var(--line-soft), 0 8px 22px rgba(0, 0, 0, 0.4);
   -webkit-backdrop-filter: blur(7px); backdrop-filter: blur(7px);
 }
-.label-caps { font-size: 10px; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; color: var(--brass); }
+.label-caps { font-size: 11px; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; color: var(--brass); }
 
 /* HUD */
 #hud { position: absolute; inset: 0; pointer-events: none; }
@@ -169,7 +169,7 @@ html, body {
   box-shadow: inset 0 0 0 1px rgba(0,0,0,0.5); -webkit-backdrop-filter: blur(7px); backdrop-filter: blur(7px);
 }
 .objectives .obj-label {
-  font-size: 10px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: var(--brass);
+  font-size: 11px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: var(--brass);
 }
 .obj-pips { display: inline-flex; gap: 5px; }
 .obj-pip {
@@ -2109,7 +2109,8 @@ html, body {
 /* The guest's initial in a corner of their portrait in the top strip (src/hud.js sets data-mark; the colour is the
    seat's, so the strip does not rely on colour alone). Drawn by CSS so it survives the portrait being swapped. */
 .mini-portrait[data-mark]::before {
-  content: attr(data-mark); position: absolute; left: 3px; top: 3px; z-index: 1;
+  content: attr(data-mark); content: attr(data-mark) / "";      /* (the second: no alternative text, so a screen reader does not read the initial as well as the name; a browser without it keeps the first) */
+  position: absolute; left: 3px; top: 3px; z-index: 1;
   display: flex; align-items: center; justify-content: center; box-sizing: border-box;
   min-width: 19px; height: 19px; padding: 0 4px; border-radius: 10px;
   background: var(--player-color); color: #16110a; font: 800 12px/1 var(--sans); letter-spacing: 0;
@@ -2136,3 +2137,10 @@ html, body {
 #discard-cards.dense { gap: 8px; }
 #discard-cards.dense .card-tile { width: 84px; }
 #discard-cards.dense .card-tile .art { min-height: 54px; }
+
+/* ==== Round 2, fixer ==== */
+
+/* The Lantern's second sentence on the card pick (src/ui/handoff.js privatePick): its own line under the card's words. */
+.offer-summary.card-desc .pick-note { display: block; margin-top: 4px; color: var(--brass-bright); }
+/* (room for it from the start, whichever card is lifted: choosing a card never moves the Give button) */
+.offer-summary.card-desc.with-note { min-height: calc(2.9em + 4px); }

@@ -10,33 +10,40 @@
 //     Utility choice: each step it scores what it could do now (escape, heal, search here, open a door
 //     here, use a room's job or a card, trade in the Fire Exit) and where it could walk (rooms to
 //     search, rooms with closed doors, the Fire Exit, an Infirmary, the Switchboard, people), the walk
-//     discounting a goal's worth by its distance, and takes the best. Its traits (src/bots/profiles.js)
-//     weight the scores; a little noise scaled by its skill makes it imperfect but never absurd, and it
-//     rarely walks straight back into a room it has just left. Walking into a room with a guest it has
-//     not met there this round forces a meeting, so careful guests route round people.
+//     discounting a goal's worth by its distance, and takes the best. Its traits (src/bots/profiles.js,
+//     among them how curious it is, whichever side it is on) weight the scores; a little noise scaled
+//     by its skill makes it imperfect but never absurd, and it rarely walks straight back into a room
+//     it has just left. Walking into a room with a guest it has not met there this round forces a
+//     meeting, so careful guests route round people.
 //   A clean guest
 //     Collects Lanterns and heads for the Fire Exit with three (explores to find it). Reasons only from
 //     what it saw: who attacked whom, who traded just before the Switchboard count went up (and what
 //     the count rules in or out), who traded with a guest it knows is possessed, a Lantern block it
-//     made, a Hand Mirror it used. Trust grows with guests who gave it useful cards. In a trade it
-//     hands over a Lantern to block when suspicion or caution is high (more readily with two or more
-//     Lanterns), otherwise a low-value card — or, now and then, a useful card back to a guest who was
-//     kind to it. Attacks only with a reason (a guest it knows is possessed, one who attacked it, a
-//     strong suspect when it is aggressive or late in the match, someone in its way to the exit). With
-//     little left to find it waits in the Fire Exit and pools its single Lantern with a guest it is sure
-//     of (one escape wins it for every clean guest).
+//     made, a Hand Mirror it used (a soul seen is proof; none seen only makes a guest LIKELY clean, about
+//     25%: a possessed guest who has spent or handed on every soul shows none either; but with no soul and no
+//     trade since they cannot possess anyone, so it neither blocks them nor refuses their trades). Trust grows with
+//     guests who gave it useful cards. In a trade it hands over a Lantern to block when suspicion or
+//     caution is high (more readily with two or more Lanterns), otherwise a low-value card — or, now
+//     and then, a useful card back to a guest who was kind to it. Attacks only with a reason (a guest
+//     it knows is possessed, one who attacked it, a strong suspect when it is aggressive or late in the
+//     match, someone in its way to the exit). With little left to find it waits in the Fire Exit and
+//     pools its single Lantern with a guest it is sure of (one escape wins it for every clean guest).
 //   A possessed guest
-//     Builds trust first: it often makes one or two friendly trades (a Bandage, Flashlight, Espresso,
-//     sometimes a Knife, rarely a Lantern) before trying a Possession card on the same guest; prefers
+//     Tries early rather than builds trust first (it did, before Round 2): at its first trade with a guest it
+//     hands over a Possession card more than half the time at six guests, seven times in ten at four (a chance
+//     raised for the smaller tables: TUNING.attemptBias, attemptSmall); otherwise it makes a friendly trade (a
+//     Bandage, Flashlight, Espresso, sometimes a Knife, rarely a Lantern) and tries on the same guest later; prefers
 //     targets who gave it something other than a Lantern before (they did not block it); grows
 //     impatient as dawn (round 8) nears, once the Fire Exit is found, and as its chances run out; never
 //     tries on a guest who knows it or on a possessed guest it knows of (a soul handed to a guest who is
 //     already possessed is only used up: soul cards, approved 10 Oct 2026); keeps Lanterns away from the
-//     clean side and searches hard (every Lantern it holds is one the clean side lacks); opens few
-//     doors; once the Fire Exit is found some stand guard in the room before it (anyone walking out
-//     has to pass) and may seal its doorway with a Barricade. It knows only the possessed guests it is
-//     linked to through conversions, the ones a spent soul showed it (its own handed to one, or one
-//     handed to it) and any it worked out, never the whole team.
+//     clean side and searches (every Lantern it holds is one the clean side lacks); opens doors, a
+//     little less keenly than a clean guest (a guest who never explores, or never moves, is picked
+//     out by whoever watches the strip and the feed: audit of 13 Oct 2026), and wanders instead of
+//     standing still; once the Fire Exit is found some guard the room before it (anyone walking out
+//     has to pass) now and then, never for long, and may seal its doorway with a Barricade. It knows
+//     only the possessed guests it is linked to through conversions, the ones a spent soul showed it
+//     (its own handed to one, or one handed to it) and any it worked out, never the whole team.
 //   Every guest listens to the table (quick chat, src/data/chat.js BOT_HEAR; see "what was said" below)
 //     A line is public, so every guest hears the same words; each weighs them by what IT knows. A clean
 //     guest believes a speaker as far as it trusts them from what it saw itself (never from what was said
@@ -71,15 +78,27 @@ const WEAPON_DAMAGE = { knife: 1, revolver: 2 };
 export const TUNING = {
   blockBias: -0.15,      // added to a clean guest's urge to hand over a Lantern to block
   poolChance: 0.4,       // base chance a clean guest pools its single Lantern with a guest it is sure of
-  attemptBias: 0,        // added to a possessed guest's chance of trying a Possession card
+  attemptBias: 0.1,      // added to a possessed guest's chance of trying a Possession card
   friendlyBias: 0,       // added to a possessed guest's chance of a friendly (trust-building) gift
-  campWeight: 1,         // how much possessed guests like to stand guard by the Fire Exit late on
+  campWeight: 0.05,      // how much possessed guests like to stand guard by the Fire Exit late on (it was 1: a guard parked
+                         // there turn after turn was possessed 99% of the time)
   avoidCap: 2.2,         // the most a forced meeting in a room adds to a walk's cost
   exitUrgency: 0.7,      // a possessed guest's urgency once the Fire Exit is known (0 … 1)
-  hoard: 1.4,            // how keen a possessed guest is to search (every Lantern it holds is one the clean side lacks)
-  possExplore: 0.4,      // how keen a possessed guest is to open doors (the Fire Exit helps only the clean side)
+  hoard: 1,              // how keen a possessed guest is to search, against a clean guest's 1 (every Lantern it holds is one the
+                         // clean side lacks; it was 1.4)
+  possExplore: 2.5,      // how keen a possessed guest is to open doors (it was 0.4: a guest who never opened one was possessed
+                         // 87% of the time; the Fire Exit helps only the clean side, so this is a blend-in, not a plan)
   cold: 0.5,             // how readily a possessed guest tries a Possession card on a guest it has built no trust with
   followThrough: 0.6,    // how much more readily it tries once it has made a friendly trade with that guest
+  mirrorSuspicion: 0.25, // a clean guest's estimate for a guest a Hand Mirror showed no Possession card in (likely, not certainly, clean)
+  curiosity: 1,          // how far a guest's own curiosity (profiles.js) scales its keenness to open doors (0: not at all)
+  possFloor: 0.6,        // the least a possessed guest's curiosity factor can be, so a possessed homebody still opens a door in the first
+                         // rounds (without it a guest with no door by the end of round 3 was possessed 60 / 67 / 70% of the time at 6 / 5 /
+                         // 4 guests, with it 53 / 59 / 58%; the clean side's win rate moved under a point)
+  attemptSmall: 0.1,     // added to a possessed guest's chance of trying a Possession card for each seat below six at the table
+                         // (fewer guests, fewer chances: and it keeps small tables as hard for the clean side as they were)
+  roam: 1,               // how keen a possessed guest with nothing to do is to wander (not stand still)
+  campFatigue: 1.5,      // how fast a guard's liking for its post fades turn after turn in the same room
 };
 
 export function createMind(seat, profile, seed) { return new Mind(seat, profile, seed); }
@@ -107,7 +126,9 @@ export class Mind {
       known: new Set(),        // (as clean) guests it knows are possessed
       allies: new Set(),       // (as possessed) possessed guests it knows of
       knowsMe: new Set(),      // (as possessed) guests who know it is possessed
-      cleared: new Map(),      // seat -> their trade count when last shown to be clean (a mirror, the Switchboard)
+      cleared: new Map(),      // seat -> their trade count when the Switchboard's count proved them clean (certain)
+      mirrorClear: new Map(),  // seat -> their trade count when a Hand Mirror showed no Possession card (only "likely clean":
+                               // a possessed guest who has spent or handed on all their souls shows none either)
       seenNoPoss: new Map(),   // seat -> their trade count when a mirror showed no Possession card
       seenNoLantern: new Map(),// seat -> { trades, searches } when a mirror showed no Lantern
       susp: new Map(),         // seat -> suspicion from evidence (added to a base rate)
@@ -125,6 +146,9 @@ export class Mind {
       allyHint: new Map(),     // (as possessed) seat -> how much what was said makes me think they are possessed too
     };
     this.turnState = null;
+    this.mem.lastRoom = null;  // the room this guest's last turn began in
+    this.mem.stay = 0;         // turns in a row it has ended in the room it is in now (0: it has just arrived)
+    this.mem.seen = new Map(); // room -> the last turn this guest was in it (to wander somewhere it has not been lately)
   }
 
   // --- reading what happened ------------------------------------------------------------------------
@@ -171,7 +195,7 @@ export class Mind {
         if (e.by === me) break;
         if (e.target === me) { this.bump(m.grudge, e.by, 1); this.bump(m.susp, e.by, 0.4); break; }
         if (m.known.has(e.target)) { this.bump(m.susp, e.by, -0.2); this.bump(m.trust, e.by, 0.4); break; }
-        const liked = (m.trust.get(e.target) || 0) > 0.5 || this.isCleared(e.target);
+        const liked = (m.trust.get(e.target) || 0) > 0.5 || this.isCleared(e.target) || this.isLikelyClean(e.target);
         this.bump(m.susp, e.by, (liked ? 0.3 : 0.17) + (e.killed ? 0.08 : 0));
         break;
       }
@@ -213,7 +237,7 @@ export class Mind {
         m.mirrored.add(e.target);
         const tc = m.tradeCount.get(e.target) || 0;
         if (e.hand.includes('possession')) { m.known.add(e.target); m.allies.add(e.target); }
-        else { m.seenNoPoss.set(e.target, tc); if (!view.me.possessed) m.cleared.set(e.target, tc); }
+        else { m.seenNoPoss.set(e.target, tc); if (!view.me.possessed) m.mirrorClear.set(e.target, tc); }
         if (!e.hand.includes('lantern')) m.seenNoLantern.set(e.target, { trades: tc, searches: m.searchCount.get(e.target) || 0 });
         break;
       }
@@ -258,8 +282,24 @@ export class Mind {
     }
   }
 
+  // Certainly clean: the Switchboard's count left no room for them (until they trade again).
   isCleared(s) {
     const at = this.mem.cleared.get(s);
+    return at != null && at === (this.mem.tradeCount.get(s) || 0);
+  }
+  // Likely clean: a Hand Mirror showed no Possession card (until they trade again). Only likely: a possessed
+  // guest who has used or given away every soul shows none either (about one look in three, tools/balance).
+  isLikelyClean(s) {
+    const at = this.mem.mirrorClear.get(s);
+    return at != null && at === (this.mem.tradeCount.get(s) || 0) && !this.isCleared(s);
+  }
+
+  // Cannot possess anyone: a Hand Mirror showed this guest no Possession card, and they have not traded since. A soul never
+  // turns up again (souls are not in the deck, and a guest is dealt new ones only by being possessed, in a trade), so there is
+  // nothing to block and nothing to fear in a trade with them, whatever their role: that is a different thing from how likely
+  // they are possessed (isLikelyClean: a possessed guest who has spent every soul shows none).
+  holdsNoSoul(s) {
+    const at = this.mem.seenNoPoss.get(s);
     return at != null && at === (this.mem.tradeCount.get(s) || 0);
   }
 
@@ -275,8 +315,10 @@ export class Mind {
     const est = (lastR ? lastR.count : 1) + 0.13 * tradesSince;
     const knownAlive = others.filter(p => m.known.has(p.seat)).length;
     const pool = others.filter(p => !m.known.has(p.seat) && !this.isCleared(p.seat)).length;
-    const base = clamp((est - knownAlive) / Math.max(1, pool), 0.03, 0.85);
-    const wasCleared = m.cleared.has(s) ? -0.08 : 0;
+    let base = clamp((est - knownAlive) / Math.max(1, pool), 0.03, 0.85);
+    if (this.isLikelyClean(s)) base = TUNING.mirrorSuspicion;     // (not 0.04: one look in three is wrong)
+    // (cleared once, but they have traded since: a little less suspect than a stranger)
+    const wasCleared = (m.cleared.has(s) || m.mirrorClear.has(s)) && !this.isLikelyClean(s) ? -0.08 : 0;
     const trust = Math.min(m.trust.get(s) || 0, 2.5) * 0.06;
     const heard = hear ? hear * this.hearsay(c, s) : 0;
     return clamp(base + (m.susp.get(s) || 0) + wasCleared - trust + heard, 0.02, 0.97);
@@ -320,6 +362,7 @@ export class Mind {
     }
     if (strong && m.known.has(about)) { this.bump(m.trust, S, H.confirmed); return; }   // true: I knew
     if (strong && this.isCleared(about)) this.bump(m.liar, S, H.wrong);               // wrong: I know they are not
+    else if (strong && this.isLikelyClean(about)) this.bump(m.liar, S, H.wrong * 0.5);   // probably wrong (a mirror showed no soul)
     m.claims.push({ by: S, id: msg.id, about, trades: m.tradeCount.get(about) || 0 });
   }
 
@@ -490,7 +533,7 @@ export class Mind {
     if (c.exitKnown && c.me.room === this.campRoom(c)) x += 0.45 + 0.3 * t.skill;
     // What was said at the table suggests they may be possessed too (a soul on them would only be spent).
     const hint = m.allyHint.get(s) || 0;
-    return clamp((x + TUNING.attemptBias) * (1 - hint), 0.02, 0.95);
+    return clamp((x + TUNING.attemptBias + TUNING.attemptSmall * Math.max(0, 6 - c.view.seats)) * (1 - hint), 0.02, 0.95);
   }
 
   // How attractive meeting `s` is for a possessed guest holding a Possession card.
@@ -503,6 +546,12 @@ export class Mind {
   // --- choosing the next step of the turn ----------------------------------------------------------------
   startTurn(view) {
     if (this.turnState?.turn === view.turn) return;
+    // (its own record of where it has stood: the turns in a row it has ended in the same room)
+    if (view.activeSeat === this.seat) {
+      const m = this.mem;
+      m.stay = m.lastRoom === view.me.room ? m.stay + 1 : 0;
+      m.lastRoom = view.me.room;
+    }
     this.turnState = { turn: view.turn, refused: new Set(), refusedRooms: new Set(), noSearch: false, proposed: new Set(), steps: 0, lastGoal: null, visited: new Set([view.me.room]) };
   }
 
@@ -513,6 +562,7 @@ export class Mind {
     if (view.finished || !c.me.alive || view.activeSeat !== this.seat) return { k: 'end' };
     if (++ts.steps > 24) return { k: 'end' };
     ts.visited.add(c.me.room);
+    this.mem.seen.set(c.me.room, view.turn);
     const ok = a => !ts.refused.has(actionKey(a));
     const ap = c.me.ap;
 
@@ -658,6 +708,7 @@ export class Mind {
     if (c.possessed) {
       const camp = this.campRoom(c);
       if (camp && camp !== me.room) go(camp, this.campValue(c), 'camp');
+      this.roamOptions(c, dist, go);
     } else if (c.stuck && c.exitKnown && c.lanterns >= 1) {
       // Little left to find: wait in the Fire Exit (safe), where Lanterns can be pooled in a trade.
       if (me.room === v.exitRoom) add(1.3, { k: 'end' }, 'wait');
@@ -667,14 +718,20 @@ export class Mind {
     return out;
   }
 
+  // How much this guest's own curiosity (profiles.js) scales its keenness to open doors: from about 0.1 (a
+  // homebody) to 1.9 (first through every door), 1 for an ordinary guest.
+  curiosityFactor() { return 1 + TUNING.curiosity * (2 * (this.t.curiosity ?? 0.5) - 1); }
+
   exploreValue(c) {
-    const t = this.t;
+    const t = this.t, f = c.possessed ? Math.max(this.curiosityFactor(), TUNING.possFloor) : this.curiosityFactor();
     if (c.view.roomTilesLeft <= 0) return 0;            // every room is on the board: the closed doors are jammed
-    if (c.possessed) return (c.exitKnown ? 0.3 : 0.55 * (1 - 0.5 * c.urgency) + 0.3 * t.boldness) * TUNING.possExplore;
+    // (a possessed guest opens doors too, a little less keenly: the Fire Exit helps only the clean side, but a guest
+    // who never opens one is soon picked out)
+    if (c.possessed) return (c.exitKnown ? 0.3 : 0.55 * (1 - 0.5 * c.urgency) + 0.3 * t.boldness) * TUNING.possExplore * f;
     if (c.escaping) return c.exitKnown ? 0.2 : 30;
-    if (c.exitKnown) return 0.8 + 0.5 * t.greed;          // a new room still has its card draw
+    if (c.exitKnown) return (0.8 + 0.5 * t.greed) * f;    // a new room still has its card draw
     // No Fire Exit yet: without it nobody gets out, and that matters more every round.
-    return (1.5 + 0.55 * Math.min(c.lanterns, 2)) * (0.8 + 0.45 * (1 - t.greed)) + 3.5 * c.urgency * c.urgency;
+    return (1.5 + 0.55 * Math.min(c.lanterns, 2)) * (0.8 + 0.45 * (1 - t.greed)) * f + 3.5 * c.urgency * c.urgency;
   }
 
   // Whether this clean guest still has a way to find Lanterns by itself: rooms whose card draw is unused,
@@ -821,11 +878,12 @@ export class Mind {
     if (!c.exitKnown) return 0;
     const w = c.possCards > 0 || (c.weapons.length && t.aggression > 0.45) ? 1 : 0.7;
     const threat = this.exitThreat(c) ? 0.8 : 0;
-    return (0.9 + 2.2 * c.urgency + threat) * (0.55 + 0.6 * t.skill) * w * TUNING.campWeight;
+    // (a homebody guards more than an explorer, and nobody keeps a post for ever: see campOption)
+    const homebody = 1.5 - (t.curiosity ?? 0.5);
+    return (0.9 + 2.2 * c.urgency + threat) * (0.55 + 0.6 * t.skill) * w * TUNING.campWeight * homebody;
   }
-  // Is a guest not known to be on the possessed side within a couple of rooms of the Fire Exit?
-  exitThreat(c) {
-    if (!c.exitKnown) return false;
+  // The rooms within a couple of doors of the Fire Exit (the Fire Exit too).
+  nearExit(c) {
     const near = new Set([c.view.exitRoom]);
     let ring = [c.view.exitRoom];
     for (let k = 0; k < 2; k++) {
@@ -833,13 +891,40 @@ export class Mind {
       for (const id of ring) for (const d of c.rooms.get(id)?.doors || []) if (!near.has(d.to)) { near.add(d.to); next.push(d.to); }
       ring = next;
     }
+    return near;
+  }
+  // Is a guest not known to be on the possessed side within a couple of rooms of the Fire Exit?
+  exitThreat(c) {
+    if (!c.exitKnown) return false;
+    const near = this.nearExit(c);
     return c.others.some(q => near.has(q.room) && !this.isAlly(q.seat));
   }
   campOption(c) {
     const room = this.campRoom(c);
     if (!room || room !== c.me.room) return null;
-    const v = this.campValue(c);
+    // Standing guard turn after turn is the surest way to be picked out: the liking for the post fades.
+    const v = this.campValue(c) / (1 + TUNING.campFatigue * this.mem.stay);
     return v > 0 ? { score: v, action: { k: 'end' }, goal: 'camp' } : null;
+  }
+
+  // A possessed guest with nothing pressing wanders to a room it has not been in for a while, instead of standing
+  // still (a guest who never moves is easy to pick out): within a few rooms, preferring rooms it has not seen
+  // lately; keener the longer it has stood where it is, and the more curious it is.
+  roamOptions(c, dist, go) {
+    const m = this.mem, ts = this.turnState;
+    const moved = ts.visited.size > 1 ? 0.3 : 1;              // (one wander a turn is enough)
+    const keen = TUNING.roam * (0.45 + 0.3 * Math.min(m.stay, 2)) * (0.5 + (this.t.curiosity ?? 0.5)) * moved;
+    if (keen <= 0) return;
+    let best = null;
+    for (const [id, e] of dist) {
+      if (id === c.me.room || !e.first || e.steps > 3) continue;
+      const room = c.rooms.get(id);
+      if (!room || room.isExit) continue;
+      const ago = Math.min(6, (c.view.turn - (m.seen.get(id) ?? -999)) / c.view.seats);
+      const v = keen * (0.4 + 0.6 * ago / 6) + this.noise('roam' + id) * 0.2;
+      if (!best || v > best.v) best = { id, v };
+    }
+    if (best) go(best.id, best.v, 'roam');
   }
 
   reject(view, action, reason) {
@@ -960,11 +1045,8 @@ export class Mind {
   wantsToBlock(c, s) {
     const m = this.mem, t = this.t;
     if (c.lanterns === 0) return false;
-    if (m.known.has(s)) {
-      const seen = m.seenNoPoss.get(s);
-      if (seen != null && seen === (m.tradeCount.get(s) || 0)) return false;   // nothing to block: don't feed them
-      return this.rng() < 0.96;
-    }
+    if (this.holdsNoSoul(s)) return false;       // nothing to block: don't feed them (a guest they know is possessed, or a stranger)
+    if (m.known.has(s)) return this.rng() < 0.96;
     const pp = this.pPoss(c, s, BOT_HEAR.blockShare);
     const trust = Math.min(m.trust.get(s) || 0, 2.5);
     let x = -0.42 + TUNING.blockBias + 2.05 * pp + 0.62 * t.caution - 0.16 * trust * (0.5 + t.trust)
@@ -1000,7 +1082,10 @@ export class Mind {
     let p;
     if (c.possessed) p = this.isAlly(proposer) ? 0.9 : m.knowsMe.has(proposer) ? 0.1 : 0.75;
     else if (m.known.has(proposer)) p = c.lanterns && t.caution > 0.5 ? 0.3 : 0.05;
-    else p = clamp(0.8 - 1.4 * this.pPoss(c, proposer) + 0.1 * (m.trust.get(proposer) || 0) - 0.3 * t.caution + (c.pressed ? 0.15 : 0), 0.05, 0.92);
+    else {
+      const risk = this.holdsNoSoul(proposer) ? 0.04 : this.pPoss(c, proposer);     // (no soul to give: nothing to fear in the trade)
+      p = clamp(0.8 - 1.4 * risk + 0.1 * (m.trust.get(proposer) || 0) - 0.3 * t.caution + (c.pressed ? 0.15 : 0), 0.05, 0.92);
+    }
     const yes = this.rng() < p;
     this.record({ k: 'accept', with: proposer, yes, possessed: c.possessed, hs: c.possessed ? 0 : this.hearsay(c, proposer) });
     return yes;

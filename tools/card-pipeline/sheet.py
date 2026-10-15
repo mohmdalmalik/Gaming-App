@@ -2,7 +2,7 @@
 import os, sys
 from PIL import Image, ImageDraw
 HERE = os.path.dirname(os.path.abspath(__file__))
-CARDS = os.path.join(HERE, '..', '..', 'assets', 'cards')
+CARDS = os.path.join(HERE, 'art')
 ORDER = ['lantern', 'bandage', 'flashlight', 'knife', 'revolver', 'barricade', 'lockPick', 'masterKey', 'handMirror', 'espresso', 'possession']
 out = sys.argv[1] if len(sys.argv) > 1 else os.path.join(HERE, 'build', 'sheet.jpg')
 T = int(sys.argv[2]) if len(sys.argv) > 2 else 300

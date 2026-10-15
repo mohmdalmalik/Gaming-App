@@ -1,4 +1,4 @@
-// Characters: body types, outfits and the five hot-seat players.
+// Characters: body types, outfits and the six named guests (now only a fixture for the Node tests and tools).
 //
 // Everything visual here is placeholder: outfits differ by silhouette and colour only.
 // When real glTF models arrive, an outfit gets a `model` field pointing at the file and
@@ -40,7 +40,8 @@ export const outfits = {
 };
 
 // The guests in turn order. `color` is the marker ring / interface colour (the seat colours of src/table.js). A
-// hot-seat match uses the first 4-6 of them; practice uses the first one only. Names are still placeholders.
+// match uses the first 4-6 of them in the Node tests and tools; the game seats players by username and avatar
+// (src/table.js); practice uses the first one only. Names are still placeholders.
 export const roster = [
   { id: 'p1', name: 'Victor', outfit: 'tuxedo', color: '#e6bc5c' },
   { id: 'p2', name: 'Eleanor', outfit: 'dressMidnight', color: '#73d4e6' },

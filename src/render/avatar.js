@@ -82,9 +82,6 @@ export function loadBase(id) {
   bases.set(id, p);
   return p;
 }
-// (tests, tools) the looks already parsed
-export const loadedBases = () => [...bases.keys()];
-
 // Head measurements in the bind pose (mesh space): the face's front surface and the head's half-width,
 // from the head-weighted Skin vertices. The glasses are fitted from these.
 function measureHead(info, headIdx) {

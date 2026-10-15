@@ -1,5 +1,8 @@
 // Look at baked rooms in the REAL game (headless Chromium), from the four camera angles.
-//   node tools/room-pipeline/shoot.mjs --rooms lounge,library [--out dir] [--w 1180 --h 820] [--seed 7]
+//   node tools/room-pipeline/shoot.mjs --rooms lounge,library [--out dir] [--w 1180 --h 820] [--seed 7] [--url http://127.0.0.1:8123/]
+// Serve the repo first (python3 -m http.server 8123 --bind 127.0.0.1). It opens the practice direct link
+// (?mode=practice): the plain address opens the main menu, which has no "Tap to begin" card.
+// last verified: 14 Oct 2026 (after the main menu, Round 2)
 // Writes <out>/<room>-r<0..3>.png and a contact sheet <out>/<room>.png. The room is put on the board
 // (opened into the hotel the way the game does), the guest stands in it and the camera looks at it.
 import fs from 'node:fs'; import path from 'node:path';
@@ -17,7 +20,7 @@ const W = +opt('w', 1180), H = +opt('h', 820), SEED = +opt('seed', 7), URL = Str
 const ZOOM = +opt('zoom', 1);
 fs.mkdirSync(OUT, { recursive: true });
 const threeDir = path.join(REPO, 'tests/node_modules/three'), CDN = 'https://cdn.jsdelivr.net/npm/three@0.186.0/';
-const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome', headless: true,
+const browser = await chromium.launch({ executablePath: [process.env.CHROME_PATH, '/opt/pw-browsers/chromium-1194/chrome-linux/chrome'].filter(Boolean).find(fs.existsSync), headless: true,
   args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--no-sandbox'] });
 const page = await (await browser.newContext({ viewport: { width: W, height: H }, deviceScaleFactor: 1, hasTouch: true })).newPage();
 const errs = [];
@@ -25,7 +28,7 @@ page.on('pageerror', e => errs.push(String(e)));
 page.on('console', m => { if (m.type() === 'error' || m.type() === 'warning') errs.push(m.text()); });
 await page.route(`${CDN}**`, r => { const f = path.join(threeDir, r.request().url().slice(CDN.length).split('?')[0]); r.fulfill(fs.existsSync(f) ? { status: 200, contentType: 'application/javascript', body: fs.readFileSync(f) } : { status: 404, body: 'x' }); });
 for (const room of ROOMS) {
-  await page.goto(`${URL}?seed=${SEED}`, { waitUntil: 'networkidle' });
+  await page.goto(`${URL}?mode=practice&seed=${SEED}`, { waitUntil: 'networkidle' });
   await page.waitForFunction(() => window.__game && !document.getElementById('btn-begin').disabled, null, { timeout: 30000 });
   await page.tap('#btn-begin');
   await page.waitForTimeout(300);

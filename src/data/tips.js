@@ -17,6 +17,11 @@ const Word = n => word(n).charAt(0).toUpperCase() + word(n).slice(1);
 const LANDING = hotel.lobby.name;
 const EXIT = hotel.tiles.find(t => t.isExit)?.name ?? 'Fire Exit';
 
+// The Lantern dilemma, once, for everyone: the first-meeting tip says it, and so does the private pick screen
+// (src/ui/handoff.js) when a Lantern is lifted there: a computer guest who walks in on the player opens that screen
+// with no Trade / Attack panel, so the tip beside that panel never comes up before the first card is chosen.
+export const LANTERN_TRADE_NOTE = 'A Lantern blocks a soul, but is lost if the other guest gives you an ordinary card.';
+
 export const TIPS = {
   firstTurn: {
     title: 'Your turn',
@@ -50,7 +55,7 @@ export const TIPS = {
     title: 'Trade or Attack',
     // (both halves of the Lantern dilemma, the same words for everyone: a Lantern blocks a soul, and is lost
     // to the other guest if what they give you is an ordinary card)
-    text: () => 'In a trade you each give one card, in secret. A Lantern blocks a soul, but is lost if the other guest gives you an ordinary card. To attack, you need a weapon.',
+    text: () => `In a trade you each give one card, in secret. ${LANTERN_TRADE_NOTE} To attack, you need a weapon.`,
   },
   possessedStart: {
     title: 'You are possessed',

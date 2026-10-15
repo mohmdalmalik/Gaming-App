@@ -69,8 +69,8 @@ const possessionsIn = cards => cards.filter(c => c.type === 'possession').length
 // `assign(st, rng)` returns the personality of each seat, AFTER the deal (so a scenario can put a
 // personality in the possessed seat). `ov` = sim-only post-steps for proposals.
 function playMatch(seed, players, assign, ov = {}) {
-  applyMode('hotseat', players);
-  const st = S.createState(floor, roster.slice(0, players), seed, { mode: 'hotseat' });
+  applyMode('match', players);
+  const st = S.createState(floor, roster.slice(0, players), seed, { mode: 'match' });
   const rng = makeRng((seed * 2654435761) ^ 0x9e55a1);
   const personas = assign(st, rng);
   const mem = P.newMemory();

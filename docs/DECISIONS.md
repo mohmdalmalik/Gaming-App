@@ -2,42 +2,58 @@
 
 Short record of the choices that shape the code and why, so another coding agent can continue the work. Product decisions are the owner's and live in `GAME_CONCEPT.md`.
 
+## Read this first: what is current (written 14 Oct 2026, v0.6)
+
+This file is a diary, oldest section first. Everything down to the section "Main menu, play with bots, hot-seat removed" describes the game as it was in September and early October, and some of those sections are wrong today: each now starts with a **SUPERSEDED** line saying where the current facts are. Where this block and an old section disagree, this block wins; where this block and `src/data/rules.js` disagree about a number, `rules.js` wins (and this block should be corrected). From "Computer guests (bots)" on, sections are current unless they say otherwise; the "Round 2" sections at the end are the latest.
+
+- **Rules and where the numbers live.** The owner's rules are `docs/GAME_RULES.md` (changed only after the owner approves a before/after list: CLAUDE.md). Every rule number is in `src/data/rules.js`; the hotel (the lobby and a deck of 24 room tiles, shuffled every match) is `src/data/hotel.js`. At v0.6: 4 actions a turn, and opening a door, moving into a room, searching, playing a card and attacking cost 1 action each (Espresso is free; escaping costs 1); a 45-second clock in matches; 4 health; hand limit 6, settled at the end of your own turn; 3 Possession cards, each a guest's own "soul", and 2 new souls for each guest possessed; 3 Lanterns to escape (everyone starts with 1); dawn after round 8; 4 to 6 guests in a match, 1 in practice. `tests/docs-check.mjs` fails if this list drifts from `rules.js`.
+- **Architecture, in one paragraph.** A static browser game: Three.js r186 as ES modules through an import map (plus a few `three/addons`: glTF loading, skeleton cloning, geometry merging), plain JavaScript in `src/`, no build step, relative paths only (GitHub Pages serves it from a sub-path). The rules are pure JavaScript in `src/game/` (`state`, `actions`, `cards`, `hotel`, `grid`, `moves`, `knowledge`: no DOM, no Three.js, so a server can reuse them) and the computer guests in `src/bots/` are pure too and see the game only through `botView`. `src/main.js` owns the turn flow (the player's turns, the bots' turns, meetings, the clock) and wires the screens: `src/ui/`, `src/hud.js`, `src/overlays.js`, the main menu (`src/ui/menu.js`) and the lobby scene behind it (`src/menu/`), drawing (`src/render/`), sound (`src/audio/`). Words and numbers that are not rules are data in `src/data/`. It is one device, you and 3 to 5 computer guests (or practice alone); nothing is online yet (`docs/ONLINE_PLAN.md`); your profile, settings and record sit in the device's localStorage behind small interfaces (`src/account/`, `src/settings.js`, `src/record.js`).
+- **Tests.** `window.__game` (end of `src/main.js`) is how the browser tests look inside the game; direct links (`?mode=bots&...`, `?mode=practice`) skip the menu. The pure suites run in Node; the browser suites run in headless Chromium (README, "Running the tests").
+- **Superseded early sections, and what replaced them.** Players and turns (hot-seat), Phase 1 (the hot-seat sandbox) and Rules reset's pass-the-device parts: hot-seat is gone, see "Main menu, play with bots, hot-seat removed". Data-driven floor, and the fixed 14- and 18-room floors: "Approved rule change — the random hotel". Rules engine (health 3, "2 AP for a new room", "Master Key, Lock Pick and Barricade have no effect"): "Rules reset", "Owner-approved (7 Oct 2026): 4 health", `rules.js`. Turn-based interaction, Pathfinding and discovery, Reliable door taps: "Tap a room, not a door". Real art, room dressing: "Starting room — baked art pass" and "Every room baked like the lobby". Characters and the Victor sections: "All six guests modelled" and "Avatars: the wardrobe". "2 Possession cards": "Owner-approved (10 Oct 2026): 3 Possession cards" and "soul cards". "Choose your guest": "Profiles: a username first".
+- **Files the old sections name that no longer exist:** `src/data/floor1.js` and `src/game/floor.js` (now `src/data/hotel.js` and `src/game/hotel.js`); `src/render/hallDeco.js` (the baked lobby, `tools/lobby-pipeline/`); `src/render/models.js` and the Kenney furniture and building pieces under `assets/models/` (removed 14 Oct 2026: no room used them); `src/ui/fullHand.js` (now `src/ui/discard.js` and `doEndTurn` in `main.js`); `src/ui/guestPicker.js` (replaced by the profile and avatar); `tests/autoplay.mjs`, `tests/browser-hotseat.mjs` and `tests/browser-test.mjs` (replaced by the suites in the README; the old QA scripts are in `tests/old/`).
+
 ## Engine and loading
-- **Three.js r186, loaded as ES modules through an import map from jsDelivr** (`index.html`). Pinned to an exact version so the game cannot break when a new release changes behaviour. No addons are used; camera controls are custom because the game needs snap rotation, not orbiting.
+- **Three.js r186, loaded as ES modules through an import map from jsDelivr** (`index.html`). Pinned to an exact version so the game cannot break when a new release changes behaviour. A few `three/addons` are used (`GLTFLoader` for the baked rooms and the guests, `SkeletonUtils`, `BufferGeometryUtils`, `RoundedBoxGeometry`; the import map maps `three/addons/` to the same pinned release; this line once said "no addons are used"); camera controls are custom because the game needs snap rotation, not orbiting.
 - **No build step, no bundler, no framework.** GitHub Pages serves the files from `main` as they are, which keeps the iPad-only workflow possible (edit → push → reload). All paths are relative so the site works at the `/Gaming-App/` sub-path; `.nojekyll` stops Pages from ignoring files.
 - `index.html` imports `src/main.js` dynamically and shows an error overlay if the engine cannot be loaded or the floor data is invalid, instead of a blank page. The "Tap to begin" button stays disabled ("Loading…") until the first frame has rendered.
 
 ## Rules separate from rendering
-- `src/game/` contains only plain JavaScript: no Three.js, no DOM. `floor.js` (geometry from data), `grid.js` (walkable grid + A*), `state.js` (discovery, action points, turns) and `moves.js` (plan a walk from a tap, apply the rules) can be run in Node and later on a server for multiplayer. `src/render/` only draws what the game state says.
+- `src/game/` contains only plain JavaScript: no Three.js, no DOM. `hotel.js` (the random hotel, grown from tiles; this line once named `floor.js`, which no longer exists), `grid.js` (walkable grid + A*), `state.js` (turns, actions, meetings, win checks), `actions.js`, `cards.js`, `knowledge.js` and `moves.js` (plan a walk to a tapped room) can be run in Node and later on a server for multiplayer. `src/render/` only draws what the game state says.
 - Room transitions are detected from the player's position crossing a room boundary (`discovery.update`). Rooms are axis-aligned rectangles that touch but never overlap, so each doorway is exactly one boundary crossing, and the pre-check in `moves.planMove` counts the same crossings (prefixed with the room the player actually stands in) before allowing a walk.
 
 ## Players and turns (hot-seat)
+> **SUPERSEDED in part, see "Main menu, play with bots, hot-seat removed" and "Computer guests (bots)".** Hot-seat (people passing one iPad) was removed on 9 Oct 2026: it is now you and 3 to 5 computer guests on one device. Still true: `endTurn` hands control to the next living guest and refills their actions.
 - `state.players` holds per-player rules state (current room, action points, health, alive, possessed, hand, unmasked-knowledge); discovered rooms and encounter locks are shared. Only `state.activeIndex` acts; `endTurn` passes control to the next **living** player and refills their points from `rules.actionPointsPerTurn`. A round is one pass round the table; a new lap clears the per-room encounter locks. (The `escaped`/continue model of pass 2 is gone — reaching the exit is now a win check, not a per-player exit.)
 - Movement objects (`src/player.js`) are one per player; only the active one is updated each frame. Handing over the turn `halt`s the outgoing player (clears any queued path and the walking flag) so a half-finished walk can't resume — and spend a fresh point — when their turn comes round again, and so their figure doesn't keep animating a walk in place.
 - Encounters resolve after the walk finishes (the arrival is detected when the active mover's path empties), so a move-and-meet is one confirm then one modal.
 
 ## Characters (`src/data/characters.js`, `src/render/characterView.js`)
+> **SUPERSEDED, see "All six guests modelled to the owner's sheets" and "Avatars: the wardrobe, runtime portraits, bots' looks".** Guests are glTF avatars; the box figure described here is only the stand-in when a model cannot load.
 - Body types (male/female proportions) and outfits (colours + silhouette: tie/bow tie/lapels, A-line/column/full skirt) are data. The roster names five players with an outfit and a marker colour each.
 - The view builds an articulated figure from boxes with pivots at shoulders and hips and a simple walk cycle; a coloured floor ring identifies each player and a marker floats over the active one. A future glTF character view only needs to offer the same `{ group, update(mover, dt), setActive() }` surface — nothing in the rules knows what a character looks like.
 - Draw calls: ~17 meshes per character (≈85 for five) on top of the rooms. Fine for now; if the iPad struggles once all rooms are revealed, merge each room's static boxes into one mesh.
 
 ## Data-driven floor (`src/data/floor1.js`)
+> **SUPERSEDED, see "Approved rule change — the random hotel (supersedes the fixed 18-room floor above)".** `src/data/floor1.js` no longer exists and there is no fixed floor: the hotel is grown from tiles (`src/data/hotel.js`, `src/game/hotel.js`) and is different every match.
 - Rooms are placed by centre and size; furniture by room-relative position and size; each room carries its mood.
 - **Doorways are declared once**, on either room, as *which wall*, *offset from that wall's centre*, *width*, *to room*. The loader creates the matching opening on the neighbour and validates that the rooms really share that wall. Overlapping rooms, unreachable rooms, doorways blocked by furniture and a missing exit are reported as fatal problems.
 - The floor has **14 rooms** around a central landing with four doorways (west: corridor + guest suite dead end; north: corridor, lounge, library and a back passage looping round to the kitchen; east: corridor, service corridor, stairs and the exit, with a storage dead end; south: dining room dead end). Five start spots are listed in `start.positions`.
 - Action-point rules (`rules` block) are data too; the code never hard-codes costs.
 
 ## Camera and cutaway
+> **PARTLY SUPERSEDED, see "Corner-on camera and see-through" and "Camera: see the whole hotel".** The standard view is corner-on and zooms out to fit every revealed room; the cutaway idea (walls lowered so you can see in) still holds.
 - Perspective camera on a rig: fixed pitch (56°), distance = zoom, yaw snaps in 90° steps with a short eased turn. The rig follows the player with a lag; a two-finger drag adds a world-space pan offset that eases back to the player once the fingers lift.
 - Pan is computed by projecting the fingers onto the ground plane, so the floor sticks to the fingers at any zoom level.
 - **Cutaway rule** (`render/cutaway.js`): based on the camera's yaw only (so walls never flap while walking). A wall shared with another *discovered* room is lowered whenever it is perpendicular to the view, so you can see over it into the next room; exterior walls and walls to undiscovered rooms are lowered only when they face the camera, so the far walls stay as a backdrop. Wall meshes have their origin at the floor so lowering is a `scale.y` change; nothing ever scales to 0.
 
 ## Pathfinding and discovery
+> **SUPERSEDED, see "Tap a room, not a door; no walking about inside a room".** A tap picks a room, not a spot, and a guest always stands in the middle of their room. `src/game/grid.js` and the A* search still exist.
 - 0.25 m grid over the floor. A cell is walkable if it lies inside a room away from the walls (wall thickness + player clearance) or inside a doorway opening, and not inside a furniture box grown by the clearance. A* with 8 directions and no corner cutting; the cell path is then straightened (string pulling with a side margin) so walking looks natural.
 - Only cells of discovered rooms are usable, plus a **landing** just inside each undiscovered room behind a glowing doorway. Tapping on or near a glowing doorway targets that landing, so a tap on the frame reliably takes the player through (a tap exactly on the boundary would otherwise stop one cell short).
 - Tapping deep inside an undiscovered room does nothing; tapping furniture or a wall snaps to the nearest walkable floor within 1.5 m.
 
 ## Lighting and look (greybox)
+> **PARTLY SUPERSEDED, see "Starting room — baked art pass" and "Every room baked like the lobby".** Rooms are baked models now, so the light counts and room tints below describe the old greybox. Still true: lights exist from the start at intensity 0 (no shader recompiles), cheap materials, no shadows, no post-processing, pixel ratio capped at 1.5.
 - Three.js r186 uses physical light units: point-light intensity is candela with inverse-square falloff. Mood intensities in the data are small numbers multiplied by `config.render.pointLightScale`. Neutral tone mapping keeps warm colours from clipping to white.
 - **All point lights exist from the start** (added to the scene, not to the hidden room groups) with intensity 0 until a room is revealed. Three.js recompiles every shader when the number of lights changes, which would stall on the iPad at each reveal; a constant count avoids that. Budget: about 12 point lights per floor. `MeshLambertMaterial` everywhere (cheap), no shadows, no post-processing.
 - Each room's floor and wall greys are pulled 20% toward the room's mood colour (`config.render.moodTint`) so the warm→cold shift also shows in the surfaces, not only in the light.
@@ -47,6 +63,7 @@ Short record of the choices that shape the code and why, so another coding agent
 - Pixel ratio is capped at 1.5 (iPads report 2). Slightly softer, much cheaper per frame. `window.__game.setPixelRatio(2)` lets the owner compare on the device.
 
 ## Real art — room dressing (first pass, starting room only)
+> **SUPERSEDED, see "Starting room — baked art pass" and "Every room baked like the lobby".** Every room, the lobby included, is a baked glTF model now. `src/render/hallDeco.js` is gone, and so are the Kenney furniture and building pieces and their loader (`src/render/models.js` and the Kenney path of `src/render/roomDressing.js`): removed on 14 Oct 2026 because no room used them ("Round 2, docs and tests").
 - **Assets**: Kenney's CC0 *Furniture Kit* and *Building Kit* (glTF/`.glb`), organised under
   `assets/models/furniture/` and `assets/models/building/` (with the shared `Textures/colormap.png`
   kept beside the shell pieces so their relative texture references resolve). Loaded at run time
@@ -149,23 +166,27 @@ Short record of the choices that shape the code and why, so another coding agent
   furniture and merge each room's static meshes (the seam is all in `models.js`/`roomDressing.js`).
 
 ## Input
+> **PARTLY SUPERSEDED, see "Tap a room, not a door".** The input handling below still holds; a one-finger tap now means a room (open, go to, search), not "walk to this spot".
 - Pointer Events on the canvas handle touch and mouse alike. One finger = tap to walk (only if it stayed single-finger, moved ≤ 10 px and lasted ≤ 450 ms); two fingers = pinch zoom + pan; right/middle mouse drag = pan; wheel = zoom (ctrl+wheel = trackpad pinch); Safari's gesture events are used only when no touch pointers are active (desktop trackpad). `touch-action: none` plus non-passive `touchmove`/`gesture*` listeners stop iPad Safari from zooming or scrolling the page.
 - Audio: unlocked by the first tap anywhere (iOS only allows it inside a tap) — see "Music and sound effects" below.
 
 ## Testing
+> **SUPERSEDED, see README "Running the tests".** The single browser-test script described here became the suites listed there (Node suites for the rules, the bots and the words; browser suites for the screens).
 - Headless Chromium (Playwright) loads the real `index.html` from a static server; the CDN requests for Three.js are intercepted and served from a local copy because the sandbox blocks the CDN. The suite drives the game through real taps/clicks and through `window.__game` (the debug hooks in `main.js`), checks for console errors, and verifies discovery, action points, End turn, rotate/cutaway, map, exit, restart, pinch, pan, wheel, draw calls and that the shader program count never grows. Screenshots are used for visual sanity.
 - Software rendering there runs ~7 fps and the game clamps frame time at 50 ms, so time-based checks step the simulation manually.
 
 ## Rules engine (Hotel Escape)
+> **SUPERSEDED, see "Rules reset", "Owner-approved (7 Oct 2026): 4 health", "Approved rule change — the random hotel" and `src/data/rules.js`.** Three facts below were wrong and are corrected in place (14 Oct 2026): health is 4, not 3; a room costs 1 action to open its door and 1 to move in, not "2 AP for a new room"; and Master Key, Lock Pick and Barricade all work.
 Implements `docs/GAME_RULES.md`. Kept pure and separate from rendering so a server can reuse it.
-- **All rule numbers live in `src/data/rules.js`** — action points (4/turn), action costs (move 1, discover 1, search 1, use-card 1, attack 1), health (3), hand size (4), the searchable deck composition, the possessed supply (3 Possession cards), Lanterns-to-escape (3), and per-card behaviour. Change values there, never in code.
-- **Entering a room costs move + discover the first time (2 AP for a new room, 1 for a known one).** `moveCostInto`/`enterRoom` add the discover point when the room is being revealed; `usableDoorways` only blinks a door the player can actually afford, and the confirm bar shows the real cost.
+- **All rule numbers live in `src/data/rules.js`** — actions per turn (4), action costs (move 1, open a door 1, search 1, use-card 1, attack 1), health (4: it said 3 here until 14 Oct 2026), hand size (4), the searchable deck composition, the possessed supply (3 Possession cards), Lanterns-to-escape (3), and per-card behaviour. Change values there, never in code.
+- **Opening a door and moving into the room are two actions of 1 each** (it said "move + discover, 2 AP for a new room" here until 14 Oct 2026; since the random hotel you open a closed door of your own room, staying where you are, and then walk in). The Move bar shows the real cost ("Move · 2 actions").
 - **Cards** (`src/game/cards.js`): a seeded PRNG (mulberry32) drives shuffling and dealing so a game is reproducible in tests; `main.js` seeds from `Date.now()` and reseeds on New game. Each card is an instance with a unique id (revolvers carry their own `shots`). The draw pile excludes Possession cards — those are the possessed side's souls, dealt to the possessed player at setup. Each carries its `owner` (soul cards: only the owner holds and gives it); one that has done its work leaves the game, and each conversion makes `rules.soulsOnConvert` (2) new souls for the newly possessed guest, so the number in play can grow past 3 (see 'Owner-approved (10 Oct 2026): soul cards').
 - **State** (`src/game/state.js`): per-player `health`, `alive`, `possessed`, `hand`, `knows` (ids unmasked), `currentRoom`, `actionPoints`; shared `discovered` rooms and `encounterLocks`. `enterRoom` charges the move and reveals; `endTurn` skips the dead, refills AP and, on a new lap, bumps the round and clears the encounter locks. `checkWin`: humans win when a clean, living player with 3 Lanterns enters the exit; the possessed side wins when no living clean player remains.
 - **Encounters** (`src/game/actions.js`): `resolveTrade` takes both players' chosen cards and applies the spec exactly — a Possession card converts the receiver unless they gave a Lantern, in which case possession fails and the Lantern and the Possession card are both discarded (`rules.lanternBlock` 'discard'), and the defender learns the giver is possessed. `resolveAttack` applies knife/revolver damage, spends and discards an empty revolver, and marks a player dead at 0 HP. A per-room, per-round `encounterLocks` set stops the same pair being forced to meet twice in one room in a round.
-- **Cards deferred per spec §11**: Master Key, Lock Pick and Barricade are in the deck (so its composition matches the 6-player spec) but have no effect yet because locked/hidden rooms are explicitly out of this build; the hand panel labels them as such.
+- **Master Key, Lock Pick and Barricade work** (this bullet said they had "no effect yet" until 14 Oct 2026): a key or pick opens a locked door from the next room until the end of the opener's turn, and a Barricade seals a doorway of your room for one round. See "Locked doors re-lock at the end of the opener's turn" and `src/game/actions.js` (`useUnlock`, `useBarricade`).
 
 ## Turn-based interaction
+> **SUPERSEDED, see "Tap a room, not a door; no walking about inside a room" and "Rules reset".** The blinking doors, the confirm bar for a door and the free walk inside a room are gone (you tap rooms; a guest stands in the middle of theirs); the meeting flow now follows "Rules reset" and docs/GAME_RULES.md.
 - Movement is no longer free roaming: on a player's turn the doors leading out of their room blink (a bright floor bar, a deliberate action cue kept separate from the mood flicker). Tapping a door raises a confirm bar; confirming spends 1 AP and walks the player to a free standing slot in the room (the centre, or a nearby spot when others are already there — arrivals avoid overlapping). Tapping inside the current room is a free reposition. An undiscovered room can only be entered as far as the doorway landing until it is revealed, after which the player can move freely inside it.
 - The encounter modal mirrors the real game's flow even though hot-seat makes everything visible: the entering player picks a card, then the other, then it resolves. The UI is split into `src/ui/` (card tiles, hand panel, encounter modal) so the presentation can change without touching the rules.
 - Rooms are searchable only where the data says so (`searchable: true` — the content rooms: guest suite, lounge, library, kitchen, storage, dining), never corridors/landings/stairs, and each room can be searched once (`state.searchedRooms`). Dark rooms (`dark: true` — Back Stairs Passage, Storage, Service Corridor) also need a Flashlight to search.
@@ -173,6 +194,7 @@ Implements `docs/GAME_RULES.md`. Kept pure and separate from rendering so a serv
 - A dead player's character view lies flat with a small blood pool (`characterView.setDead`) and stays where they fell; the turn strip crosses them out.
 
 ## Interface layout (portraits, panels, hand)
+> **PARTLY SUPERSEDED, see "Interface redesign", "The possessed guest's own interface" and "Round 2, polish".** Health is four bars (not three), and the hand is a fan of face-up cards, not face-down backs. Portraits are drawn from each guest's avatar.
 - Placeholder character faces live in `src/ui/portrait.js` (`makePortrait(doc, player, {possessed})`) as inline SVG — one function behind which real face art can drop in later without touching the interface logic. Normal and POSSESSED (the same face with both eyes a deep blood-red iris and a white catchlight — the drawn fallback for the possessed portrait images) are two states of the same call; callers just pass the player and whether to show the possessed look.
 - Bottom-left **active-player panel**: portrait (normal / possessed), name, three health bars, AP. The possessed portrait and a faint dark-plum corner shadow (`#possess-tint`, pointer-events none, under the HUD; hidden again by `hud.hide()` on the way back to the menu) are driven by the viewer's own `possessed` flag, so they update automatically.
 - Top **players strip**: a small portrait + name per player, the active one highlighted with a coloured ring and a TURN tag, the dead crossed out. These portraits are always drawn normal — they never reveal a possessed role (hidden information).
@@ -181,6 +203,7 @@ Implements `docs/GAME_RULES.md`. Kept pure and separate from rendering so a serv
 - **Hand limit** (`rules.handLimit`, 6): at End turn a player over the limit gets a discard modal (`src/ui/discard.js`) — tap cards to drop until at 6, then Done — before control passes on. `actions.discardCard`/`overHandLimit` are the pure helpers.
 
 ## Interface redesign — Art Deco player interface (pass 11)
+> **PARTLY SUPERSEDED, see "Search from the room, and the hand held like cards" and "Round 2, polish".** There is no Search button and the hand is a fan now; the Art Deco look and the rule that existing element ids are kept still hold.
 - The interface was restyled to the approved grand-hotel concept (charcoal-navy panels, brass
   hairline framing, ivory serif display type) entirely in `styles.css` plus small structural
   changes; **every DOM id/class the game code and the browser test rely on was preserved**, so the
@@ -210,6 +233,7 @@ Implements `docs/GAME_RULES.md`. Kept pure and separate from rendering so a serv
   "Artwork still needed".
 
 ## First real 3D character — Victor (glTF, tuxedo outfit)
+> **HISTORY, see "All six guests modelled to the owner's sheets" and "Avatars: the wardrobe, runtime portraits, bots' looks" for what ships now.** This section and the next two (Victor v2, v5) record how the first glTF guest was made.
 - **What changed**: only the `tuxedo` outfit now carries `model: 'assets/characters/victor.glb'`
   (+ `modelHeight`). Every other guest still uses the placeholder box figure. Nothing in the game
   rules, movement, collision, camera, selection ring/marker, colours, or death behaviour changed —
@@ -312,6 +336,7 @@ Implements `docs/GAME_RULES.md`. Kept pure and separate from rendering so a serv
   the model (owner-authorised), see below.
 
 ## Victor v2, grounded movement and the interface pass (pass 12b)
+> **HISTORY, see "All six guests modelled to the owner's sheets".** Walking is now by room, not free movement.
 Brief: bring Victor, his movement and the player interface up to the owner's cartoon target
 (`docs/CHARACTER_GUI_CHECKPOINT.md` has the measured target, the gap analysis, every increment and
 the lessons). Key decisions:
@@ -357,6 +382,7 @@ the lessons). Key decisions:
   340 draw calls, 41,426 triangles, 13 programs (headless count, same code path as the iPad).
 
 ## Victor v5 — rebuilt to the owner's character sheet (Victor-only pass)
+> **HISTORY, see "All six guests modelled to the owner's sheets" and "Avatars: the wardrobe".**
 - **Measure, then model.** The character sheet's front panel is the proportion authority: every
   vertical landmark is stored as a percentage of standing height in `CFG` (`make_victor.py`), and
   the skull and hair are superellipse shells driven by height tables read off the sheet
@@ -381,6 +407,7 @@ the lessons). Key decisions:
 
 
 ## Phase 1 — the hot-seat rules sandbox (local only)
+> **SUPERSEDED, see "Rules reset" (next section) and "Main menu, play with bots, hot-seat removed".** Hot-seat, the Offers ruleset, the "legacy" engine, "Possession is an intent" and the six-guests-one-iPad privacy design are all gone. There is one ruleset (`src/data/rules.js`), `applyMode` takes `'practice'` or `'match'`, and `?mode=hotseat` links open a match against bots.
 - **One rulebook, three modes.** `src/data/rules.js` holds the practice defaults and an
   `applyMode(mode, playerCount)` that overwrites what a mode changes: `'practice'` (Phase 0),
   `'hotseat'` (the approved v1 rules) and `'legacy'` (the older engine, kept working and tested).
@@ -428,6 +455,7 @@ the lessons). Key decisions:
 
 
 ## Rules reset — the owner's restored ruleset (supersedes the two sections above on rules)
+> **The hot-seat parts of this section are SUPERSEDED, see "Main menu, play with bots, hot-seat removed".** There is no device to pass: "private screens" are now screens only the player looks at, and `applyMode('hotseat')` is `applyMode('match')`. The rules half (one ruleset, the owner's numbers, GAME_RULES.md guarded by CLAUDE.md) still holds.
 - **`docs/GAME_RULES.md` is the product design, and `CLAUDE.md` now guards it.** No rule or number
   changes without the owner's explicit approval of a plain-language before/after list. The Offers
   ruleset lives on in `docs/archive/GAME_RULES_offers_version.md` and in git history only.
@@ -464,6 +492,7 @@ the lessons). Key decisions:
 
 
 ## Approved rule changes — Lanterns are the way out
+> **Some numbers here changed, see "Owner-approved: 1 Lantern each; hand limit at the end of your turn".** Every guest now starts with 1 Lantern (they were "never dealt" when this was written). Three Lanterns to escape, and a Lantern as the block against possession, still hold.
 - **Lanterns do double duty.** Three in a clean guest's hand open the exit (`rules.lanternsToEscape`);
   given in a trade they block possession. The key pieces, their hiding and the `pieceRooms` state
   are gone.
@@ -491,6 +520,7 @@ the lessons). Key decisions:
 
 
 ## Approved rule change — the dawn deadline
+> **"Hot-seat only" below now means "a match" (not practice), see "Main menu, play with bots, hot-seat removed".** The rule itself (dawn after round 8, `rules.roundLimit`) is unchanged.
 - **`rules.roundLimit` (8) is checked in `checkWin`, hot-seat only.** `state.round` advances as the
   last living guest of a round ends their turn, so `round > roundLimit` is true exactly when round 8
   has ended. The dawn check comes after the escape check and after the "no clean guest left" check,
@@ -703,6 +733,7 @@ Target: `docs/art-reference.jpg` (style, palette and finish; not its layout or i
 - **Scene cost** with all six on screen in the lobby: 144 draw calls, ~237k triangles, 11 shader programs.
 
 ## Search from the room, and the hand held like cards (interface only — no rule changed)
+> **The hot-seat wording in this section is SUPERSEDED, see "Main menu, play with bots, hot-seat removed".** The hand-over screens it mentions are now private screens for the one player; the search icon and the card fan described here still ship.
 - **No Search button.** The furniture flagged `search: true` in `src/data/hotel.js` carries the search
   spot. `placeRoom` (`src/game/hotel.js`) now keeps that flag on the placed, turned furniture and
   `searchSpotOf(room)` returns it, so any new footprint works with no code change. The icon
@@ -738,6 +769,7 @@ Target: `docs/art-reference.jpg` (style, palette and finish; not its layout or i
   in the rules, so the existing discard prompt stays the only place for it.
 
 ## Playtest fix round (interface; one owner-approved rule)
+> **The hot-seat wording in this section is SUPERSEDED, see "Main menu, play with bots, hot-seat removed".** The skipped-trade rule and its neutral words still hold.
 
 - **Skipped trade = pure rules + neutral words.** `canTrade(P, Q)` and `skipTrade(state, floor, P, Q)`
   live in `src/game/actions.js` so a server can reuse them; `resolveTrade` refuses a trade that should be
@@ -806,6 +838,7 @@ Target: `docs/art-reference.jpg` (style, palette and finish; not its layout or i
   instead of a large white tick in the air.
 
 ## Reliable door taps (touch fix round; no rule changed)
+> **SUPERSEDED, see "Tap a room, not a door; no walking about inside a room".** Doors are no longer tapped or ringed (a tap picks a room); the lesson that a late click lands on whatever is under the finger by then still matters (see `src/ui/tapGuard.js`, which keeps a double tap from answering the next screen).
 
 - **No "ghost" confirm.** A finger tap is followed by a browser click aimed at whatever is under the
   finger by then. A door ring under the spot where the Move/Open bar appears got that late click on
@@ -865,6 +898,7 @@ Target: `docs/art-reference.jpg` (style, palette and finish; not its layout or i
 
 
 ## The possessed guest's own interface (interface only; no rule changed)
+> **The hot-seat parts are SUPERSEDED, see "Main menu, play with bots, hot-seat removed" and "The possessed look".** The possessed look is shown on the player's own screen only (nobody else looks at it); "Souls to trade" and the ×N Possession card still ship.
 
 - **"Souls to trade"** is the owner's word for the Possession cards a possessed guest still holds
   (`soulsHeld` in `src/ui/souls.js`, simply the Possession cards in their hand). It is shown as a small
@@ -948,6 +982,7 @@ Target: `docs/art-reference.jpg` (style, palette and finish; not its layout or i
 
 
 ## Owner-approved: card counts are private (and what hot-seat may show)
+> **The hot-seat reasoning is gone, the rule stays** (docs/GAME_RULES.md, Possession: the table never sees how many cards another guest holds). See "Main menu, play with bots, hot-seat removed".
 - **Rule (docs/GAME_RULES.md > Possession):** the table never sees how many cards another guest holds. The top strip shows
   only the room and health; not even the active guest's own count is on it, because the whole table sees the strip in
   hot-seat. Why: a Possession card changing hands, or a Lantern block, changed the counts unevenly and gave possessions
@@ -964,6 +999,7 @@ Target: `docs/art-reference.jpg` (style, palette and finish; not its layout or i
 
 
 ## Owner-approved (7 Oct 2026): 4 health, 2 Possession cards, the chain
+> **The Possession cards number was changed again, see "Owner-approved (10 Oct 2026): 3 Possession cards" and "Owner-approved (10 Oct 2026): soul cards".** It is 3 now, and each card is its owner's soul. Four health still holds.
 - `rules.maxHealth` 3 → 4 and `rules.possessionSupply` 3 → 2 (src/data/rules.js). Everything reads them: the
   engine, the health bars (four fit the panel at 1024 px), the strip's hearts, the souls count, the
   balance simulator (≈31% clean wins, 6 players, mixed table).
@@ -1099,8 +1135,10 @@ Target: `docs/art-reference.jpg` (style, palette and finish; not its layout or i
   Lantern when suspicion or caution is high, collect Lanterns and head for the Fire Exit, and late on turn
   on strong suspects or pool a single Lantern with a guest they are sure of. Possessed bots build trust
   first (a friendly trade, then the attempt on that guest), prefer guests who did not block them, feel the
-  clock once the Fire Exit is found, search hard and open few doors, and some stand guard in the room
-  before the Fire Exit. Behaviour knobs live in `TUNING` (`src/bots/brain.js`) — bot behaviour only, never a
+  clock once the Fire Exit is found, search, open doors (a little less keenly than a clean guest) and wander
+  rather than stand still, and some stand guard in the room before the Fire Exit now and then (14 Oct 2026: they
+  used to "open few doors" and park by the Fire Exit, which gave them away; see "Round 2, computer guests and
+  sound"). Behaviour knobs live in `TUNING` (`src/bots/brain.js`) — bot behaviour only, never a
   rule — and `tools/balance/bot-match.mjs --tune` tries them.
 - **Pace**: `thinkMs` gives quicker-than-human pauses (about 0.35–1.4 s a step, 0.7–2 s for trades and
   meetings, an occasional "hmm" up to 2.5 s, times the guest's pace 0.7–1.4); the interface multiplies by
@@ -1959,6 +1997,114 @@ An independent review of the three builds above found these; each was reproduced
   later than the fixed 600 ms the test waited); the README's rollback section says how to bring the rolled-back
   work back (`git revert` the rollback commit: a merge of the old branch says "Already up to date").
 
+## Round 2, polish: small text, guests easier to tell apart, keyboard focus and tall pop-ups, the app icon, a match the browser cut short (14 Oct 2026 — interface, tests and docs only; no rule or rule number changed)
+
+From the 13 Oct audit, items G5, G7, G12, G13 and G14 of the owner-approved list.
+
+- **Small text (G5; design-5, compat-10).** The floor for visible text is now 11 px, and 12-13 px for what a player
+  reads or acts on mid-turn. Changed in place in `styles.css` (about 30 labels, only the key ones): the turn flags
+  above the strip 9 -> 11 px; the strip's room and hearts 11.5 / 11 -> 12; Safe zone 11 -> 12; Health / Actions 11
+  -> 12 (the label column 52 -> 58 px); the CLEAN / POSSESSED pill 10.5 -> 12 and "Only you can see this" 10.5 -> 12
+  (12.5 in the role card's head); "My cards" 12 -> 13; the Revolver / souls badge on the fan 10.5 -> 12; the search
+  icon's caption 11.5 -> 12.5; the card view's "Private" 11 -> 12; the chat panel's tabs 11 -> 12.5, its heading
+  10 -> 11, the "WHO" blank in a line 10 -> 12; the Tip label 10 -> 11; Your record's captions 11 -> 12; "Playing
+  as" 10.5 -> 12; the version line and the problem card's small print 11.5 -> 12; the attack scene's "Empty" tag 11
+  -> 12; and the wardrobe's "Coming soon" 9.5 -> 11 px and brightened (the old brass-dim was 3.85:1 on the panel,
+  now about 8:1). What is left under 12 px is four labels, all at 11 and all secondary (the turn flags, "Coming
+  soon", the Lanterns chip's word, the Tip label). The HUD is tight at 1024 wide, so every block was measured at 1024x768 and
+  1024x694 before and after: no block overlaps another, no key label is cut off, the chat panel, the map's legend
+  and the Settings / Record / wardrobe panels still fit (`tests/browser-polish.mjs`, section text). Not done, on
+  purpose: a "Text size" setting (a held recommendation, the owner's call) and the role paragraph's size (the learn
+  agent's).
+- **Guests easier to tell apart (G7; graphics-8, compat-9).** (1) The other guests' floor rings are at 0.6 (was
+  0.35: `config.character.ringInactiveOpacity`) and every ring has a thin dark edge (a second, wider ring just
+  under it, one extra small mesh per guest; `src/render/characterView.js`), so a colour reads on the red rugs and
+  the cream floor alike. (2) Each guest's initial sits in their dot on the plan (the dots are bigger, radius 10; the
+  guest whose turn it is has a brass halo and a heading pointer) and in the corner of their portrait in the strip
+  (CSS `::before` on `data-mark`, so it survives the portrait being swapped for red eyes). The mark is
+  `guestMarks` in `src/table.js`: the first letter; two letters each when two names start alike ("Mi", "Mo"); the
+  seat numbers if even those match. Names are public, so it shows nothing private. (3) The lime seat colour
+  merged with gold and orange for red-green colour blindness (CIELAB distance 5; under about 12 is hard to tell
+  apart), and cyan with lavender (8.6). `SEAT_COLORS` is now `#e6bc5c #73d4e6 #2f8cff #e673ac #e6652e #b6b2ff`
+  (gold, sky, blue, pink, vermillion, lilac): the lime became a blue, and the other five moved a little (about 8 or
+  less in CIELAB: gold a touch lighter, orange redder, lilac a touch bluer) because replacing the lime alone could
+  not lift cyan / lilac above 8.6. Found by searching candidate sets with the Machado simulations of protanopia,
+  deuteranopia and tritanopia; every pair is now at least 17.5 apart under all four ways of seeing (32 normal, 24
+  protanopia, 17.5 deuteranopia, 23 tritanopia). Every place that draws a seat colour takes it from the seat: the
+  ring, the strip's underline and corner mark, the plan's dot, the chat bubble's dot, the feed, the end screen, the
+  matchmaking list; the lobby roster in `src/data/characters.js` and the legend's swatch in `styles.css` were
+  updated to match. `tests/polish-check.mjs` runs the simulation (the old set is the control that fails). A
+  floor ring still has no letter (the name tags show names when zoomed out): the strip and plan carry the marks.
+  Not done: a different ring SHAPE per seat (the audit's other suggestion): the owner's look-and-feel choice.
+- **Keyboard focus and tall pop-ups (G12; compat-5, compat-6).** `src/ui/focus.js` is a watcher over the screens
+  that cover the game: the private screens (one overlay: the secret role, the turn's start, the trade pick and its
+  result, a note, the Hand Mirror, a search's find), the discard, meeting, question, notice, end and problem
+  screens, the card view and the map. While one is open (its overlay has no `hidden`) focus moves to its main button
+  (the pick and the discard: the first card, because Give / Discard wait for a choice), Tab and Shift+Tab stay inside
+  (so Tab can no longer reach Main menu or the game under the secret role card; the old behaviour is reproduced by
+  `tests/browser-polish.mjs --control`), the dialog is `role="dialog"` (the existing `alertdialog` stays) with
+  `aria-modal="true"` and a name (its title), Escape does not skip a private screen (it takes the plain way out only
+  on a question, "Keep playing", and on the card view and the map, which the player opened) and focus goes back to
+  where it was. It needs no change inside those screens (it watches the `hidden` attribute and re-places focus
+  when a screen draws its next step in place), it is one call in `src/main.js`, and `watchDialog(doc, spec)` is the
+  reusable part: the in-match Menu panel and How to play already keep their own focus (`gameMenu.js`, `howToPlay.js`),
+  and could be a list entry. `inert` on the game behind (the audit's suggestion) was not needed: Tab is held in the
+  dialog and `aria-modal` hides the rest from a screen reader; Safari 15.5+ would take it if that proves not
+  enough. A card you can choose (the pick, the discard, a weapon) is now a keyboard button too (`tabindex`,
+  `role="button"`, `aria-pressed`, Enter / Space): without that the trap would have held a keyboard player in a
+  screen with nothing to choose. Touch scrolling: `data-scrolls` on the four containers (the discard and the
+  meeting `.modal`, the hand-over card, the card view's text column), which `src/input.js`'s touchmove rule already
+  lets through, plus `overscroll-behavior: contain`; checked with real touch events through the DevTools protocol
+  (the wardrobe's list scrolls 185 px with the same swipe, the control; each pop-up scrolls with the attribute and
+  not without). The discard draws more than 8 cards smaller (84 px, six to a row: `#discard-cards.dense`), so 11
+  cards fit at 1024x694 with Done on the screen (it was 710 px tall in a 650 px box).
+- **Home Screen (G13; design-12, graphics-10, code-12, compat-12).** An icon the owner may change: a brass lantern
+  on navy in a thin Art Deco ring, drawn as SVG from the look of the Lantern card (`assets/icons/icon.svg`,
+  1024 x 1024; a simpler `favicon.svg` for the tab), rasterised with headless Chromium to `icon-180` (the
+  apple-touch-icon), `icon-192`, `icon-512`, a maskable 512 and the 32 / 16 px favicons (`assets/icons/README.md`).
+  `manifest.webmanifest`: name and short name "Hotel Escape", `start_url` and `scope` `./`, `display: standalone`,
+  `orientation: landscape`, theme and background `#0f1119` (the page's own background; the head's `theme-color` was
+  `#141318` and is now the same), icons by relative path. **standalone, not fullscreen**: nothing here shows what
+  iPadOS does with `fullscreen` (no device), `apple-mobile-web-app-capable` in the head already makes iOS run the
+  saved page without Safari's bars, and `standalone` is the value every platform treats the same. The head gained
+  `link rel=icon` (SVG, 32, 16), `apple-touch-icon`, `manifest`, `apple-mobile-web-app-title` and
+  `mobile-web-app-capable`; every path is relative (the site is at a sub-path), checked by loading the game from
+  `/Gaming-App/`. No service worker: nothing is cached for offline, which `docs/ONLINE_PLAN.md`'s caution about
+  offline tricks asked for. **A Home Screen copy has its own storage**: an empty profile and record (the register
+  again), separate from Safari's; said in the README. The picture is a proposal: the audit left it to the owner.
+- **A match the browser cut short (G14; compat-1, step 1 only).** `src/matchMarker.js` writes
+  `hotelEscape.matchInProgress.v1` in localStorage (the skeptic's advice: sessionStorage is less sure to survive a
+  Safari kill) holding only the time, when a real match begins (`begin()`, `src/main.js`: not practice, not a
+  direct link) and removes it when the end screen shows and in `backToMenu` (Menu > Leave > Main menu, the end
+  screen's Main menu and the problem card's Back to menu all go through it). At the next start of the main menu, if
+  it is still there and is less than 6 hours old, the game counts one "Left early" (`record.countLeft`), clears the
+  marker and shows the notice card once: "Welcome back. The game was restarted by your browser. Your last match was
+  not finished and is counted as left early." (`src/data/lostMatch.js`; the notice card now sits above the menu: z-index 45). An older, damaged
+  or future-dated marker is ignored and removed. A direct link (`?mode=`) and practice never read or write it, so
+  the test suites are not affected. A match left on purpose is counted at once by `backToMenu` and the marker is
+  cleared first, so nothing is counted twice. No Resume: it would be thrown away by online play (the server will hold
+  the match), and it waits for the owner to say how often a real iPad cuts a match short. Known limits: two tabs
+  of the game (the second one sees the first one's marker and says so); a tab closed on purpose in the middle of a
+  match reads the same and is counted as left early, which the skeptic found right.
+- **Tests.** New `tests/polish-check.mjs` (node, ~1 s, also in the GitHub Action: the seat colours under the three
+  colour-blindness simulations with the old set as the control, the marks, the marker's every case, the ring's
+  numbers) and `tests/browser-polish.mjs` (head / reload / focus / scroll / text / seats; `--control` runs the focus
+  section against a focus.js that does nothing, and it fails as the audit described). Run with these changes
+  in place and passing: rules-check, logic-check, bots-check, chat-check, profile-check, crash-check,
+  audio-buttons-check, flicker-check, howto-check; and in a browser browser-build-fixes, browser-lobby (the extra ring
+  mesh per guest is one more draw call each: 62 in the lobby view, budget 120), tips-check, trade-reveal-check,
+  browser-profile, browser-reliability, avatar-check, browser-practice, audio-check. `browser-bots` passed all of
+  its checks except one timing-sensitive check per run (the chat bubble "You tried to possess me!" in one run; "a bot
+  attacks you: the result says hit you" in two others, where the bot that met the player traded instead of
+  attacking: the scripted attack depends on the order the computer guests act in, and `src/bots/` was being
+  changed by another task at the time). What those two checks read (a bubble's text, the attack panel's text) is not changed by this round.
+- **Only a real iPad can say**: how the larger labels sit at the real size and in sunlight (the HUD was measured in
+  Chromium at the true window sizes, but Safari's text metrics differ a little); whether Safari's focus ring and
+  an iPad's keyboard behave like Chromium's (Tab order, Enter on a card, Escape); whether VoiceOver announces the
+  dialogs and card buttons well; real finger scrolling of a tall pop-up; the icon on the Home Screen at its true
+  size and rounding, whether `standalone` opens full screen as hoped, and what the Home Screen copy's empty profile
+  feels like; and whether Safari ever discards the tab mid-match (the note is how the owner will know).
+
 ## Round 2, learn: How to play, the Menu panel, the Lanterns chip, Victory / Defeat, three tips (14 Oct 2026 — interface, tests and docs only; no rule or rule number changed)
 
 From the 13 Oct audit (owner-approved list: F1 teach new players, G17 the Menu panel, G6 the Lanterns count and
@@ -2063,3 +2209,321 @@ untouched and no rule was added, removed or changed.
   play pages), whether Safari's focus ring or keyboard show up the way Chromium's do, how Back / Next feel with a
   finger, the sound rows' loudness change while a match plays, and whether the new camera tips read well beside the
   round buttons at the real size.
+
+## Round 2, computer guests and sound: possessed guests that blend in, a Hand Mirror that shows no soul, downloads that retry (14 Oct 2026 — bot behaviour, one line of text and sound loading only; no rule or rule number changed)
+Items F2, G8 and G9 of the owner-approved list from the audit of 13 Oct 2026. Nothing in `src/game/*` or
+`src/data/rules.js` was touched; bot behaviour lives in `src/bots/*`.
+
+- **The problem (F2).** A possessed computer guest opened 0.10 doors a turn in rounds 1-3 (a clean one 1.38), from
+  round 4 stood still on 40% of its turns, often in the room beside the Fire Exit. Both the feed ("X opened a door")
+  and the top strip (where every guest stands) are public, so a player who watched them could pick out the possessed
+  guest: with no door opened after two rounds it was possessed 86-96% of the time, two turns running beside the Fire
+  Exit 95-97%. Hiding the strip or the feed would take information from people too, so the bots changed instead.
+- **What the bots do now** (`TUNING` and `Mind` in `src/bots/brain.js`; every number can be tried with
+  `tools/balance/bot-match.mjs --tune` or `tools/balance/tells.mjs --tune`):
+  - **Explore**: `possExplore` 0.4 -> 2.5 (a possessed guest opens doors at about 60% of a clean guest's rate in
+    rounds 1-3, 0.76 against 1.25 a turn at six guests, instead of 7%). `hoard` 1.4 -> 1.0 (it searches like a clean
+    guest). This is a blend-in, not a plan: the Fire Exit still helps only the clean side.
+  - **Guard less, and not for long**: `campWeight` 1 -> 0.05 and the liking for the post fades turn after turn in
+    the same room (`campFatigue`, from the guest's own record `mem.stay`). A guard is now rare and short. It was worth
+    only about 3 points of balance.
+  - **Wander**: a possessed guest with nothing pressing walks to a room it has not been in for a while (`roam`,
+    `roamOptions`, from its own `mem.seen`) instead of standing still.
+  - **Personality**: a new trait, `curiosity` (`src/bots/profiles.js`), 0.05-0.95, for clean and possessed guests
+    alike, scales how keen a guest is to open doors (about 0.1 to 1.9 times usual: some guests are homebodies who open
+    no door for a round or two, some are first through every door) and, the other way, how much of a homebody guards.
+    It is worked out from the guest's name and its other traits, with no random draw of its own (a test counts: still 25
+    draws a guest), so the guests rolled for a given seed are exactly the guests as before. Because a clean homebody
+    now also opens no door early, "has not opened a door" is no longer a purely role-based sign.
+  - **Winning back the balance** (more exploring helps the clean side find the Fire Exit sooner: at four guests it was
+    found about 1.2 rounds earlier): `attemptBias` 0 -> 0.1 and a new `attemptSmall` 0.1 for each seat below six (fewer
+    guests, fewer chances to try a soul). These are possessed-side bot knobs, not rules.
+- **Measured** (all-bot matches with the game's own computer guests, `tools/balance/tells.mjs`, 4,000 matches a size;
+  "possessed" includes guests converted by then; 6 / 5 / 4 guests; before -> after):
+
+  | what a person could watch for | before | after |
+  |---|---|---|
+  | (a) no door opened by the end of round 2, possessed | 86 / 92 / 96% | 47 / 56 / 59% |
+  | (a) no door opened by the end of round 3 | 94 / 98 / 99% | 61 / 69 / 72% |
+  | (a) the one guest who opened the fewest doors by round 3 is the original possessed one (a guess at random: 17 / 20 / 25%) | 70 / 80 / 89% | 21 / 27 / 36% |
+  | (b) same ordinary room at the end of 3 turns in a row, round 3 on | 97 / 97 / 96% (10,623 times at 6) | 41 / 42 / 35% (383 times) |
+  | (b) a turn with no action at all, round 3 on | 94 / 96 / 97% | 17 / 18 / 18% (so now it points at a CLEAN guest) |
+  | (c) beside the Fire Exit at the end of 2 turns in a row | 97 / 96 / 95% (17,325 times at 6) | 53 / 47 / 33% (543 times) |
+  | (c) beside the Fire Exit at the end of any turn, round 4 on | 85 / 83 / 78% | 57 / 54 / 43% |
+  | (c) inside the Fire Exit, round 4 on, is possessed | 0.3 / 0.1 / 0.0% | 6 / 7 / 6% |
+  | doors a turn in rounds 1-3, possessed / clean (6 guests) | 0.10 / 1.38 | 0.76 / 1.25 |
+  | clean side wins, 6 / 5 / 4 guests (seed 3, 4,000 matches; seed 11, 4,000; `bot-match` seed 9, 2,000) | 46.8 / 40.0 / 31.5; 47.2 / 39.8 / 30.7; 46.0 / 40.0 / 31.1% | 47.3 / 38.3 / 33.1; 47.2 / 40.4 / 31.4; 48.6 / 38.9 / 31.8% |
+  | possession attempts / successes a match (6 guests) | 5.5 / 2.4 | 6.2 / 2.6 |
+  | match length, median rounds / turns (6 guests) | 7 / 39 | 6 / 34 |
+
+  Every signal is now at or under about 70% (the target was 65-70%), and the one-guess tests near the chance of
+  picking a guest at random. The balance did not move: averaged over the three runs the clean side wins 46.7 -> 47.7%
+  at six guests, 39.9 -> 39.2% at five, 31.1 -> 32.1% at four (one run is good for about 1 point either way; the
+  largest single difference was 2.6 points). (The 50 / 42 / 34 in "Measured balance" above was measured before the
+  soul cards; the bots measured 47 / 40 / 31 just before this change.) Refused actions 0 and unfinished matches 0 in
+  every run. A bot turn takes about 0.7 s longer (4.0 actions instead of 3.5), but matches are shorter, so a whole
+  match takes about as long.
+- **What is still a sign.** A guest in the Fire Exit is clean about 94% of the time (clean guests wait there, a
+  possessed one rarely does: it was 99.7%). The guest who has walked the most rooms by round 5 is the original
+  possessed one 27 / 31 / 42% of the time (chance 17 / 20 / 25%): possessed guests wander. A guest who stands still is
+  now more likely clean than possessed. None of these is a rule; each is one more knob if the owner wants it flatter.
+- **Hand Mirror (G8).** A Hand Mirror showing "no Possession card" proves nothing: a possessed guest who has used or
+  given away every soul shows none (3,000 six-guest matches: 32.5% of such looks were at a guest already possessed).
+  The result screen (`privateHand` in `src/ui/handoff.js`, `MIRROR_NO_SOUL`) now says, whoever you are: "No Possession
+  card. A possessed guest who has used all their souls shows none." (nothing is added when a soul is seen: the
+  existing line names the guest). The computer guests agree: a guest cleared only by a mirror is "likely clean"
+  (`isLikelyClean`, estimate `mirrorSuspicion` 0.25, `mem.mirrorClear`) and no longer "certainly clean" (4%, still what
+  the Switchboard's count gives). A claim that such a guest is possessed counts against the speaker half as much. The
+  look still goes out of date when the guest trades again. A possessed bot's own look still clears nobody.
+- **Chat kept in step.** The bots' lines are unchanged; two things moved with the bots' movement. The possessed
+  "Meet me at the Fire Exit." was said only while standing beside the Fire Exit, which they now rarely do, so
+  `tests/chat-check.mjs` (no role tells: the plans said at the start of a turn come about as often from either side)
+  failed; it is now said by a possessed guest holding a soul within two doors of the Fire Exit (`nearExit`), which
+  gives about the same number of lines a turn as before (10.7 clean / 9.4 possessed per 1000 turns, 13.0 / 8.1 before).
+  The test also gained two honest exceptions it had needed all along: "I trust <name>." from a possessed guest may be
+  for a guest it has made a friendly gift to (the bot's own rule), and "Stay away from <name>!" is only expected to
+  raise the estimate when the bot does not already think the speaker all but certainly possessed.
+- **Sound downloads (G9, `src/audio/index.js`).** A failed download is tried again after 3 s, then after 10 s
+  (`RETRY_PAUSES`), only waiting, never a loop, never holding the game: the sound simply arrives when the file does
+  (the night music fades in a few seconds late; an effect missed once is heard from the next time). A file that is
+  really not there (404) is asked for once. A file that failed every try rests for a minute (`COOL_OFF_MS`) and is
+  asked for afresh the next time something wants it; a scene's music that failed every try is asked for again by
+  itself after the rest (twice at most). Three effects in a row failing every try stop the preload (the connection
+  is down); the others are asked for when needed. Before, one failed request silenced a file until the page was
+  reloaded.
+- **Sound ahead of time (G9).** The night music's download (1.9 MB, bytes only, decoded when the game starts, so
+  memory is as before) starts when "Find a table" is pressed (`startBots`) and, for practice, when the lift starts
+  (`setScene('intro')`); the four end fanfares (win, winPossessed, lose, dawn: about 590 KB, the same for every
+  guest, whichever side) are fetched from round 3 (`prefetchEnding`, `ENDING_FROM_ROUND` in `src/main.js`: a match
+  runs six rounds at the median, so the first version, round 7, left most matches to fetch them at the end; it is
+  bytes only, nothing decoded), and the final-round music is decoded ahead in round 7. The 2.5-second rule
+  for a fanfare is unchanged. Before the first tap nothing new is fetched: only the menu's own music, as before.
+- **Tests.** `tests/audio-load-check.mjs` (new, node, ~3 s, in the GitHub Action): with the network and the clock
+  faked, the exact request order and spacing (3 s then 10 s, nothing before the first tap, the 404, the rest, the
+  lift, the fanfares, the connection down). `tests/audio-check.mjs` gained a request log (before the first tap only
+  `music-lobby.mp3`; `music-game.mp3` fetched while the table fills up, a few seconds after "Find a table" and before the
+  lift (the test prints the actual gaps; they depend on the machine and are not asserted); the four fanfares from round 3,
+  none before, none at the end) and a section where a real browser has the first
+  request for the night music and for the rummage aborted. `tests/bots-check.mjs`: a possessed bot opens doors in
+  rounds 1-2 at least a third as often as a clean one; of the guests with no door opened by the end of round 2 at most
+  70% are possessed; the Hand Mirror cases (likely clean, Switchboard certain, out of date after a trade, a possessed
+  bot's look clears nobody); the curiosity trait (spread, no extra draw). `tools/balance/tells.mjs` (new) is the
+  measuring tool for the table above.
+- **Only a real iPad can say**: whether a real Wi-Fi hiccup or Safari's own network handling behaves like the aborted
+  request of the test (a request that stalls for a long time without failing is not retried: there is no timeout), how
+  the extra 2.5 MB of downloads in matchmaking and from round 3 feels on a slow or metered connection, whether the music
+  decoding the downloaded bytes at the start of a match is as quiet on the iPad as it was, and above all how the
+  computer guests FEEL: whether a possessed guest that opens doors and wanders still plays plausibly and the match is
+  as tense as before.
+
+## Round 2, docs and tests: a DECISIONS file that says what is current, a README that works from a clean machine, tests for public events and Your record, unused files removed (14 Oct 2026 — documents, tests, tools and a clean-up; no rule or rule number changed)
+
+Items F7 and G18 of the owner-approved list from the audit of 13 Oct 2026 (the audit's code-4, code-5, code-6,
+code-8, code-10, graphics-13 and security-15), done last, after the other Round 2 builders, so the documents describe
+the final state. Nothing in `docs/GAME_RULES.md` and no number in `src/data/rules.js` changed (two new constants in
+it are the table sizes below, with the same values the code already used).
+
+- **DECISIONS.md reads from the top (F7, code-4).** A "Read this first: what is current" block at the very top
+  (the numbers and where they live, the architecture in one paragraph, how to test, which early sections are
+  superseded and by what, which files the old text names that no longer exist). Every stale early section starts with
+  a one-line **SUPERSEDED, see "…"** (or PARTLY SUPERSEDED, or HISTORY) pointing at the section that holds the current
+  facts; the six wrong facts the audit listed are corrected in place and say so ("No addons are used" — there are
+  `three/addons` imports; health 3 — 4; "2 AP for a new room" — open a door 1 and move 1; "Master Key, Lock Pick and
+  Barricade have no effect" — they work; `floor.js`/`floor1.js` — `hotel.js`). **No section was moved, renamed or
+  deleted**, so docs/PROGRESS.md's references by name still work (the skeptic's point: do not move sections to
+  `docs/archive/`). The suggested CLAUDE.md line ("when a decision changes, edit its section the same day") was NOT
+  added: CLAUDE.md is the owner's file; it is proposed in the report.
+- **The documents are checked (`tests/docs-check.mjs`, node, ~0.1 s, also in the GitHub Action).** The numbers in the
+  "Read this first" block must equal `rules.js` (so "health 3" cannot come back unseen); the README's project
+  structure must name every file under `src/` (the audit found 14 missing); every path the block and the structure
+  name must exist; the GitHub Action must run every fast suite; the README must name every suite in `tests/` and none
+  that is gone; every preview server named is bound to `127.0.0.1`; `docs/VERSIONS.md` has a row for the version in
+  `src/version.js`; every DECISIONS section named in PROGRESS.md or the README exists. Proven by planting "3 health" in
+  the block, a README without `tapGuard.js` and a preview command without `--bind` in a scratch copy: each fails it. (It
+  is a guard against the audit's finding, not a proof of the prose: a human still has to write the sentences.)
+- **README (F7, code-5, security-15).** The preview command is `python3 -m http.server 8000 --bind 127.0.0.1` (the old
+  one served the folder, `.git` included, to the whole Wi-Fi). A "Running the tests" section works from a clean copy:
+  Node 20.19 or newer, `node tests/run-fast.mjs` for the fast suites, `npm --prefix tests ci` and Playwright's
+  Chromium (or `CHROME_PATH`) for the browser suites, the server bound to `127.0.0.1`, direct links. Hard-coded
+  counts ("359 assertions", "450 matches", "~15 s") are gone; "which mode runs is decided by the address" now says
+  what `main.js` does (`applyMode('practice' | 'match', n)` per game; a direct link only skips the menu); the 14
+  missing files are in the structure; `assets/README.md` no longer says the game has two images ("Supplied so far") and
+  has a table of what each folder is and who reads it. `tests/run-fast.mjs` runs exactly the Action's list (it reads the
+  workflow), so "the fast suites in one command" cannot differ from CI. `tests/browser-practice.mjs` now falls back to
+  Playwright's own Chromium instead of throwing when `/opt/pw-browsers` is missing (the other launchers already did).
+- **A test that every public event holds only its documented keys (G18, code-6: `tests/public-events-check.mjs`).** The
+  14 public event types and the keys and kinds of value each may carry are written out in the test (from
+  `src/game/state.js` and the `emitPublic` calls). It runs 300 seeded all-bot matches (about 48,000 events) and fails
+  on any key not on the list (an earlier slip put the searcher's hand size on the `search` event), a missing key, an
+  object or list where a number belongs, a Possession card named as a weapon, a seat not at the table, or an event
+  type it does not know. It scans `src/` for `emitPublic` calls too, so a NEW event type must be written down in the
+  test (and in the comment above `emitPublic`) before the suite passes: whoever adds an event decides on purpose that
+  it is public. Proven by planting the old leak in a scratch copy of the engine (`hand: player.hand.length` on
+  `search`): the suite fails, naming the key.
+- **Your record testable in Node (G18, code-6: `src/record.js`, `tests/record-check.mjs`).** `createRecord({ store })`
+  takes anything with `getItem` and `setItem` (the shape of localStorage, as the account takes its store); the
+  exported `record` is made with the device's own localStorage looked up at each call, exactly as before. Behaviour is
+  identical: a differential run of the old and the new module over 400 random sequences (counting, left early,
+  practice, reset, another tab saving in between, damaged saves, throwing or missing storage) gave the same record and
+  the same saved text every time. The suite covers counting by side and escapes, "Left early" (never played, won or
+  lost), practice escapes, reset, saving and a new visit, two tabs, thirteen kinds of damaged save, huge numbers, blocked
+  and missing storage, storage that refuses writes then works again, the words and the win rate. A planted
+  double-count of a win fails it. (What `main.js` does with it, once per game when its end screen shows, is still
+  covered only by the browser suites.)
+- **Fixed waits (G18, code-6).** Ten of the longest fixed pauses in the browser suites now wait for the condition the
+  next line checks, with a new helper (`settle` / `settleNode` in `tests/smoke-lib.mjs`: it waits up to a limit, says
+  true or false, never throws, so the check after it still fails in its own words): `audio-check` (Music Off stops the
+  waltz; the lift's bell and doors; the lobby music gone; the game music released; the four fanfares fetched from round 3;
+  the stinger at the end), `browser-polish` (back to the menu; the wardrobe up, twice) and `browser-learn` (the
+  Lanterns chip in practice). The rest stay: most of those in `tips-check` are "nothing happens" checks (a tip never
+  comes back, the clock keeps running), where the waiting is the test; the others let a camera or a light settle
+  before a measurement or a screenshot, or stand beside a CSS animation, with no state to wait for. **One of the ten was NOT safe as first written**: with the
+  4-second wait after "back to the menu" gone, `audio-check` navigated away while the menu's hotel was still
+  downloading and its console check counted the aborted downloads (a failure the old wait had hidden). It now waits for
+  `window.__game.settled()` before each page load, which is what that line meant to do (the old `dressingDone()` call
+  there waited for nothing).
+- **Old QA scripts (code-6).** The nine `qa-*.mjs` scripts, `qa-lib.mjs` and the two playtest reports they belong to
+  (`autoplay-report.md`, which names a `tests/autoplay.mjs` that no longer exists, and `qa-visual-report.md`) moved to
+  `tests/old/` with a README saying they are historical (nothing runs them or imports them; their relative imports
+  were repointed so they still load). `tests/personality-report.md` stays: the balance tools write it.
+- **Maintenance tools (code-8).** `walkcheck`, `perf`, `shoot` and `vsref` in `tools/room-pipeline/` opened the plain
+  address, which is the main menu and has no "Tap to begin" card; they open `?mode=practice` now, take `--url`, find
+  Chromium through `CHROME_PATH` like the tests, and say "last verified: 14 Oct 2026" in their first lines (and the README
+  says what was run). `tools/lobby-pipeline/lobby.json` (the lobby's start positions had changed) and
+  `tools/room-pipeline/rooms.json` (the corridors' flicker values had changed in round 1) were regenerated with their
+  own `dump_*.mjs`; the Blender build reads neither of those fields.
+- **Clean-up (code-10, graphics-13).** Removed, each first checked by grep over `src/`, `tests/`, `tools/` and
+  `index.html`, by a network log of a whole game (the main menu; a match from "Find a table" through the lift to the end
+  screen with every baked room revealed and every card type shown; then practice: no file of the list below was
+  asked for, and after the removal nothing 404s and the console stays clean) and by the node suites:
+  the dead exports `isValidUsername`, `hasType`, `isEvil`, `frontierDoorways`, `isDiscovered`, `loadedBases`,
+  `STYLE_NAMES`, `countTile`; `handoff.passTo` and its "Pass the device to…" text (no caller); the hot-seat fields
+  `state.hotseat` and `__game.hotseat` (nothing read them), and `applyMode('hotseat')` (every caller says `'match'`
+  now; an unknown mode throws instead of quietly meaning practice); the Kenney furniture and building models
+  (`assets/models/furniture`, 31 files, 318,460 bytes; `assets/models/building`, 17 files, 104,859 bytes) with their loader
+  (`src/render/models.js`, deleted, and the Kenney path of `src/render/roomDressing.js`, which went from 169 to 55 lines:
+  every room is baked); and `CARD_ART` with the old 640 x 640 card illustrations (11 files, 550,537 bytes). Those
+  pictures were **moved, not deleted**: `tools/card-pipeline/art/` now holds them because
+  `make_lockpick_face.py` reads `lockPick.jpg` (re-running it from there reproduces the shipped Lock Pick face
+  byte for byte) and `lantern.jpg` is the hand-painted reference; the pipeline's scripts and README point there. Comments
+  that were no longer true were fixed (`rules.js` "Call ONCE", the PASS screen note in `handoff.js`, the hot-seat
+  remarks in `characters.js` and `roundLabel.js`, and the README's applyMode sentence). `createState` takes `'practice'`
+  or `'match'` and `resetState` now throws when it is given no seed (every caller gives one; the `performance.now()`
+  fallback was a way to deal an unrepeatable game).
+- **The table sizes are in `rules.js` (code-10), as a pure move.** `rules.minPlayers` 4 and `rules.maxPlayers` 6 (GAME_RULES
+  "4–6", "3–5 computer guests"), with `minBots` 3 and `maxBots` 5 derived from them in `derive()`. They replace the
+  `4`/`6` clamp in `applyMode`, the menu's `[3, 4, 5]` and the three `Math.max(3, Math.min(5, …))` clamps in `main.js`
+  (the old `?mode=hotseat&players=` link, the menu's choice and `?bots=`); same values everywhere, so nothing a player
+  sees changes. `tests/docs-check.mjs` pins the numbers to the "Read this first" block.
+- **A test the computer-guest change broke, and its fix (`tests/browser-bots.mjs`, section 5).** On the code as it stood
+  when this round began (the last commit plus the new computer-guest behaviour, none of this round's clean-up) the
+  scripted attack failed: "a bot attacks you: the result says hit you", and every check after it; a plain checkout of
+  the last commit passed all 67 checks. So it was the roaming bots, not the clean-up (the polish builder saw the same
+  failure; the bots builder's own run passed: the scene depends on where the bots happen to roam). Logging the scripted
+  killer showed two causes. The killer was "whoever acts first", and the check relied on it walking IN to the player's
+  room to force a meeting; a roaming bot can start its turn already in the player's room (a guest already there is not
+  forced to meet again: the pair is locked) and simply walks off. And once that was arranged, the player's death ended
+  the match at once, because by round 4 every other guest had been possessed, so there was no "You are out" question
+  left to check. The test now sets its scene: the killer is the next guest to act, started next door (the lobby will
+  do) with a knife, and a clean guest is kept alive. Same checks, same words; where a bot happened to roam no longer
+  decides whether they run. It passes again (67 checks). A possible follow-up for the bot work, not a rule: three of
+  four guests possessed by round 4 in that seed.
+- **Not done, on purpose.** Test-only helpers in production modules (`growTo`, `placeTile`, `stackDeck`,
+  `characters.roster`, the feed's `_kindOf`: tests use them, so they are not dead); one shared `esc()` for the four
+  files that each copy it, the three names for the seat list (`roster`, `cast`, `seats`) and the capitalised `PRACTICE`
+  that changes at run time (no bug; a wide edit of working screens for tidiness); about 19 unused CSS classes; the
+  card-pipeline's `ui-shots.mjs` and two `char-pipeline` scripts still open `?mode=hotseat` links (outside the four
+  scripts the audit named); whether `tools/` (26 MB, the character reference sheets included) should stay in the
+  published site (the owner may prefer them public or private).
+- **Verified here:** see docs/PROGRESS.md ("Round 2 (v0.6)") for what was run; the browser suites I did not run are
+  listed there.
+
+## Round 2, fixes after review (14 Oct 2026 — interface, computer-guest behaviour, tests and documents; no rule or rule number changed)
+
+The independent review of round 2 found 19 things; each was checked first (reproduced, or confirmed in the code) and
+fixed with the smallest change that fits, with a test that fails without the fix where a browser can show it. What
+changed, and what was left on purpose:
+
+- **The Lantern's other half is said where the choice is made.** A computer guest who walks in on the player opens the
+  private card pick with no Trade / Attack panel, so the first-meeting tip (which sits beside that panel) never came
+  up before the first card was chosen (reproduced: seed 21, three computer guests: the tip stayed unseen through a
+  whole trade). Lifting a Lantern on the pick screen now adds its own line, `LANTERN_TRADE_NOTE` ("A Lantern blocks a
+  soul, but is lost if the other guest gives you an ordinary card."), the same words for either side, kept in
+  `src/data/tips.js` and used by the tip too (one place). Room for it is kept from the start of any pick that offers
+  a Lantern, so lifting a card moves no button. The rules' own Lantern text (`rules.js`) is untouched.
+- **A double tap on the dark round the Menu panel (or the Leave question) opened a door.** The first tap closed the
+  panel, the second landed on the hotel under it (actions 4 to 3, a door open, no question). `gameMenu.swallowTap()` and
+  `overlays.swallowTap()` are true for 350 ms after either closes, and `main.js` `onTap` asks them beside the chat's
+  and the tips' own. A tap a moment later is the game's again.
+- **The role screen's line for a clean guest** now says all three ways the possessed side wins, as GAME_RULES
+  (Winning) and page 1 of How to play do: "The possessed win if every living guest is possessed, or no clean guest is
+  left, or dawn breaks before anyone escapes." (It said "everyone", wrong once anyone is dead, and left out the
+  kill-them-all way.)
+- **How to play: the one error of fact.** Page 5 said a guest who is out "drops everything you carry"; GAME_RULES
+  (Health) says Possession cards leave the game instead. Not changed, because the wording is the owner's to decide,
+  and none is an error: (a) no page, and not the match's Lantern tip, says how to get out: stand in the Fire Exit and
+  tap Escape, 1 action; (b) End turn is never mentioned, nor that unused actions are lost; (e) nothing says what
+  happens when a computer guest walks into you (it chooses, and a trade then asks you for a card). Sentences that would
+  fit, for the owner to approve: "Escaping costs 1 action: stand in the Fire Exit and tap Escape." / "Tap End turn when
+  you are done; unused actions are lost." / "If a guest walks into your room, they choose; a trade then asks you for a
+  card." (d) The pages teach the match, so opened from Practice's Menu they still say 45 seconds and dawn: by design
+  (the header of `src/data/howToPlay.js`; page 1 says practice has no deadline).
+- **Small ones.** The Menu button's accessible name is "Menu" (it said "Main menu", which is not where it goes). The map
+  legend says "A guest (their initial, or seat number)" (two names that start alike get their seat numbers; three
+  letters first was rejected: a plan dot is 20 px). The "Welcome back" card says the match "is counted as left early".
+  How to play keeps the keyboard focus when the window changes shape (measuring the pages turned Next off for a
+  moment, which dropped the focus). After Menu > Leave > Keep playing the focus goes back to the Menu button.
+- **A tall private screen no longer leaves the next one scrolled.** The one card serves every private screen and a
+  hidden box keeps its scroll position, so a Hand Mirror result swiped down opened the next screen with its title out
+  of sight. `handoff.close()` puts the card back to the top before it hides; the meeting, discard and card-view panels
+  start at their top when they open.
+- **Floor rings on the red rug.** The orange and blue rings were about 2.4:1 against the rug, and a dark edge shows
+  nothing on a dark floor. Every ring now also has a thin light edge outside the dark one (`ringLightOpacity`, one more
+  small mesh per guest); a ring reads on the cream floor, the rug and a dark one. Lifting the orange (the review's other
+  idea) was tried on paper and rejected: `#ff8a4c` is 6.9 apart from gold for deuteranopia, the very problem the seat
+  colours were chosen to avoid.
+- **Fanfares from round 3, not round 7.** A match runs six rounds at the median, so the four end fanfares (about 590 KB,
+  bytes only) are fetched from round 3 (`ENDING_FROM_ROUND` in `main.js`); the final-round music is still decoded
+  ahead in round 7.
+- **Hand Mirror, no soul seen (computer guests).** Souls never come back (they are not in the deck, and a guest is dealt
+  new ones only by being possessed, in a trade), so a guest a mirror showed no soul, and who has not traded since,
+  cannot possess anyone, whatever their role. `holdsNoSoul` keeps a clean bot from handing them a Lantern to block and
+  from refusing their trade as it might a stranger's; the estimate of whether they are possessed stays 25% (a possessed
+  guest who has spent every soul shows none), for chat, attacks and who to trust.
+- **How the possessed side now wins (a decision for the owner).** The clean side wins about as often as before the
+  computer-guest change, but the possessed side wins differently. Per 3,000 matches a seed, three seeds (before the
+  change / now): 
+
+  | guests | clean wins | possessed: everyone possessed or dead | possessed: dawn | median rounds |
+  |---|---|---|---|---|
+  | 6 | 46.0 / 47.8% | 8.9 / 13.7% | 45.1 / 38.5% | 7 / 6 |
+  | 5 | 39.0 / 39.0% | 17.3 / 25.5% | 43.7 / 35.5% | 7 / 6 |
+  | 4 | 31.8 / 33.1% | 26.1 / 36.4% | 42.2 / 30.5% | 7 / 6 |
+
+  A possessed bot's first trade with a guest is a Possession card 45 / 44 / 42% of the time before and 56 / 63 / 70%
+  now (6 / 5 / 4 guests), and conversions in round 1 went from 6 / 5 / 3% to 9 / 10 / 10%: the knobs that cancelled the
+  gain from exploring (`TUNING.attemptBias`, `attemptSmall`) keep the clean win rate where it was but make the possessed
+  side quicker. If the owner wants dawn wins back: bring those two down and offset the sooner Fire Exit another way (a
+  lower `hoard` or exploring value for the clean side), then measure with `tools/balance/bot-match.mjs`. The header of
+  `src/bots/brain.js` no longer says "builds trust first".
+- **A possessed homebody still opens a door.** A possessed guest with a low curiosity never opened one (a guest with no
+  door by the end of round 3 was possessed 60 / 67 / 70% of the time at 6 / 5 / 4 guests). `TUNING.possFloor` 0.6 is the
+  least a possessed guest's curiosity can be: 53 / 59 / 58% now, the "fewest doors" guess 20 / 27 / 36% to 17 / 25 / 33%
+  (chance 17 / 20 / 25%), the clean side's win rate within 1.8 points of before. The review's other idea, lowering
+  `TUNING.roam`, was measured and does nothing (rooms entered a turn in round 4 on: 3.15 to 3.12; the guess "the guest
+  who walked the most" at the end of round 5: 26.5 to 26.2%): the possessed guests walk more because they walk to the
+  guests they mean to possess. That sign stays (about 70% by round 6); flattening it would mean fewer attempts.
+- **Chat parity (`tests/chat-check.mjs`).** The review's "nearby" ratio (possessed 1.5x clean) is unchanged by these
+  changes (1.46 to 1.52 on two sets of 600 matches). The "vouches" ratio is a ratio of about 100 lines a side and
+  wobbles by chance (1.66x on one set of 600 matches and 1.19x on another, same bots), so a ratio over its limit now
+  fails only when the two rates also differ by more than chance (three standard errors); the limits are the same.
+- **`tests/public-events-check.mjs`** no longer depends on the bots happening to produce a meeting where nobody can
+  trade (it did not in 300 matches after the change): that one event is provoked by hand and held to its shape.
+- **Documents.** This file's tests bullet no longer states one run's audio timings as fact (`audio-check` prints them,
+  they depend on the machine), and its architecture line puts the main menu in `src/ui/menu.js` (`src/menu/` is the lobby
+  scene behind it). `docs-check` prints a note while `docs/VERSIONS.md` still says "written in after publishing" for the
+  current version: put the real commit in right after the publish or the rollback steps have nothing to go back to.
+- **Only a real iPad can say**: how the Lantern line reads on the pick screen at finger size; whether the light ring
+  edge looks right on the real display (a soft halo on the cream floor); the double tap on the dark round the panel with a
+  real finger; Safari's focus handling after Leave > Keep playing (Safari does not focus a button on tap, so the focus
+  return matters only with a keyboard).

@@ -1,5 +1,6 @@
 # A quiet safety net: the fast suites (the rules, the generated hotels, the computer guests, quick chat, the
-# profile, the frame safety net, which sound each button makes and the corridors' flicker) run on every push and
+# profile, the frame safety net, which sound each button makes, the corridors' flicker, the words that teach the
+# game, what the public events may carry, Your record, and the documents' facts) run on every push and
 # pull request, and a red cross on the commit says one of them failed. It only REPORTS. The live game is published straight from the main branch by GitHub Pages and
 # does not wait for this, so a red run never blocks (or removes) a publish.
 # See README > Publishing and rolling back.
@@ -23,7 +24,7 @@ jobs:
     strategy:
       fail-fast: false        # every suite reports, even if another one failed
       matrix:
-        suite: [rules-check, logic-check, bots-check, chat-check, profile-check, crash-check, audio-buttons-check, flicker-check, polish-check, howto-check]
+        suite: [rules-check, logic-check, bots-check, chat-check, profile-check, crash-check, audio-buttons-check, audio-load-check, flicker-check, polish-check, howto-check, public-events-check, record-check, docs-check]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

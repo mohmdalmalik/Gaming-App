@@ -112,7 +112,7 @@ export function createHand(doc, cfg, { onUseBandage, onUnlock, onBarricade, onEs
   }
 
   function renderDetail(state, floor, p, card, souls = 0) {
-    detail.innerHTML = '';
+    detail.innerHTML = ''; detail.scrollTop = 0;
     if (!card) { detail.innerHTML = '<div class="d-empty">Select a card to see what it does.</div>'; return; }
     const meta = CARDS[card.type];
     const line = (html, cls = 'd-line') => { const d = doc.createElement('div'); d.className = cls; d.innerHTML = html; detail.appendChild(d); };

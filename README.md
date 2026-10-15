@@ -238,18 +238,32 @@ button (bottom-right) opens the 2D map.
 No build step. Serve the repo folder and open it (ES modules need a server, not `file://`):
 
 ```
-python3 -m http.server 8000
+python3 -m http.server 8000 --bind 127.0.0.1
 ```
 
+then open `http://127.0.0.1:8000/`. `--bind 127.0.0.1` keeps the server to this computer: without it the folder (the
+hidden `.git` history included) is served to everyone on the same Wi-Fi.
+
 Three.js loads from a CDN, so the first load needs an internet connection.
+
+## Running the tests
+
+You need Node 20.19 or newer (the GitHub Action uses 22) and Python 3; nothing else for the fast suites.
+
+1. **Fast suites** (the rules, the computer guests, the words, the documents; no browser, a few minutes in all): `node tests/run-fast.mjs`. It runs exactly what the GitHub Action runs (the list is in `.github/workflows/tests.yml`); one alone: `node tests/rules-check.mjs`.
+2. **Browser suites** (each plays the real game in headless Chromium with software WebGL, 1 to 3 frames a second, so each takes 5 to 15 minutes: run only the ones your change touches, one at a time). Once: `npm --prefix tests ci` (Playwright and the three.js files the tests serve in place of the CDN: `tests/package.json`), then `node tests/node_modules/playwright-core/cli.js install chromium` (or set `CHROME_PATH` to a Chromium you already have).
+3. Serve the folder **bound to this machine only**: `python3 -m http.server 8123 --bind 127.0.0.1 &`, then run a suite: `node tests/browser-lobby.mjs` (they use port 8123; `--url http://127.0.0.1:PORT/` says another). Stop the server when you are done.
+4. A suite prints one line per check and exits 0 only if all passed. Screenshots go to `tests/shots/` (not in git). `tests/old/` holds historical QA scripts that nothing runs.
+5. **Direct links** skip the menu and are what the suites use (more under "Play with bots"): `?mode=practice`, `?mode=bots&bots=3&role=clean&seed=7&intro=off&botpace=0.1&timer=off`; `window.__game` (end of `src/main.js`) is how a test looks inside the game.
+
+The list of every suite, and the maintenance tools, is under "Changing the rules or the floor" > "Tests" below.
 
 ## Publishing and rolling back
 
 **How the live game is made.** GitHub Pages serves the `main` branch as it is: no build, no staging copy. A
 change is live for everyone about a minute after it reaches `main`, and a browser may keep the old files for up
 to about ten minutes (reload twice to be sure). Nothing waits for the tests: a GitHub Action
-(`.github/workflows/tests.yml`) runs the fast suites (`rules-check`, `logic-check`, `bots-check`,
-`chat-check`, `profile-check`, `crash-check`, `audio-buttons-check`, `flicker-check`; no install needed) on every
+(`.github/workflows/tests.yml`) runs the fast suites (the list is in the workflow, and `node tests/run-fast.mjs` runs the same; no install needed) on every
 push and shows a red cross on the commit if one fails. That is a warning only; it never blocks or removes a publish. Look at the Actions tab or the
 commit's mark after a publish.
 
@@ -329,7 +343,8 @@ src/
   social/chat.js      the table's quick-chat channel: a message is { seat, id, at } (+ about: the seat a line names) and nothing else (a server would relay it)
   audio/              music and sound (Web Audio): bus.js (the cue bus: sfx('doorOpen')), index.js (the player:
                       unlock on the first tap, music by scene with crossfades, effects with variation and a
-                      voice cap), gameSounds.js (the hotel's sounds from the engine's PUBLIC events, footsteps),
+                      voice cap; a failed download is retried after 3 s and 10 s; the night music is fetched during
+                      matchmaking / the lift and the end fanfares from round 3: tests/audio-load-check.mjs), gameSounds.js (the hotel's sounds from the engine's PUBLIC events, footsteps),
                       sounds.js (the mix: cue -> file, levels, scenes), library.js (GENERATED file table),
                       buttonCues.js (which cue each button makes: open / close / select / click; pure, listed and checked by tests/audio-buttons-check.mjs)
   menu/               the lobby behind the main menu: lobbyScene.js (the API: idle life, the lift
@@ -355,6 +370,7 @@ src/
     gameMenu.js       the words of the in-match Menu panel
     lostMatch.js      the card shown once when the browser cut a match short ("The game was restarted by your browser…")
     endScreen.js      the end screen's Victory / Defeat, who won, and the recap line
+    dressing.js       which baked model, light maps and exposure each room has (src/render/roomDressing.js and bakedRoom.js read it)
   game/               pure rules, no rendering (a server could reuse these)
     hotel.js  grid.js   the random hotel (tiles placed as doors open), walkable grid + A* pathfinding
     cards.js            deck build, seeded shuffle, deal, hand helpers
@@ -365,19 +381,28 @@ src/
   bots/               the computer guests — pure, no rendering, run in the browser and in Node
     view.js             botView: THE one place a bot's information is built (public board + its own
                         hand, role and private events; never another guest's hand, count or role)
-    brain.js            one bot's mind: memory, suspicion and trust, trust-building, choices (TUNING knobs)
-    profiles.js         usernames and playing styles (mostly medium; some bold, some careful)
+    brain.js            one bot's mind: memory, suspicion and trust, trust-building, choices (TUNING knobs; a possessed guest blends in: it explores, wanders and guards only now and then)
+    profiles.js         usernames and playing styles (mostly medium; some bold, some careful) and each guest's curiosity (how keen it is to open doors, either side)
     index.js            createBotTable: the API the interface calls (nextAction, tradeCard, thinkMs, …)
     autoplay.js         plays bot turns straight through the rules (Node tools; finishing a match at once)
     chatter.js          the bots' quick chat: small talk and answers, and talk that carries information
                         (accusations after their own Lantern block or Hand Mirror, denials, trust, a
                         possessed bot's lies) — from each bot's own view and mind only; its own random numbers
                         (listening is in brain.js: onChat / hearsay, weights in data/chat.js BOT_HEAR)
-  render/             Three.js visuals: greybox rooms, doors, characters, cutaway, mood (flicker.js: the two spooky corridors' flicker as pure functions, steady under Reduce Motion),
-                      searched-room ticks; bakedRoom.js loads the baked rooms; xray.js fades
+  render/             Three.js visuals (placeholder boxes where a model is missing, baked glTF rooms and guests otherwise):
+                      scene.js the renderer, scene, camera and global light, sized to its container;
+                      materials.js the shared greybox geometry and materials (the one place a material swap happens);
+                      roomView.js a room's floor, walls, doorways and furniture boxes, built as each room is revealed;
+                      roomDressing.js hands a revealed room to bakedRoom.js, and src/data/dressing.js says which baked model, light maps and exposure each room has;
+                      bakedRoom.js loads the baked room models (the lobby and every tile, built by tools/lobby-pipeline and tools/room-pipeline);
+                      cutaway.js lowers the walls that face the camera so the inside shows; xray.js fades
                       whatever stands between the camera and the active guest / search spot;
+                      mood.js the lights: a fixed pool of point lights given to the rooms nearest the camera, so no shader ever recompiles;
+                      flicker.js the two spooky corridors' flicker as pure functions, steady under Reduce Motion;
+                      searchMarks.js the brass tick on the furniture of a searched room;
                       fog.js the fogged rooms beyond closed doors (+ "Explore · 1 action" tags);
                       pathPreview.js the dotted path, outline + cost tag of a move to confirm;
+                      characterView.js one guest's figure behind one surface (an avatar, a glTF guest or the box stand-in): walking, dying, the possessed look;
                       possessedLook.js the possessed player's own red eyes (shared with the portrait tool);
                       avatar.js a player's avatar from one of the six models (parsed once per look, cloned
                       with its own colours, eye colour and glasses); avatarGlasses.js glasses fitted to any
@@ -389,6 +414,10 @@ src/
   ui/
     focus.js                          keyboard focus for the screens over the game (private screens, discard, meeting, questions, notice, end, problem card, card view, map): focus on the main button, Tab stays inside, role=dialog + aria-modal + a name, Escape never skips a private screen, focus goes back; reusable (watchDialog)
     cards.js                          card tiles, cards shown large, the order a hand is shown in (a card you can choose is a keyboard button too)
+    cardIcons.js                      small drawn card icons (the feed's lines, and a card type that has no face picture)
+    tapGuard.js                       a double tap must not answer the screen it opens: a click that comes too soon after a screen opened is ignored
+    roundLabel.js                     how the round is written everywhere ("Round 3 of 8", the final round marked)
+    perfStats.js                      the ?stats=1 frame-rate / draw-call readout
     handFan.js                        the hand held as a fan of face-up cards (bottom centre)
     hand.js                           the card view: one card large, with Bandage / key / Barricade / … actions
     searchSpot.js                     the search icon over the room's flagged search furniture
@@ -426,10 +455,15 @@ src/
 assets/audio/         the music and effects (MP3), generated by tools/audio/ (see tools/audio/README.md)
 assets/icons/         the app icon: a brass lantern on navy in an Art Deco ring. icon.svg is the master (1024), favicon.svg the simpler tab icon, icon-maskable.svg the same at 80 % for round masks;
                       the PNGs (icon-180 = apple-touch-icon, icon-192, icon-512, icon-maskable-512, favicon-32, favicon-16) are rasterised from them with headless Chromium (README in the folder)
-tools/audio/          the Python that makes every sound from code: dsp.py, instruments.py, music.py (the scores),
+assets/cards/         the card pictures: face/<type>.jpg (the owner's finished card faces, 512 x 768) and back.jpg (the card back)
+assets/characters/ assets/portraits/ assets/models/   the guests' glTF models, their stock portraits, and the baked rooms (models/lobby, models/rooms)
+tools/                not part of the game (the whole repo is published, tools included); each folder has a README:
+  audio/              the Python that makes every sound from code: dsp.py, instruments.py, music.py (the scores),
                       sfx.py (the effects), build.py (mix, master, encode, measure -> report.json, library.js)
-docs/                 GAME_RULES (spec), GAME_CONCEPT, DECISIONS, PROGRESS, ONLINE_PLAN (going online, step by step)
-tests/                Node checks (rules-check, logic-check) + a headless browser walkthrough
+  balance/            the bot simulators: who wins, trust-building, tells (can a player tell the possessed bots apart?)
+  card-pipeline/ char-pipeline/ lobby-pipeline/ room-pipeline/   Blender and Python that make the cards, guests, lobby and rooms (below)
+docs/                 GAME_RULES (spec), GAME_CONCEPT, DECISIONS (start with "Read this first"), PROGRESS (newest first), VERSIONS (each publish), ONLINE_PLAN (going online, step by step)
+tests/                the suites ("Running the tests" above; the list is under "Tests" below), run-fast.mjs (the fast ones in one command), smoke-lib.mjs (the browser launcher), old/ (historical QA scripts: nothing runs them)
 ```
 
 ## Character pipeline (Blender → glTF → game)
@@ -472,6 +506,10 @@ the owner's reference image for it (`tools/room-pipeline/ref/`; see `tools/room-
 (`tools/room-pipeline/shots/<room>-vs-ref.png`, contact sheet `shots/rooms-vs-refs.png`),
 `node tools/room-pipeline/walkcheck.mjs` walks a guest through every doorway of every room, and
 `node tools/room-pipeline/perf.mjs --rooms 12` measures draw calls. Output: `assets/models/rooms/`.
+`vsref`, `walkcheck`, `perf` and `shoot` play the game in headless Chromium: serve the repo first
+(`python3 -m http.server 8123 --bind 127.0.0.1`; `--url` names another address). They open the practice direct link
+(`?mode=practice`: the plain address opens the main menu), and each says "last verified" with a date in its first lines.
+Last run and working: 14 Oct 2026. The Blender steps (`bpy`) were not run in that check.
 
 ## Changing the rules or the floor
 
@@ -480,19 +518,20 @@ timer — is in `src/data/rules.js`, which implements `docs/GAME_RULES.md`. The 
 doorways, furniture, which rooms are dark or locked, moods) is the room deck in `src/data/hotel.js`. Change those files,
 not the game code — and per `CLAUDE.md`, not without the owner's approval of a before/after list.
 
-Which mode runs is decided by the address: `applyMode()` at the bottom of `src/data/rules.js`.
+Which ruleset a game uses is set in code, once per game: `src/main.js` calls `applyMode('practice' | 'match', guests)` (in `src/data/rules.js`) each time a game is dealt, from the menu's choice. The address does not choose it: a direct link (`?mode=practice`, `?mode=bots`) only skips the menu.
 
 ### Tests
 
 ```
 python3 -m http.server 8123 --bind 127.0.0.1 &
-node tests/rules-check.mjs        # the rules engine against docs/GAME_RULES.md (359 assertions)
+node tests/rules-check.mjs        # the rules engine against docs/GAME_RULES.md
 node tests/logic-check.mjs        # floor, map topology, grid, pathfinding
 node tests/browser-practice.mjs   # practice mode in a real browser [--screens]
 node tests/browser-bots.mjs       # the main menu and matches against bots in a real browser: settings, the table filling up, the lift, bots' turns, privacy, meetings both ways, being attacked, the end screen, whole matches [--screens] [--matches 3]
 node tests/browser-lobby.mjs      # the baked starting room, fog rooms, tap to open / move, camera (big hotel), draw calls
 node tests/audio-check.mjs        # music and sound: unlock on the first tap, every file decodes, Settings, the menu -> lift -> game music, cues in a match and practice [--quick]
 node tests/audio-buttons-check.mjs # which sound every button makes (pure, no browser): a new button must be listed with its sound, so it cannot slip onto the wrong one; and every cue has its file (~1 s)
+node tests/audio-load-check.mjs    # how the sound files download, with the network and the clock faked: a failed download is tried again after 3 s, then 10 s (never in a loop), a 404 once, the night music's download starts with the lift, the end fanfares from round 3, nothing before the first tap (~3 s)
 node tests/flicker-check.mjs       # the two corridors' flicker measured (at most 3 flashes a second of the whole room; steady, not moving at all, under Reduce Motion) (~5 s)
 node tests/browser-build-fixes.mjs # the round 1 fixes in a real browser: End turn's question and the two-step card pick, the sounds, a one-card find and the map legend at the four iPad sizes, Reduce Motion [--only a,b,c,d]
 node tests/trade-reveal-check.mjs # the trade scene: real trades for all seven outcomes (conversion with two new souls of your own, then your role; Lantern block; swap; you possess them; a soul spent on a guest already possessed; two souls crossed): soul faces, hands after, red eyes on known allies
@@ -506,17 +545,22 @@ node tests/browser-reliability.mjs # start-up and failures in a real browser: an
 node tests/profile-check.mjs      # profiles: the name rules, reserved words and filter, suggestions, profile repair, the account (memory store), seats and bots' avatars, seeded tables, the feed's name masking (~1 s)
 node tests/browser-profile.mjs    # the first-run register, the profile card, Change name, blocked storage, usernames at the table, ?user=, long names [--screens] [--sizes 1024x768,1366x1024]
 node tests/tips-check.mjs         # first-match tips ON: where they sit, never blocking, the clock runs on, once per device, Hide tips, Show tips again, the safe-zone / pinch-and-drag / round-buttons tips [--size 1024x768] [--shots DIR] [--new-only: just the new tips]
+node tests/public-events-check.mjs # what the public events may carry (no browser, ~5 s): every public event of a few hundred bot matches has only its documented keys (a role, a hand, a card count or a private result can never ride along), and a new event type must be written down in the test
+node tests/record-check.mjs       # Your record (src/record.js, an injected store, no browser, ~1 s): counting, "Left early", reset, saving, a second tab, damaged saves, blocked or missing storage
+node tests/docs-check.mjs         # the documents' facts (no browser, ~1 s): the numbers in docs/DECISIONS.md "Read this first" are rules.js's, the README's file list names every src/ file, the paths the documents name exist, the GitHub Action runs every fast suite, a preview server is bound to 127.0.0.1
+node tests/run-fast.mjs           # every fast suite (the GitHub Action's list) in one command
 node tests/howto-check.mjs        # the words that teach the game (no browser): the How to play pages follow the rules' numbers (a copy of the rules with every number changed), the hint, the role screen's lines, the tips, the end screen's recap, no "AP" anywhere the player reads (~1 s)
 node tests/browser-learn.mjs      # How to play, the hint, the role screen, the Lanterns chip, the in-match Menu panel and what the clock does while it is open, the end screen's Victory / Defeat, at the four iPad sizes [--only a,b,c,d] [--sizes 1024x694,1180x820]
 python3 tools/audio/build.py      # rebuild every sound, ~6 min (tools/audio/README.md); needs numpy, scipy, ffmpeg
 python3 tools/audio/build.py revolver lobby   # rebuild only these (effect or music names); updates library.js + report.json
 node tools/balance/hotseat-sim.mjs 400 6   # 400 six-player matches under the rules as they stand (--before: same bots on the rules before Part 2; --compare: Lantern variants; --cautious)
 node tools/balance/hotseat-sim.mjs --study  # six player personalities (tools/balance/personalities.mjs) + rule proposals, in memory only (tests/personality-report.md)
-node tests/bots-check.mjs                  # the computer guests: information honesty, 450 seeded matches, determinism, the feed's icons (~5 s)
-node tests/chat-check.mjs                  # quick chat: the 20 lines, the channel (about), the bots' talk and listening honesty (scrambled hidden state), talk alone never changes the game, sense, caps, pacing, answers (~15 s)
+node tests/bots-check.mjs                  # the computer guests: information honesty, hundreds of seeded matches, determinism, the feed's icons
+node tests/chat-check.mjs                  # quick chat: the 20 lines, the channel (about), the bots' talk and listening honesty (scrambled hidden state), talk alone never changes the game, sense, caps, pacing, answers (a minute or two)
 node tools/balance/bot-match.mjs --n 1000  # all-bot matches at 6, 5 and 4 players: who wins, trust-building, blocks, waits
                                            # (--players 6, --trace one match, --tune blockBias=-0.2,... to try a bot knob)
                                            # --chat talk|on: the bots' quick chat on a clock (talk: must match --chat off exactly;
                                            # on: they listen too), with lines per match, accusations and how true they are;
                                            # --hear k=v / --say moment.key=v try a chat knob; --inject id[:partner]@round an exploit test
+node tools/balance/tells.mjs --n 1500 --players 6  # can a player tell the possessed computer guests apart by how they move? (doors opened by round 2, standing still, parked by the Fire Exit; --tune k=v)
 ```

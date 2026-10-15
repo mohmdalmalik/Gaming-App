@@ -66,6 +66,8 @@ export const config = {
     ringInactiveOpacity: 0.6,     // (was 0.35: the other guests' rings hardly showed on a red rug)
     ringEdgeOpacity: 0.5,         // the thin dark edge round every ring (src/render/characterView.js)
     ringEdgeActiveOpacity: 0.7,
+    ringLightOpacity: 0.55,       // the thin light edge outside that: a ring still shows on a dark floor (the red rug)
+    ringLightActiveOpacity: 0.7,
     markerHeight: 0.16,       // how far the active marker floats above the head
   },
 

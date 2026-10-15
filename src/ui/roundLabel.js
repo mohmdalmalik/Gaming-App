@@ -1,4 +1,4 @@
-// How the round is written everywhere it appears. Hot-seat counts down to dawn ("Round 3 of 8")
+// How the round is written everywhere it appears. A match counts down to dawn ("Round 3 of 8")
 // and marks the last one; practice has no deadline, so it is just "Round 3".
 import { rules } from '../data/rules.js';
 import { isFinalRound } from '../game/state.js';

@@ -2,13 +2,13 @@
 import { chromium } from 'playwright-core';
 import fs from 'node:fs';
 import path from 'node:path';
-import { tipsOff, profileOn, TEST_PROFILE } from './smoke-lib.mjs';
+import { tipsOff, profileOn, TEST_PROFILE } from '../smoke-lib.mjs';
 
 export const BASE = process.env.QA_URL || 'http://127.0.0.1:8125/';
 const here = path.dirname(new URL(import.meta.url).pathname);
-export const SHOTS = path.join(here, 'shots/qa');
+export const SHOTS = path.join(here, '../shots/qa');
 fs.mkdirSync(SHOTS, { recursive: true });
-const threeDir = path.join(here, 'node_modules/three');
+const threeDir = path.join(here, '../node_modules/three');
 const CDN = 'https://cdn.jsdelivr.net/npm/three@0.186.0/';
 
 export const VIEWPORTS = {

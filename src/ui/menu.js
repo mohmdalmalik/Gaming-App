@@ -18,6 +18,7 @@
 // callbacks and starts the match. A guest joining the table rings the reception bell (the sound cue
 // bus, src/audio/bus.js). `onScreenChange(name, prev)` hears every change of screen (the lobby's camera
 // follows it: the wardrobe frames your avatar).
+import { rules } from '../data/rules.js';
 import { settings, SETTING_CHOICES } from '../settings.js';
 import { reducedMotion } from '../motion.js';
 import { sfx } from '../audio/bus.js';
@@ -35,7 +36,7 @@ const ROLE_CHOICES = [
   { value: 'clean', label: 'Clean guest', note: 'Find Lanterns, trust carefully, and get one clean guest out through the Fire Exit before dawn.' },
   { value: 'possessed', label: 'Possessed', note: 'You start possessed, with souls of your own (your face on each). Win their trust, then give one in a trade.' },
 ];
-const BOT_CHOICES = [3, 4, 5];
+const BOT_CHOICES = Array.from({ length: rules.maxBots - rules.minBots + 1 }, (_, i) => rules.minBots + i);     // the computer guests to play with: 3, 4 or 5 (rules.js: a table of 4 to 6)
 
 export function createMenu(doc, { onPlayBots, onPractice, onSettingChanged, onScreenChange, onHowToPlay, account = null } = {}) {
   const $ = id => doc.getElementById(id);
@@ -116,7 +117,7 @@ export function createMenu(doc, { onPlayBots, onPractice, onSettingChanged, onSc
   }
 
   function renderBots() {
-    const n = BOT_CHOICES.includes(+settings.get('bots')) ? +settings.get('bots') : 5;
+    const n = BOT_CHOICES.includes(+settings.get('bots')) ? +settings.get('bots') : rules.maxBots;
     segment($('opt-bots'), BOT_CHOICES.map(v => ({ value: v, label: String(v) })), n, v => { settings.set('bots', v); renderBots(); });
     $('opt-bots-note').textContent = `A table of ${n + 1} guests: you and ${n} others.`;
     const role = ROLE_CHOICES.find(r => r.value === settings.get('role')) || ROLE_CHOICES[0];
@@ -204,7 +205,7 @@ export function createMenu(doc, { onPlayBots, onPractice, onSettingChanged, onSc
   click(btn.howto, () => onHowToPlay?.({ focusBack: btn.howto }));
   click($('btn-bots-back'), () => show('main'));
   click($('btn-bots-find'), () => {
-    const n = BOT_CHOICES.includes(+settings.get('bots')) ? +settings.get('bots') : 5;
+    const n = BOT_CHOICES.includes(+settings.get('bots')) ? +settings.get('bots') : rules.maxBots;
     onPlayBots?.({ bots: n, role: settings.get('role') || 'random' });
   });
   // Your record: Reset asks first, in place of the Back / Reset row (each step a fresh tap: shownAt).

@@ -13,7 +13,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { rules } from '../src/data/rules.js';
 import { HOW_TO_PLAY, NEW_PLAYER_HINT, ROLE_REVEAL, LANTERN_CHIP } from '../src/data/howToPlay.js';
-import { TIPS } from '../src/data/tips.js';
+import { TIPS, LANTERN_TRADE_NOTE } from '../src/data/tips.js';
 import { END_WORDS } from '../src/data/endScreen.js';
 import { GAME_MENU } from '../src/data/gameMenu.js';
 import { endRecap } from '../src/ui/endRecap.js';
@@ -53,6 +53,7 @@ for (const sentence of [
   'A Lantern is your shield: hand one over in that trade and the attempt fails. The Lantern and the soul burn, and you learn who tried.',
   'At the end of your turn you can keep 6 cards. Souls do not count.',
 ]) check(all.includes(sentence), `the draft sentence is there: "${sentence.slice(0, 48)}..."`);
+check(/out of the game and drop everything you carry, except Possession cards, which leave the game\./.test(all), 'a guest who is out drops what they carry, but Possession cards leave the game (docs/GAME_RULES.md, Health)');
 check(/Opening a door, moving to the next room, searching, using a card and using a room's job cost 1 action each\./.test(all), 'the costs read as one sentence while they are all the same');
 
 // Every number changed: the pages follow the rules, nothing is typed in.
@@ -72,7 +73,8 @@ check(/searching 2 actions/.test(pageText(mixed).join('\n')) && !/cost 1 action 
 console.log('\nthe hint, the role screen, the Lanterns chip');
 check(NEW_PLAYER_HINT === 'New to Hotel Escape? Practice alone is the best place to start.', 'the hint under Practice alone, as drafted');
 check(ROLE_REVEAL.headline(false) === 'You are clean' && ROLE_REVEAL.headline(true) === 'You are possessed', 'the role headline: "You are clean" / "You are possessed"');
-check(ROLE_REVEAL.otherSide(false, rules) === 'The possessed win if everyone is possessed, or dawn breaks before anyone escapes.', 'a clean guest is told how the possessed win');
+check(ROLE_REVEAL.otherSide(false, rules) === 'The possessed win if every living guest is possessed, or no clean guest is left, or dawn breaks before anyone escapes.', 'a clean guest is told how the possessed win: all three ways, as docs/GAME_RULES.md (Winning) and the first page say');
+check(/every living guest is possessed/.test(real[0]) && /no clean guest is left/.test(real[0]) && /dawn breaks/.test(real[0]), '...the same three ways as page 1 of How to play');
 check(ROLE_REVEAL.otherSide(true, rules) === `The clean guests win if one of them escapes with ${rules.lanternsToEscape} Lanterns.`, 'a possessed guest is told how the clean guests win, the number from the rules');
 check(ROLE_REVEAL.otherSide(true, other) === 'The clean guests win if one of them escapes with 5 Lanterns.', '...and the number follows the rules');
 check(LANTERN_CHIP.text(2, rules.lanternsToEscape) === `2/${rules.lanternsToEscape}` && LANTERN_CHIP.label === 'Lanterns', 'the chip reads "Lanterns 2/3": your own count out of the number the rules ask for');
@@ -87,6 +89,7 @@ check(ids.length === 21, `21 tips in all (18 before, 3 new): ${ids.length}`);
 const meeting = TIPS.meeting.text(rules, { practice: false, possessed: false });
 check(/A Lantern blocks a soul/.test(meeting) && /but is lost if the other guest gives you an ordinary card/.test(meeting), `the first-meeting tip says both halves of the Lantern dilemma ("${meeting}")`);
 check(TIPS.meeting.text(rules, { practice: false, possessed: true }) === meeting, '...and says it the same to a possessed guest');
+check(meeting.includes(LANTERN_TRADE_NOTE), '...with the sentence the private pick screen shows when a Lantern is lifted (one place: LANTERN_TRADE_NOTE), so a computer guest who walks in teaches it too');
 for (const [id, tip] of Object.entries(TIPS)) {
   const texts = [false, true].flatMap(practice => [false, true].map(possessed => tip.text(rules, { practice, possessed })));
   check(texts.every(t => typeof t === 'string' && t.length > 20 && t.length <= 200), `tip "${id}": one or two short sentences (${texts[0].length} characters)`);

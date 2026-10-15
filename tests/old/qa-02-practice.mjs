@@ -143,5 +143,5 @@ for (let m = 0; m < COUNT; m++) {
   console.log(JSON.stringify(summary.at(-1)));
   if (h.log.length) { note(seed, 'console: ' + h.log.splice(0).slice(0, 5).join(' | ')); }
 }
-fs.writeFileSync(new URL(`./shots/qa/practice-${SEED0}-${VP}.json`, import.meta.url), JSON.stringify({ summary, findings }, null, 1));
+fs.writeFileSync(new URL(`../shots/qa/practice-${SEED0}-${VP}.json`, import.meta.url), JSON.stringify({ summary, findings }, null, 1));
 await browser.close();

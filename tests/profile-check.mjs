@@ -311,8 +311,8 @@ console.log('\nthe feed');
   let lines = 0;
   for (let k = 0; k < 40; k++) {
     const players = 4 + (k % 3);
-    applyMode('hotseat', players);
-    const state = S.createState(floor, roster.slice(0, players), 5000 + k * 13, { mode: 'hotseat' });
+    applyMode('match', players);
+    const state = S.createState(floor, roster.slice(0, players), 5000 + k * 13, { mode: 'match' });
     const profiles = rollProfiles(players, makeRng(9000 + k));
     state.players.forEach((p, i) => { p.name = profiles[i].username; });
     const table = createBotTable(state, floor, profiles.map((profile, index) => ({ index, profile })), 5000 + k);

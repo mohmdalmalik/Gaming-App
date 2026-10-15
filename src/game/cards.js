@@ -91,11 +91,9 @@ export const countableCards = hand => hand.filter(isCountable);
 export const countableCount = hand => hand.reduce((n, c) => n + (isCountable(c) ? 1 : 0), 0);
 
 export const countType = (hand, type) => hand.reduce((n, c) => n + (c.type === type ? 1 : 0), 0);
-export const hasType = (hand, type) => hand.some(c => c.type === type);
 export const lanternCount = hand => countType(hand, 'lantern');
 export const weaponsIn = hand => hand.filter(c => CARDS[c.type]?.weapon);
 export const isWeapon = card => !!CARDS[card?.type]?.weapon;
-export const isEvil = card => !!CARDS[card?.type]?.evil;
 
 export function takeCard(hand, cardId) {
   const i = hand.findIndex(c => c.id === cardId);

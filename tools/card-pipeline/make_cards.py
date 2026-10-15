@@ -1,5 +1,5 @@
 # Card illustrations for Hotel Escape, modelled and rendered procedurally in Blender (bpy, headless)
-# to sit next to the painted reference assets/cards/lantern.jpg: one object, centred, three-quarter
+# to sit next to the painted reference art/lantern.jpg (tools/card-pipeline/art/): one object, centred, three-quarter
 # view, warm key + soft fill + rim light, on a dark mottled green backdrop (purple for the evil
 # Possession card) with a soft vignette.
 #
@@ -8,7 +8,9 @@
 #   python3 tools/card-pipeline/make_cards.py --draft               # quick low-sample look
 #   python3 tools/card-pipeline/make_cards.py --post                # re-run the 2D pass only
 #
-# Output: assets/cards/<type>.jpg (640x640 JPEG). Raw renders go to tools/card-pipeline/build/.
+# Output: tools/card-pipeline/art/<type>.jpg (640x640 JPEG). Raw renders go to tools/card-pipeline/build/.
+# (The game no longer shows these: every card has a finished face, assets/cards/face/. They stay as the art
+# make_lockpick_face.py reads, and as the reference for new illustrations; they moved here from assets/cards/ on 14 Oct 2026.)
 # lantern.jpg is the hand-painted reference and is never touched by this script.
 import os, sys, math, json, time
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -20,7 +22,7 @@ from cardlib import lin
 import post
 
 REPO = os.path.abspath(os.path.join(HERE, '..', '..'))
-OUT = os.path.join(REPO, 'assets', 'cards')
+OUT = os.path.join(HERE, 'art')
 BUILD = os.path.join(HERE, 'build')
 os.makedirs(BUILD, exist_ok=True)
 
@@ -598,7 +600,7 @@ def make(name):
                    floor_glow=meta.get('floor_glow', True),
                    glow=(0.7, 0.42, 1.0) if meta.get('evil') else (1.0, 0.72, 0.38),
                    tint=(1.0, 0.97, 1.04) if meta.get('evil') else (1.03, 1.0, 0.95))
-    print(f'[{name}] {time.time() - t0:.0f}s  ->  assets/cards/{name}.jpg', flush=True)
+    print(f'[{name}] {time.time() - t0:.0f}s  ->  tools/card-pipeline/art/{name}.jpg', flush=True)
 
 def beam_fx(lens, ahead):
     """A soft cone of warm light from the torch's lens (painted in 2D)."""

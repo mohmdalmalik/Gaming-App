@@ -15,7 +15,7 @@
 // Menu button still goes straight to the main menu).
 import { GAME_MENU as W } from '../data/gameMenu.js';
 import { SETTING_CHOICES } from '../settings.js';
-import { tooSoon } from './tapGuard.js';
+import { tooSoon, GUARD_MS } from './tapGuard.js';
 
 export function createGameMenu(doc, { settings, howTo = null, practice = () => false, onSettingChanged = null, onLeave = null } = {}) {
   const $ = id => doc.getElementById(id);
@@ -23,8 +23,9 @@ export function createGameMenu(doc, { settings, howTo = null, practice = () => f
     root: $('gamemenu-overlay'), title: $('gm-title'), resume: $('btn-gm-resume'), howto: $('btn-gm-howto'), leave: $('btn-gm-leave'),
     music: $('gm-music'), sound: $('gm-sound'), musicLabel: $('gm-music-label'), soundLabel: $('gm-sound-label'),
   };
-  if (!el.root) return { open() {}, close() {}, get isOpen() { return false; } };
+  if (!el.root) return { open() {}, close() {}, swallowTap() { return false; }, get isOpen() { return false; } };
   let shownAt = 0;           // when the panel opened (the double-tap guard)
+  let closedAt = -Infinity;  // when it last closed (swallowTap)
   let cameFrom = null;
 
   // A row of Off / Low / Medium / High: the settings' own choices; a pick is saved and applied at once.
@@ -67,13 +68,18 @@ export function createGameMenu(doc, { settings, howTo = null, practice = () => f
       try { el.resume.focus({ preventScroll: true }); } catch { /* no focus here */ }
     },
     // Resume (or Escape, or Leave on its way to the question): the panel goes and the match is as it was.
+    // (`restoreFocus: false`: main.js, when a new match or the main menu takes over.)
     close({ restoreFocus = true } = {}) {
       if (el.root.hidden) return;
       howTo?.close();
       el.root.hidden = true;
+      closedAt = performance.now();
       const back = cameFrom; cameFrom = null;
       try { if (restoreFocus && back && back.isConnected && !back.closest('[hidden]')) back.focus({ preventScroll: true }); } catch { /* nothing to focus */ }
     },
+    // The second tap of a double tap on the dark round the card (or on Resume) lands on the hotel, which the panel no
+    // longer covers: a tap on the hotel just after it closed does nothing (main.js onTap), as after a tip's button.
+    swallowTap() { return performance.now() - closedAt < GUARD_MS + 50; },
   };
 
   const guarded = fn => e => { e.preventDefault(); if (tooSoon(e, shownAt)) return; fn(); };
@@ -81,7 +87,9 @@ export function createGameMenu(doc, { settings, howTo = null, practice = () => f
   // A tap on the dark round the card resumes, as it closes the question (src/overlays.js), under the same guard.
   el.root.addEventListener('click', e => { if (e.target === el.root && !tooSoon(e, shownAt)) api.close(); });
   el.howto.addEventListener('click', guarded(() => howTo?.open({ focusBack: el.howto })));
-  el.leave.addEventListener('click', guarded(() => { api.close({ restoreFocus: false }); onLeave?.(); }));
+  // (Leave: the focus goes back to the Menu button first, so the question that opens next remembers it and gives it
+  // back on Keep playing, as it did before the panel existed: src/ui/focus.js)
+  el.leave.addEventListener('click', guarded(() => { api.close(); onLeave?.(); }));
 
   // The keyboard: Escape resumes (while How to play is up, Escape closes that first), Tab stays in the panel.
   doc.addEventListener('keydown', e => {

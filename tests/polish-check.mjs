@@ -111,13 +111,14 @@ const T0 = Date.UTC(2026, 9, 14, 12, 0, 0);
   check(!threw, 'storage that refuses every call (a private window): nothing throws');
   delete globalThis.localStorage;
 }
-check(LOST_MATCH.body === 'The game was restarted by your browser. Your last match was not finished.' && LOST_MATCH.title.length > 0, 'the words say what happened, plainly');
+check(LOST_MATCH.body === 'The game was restarted by your browser. Your last match was not finished and is counted as left early.' && LOST_MATCH.title.length > 0, 'the words say what happened, plainly');
 
 // --- d. the roster and the ring ------------------------------------------------------------------------------
 console.log('d. the lobby roster and the floor ring');
 check(roster.every((r, i) => r.color === SEAT_COLORS[i]), 'the lobby roster\'s colours are the seat colours');
 check(config.character.ringInactiveOpacity >= 0.55 && config.character.ringInactiveOpacity <= 0.65, `the other guests' rings are about 0.6 (${config.character.ringInactiveOpacity}), were 0.35`);
 check(config.character.ringEdgeOpacity > 0 && config.character.ringEdgeActiveOpacity >= config.character.ringEdgeOpacity, 'every ring has a dark edge');
+check(config.character.ringLightOpacity > 0 && config.character.ringLightActiveOpacity >= config.character.ringLightOpacity, 'and a thin light edge outside it (a dark edge alone shows nothing on the red rug)');
 
 console.log(failures ? `\n${failures} check(s) FAILED` : '\nAll checks passed.');
 process.exit(failures ? 1 : 0);

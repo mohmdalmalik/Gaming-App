@@ -17,14 +17,14 @@ import { buildGrid } from './game/grid.js';
 import {
   createState, resetState, endTurn, activePlayer, nextPlayer, checkWin, canEscape,
   openableDoors, pendingEncounters, lockEncounter, playersInRoom, isLocked,
-  isBarricaded, canTradeVoluntarily, doorBetween, encountersIn,
+  isBarricaded, canTradeVoluntarily, doorBetween, encountersIn, adjacentLockedRooms,
 } from './game/state.js';
 import {
   search, canSearch, escape, useBandage, useUnlock, useBarricade, resolveTrade, resolveAttack,
-  discardCard, overHandLimit, tradeableCards, canTrade, skipTrade, openDoor,
+  discardCard, discardRandomDown, overHandLimit, tradeableCards, canTrade, skipTrade, openDoor,
   canUseRoom, useInfirmary, useSwitchboard, useHandMirror, useEspresso,
 } from './game/actions.js';
-import { CARDS, weaponsIn, countableCount } from './game/cards.js';
+import { CARDS, weaponsIn, lanternCount } from './game/cards.js';
 import { createScene } from './render/scene.js';
 import { addRoomView, clearRoomViews, createDoorwayViews } from './render/roomView.js';
 import { dressRoom } from './render/roomDressing.js';
@@ -49,9 +49,11 @@ import { watchDialogs } from './ui/focus.js';
 import { matchMarker } from './matchMarker.js';
 import { LOST_MATCH } from './data/lostMatch.js';
 import { createHand } from './ui/hand.js';
+import { createLockChoice, lockWarning } from './ui/lockChoice.js';
 import { createHandFan } from './ui/handFan.js';
 import { createSearchSpot } from './ui/searchSpot.js';
 import { createDiscard } from './ui/discard.js';
+import { discardAllowance, discardedLine, atZero } from './ui/discardClock.js';
 import { createHandoff } from './ui/handoff.js';
 import { createMeeting } from './ui/meeting.js';
 import { createTradeReveal, tradeOutcome } from './ui/tradeReveal.js';
@@ -63,7 +65,7 @@ import { createGoTags } from './ui/goTags.js';
 import { createScreenTags, interfaceRects } from './ui/screenTags.js';
 import { standable } from './game/moves.js';
 import { usePracticeWording, prepareSoulCards } from './ui/cards.js';
-import { redEyedAllies } from './ui/allies.js';
+import { redEyedAllies, knownPossessedIds } from './ui/allies.js';
 import { createMenu } from './ui/menu.js';
 // (avatars: the wardrobe screen, the runtime portraits and the soul cards' faces from each seat's avatar)
 import { createAvatarEditor } from './ui/avatarEditor.js';
@@ -78,6 +80,7 @@ import { createChatUI } from './ui/chat.js';
 import { createChatChannel } from './social/chat.js';
 import { createTips } from './ui/tips.js';
 import { createHowToPlay } from './ui/howToPlay.js';
+import { createCardsGuide } from './ui/cardsGuide.js';
 import { createGameMenu } from './ui/gameMenu.js';
 import { endRecap } from './ui/endRecap.js';
 import { END_WORDS } from './data/endScreen.js';
@@ -276,9 +279,12 @@ watchDialogs(document);      // the screens over the game take the keyboard focu
 // How to play (src/ui/howToPlay.js: five pages, from the main menu and from the Menu) and the in-match Menu
 // panel (src/ui/gameMenu.js). The panel holds the game still exactly as a question does (the clock, the computer
 // guests, the hand and the buttons): everywhere main.js asks "is a question up?" it asks askUp().
-const howTo = createHowToPlay(document);
+// The Cards screen (src/ui/cardsGuide.js: what every card does, read-only) opens from the main menu, from the Menu and
+// from the last How to play page, above all three; it holds nothing still and changes nothing.
+const cardsGuide = createCardsGuide(document);
+const howTo = createHowToPlay(document, { cards: cardsGuide });
 const gameMenu = createGameMenu(document, {
-  settings, howTo, practice: () => PRACTICE,
+  settings, howTo, cards: cardsGuide, practice: () => PRACTICE,
   onSettingChanged: name => applySettings(name),       // (Music and Sound effects, as in Settings)
   onLeave: () => askLeave(),
 });
@@ -321,6 +327,8 @@ view.renderer.domElement.addEventListener('webglcontextrestored', () => {
   if (graphicsCard) { graphicsCard = false; overlays.hideError(); crash.reset(); }   // (it came back after all: the card is not needed)
 });
 const hand = createHand(document, cfg, { onUseBandage, onUnlock, onBarricade, onEspresso, onHandMirror });
+// The padlock of a locked door next to the guest, tapped: which key or pick to open it with (onLockTap, onUnlock).
+const lockChoice = createLockChoice(document, { onChoose: (cardId, roomId) => onUnlock(cardId, roomId) });
 const discard = createDiscard(document, cfg, {
   onDiscard: cardId => { const r = discardCard(state, activePlayer(state), cardId); if (!r.ok) hud.toast('That card cannot be discarded.'); refresh(); },
 });
@@ -369,7 +377,7 @@ const tips = createTips(document, {
     safe: !!floor.rooms.get(me()?.currentRoom)?.safe,                  // (the player's own room is a safe zone: the badge says so to everyone)
     cameraTouched: camTouchedIn === gameToken, cameraButton: camButtonIn === gameToken,   // (the player's own use of the camera in this game)
     myTurn: myTurn(), acting: actionPhaseClear() && !hand.isOpen && !pendingArrival && !activeMover().walking && !activeMover().path.length,
-    clock: rules.turnTimerEnabled && timerLeft > 0 ? timerLeft : null, moveBar: hud.confirmKind === 'move', search: searchSpot.mode,
+    clock: rules.turnTimerEnabled && timerLeft > 0 ? timerLeft : null, moveBar: hud.confirmKind === 'move', search: searchSpot.kind === 'search' ? searchSpot.mode : null,
     meeting: meeting.isOpen, heard: PRACTICE ? 0 : chat.recent().reduce((t, m) => (m.seat !== humanSeat ? Math.max(t, m.at) : t), 0),   // (when another guest last spoke)
     covered: handoff.isOpen || tradeReveal.isOpen || hand.isOpen || discard.isOpen || map.isOpen || chat.isOpen
       || overlays.endOpen || overlays.noticeOpen || askUp() || !fadeEl.hidden || !!sideways?.matches,
@@ -383,7 +391,7 @@ let selectedMove = null;     // a move to a room awaiting confirmation
 let activeWalk = null;       // the confirmed walk under way (its plan), until the guest arrives
 let walkCutShort = false;    // the clock ran out during this walk: it was cut short at the next room
 
-const uiBusy = () => map.isOpen || hand.isOpen || discard.isOpen
+const uiBusy = () => map.isOpen || hand.isOpen || discard.isOpen || lockChoice.isOpen
   || overlays.endOpen || overlays.noticeOpen || askUp() || handoff.isOpen || meeting.isOpen;
 
 const discovery = createDiscovery({
@@ -399,10 +407,13 @@ const discovery = createDiscovery({
   },
 });
 
-// The search icon over the room's search spot (the furniture flagged `search: true`).
-const searchSpot = createSearchSpot(document, { camera: view.camera, container, floor, state, onTap: onSearchSpot });
+// The room action icon (src/ui/searchSpot.js): the magnifier over the room's search spot (the furniture flagged
+// `search: true`), the door-with-an-arrow in the Fire Exit, the cross in an Infirmary, the headset in the Switchboard
+// (the last two stand on the same flagged furniture: those rooms are not searched). A tap does what its kind says (a new
+// kind adds a line here).
+const searchSpot = createSearchSpot(document, { camera: view.camera, container, floor, state, onTap: { search: onSearchSpot, exit: onEscape, heal: onRoom, switchboard: onRoom } });
 
-// The search icon is part of the player's own action phase only: never on another guest's turn, a
+// The room action icon is part of the player's own action phase only: never on another guest's turn, a
 // private screen, a meeting, a notice or the end screen (CSS also hides it the moment any of those is
 // up). The hand fan is the player's own hand: it shows on other guests' turns too (to look at — using a
 // card needs their own turn), but never under a private screen, a meeting, a notice or the end screen.
@@ -418,7 +429,8 @@ function syncHandFan() {
   hud.syncEndTurn(state);
 }
 function syncSearchSpot() {
-  searchSpot.update(me(), actionPhaseClear() && !hand.isOpen && !pendingArrival);
+  const m = activeMover();   // (on the player's own turn, the only time the icon is up, this is their own guest)
+  searchSpot.update(me(), actionPhaseClear() && !hand.isOpen && !pendingArrival, m.walking || m.path.length > 0);
 }
 // Quick chat: the Chat button only while nothing covers the game (other guests' turns and watching after
 // death included); the end screen has its own "Good game!". The computer guests' chatter is asked a few
@@ -463,6 +475,9 @@ function refreshUsable() {
   const p = me();
   const usable = new Set(state.finished || !myTurn() ? [] : openableDoors(state, floor, p).map(d => d.id));
   for (const dv of doorways.views.values()) dv.setUsable(usable.has(dv.doorway.id), p.currentRoom);
+  // The padlock of a locked door next to the guest is drawn larger while they hold a key or a pick and an action to use it.
+  const canKey = !state.finished && myTurn() && p.actionPoints >= rules.actionCost.useCard && p.hand.some(c => CARDS[c.type]?.unlock);
+  doorways.setKeyable(canKey ? adjacentLockedRooms(state, floor, p) : []);
 }
 
 function refresh() { hud.update(state, floor); refreshUsable(); hand.refresh(); searchMarks.update(state); discovery.refresh(); syncHandFan(); syncSearchSpot(); }
@@ -537,7 +552,12 @@ function beginTurn() {
 
 // --- Turn timer --------------------------------------------------------------------------
 // Counts the active guest's actions only. Meetings, hand-over screens, the end screen and every
-// blocking prompt pause it.
+// blocking prompt pause it. The end-of-turn DISCARD does not (approved rule, 15 Oct 2026): the clock runs on
+// while the guest chooses what to discard, but they always get at least rules.discardMinSeconds (endTurnNow);
+// when it reaches zero, or when the 45 seconds run out in the action phase holding more than the limit, the
+// game discards random ordinary cards for them and the turn ends (onTimeUp, endTurnByClock). The clock is
+// dt-based (a frame is never counted as more than 50 ms), and a hidden tab draws no frames: time away from
+// the page is not counted, so coming back never finds a discard made behind the guest's back.
 function startTimer() {
   if (!rules.turnTimerEnabled) { hud.hideTimer(); timerLeft = 0; return; }
   timerLeft = rules.turnTimerSeconds;
@@ -545,10 +565,11 @@ function startTimer() {
 }
 function stopTimer() { timerLeft = 0; hud.hideTimer(); }
 // The "turn your iPad sideways" card (pure CSS, styles.css) covers the game in portrait: the clock
-// waits while it is up.
+// waits while it is up. (The discard screen is not in this list: only the half second its last card spends
+// leaving, `discard.finishing`, when the choosing is over and the screen is closing by itself.)
 const sideways = window.matchMedia?.('(orientation: portrait), (max-width: 900px)');
 const timerPaused = () => handoff.isOpen || overlays.endOpen || overlays.noticeOpen || askUp()
-  || meeting.isOpen || discard.isOpen || meetingLive || overlays.errorOpen || !!sideways?.matches;
+  || meeting.isOpen || discard.finishing || meetingLive || overlays.errorOpen || !!sideways?.matches;
 
 function tickTimer(dt) {
   if (!rules.turnTimerEnabled || state.finished || timerLeft <= 0) return;
@@ -567,6 +588,7 @@ function tickTimer(dt) {
     timerLeft = 0.001;
   }
   hud.showTimer(timerLeft, rules.turnTimerSeconds);
+  if (discard.isOpen) discard.tick(timerLeft);      // (the discard screen's own countdown)
   if (timerLeft <= 0) onTimeUp();
 }
 
@@ -590,10 +612,35 @@ function cutWalkShort() {
 }
 
 function onTimeUp() {
+  // (a discard screen left over from another turn or game never ends this one: it just goes)
+  if (discard.isOpen && discardStamp !== turnStamp()) { discard.close(); stopTimer(); return; }
   stopTimer();
+  const p = activePlayer(state);
+  // The player's clock ran out holding more than the limit, on the discard screen or in the action phase (the
+  // screen then never opens): the game discards for them. A computer guest's clock is its own backstop (endTurnNow).
+  if (myTurn() && !isBot(p.index) && atZero(overHandLimit(p)) === 'random') { endTurnByClock(p); return; }
+  if (discard.isOpen) discard.close();
   if (myTurn()) { hud.toast('Time is up — your turn ends.'); sfx('timeUp'); }
   endTurnNow();
 }
+
+// The clock ran out while the player holds more than the hand limit: the game discards RANDOM ordinary cards for
+// them, only as many as needed (discardRandomDown, src/game/actions.js: never a Possession card, and no log line or
+// public event: the table learns nothing), and the turn passes the way any end of turn does (passTurn). The
+// player is told what went, privately and without blocking anything, on their own screen. Called once: the clock
+// is stopped first (onTimeUp), and the screen, if it was open, is closed here before anything else.
+function endTurnByClock(p) {
+  discard.close();
+  hand.close(); map.close(); hud.hideConfirm(); selectedMove = null;
+  if (activeMover().walking) activeMover().halt();
+  const gone = discardRandomDown(state, p);
+  sfx('timeUp');
+  passTurn();
+  if (gone.length && !state.finished) discard.note(discardedLine(gone));
+}
+// Which turn of which game a discard screen belongs to (a screen is only ever ended by its own turn's clock).
+const turnStamp = () => `${gameToken}:${state.turn}`;
+let discardStamp = '';
 
 // "the door to the Library" (seen from `fromRoom`), or "door between the Hall and the Library".
 function doorName(doorwayId, fromRoom = null) {
@@ -637,18 +684,25 @@ function passTurn() {
   sfx('yourTurn', { volume: 0.7 });
 }
 
-// End the turn (the End turn button, or the 45-second clock running out). The hand limit is settled
+// End the turn (the End turn button, the turn passing by itself when the actions run out - tickAutoEnd
+// below - or the 45-second clock running out). The hand limit is settled
 // HERE and only here (approved rule): a guest holding more than 6 cards (Possession cards don't count)
 // chooses what to discard on the discard screen first, and the turn passes only once they are down to
 // 6. Nothing else is left open behind it. A computer guest chooses its discards itself.
+// The turn clock keeps running during the discard (approved rule, 15 Oct 2026): the screen gets what is left of
+// it, but never under rules.discardMinSeconds (src/ui/discardClock.js); at zero the game discards at random
+// (onTimeUp). Where the clock is off (Practice, ?timer=off) the discard has no time limit.
 function endTurnNow() {
   const p = activePlayer(state);
   if (overHandLimit(p) > 0) {
     if (isBot(p.index)) { botDiscardDown(p); passTurn(); return; }
     hand.close(); map.close(); hud.hideConfirm(); selectedMove = null;
     if (activeMover().walking) activeMover().halt();
-    stopTimer();
-    discard.open(p, passTurn);
+    const seconds = discardAllowance(timerLeft, rules.turnTimerEnabled);
+    if (seconds === null) stopTimer();
+    else { timerLeft = seconds; hud.showTimer(timerLeft, rules.turnTimerSeconds); }
+    discardStamp = turnStamp();
+    discard.open(p, passTurn, { seconds });
     return;
   }
   passTurn();
@@ -678,8 +732,47 @@ function doEndTurn({ ask = true } = {}) {
   endTurnNow();
 }
 
+// --- Auto end turn -----------------------------------------------------------------------
+// When the player's last action is spent, the turn passes by itself a beat later: the same path as the
+// End turn button (endTurnNow: the discard screen first if the hand is over the limit, stopTimer, ...),
+// without the "End turn?" question. The beat (AUTO_END_MS) only runs while nothing else is going on - no
+// walk, door, reveal, meeting, private screen or menu - and starts over if something does start, so the
+// result of the last action is always seen first. It never runs on a computer guest's turn, for a guest
+// who is out, once the match is over, while the clock is paused, or after the clock cut a walk short.
+// While the player could still do something FREE with no actions left (an Espresso in hand gives +2
+// actions; a Trade in the Fire Exit costs nothing) it does not run at all: End turn glows instead, and
+// the player taps it themselves. The End turn button stays for ending early.
+const AUTO_END_MS = 900;
+let autoEndOn = !window.__noAutoEnd;       // (the browser checks that tap End turn themselves switch it off before the page loads: tests/smoke-lib.mjs)
+let autoEndKey = '', autoEndSince = 0;     // the turn the beat is running for (game + turn number) and when it began
+let autoEndFired = 0;                      // how many turns have passed this way (tests)
+const endTurnBtn = document.getElementById('btn-end-turn');
+
+// 'out': no actions left and nothing free to do; 'free': no actions left but something free remains;
+// 'no': anything else (actions left, not the player's turn, over, ...).
+function autoEndState() {
+  if (!running || state.finished || phase !== 'game' || !myTurn() || !inActionPhase) return 'no';
+  const p = me();
+  if (!p.alive || p.actionPoints > 0) return 'no';
+  return p.hand.some(c => c.type === 'espresso') || canTradeVoluntarily(state, floor, p) ? 'free' : 'out';
+}
+const autoEndBusy = () => uiBusy() || timerPaused() || tradeReveal.isOpen || chat.isOpen || howTo.isOpen || cardsGuide.isOpen
+  || doorways.animating || crash.shown || meetingLive || !!pendingArrival || walkCutShort || activeMover().walking || activeMover().path.length > 0;
+
+function tickAutoEnd(now) {
+  const s = autoEndState();
+  if (endTurnBtn && endTurnBtn.classList.contains('nudge') !== (s === 'free')) endTurnBtn.classList.toggle('nudge', s === 'free');
+  if (!autoEndOn || s !== 'out' || autoEndBusy()) { autoEndKey = ''; return; }
+  const key = `${gameToken}:${state.turn}`;
+  if (key !== autoEndKey) { autoEndKey = key; autoEndSince = now; return; }    // (the beat starts now)
+  if (now - autoEndSince < AUTO_END_MS) return;
+  autoEndKey = '';                          // (once: a new beat needs a new quiet moment)
+  autoEndFired++;
+  endTurnNow();
+}
+
 // The active guest finished walking into a room. The Fire Exit is a safe zone (never a meeting);
-// escaping there is a separate action, the Escape button (1 AP).
+// escaping there is a separate action, the Exit icon (1 action: onEscape).
 function onArrive() {
   const player = activePlayer(state);
   const room = floor.rooms.get(player.currentRoom);
@@ -690,7 +783,7 @@ function onArrive() {
     // possessed. (Practice has nothing to hide: it says plainly what to do.)
     const cost = `${rules.actionCost.escape} action${rules.actionCost.escape === 1 ? '' : 's'}`;
     hud.toast(!state.practice ? `The Fire Exit — a clean guest carrying ${rules.lanternsToEscape} Lanterns can escape here (${cost}).`
-      : canEscape(state, floor, player) ? `You carry ${rules.lanternsToEscape} Lanterns: tap Escape (${cost}).`
+      : canEscape(state, floor, player) ? `You carry ${rules.lanternsToEscape} Lanterns: tap the Exit icon (${cost}).`
         : `The Fire Exit — bring ${rules.lanternsToEscape} Lanterns here to escape (${cost}).`);
   }
   const candidates = pendingEncounters(state, floor, player);
@@ -804,6 +897,7 @@ function runTrade(A, B, onDone = afterMeeting, { voluntary = false } = {}) {
         const wasPossessed = human.possessed;
         // (whether the player sees red eyes on the other guest before the trade, and after it: src/ui/allies.js)
         const allyBefore = redEyedAllies(state, human).has(other.id);
+        const markBefore = knownPossessedIds(state, human).has(other.id);   // (the strip's marker: for a clean guest too)
         const events = resolveTrade(state, floor, A, B, cA, cB);
         if (!events.ok) { refresh(); handoff.privateNote(human, ['The trade could not be made.'], onDone); return; }
         const newly = events.possessed?.find(e => e.newly === human.id);
@@ -814,7 +908,8 @@ function runTrade(A, B, onDone = afterMeeting, { voluntary = false } = {}) {
         const held = human.hand.filter(c => c.type === 'possession').length;
         tradeReveal.show({
           outcome: tradeOutcome(events, human, other), me: human, other, mine, theirs: given,
-          held, wasPossessed, allyBefore, allyAfter: redEyedAllies(state, human).has(other.id), notes: events.notes?.[human.id],
+          held, wasPossessed, allyBefore, allyAfter: redEyedAllies(state, human).has(other.id),
+          markBefore, markAfter: knownPossessedIds(state, human).has(other.id), notes: events.notes?.[human.id],
         }, () => (newly ? handoff.revealRole(human, { changed: true, by: other.name }, onDone) : onDone()));
         refresh();   // (once the scene is up: a guest it shows to be possessed turns red only as it shows it)
       });
@@ -1107,31 +1202,32 @@ function onSearch() {
   const where = r.searchPoint || 'the room';
   syncViews(false);
   // Everything found goes into the hand, even past the limit of 6 (approved rule): the limit is
-  // settled only when the turn ends (endTurnNow -> the discard screen). Over it, the reveal adds a
-  // calm reminder, and the hand fan shows "Cards 8/6 · discard 2 at end of turn".
+  // settled only when the turn ends (endTurnNow -> the discard screen). The reveal says nothing about
+  // it: the hand fan shows "Cards 8/6 · discard 2 at end of turn" the moment the reveal closes.
   const found = r.kind === 'found' || r.kind === 'cards' ? r.cards : r.kind === 'card' ? [r.card] : [];
-  const line = r.kind === 'found'
-    ? `Lying in ${where}: ${r.cards.map(c => CARDS[c.type].name).join(', ')}. You take it all.`
-    : r.kind === 'nothing' ? `You search ${where}. Nothing.`
-      : r.kind === 'cards' ? `You search ${where} and find ${andList(r.cards.map(c => aCard(c.type)))}.`
-        : `You search ${where} and find ${aCard(r.card.type)}.`;
-  const lanterns = player.hand.filter(c => c.type === 'lantern').length;
-  const tally = lanterns ? ` You now hold ${lanterns} Lantern${lanterns === 1 ? '' : 's'}.` : '';
-  const over = r.over || 0;
-  const limitNote = over > 0
-    ? ` You hold ${countableCount(player.hand)} cards, more than ${rules.handLimit}: keep them all for now, and discard ${over} when you end your turn.` : '';
   const then = () => refresh();
   // Search results are PRIVATE: the others learn only that a search happened (the public log). The
   // found cards are shown large on the player's own screen, on a light backdrop with the room still in
-  // view (only the player looks at this screen).
+  // view (only the player looks at this screen), each kind with its one short line (src/ui/handoff.js).
   handoff.privateFound(player, {
     kicker: `You search ${where}`,
-    title: !found.length ? 'Nothing here' : r.kind === 'found' ? `You pick up ${andList(found.map(c => aCard(c.type)))}` : `You found ${andList(found.map(c => aCard(c.type)))}`,
+    title: !found.length ? 'Nothing here' : `${r.kind === 'found' ? 'You pick up' : 'You found'} ${foundPhrase(found)}`,
     cards: found,
-    lines: [line + tally + limitNote],
     soft: true,
   }, then);
   if (found.length) sfx('cardFound', { delay: 0.55 });
+}
+
+// What was found, in a few words: "a Lantern", "2 Lanterns", "a Bandage and a Knife". A big pile off the
+// floor (a guest's dropped hand) is just counted, so the title stays short.
+function foundPhrase(cards) {
+  if (cards.length > 3) return `${cards.length} cards`;
+  const counts = new Map();
+  for (const c of cards) counts.set(c.type, (counts.get(c.type) || 0) + 1);
+  return andList([...counts].map(([type, n]) => {
+    const name = CARDS[type]?.name ?? type;
+    return n === 1 ? aCard(type) : `${n} ${name.endsWith('fe') ? `${name.slice(0, -2)}ves` : `${name}s`}`;
+  }));
 }
 
 // The search icon (or its furniture) was tapped: search it from where the guest stands — they do not
@@ -1149,6 +1245,13 @@ function onSearchSpot() {
   onSearch();
 }
 
+// The furniture the icon rests on was tapped: the same as tapping the icon. In an Infirmary or the Switchboard that
+// furniture is where the room's own action is (those rooms are not searched); anywhere else it is the search.
+function onSpotTap() {
+  const job = floor.rooms.get(activePlayer(state).currentRoom)?.job;
+  if (job === 'infirmary' || job === 'switchboard') onRoom(); else onSearchSpot();
+}
+
 // Turn the active guest to look at a point (the furniture they search).
 function faceTowards([x, z]) {
   const m = activeMover();
@@ -1164,13 +1267,19 @@ function onUseBandage(cardId) {
   refresh();
 }
 
+const doorBarricaded = name => `The ${name} door is barricaded: a key or pick cannot get you through it until the barricade comes down.`;
+
+// A Master Key or Lock Pick on the locked door of room `roomId` (1 action): from the hand's Open button, or from the
+// choice card the padlock opens (onLockTap). The rules settle it (useUnlock); then the door shows the outcome
+// (roomView.js playUnlock): opened, the padlock pops open and the door swings (its sound after the unlock cue the public
+// event plays), snapped, the padlock shakes and the door stays shut (the lockFail cue is that same event's).
 function onUnlock(cardId, roomId) {
   if (!myTurn() || !inActionPhase) return;
   const r = useUnlock(state, floor, activePlayer(state), cardId, roomId);
   const name = floor.rooms.get(roomId)?.name ?? 'locked room';
   if (!r.ok) {
     hud.toast(r.reason === 'ap' ? 'No actions left.'
-      : r.reason === 'sealed' ? `The ${name} door is barricaded: a key or pick cannot get you through it until the barricade comes down.`
+      : r.reason === 'sealed' ? doorBarricaded(name)
         : 'Cannot use that here.');
     return;
   }
@@ -1178,6 +1287,40 @@ function onUnlock(cardId, roomId) {
     : `The lock pick snapped. The ${name} door stays locked.`);
   hand.close();
   syncViews(false); refresh();
+  doorways.playUnlock(r.doorway, r.opened);
+  if (r.opened) sfx('doorOpen', { delay: 0.45 });
+}
+
+// The padlock of a locked door (or that door) was tapped by the guest standing next to it (tapTarget 'lock'): the same
+// cards as the hand's Open button, chosen on the door itself. A guest holding neither is told what opens it. Otherwise
+// the choice card asks which to use: one button for each kind held, and Not now, so a tap meant for something else never
+// spends a card. A barricaded door and a turn with no action left are refused here, plainly, with nothing spent.
+function onLockTap(roomId) {
+  if (!myTurn() || !inActionPhase || uiBusy()) return;
+  const player = activePlayer(state);
+  if (!adjacentLockedRooms(state, floor, player).includes(roomId)) return;
+  const room = floor.rooms.get(roomId);
+  const door = doorBetween(floor, player.currentRoom, roomId);
+  hud.hideConfirm(); selectedMove = null;
+  const held = new Map();                       // one card of each kind held (the choice is a kind, not a card)
+  for (const c of player.hand) if (CARDS[c.type]?.unlock && !held.has(c.type)) held.set(c.type, c.id);
+  if (!held.size) { hud.toast(moveRefusal({ reason: 'locked' }, room, player), 4); sfx('doorLocked'); return; }
+  if (door && isBarricaded(state, door.id)) { hud.toast(doorBarricaded(room.name), 4); sfx('deny'); return; }
+  if (player.actionPoints < rules.actionCost.useCard) { hud.toast('No actions left.'); sfx('deny'); return; }
+  // (the sure one first)
+  const options = [...held].map(([type, cardId]) => ({ type, cardId })).sort((a, b) => (b.type === 'masterKey') - (a.type === 'masterKey'));
+  lockChoice.open({ roomId, roomName: room.name, options, cost: actionsWord(rules.actionCost.useCard), warn: lockWarning(state, player, roomId), anchor: lockPoint(roomId) });
+  sfx('doorLocked', { volume: 0.6 });
+}
+
+// Where the padlock of a locked room's door is on screen (the choice card sits near it), or null. `part: 'door'`: the
+// shut door itself, low on it (tests).
+function lockPoint(roomId, part = 'sign') {
+  const v = [...doorways.views.values()].find(w => w.kind === 'open' && w.lockRoom === roomId);
+  if (!v || !v.mark.visible) return null;
+  const rect = view.renderer.domElement.getBoundingClientRect();
+  const p = part === 'door' ? v.leaf.userData.leaf.getWorldPosition(new THREE.Vector3()).setY(0.45).project(view.camera) : v.mark.position.clone().project(view.camera);
+  return p.z < 1 ? { x: rect.left + ((p.x + 1) / 2) * rect.width, y: rect.top + ((1 - p.y) / 2) * rect.height } : null;
 }
 
 function onBarricade(cardId, doorwayId) {
@@ -1232,40 +1375,61 @@ function onHandMirror(cardId, targetId) {
   }, () => refresh());
 }
 
-// A room with a job (src/data/hotel.js `job`). The Infirmary heals; the Switchboard tells the whole
-// table how many guests are possessed right now, never who. A Linen Store's job is in the search.
+// A room with a job (src/data/hotel.js `job`). The Infirmary heals (once per match, for the whole table: the first guest to
+// use it spends it for everyone); the Switchboard tells the whole table how many guests are possessed right now, never who
+// (2 actions, as often as the guest can pay). Each has its own icon on its furniture (src/ui/searchSpot.js, kinds 'heal' and
+// 'switchboard'); a refused tap says why here and spends nothing. A Linen Store's job is in the search.
 const ROOM_FAIL = {
-  full: 'Already at full health.',
-  ap: 'No actions left.',
-  usedThisTurn: 'You have already rung the Switchboard this turn.',
-  noJob: 'There is nothing to use in this room.',
+  full: () => 'You are at full health.',
+  spent: () => 'This Infirmary has already been used.',
+  ap: job => (job === 'switchboard' ? `The Switchboard needs ${actionsWord(rules.actionCost.switchboard)}.` : 'No actions left.'),
+  noJob: () => 'There is nothing to use in this room.',
 };
+const roomRefusal = r => (ROOM_FAIL[r.reason] || (() => 'Cannot use this room now.'))(r.job);
 function switchboardLine(n) {
   if (n === 0) return 'No guest is possessed right now.';
   return `${n} ${n === 1 ? 'guest is' : 'guests are'} possessed right now — it doesn't say who.`;
 }
-function onRoom() {
-  if (!running || state.finished || uiBusy() || activeMover().walking) return;
+// The Exit icon in the Fire Exit was tapped (src/ui/searchSpot.js, kind 'exit'): leave the hotel — the escape
+// the rules allow (a clean guest carrying the Lanterns, for 1 action), the very one a computer guest uses. If the
+// rules refuse, a short line says what is missing and nothing is spent. The icon is there for every guest in the
+// Fire Exit and the words never depend on the role, so a tap tells nobody (and no screen) who is possessed.
+function onEscape() {
+  if (!running || state.finished || uiBusy() || pendingArrival || activeMover().walking) return;
   if (!myTurn() || !inActionPhase) return;
   const player = activePlayer(state);
-  // The Fire Exit: escaping is its own action (1 AP). The refusal reads the same for everyone.
-  if (floor.rooms.get(player.currentRoom)?.isExit) {
-    const r = escape(state, floor, player);
-    if (r.ok) { syncViews(false); refresh(); showEnd(); return; }
-    hud.toast(r.reason === 'ap' ? 'No actions left — you can escape on your next turn.'
-      : `The fire exit opens only for a clean guest carrying ${rules.lanternsToEscape} Lanterns.`);
-    return;
-  }
+  if (!floor.rooms.get(player.currentRoom)?.isExit) return;
+  const r = escape(state, floor, player);
+  if (r.ok) { syncViews(false); refresh(); showEnd(); return; }
+  hud.toast(escapeRefusal(player, r.reason));
+}
+// What a tap on the grey Exit icon says. No actions left is the same for everyone. Otherwise one sentence for
+// every guest the exit stays shut for, with their own Lantern count: a clean guest short of Lanterns and a
+// possessed one holding enough read the same words, and neither is told why. (Practice has no roles: it says
+// plainly what is missing.)
+function escapeRefusal(player, reason) {
+  if (reason === 'ap') return 'No actions left.';
+  const need = rules.lanternsToEscape, have = lanternCount(player.hand);
+  return state.practice ? `You need ${need} Lanterns to leave. You have ${have}.`
+    : `Only a clean guest with ${need} Lanterns can leave. You have ${have}.`;
+}
+
+// The icon in an Infirmary or the Switchboard was tapped (or the furniture it stands on): the room's action, from where the
+// guest stands, for its cost. The rules settle it (useInfirmary / useSwitchboard); a refusal says why and spends nothing.
+function onRoom() {
+  if (!running || state.finished || uiBusy() || pendingArrival || activeMover().walking) return;
+  if (!myTurn() || !inActionPhase) return;
+  const player = activePlayer(state);
   const gate = canUseRoom(state, floor, player);
-  if (!gate.ok) { hud.toast(ROOM_FAIL[gate.reason] || 'Cannot use this room now.'); return; }
+  if (!gate.ok) { hud.toast(roomRefusal(gate)); return; }
   if (gate.job === 'infirmary') {
     const r = useInfirmary(state, floor, player);
-    if (!r.ok) { hud.toast(ROOM_FAIL[r.reason] || 'Cannot use this room now.'); return; }
+    if (!r.ok) { hud.toast(roomRefusal(r)); return; }
     hud.toast(`Treated in the Infirmary — health ${r.health} of ${rules.maxHealth}.`);
-    refresh();
+    refresh();     // (the icon turns to its "already used" look at once, for this Infirmary is spent for everyone)
   } else if (gate.job === 'switchboard') {
     const r = useSwitchboard(state, floor, player);
-    if (!r.ok) { hud.toast(ROOM_FAIL[r.reason] || 'Cannot use this room now.'); return; }
+    if (!r.ok) { hud.toast(roomRefusal(r)); return; }
     refresh();
     // PUBLIC, for every guest: it stays up until the player taps Continue (the clock waits).
     // Practice: nobody else is in the hotel, so there is nobody to count — say what it does in a match.
@@ -1279,11 +1443,12 @@ function onRoom() {
 function showEnd() {
   if (!DIRECT) matchMarker.clear();         // (the match ended: it is not one the browser cut short)
   stopTimer();
+  if (discard.isOpen) discard.close();      // (a discard screen open as the match ends goes; the stopped clock discards nothing)
   meetingLive = false;
   hud.hideConfirm(); selectedMove = null;
   endMusic();
   if (state.practice) {
-    overlays.showEnd('You reached the fire exit',
+    overlays.showEnd('You reached the Fire Exit',
       `Practice complete: ${rules.lanternsToEscape} Lanterns carried out.\n${floor.roomList.length} rooms of the hotel revealed, on round ${state.round}.`,
       { keepExploring: false, restartLabel: 'Restart practice' });
     countRecord({ practice: true });
@@ -1686,6 +1851,7 @@ function groundToScreen(x, z) {
 // tapping the magnifier over it.
 //   { kind: 'room', id }        a revealed room
 //   { kind: 'search' }          the search spot's furniture in the guest's own room
+//   { kind: 'lock', id }        the padlock, or the shut door, of the locked room `id` next to the guest
 //   { kind: 'fog', key, doors } a fogged room: the closed doors that lead into it
 //   { kind: 'jammed', door }    the empty space behind a jammed door
 function tapTargetAt(x, y) {
@@ -1710,6 +1876,11 @@ function tapTargetAt(x, y) {
     if (id !== here) for (const w of rv.walls) tryBox(w.wall.min[0], w.wall.min[1], w.wall.max[0], w.wall.max[1], Math.max(cfg.cutaway.stubHeight, w.height) * k, id);
     for (const f of rv.room.furniture) tryBox(f.min[0], f.min[1], f.max[0], f.max[1], f.size[1] * k, id, f);
   }
+  // The padlock sign (drawn over everything) or the shut door of a locked room next to the guest, whichever the tap is on;
+  // the door only when nothing stands in front of it (src/render/roomView.js pickLock).
+  const next = adjacentLockedRooms(state, floor, activePlayer(state));
+  const lock = next.length ? doorways.pickLock(raycaster, view.camera, rect, x, y, next) : null;
+  if (lock && lock.distance < best) return { kind: 'lock', id: lock.room };
   if (hitRoom === here && hitPiece?.search) return { kind: 'search' };
   if (hitRoom) return { kind: 'room', id: hitRoom };
   if (!g) return null;
@@ -1728,7 +1899,8 @@ function tapTargetAt(x, y) {
 // search (the magnifier) or use its job — a short hint says so.
 function tapTarget(t, { queued = false } = {}) {
   const player = activePlayer(state);
-  if (t.kind === 'search') { if (!queued) onSearchSpot(); return; }
+  if (t.kind === 'search') { if (!queued) onSpotTap(); return; }
+  if (t.kind === 'lock') { if (!queued) onLockTap(t.id); return; }
   if (t.kind === 'fog') {
     // (your own door into it is jammed — even if another room's door into it is not: say so)
     const mine = floor.rooms.get(player.currentRoom)?.frontier.find(d => `${d.cell[0]},${d.cell[1]}` === t.key);
@@ -1892,7 +2064,8 @@ let queuedTap = null;   // { target, turn }
 // a toast, the search icon — grown by DEAD_ZONE px.
 const DEAD_ZONE = 18;
 const TAP_GUARD = ['.hud-top-left', '.hud-top-center', '.hud-top-right', '#player-panel', '#hand-fan', '#hand-fan .fan-card',
-  '#hand-fan .fan-limit', '.hud-bottom-right', '#btn-end-turn', '#confirm-bar', '#toast', '#search-spot', '.path-label', '#tip'];
+  '#hand-fan .fan-limit', '.hud-bottom-right', '#btn-end-turn', '#confirm-bar', '#toast', '.search-spot .ss-badge, .search-spot .ss-caption',
+  '.path-label', '#tip'];
 function inDeadZone(x, y) {
   const cr = container.getBoundingClientRect();
   const px = x - cr.left, py = y - cr.top;
@@ -1912,6 +2085,7 @@ createInput(view.renderer.domElement, {
     if (chat.swallowTap()) return;     // (a tap that closes the chat panel does nothing else)
     if (tips.swallowTap()) return;     // (nor the second tap of a double tap on a tip's button)
     if (gameMenu.swallowTap() || overlays.swallowTap()) return;     // (nor on the Menu panel or the Leave question closing)
+    if (lockChoice.swallowTap()) return;     // (nor the second tap of a double tap on the lock choice, landing on the door)
     if (!running || state.finished || uiBusy()) return;
     if (!myTurn() || !inActionPhase) return;
     if (inDeadZone(x, y)) return;
@@ -1919,7 +2093,7 @@ createInput(view.renderer.domElement, {
     if (!t) return;
     if (activeMover().walking || activeMover().path.length || pendingArrival) {
       if (t.kind === 'room') queuedTap = { target: t, turn: state.turn };
-      else if (t.kind === 'fog' || t.kind === 'search') { queuedTap = null; hud.toast('Wait until you arrive.'); }
+      else if (t.kind === 'fog' || t.kind === 'search' || t.kind === 'lock') { queuedTap = null; hud.toast('Wait until you arrive.'); }
       return;
     }
     queuedTap = null;
@@ -1943,7 +2117,6 @@ hud.on('rotateRight', () => { rig.rotateRight(); camTouchedIn = camButtonIn = ga
 function onCentre() { if (running) rig.recentre(); }
 hud.on('centre', () => { onCentre(); camTouchedIn = camButtonIn = gameToken; });
 hud.on('endTurn', doEndTurn);
-hud.on('roomJob', onRoom);
 hud.on('trade', onTrade);
 hud.on('private', () => { if (running && !uiBusy()) hand.open(state, floor); });
 hud.on('map', () => { if (!meeting.isOpen && !discard.isOpen && !overlays.endOpen && !handoff.isOpen) map.toggle(state, movers); });
@@ -2032,6 +2205,7 @@ const menu = createMenu(document, {
   onSettingChanged: name => applySettings(name),
   onScreenChange: (name, prev) => onMenuScreen(name, prev),
   onHowToPlay: opts => howTo.open(opts),
+  onCards: opts => cardsGuide.open(opts),
 });
 // The wardrobe (src/ui/avatarEditor.js, the menu's 'avatar' screen): every pick shows at once on your
 // avatar in the lobby, which the lobby's wardrobe camera frames in the space right of the panel, sharp
@@ -2195,6 +2369,9 @@ function frameLoop(now) {
     step('queued tap', replayQueuedTap);
     step('bots', () => botTick(now));
   }
+  step('auto end', () => tickAutoEnd(now));      // (after the walk: an arrival and its meeting have started by now)
+  // The lock choice stays only while it is still the player's own action phase (the clock may run out, the match end).
+  step('lock choice', () => { if (lockChoice.isOpen && !(running && myTurn() && inActionPhase)) lockChoice.close(); });
   step('camera', () => { rig.setFocus(...followPoint()); rig.update(dt); });
   step('rooms', () => { for (const rv of roomViews.values()) rv.update(dt); });
   step('doorways', () => doorways.update(time, dt, roomViews));
@@ -2268,6 +2445,7 @@ window.__game = {
   cfg, rules, hotel, floor, grid, state, movers, rig, roomViews, doorways, characters, discovery, view, pathPreview, fog, screenTags,
   crash,        // the safety net (src/ui/crash.js): ring(), shown, limits, step(), note()
   begin, restart, endTurn: () => doEndTurn({ ask: false }),     // (tests: End turn with the question answered; the button asks)
+  autoEnd: on => { if (on !== undefined) { autoEndOn = !!on; autoEndKey = ''; } return autoEndOn; }, autoEndFired: () => autoEndFired,     // (tests: the turn passing by itself when the actions run out, on or off)
   refresh,
   activePlayer: () => activePlayer(state),
   nextPlayer: () => nextPlayer(state),
@@ -2277,7 +2455,7 @@ window.__game = {
   search: () => onSearch(),
   // The search icon and the hand fan (tests).
   tapSearchSpot: () => onSearchSpot(),
-  searchSpot: () => ({ mode: searchSpot.mode, point: searchSpot.point, spot: searchSpot.spot && { center: searchSpot.spot.center, height: searchSpot.spot.size[1], kind: searchSpot.spot.kind } }),
+  searchSpot: () => ({ mode: searchSpot.mode, kind: searchSpot.kind, point: searchSpot.point, second: searchSpot.second, spot: searchSpot.spot && { center: searchSpot.spot.center, height: searchSpot.spot.size[1], kind: searchSpot.spot.kind } }),
   searchPending: () => false,      // (searching no longer walks anywhere first; kept for older scripts)
   fanIds: () => (fan.visible ? fan.ids : []),
   cardViewOpen: () => hand.isOpen,
@@ -2291,6 +2469,11 @@ window.__game = {
   handMirrorTargets: () => playersInRoom(state, activePlayer(state).currentRoom, activePlayer(state).id).map(q => q.id),
   mirrorOpen: () => handoff.kind === 'mirror',
   unlock: (id, room) => onUnlock(id, room),
+  // The padlock of a locked room's door next to the guest (tests): where it is on screen, a tap on it, the choice card.
+  lockPoint: (room, part) => lockPoint(room, part),
+  tapLock: room => onLockTap(room),
+  lockChoiceOpen: () => lockChoice.isOpen,
+  doorsAnimating: () => doorways.animating,
   barricade: (id, door) => onBarricade(id, door),
   trade: () => onTrade(),
   mode: () => (PRACTICE ? 'practice' : 'match'),
@@ -2331,7 +2514,7 @@ window.__game = {
   record: () => record.get(),        // your record on this device (src/record.js)
   endOpen: () => overlays.endOpen,
   askOpen: () => overlays.askOpen,
-  menuPanelOpen: () => gameMenu.isOpen, howToOpen: () => howTo.isOpen,     // (tests: the in-match Menu panel, How to play)
+  menuPanelOpen: () => gameMenu.isOpen, howToOpen: () => howTo.isOpen, cardsOpen: () => cardsGuide.isOpen,     // (tests: the in-match Menu panel, How to play, Cards)
   showEnd: () => showEnd(),          // (tests: the end screen for the state as it is; it counts the game in your record)
   handoff, meeting, tradeReveal,
   // QA: the private trade reveal for one outcome (src/ui/tradeReveal.js: swap, blocked, blockedMe,
@@ -2368,7 +2551,7 @@ window.__game = {
   lockedRooms: () => [...state.lockedRooms],
   openLocks: () => [...state.openLocks.keys()],       // locked doors a key opened this turn
   canEscape: () => canEscape(state, floor, activePlayer(state)),
-  escape: () => onRoom(),
+  escape: () => onEscape(),         // (the Exit icon's tap)
   openHand: cardId => hand.open(state, floor, cardId),
   rotate: steps => rig.rotate(steps),
   toggleMap: () => map.toggle(state, movers),

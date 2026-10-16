@@ -2,8 +2,8 @@
 // the velvet sofas, chat at reception and stroll; the concierge works the desk; the manager paces the
 // back of the room, pausing at the night windows. On Play, the manager steps into the lift, the
 // chosen seated guests rise and follow him in, turn to face out, the brass doors close and the floor
-// dial swings up toward the fourth floor (the game's starting room), while the camera pushes in and
-// everyone left behind turns to watch.
+// dial's needle swings up to rest between two of its marks (the hidden floor the guests are stuck on), while
+// the camera pushes in and everyone left behind turns to watch.
 //
 //   const lobby = createLobbyScene({ renderer, cfg });
 //   await lobby.ready;                       // models loaded (always resolves; failures are logged)
@@ -390,7 +390,7 @@ export function createLobbyScene({ renderer, cfg, layout = lobbyLayout } = {}) {
     s.ding = Math.max(0, s.ding - dt * 1.2);
     if (s.t > 0.15 && !s.dinged) { s.dinged = true; s.ding = 1; cue(s, 'liftDing'); cue(s, 'liftDoors'); }
     set.lift.setDing(s.ding);
-    // shut: the dial's needle climbs toward the fourth floor; the promise resolves
+    // shut: the dial's needle climbs to its resting gap (lift.destination); the promise resolves
     if (s.closeAt != null && s.t >= s.closeAt + 0.95) {
       if (s.shutAt == null) s.shutAt = s.t;
       const up = ease((s.t - s.shutAt - 0.15) / 3.0);

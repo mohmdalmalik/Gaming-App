@@ -6,6 +6,7 @@ export const GAME_MENU = {
   music: 'Music',
   sound: 'Sound effects',
   howTo: 'How to play',
+  cards: 'Cards',
   // (practice has no table to leave: it is a hotel of your own)
   leave: practice => (practice ? 'Leave practice' : 'Leave the match'),
 };

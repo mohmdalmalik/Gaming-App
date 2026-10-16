@@ -9,7 +9,7 @@
 import { chromium } from 'playwright-core';
 import fs from 'node:fs';
 import path from 'node:path';
-import { tipsOff, profileOn, TEST_PROFILE } from './smoke-lib.mjs';
+import { tipsOff, autoEndOff, profileOn, TEST_PROFILE } from './smoke-lib.mjs';
 
 const args = process.argv.slice(2);
 const baseUrl = args.includes('--url') ? args[args.indexOf('--url') + 1] : 'http://127.0.0.1:8123/';
@@ -27,6 +27,7 @@ const check = (cond, msg) => { if (cond) console.log('  ok  ', msg); else { cons
 const browser = await chromium.launch({ executablePath: chrome, headless: true, args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--no-sandbox'] });
 const lobbyContext = await browser.newContext({ viewport: { width: 1180, height: 820 }, deviceScaleFactor: 1, hasTouch: true });
 await lobbyContext.addInitScript(tipsOff);     // (first-match tips Off: none over what this suite looks at)
+await lobbyContext.addInitScript(autoEndOff);     // (the turn does not pass by itself here: tests/browser-turnflow.mjs checks that)
 await lobbyContext.addInitScript(profileOn, TEST_PROFILE);   // (a saved profile: you play as 'tester')
 const page = await lobbyContext.newPage();
 const consoleMessages = [];
@@ -505,7 +506,8 @@ console.log('\n7b. locked rooms look locked');
 
 console.log('\n8. console');
 await dressed();
-const noisy = consoleMessages.filter(x => !/favicon/i.test(x));
+// (a download cut off because the test itself moved on, a sound or the music still on its way, is not the game's fault: the other suites skip it too)
+const noisy = consoleMessages.filter(x => !/favicon/i.test(x) && !/^requestfailed: .*net::ERR_ABORTED/.test(x));
 check(noisy.length === 0, noisy.length ? `console noise:\n    ${noisy.slice(0, 6).join('\n    ')}` : 'no console errors or failed requests (clean)');
 await browser.close();
 console.log(failures.length ? `\n${failures.length} FAILED` : '\nALL LOBBY BROWSER CHECKS PASSED');

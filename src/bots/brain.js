@@ -552,7 +552,7 @@ export class Mind {
       m.stay = m.lastRoom === view.me.room ? m.stay + 1 : 0;
       m.lastRoom = view.me.room;
     }
-    this.turnState = { turn: view.turn, refused: new Set(), refusedRooms: new Set(), noSearch: false, proposed: new Set(), steps: 0, lastGoal: null, visited: new Set([view.me.room]) };
+    this.turnState = { turn: view.turn, refused: new Set(), refusedRooms: new Set(), noSearch: false, rang: false, proposed: new Set(), steps: 0, lastGoal: null, visited: new Set([view.me.room]) };
   }
 
   nextAction(view) {
@@ -590,6 +590,7 @@ export class Mind {
     if (best.score < 0.9 && ap <= 2 && this.rng() < 0.12 * (1 - this.t.skill) + 0.04) return { k: 'end' };
     ts.lastGoal = best.goal ?? null;
     if (best.action.k === 'trade') ts.proposed.add(best.action.with);    // one proposal per guest per turn
+    if (best.action.k === 'job' && c.here?.job === 'switchboard') ts.rang = true;   // one ring a turn
     return best.action;
   }
 
@@ -636,13 +637,17 @@ export class Mind {
     const greedW = (0.75 + 0.5 * t.greed) * (c.possessed ? TUNING.hoard : 1);
 
     // --- here, now -------------------------------------------------------------------------------
-    if (hurt && here?.job === 'infirmary' && me.health < v.maxHealth) add(9, { k: 'job' }, 'heal');
+    // (an Infirmary works once per room, for the whole match: one somebody has used is spent, and public)
+    const clinicHere = here?.job === 'infirmary' && !here.spent;
+    if (hurt && clinicHere && me.health < v.maxHealth) add(9, { k: 'job' }, 'heal');
     const bandage = c.has('bandage');
     if (bandage && me.health < v.maxHealth) {
-      if (hurt) add(here?.job === 'infirmary' ? 4 : 8, { k: 'card', type: 'bandage', card: bandage.id }, 'heal');
+      if (hurt) add(clinicHere ? 4 : 8, { k: 'card', type: 'bandage', card: bandage.id }, 'heal');
       else if (me.health <= v.maxHealth - 1 && t.caution > 0.6 && c.count('bandage') >= 2) add(0.9, { k: 'card', type: 'bandage', card: bandage.id }, 'heal');
     }
-    const canSearchHere = here && here.searchable && !here.isExit && (here.drops || !here.searched)
+    // (the Infirmary and the Switchboard are not searchable: their action takes the search's place; only a dead
+    // guest's things lying there can still be picked up)
+    const canSearchHere = here && (here.searchable || here.drops) && !here.isExit && (here.drops || !here.searched)
       && (!here.dark || c.hasLight) && !this.turnState.noSearch;
     if (canSearchHere) {
       let s = (here.drops ? 6 : 2.4 * (here.job === 'linenStore' ? 1.6 : 1)) * greedW + 0.3;
@@ -653,7 +658,9 @@ export class Mind {
       const door = here.closed[Math.floor(hash32(this.seed, v.turn, here.id) % here.closed.length)];
       add(this.exploreValue(c) + 0.25 + this.noise('open'), { k: 'open', door }, 'explore:' + here.id);
     }
-    if (here?.job === 'switchboard' && !me.rangSwitchboardThisTurn) add(this.switchboardValue(c) + 0.2, { k: 'job' }, 'switchboard');
+    // The Switchboard costs 2 actions (v.switchboardCost) and can be rung as often as anyone can pay, so a guest
+    // rings it at most once a turn here: the count cannot have changed since the ring it just made.
+    if (here?.job === 'switchboard' && !this.turnState.rang && ap >= v.switchboardCost) add(this.switchboardValue(c) + 0.2, { k: 'job' }, 'switchboard');
     const unlock = this.unlockOption(c); if (unlock) out.push(unlock);
     const mirror = this.mirrorOption(c); if (mirror) out.push(mirror);
     const vt = this.voluntaryTradeOption(c); if (vt) out.push(vt);
@@ -677,10 +684,10 @@ export class Mind {
       if (c.exitKnown) go(v.exitRoom, 100, 'exit');
       else for (const r of v.rooms) if (r.closed.length) go(r.id, 30, 'explore:' + r.id);
     }
-    if (hurt && me.health < v.maxHealth) for (const r of v.rooms) if (r.job === 'infirmary') go(r.id, c.has('bandage') ? 3 : 7, 'heal');
+    if (hurt && me.health < v.maxHealth) for (const r of v.rooms) if (r.job === 'infirmary' && !r.spent) go(r.id, c.has('bandage') ? 3 : 7, 'heal');
     for (const r of v.rooms) {
       if (r.id === me.room) continue;
-      if (r.searchable && !r.isExit && (r.drops || !r.searched) && (!r.dark || c.hasLight)) {
+      if ((r.searchable || r.drops) && !r.isExit && (r.drops || !r.searched) && (!r.dark || c.hasLight)) {
         let s = (r.drops ? 6 : 2.4 * (r.job === 'linenStore' ? 1.6 : 1)) * greedW;
         if (c.escaping) s *= 0.12;
         go(r.id, s, 'search:' + r.id);
@@ -738,7 +745,7 @@ export class Mind {
   // or room tiles still to come.
   prospects(c) {
     let n = 0;
-    for (const r of c.view.rooms) if (r.searchable && !r.isExit && (r.drops || !r.searched) && (!r.dark || c.hasLight) && !r.locked) n++;
+    for (const r of c.view.rooms) if ((r.searchable || r.drops) && !r.isExit && (r.drops || !r.searched) && (!r.dark || c.hasLight) && !r.locked) n++;
     return n + Math.min(c.view.roomTilesLeft, 4);
   }
 

@@ -9,7 +9,7 @@
 import { chromium } from 'playwright-core';
 import fs from 'node:fs';
 import path from 'node:path';
-import { tipsOff, endTurn as endTurnTap, GUARD_WAIT } from './smoke-lib.mjs';
+import { tipsOff, autoEndOff, endTurn as endTurnTap, GUARD_WAIT } from './smoke-lib.mjs';
 
 const args = process.argv.slice(2);
 const baseUrl = args.includes('--url') ? args[args.indexOf('--url') + 1] : 'http://127.0.0.1:8123/';
@@ -37,6 +37,7 @@ const browser = await chromium.launch({ executablePath: findChrome(), headless: 
 // iPad-landscape sized viewport with touch enabled — the primary target.
 const context = await browser.newContext({ viewport: { width: 1180, height: 820 }, deviceScaleFactor: 2, hasTouch: true });
 await context.addInitScript(tipsOff);     // (first-match tips Off: none over what this suite taps)
+await context.addInitScript(autoEndOff);     // (the turn does not pass by itself: this suite taps End turn itself; tests/browser-turnflow.mjs checks the auto end)
 const page = await context.newPage();
 const consoleMessages = [];
 page.on('console', m => { if (['error', 'warning'].includes(m.type())) consoleMessages.push(`${m.type()}: ${m.text()}`); });
@@ -175,13 +176,16 @@ const info = await game(() => ({
   dealt: window.__game.activePlayer().hand.filter(c => c.type === 'lantern').length,
   hand: window.__game.activePlayer().hand.length,
   inPile: window.__game.state.drawPile.filter(c => c.type === 'lantern').length, pile: window.__game.state.drawPile.length,
+  // (read from the rules, so the next deck change does not break this line again)
+  wantInPile: window.__game.rules.deck.lantern - window.__game.rules.lanternsDealtEach,
+  wantPile: Object.values(window.__game.rules.deck).reduce((a, n) => a + n, 0) - window.__game.rules.startingHandSize,
   locked: window.__game.lockedRooms(), timer: window.__game.rules.turnTimerEnabled,
 }));
 check(info.problems.length === 0, 'no floor problems');
 check(info.practice && info.players === 1, 'one guest, practice mode');
 check(info.ap === 4 && info.move === 1 && info.open === 1, '4 actions; opening a door costs 1, a move costs 1');
 check(info.dealt === 1 && info.hand === 4, 'the same deal as a match: the guest starts with 1 Lantern + 3 other cards');
-check(info.inPile === 13 && info.pile === 44, `the other 13 Lanterns are in the ${info.pile}-card deck (48 less a hand of 4), to be found by searching`);
+check(info.inPile === info.wantInPile && info.pile === info.wantPile, `the other ${info.inPile} Lanterns are in the ${info.pile}-card deck (the whole deck less a hand of 4), to be found by searching`);
 check(info.locked.length === 0 && info.rooms === 1, 'the hotel starts as just the lobby; nothing is locked yet');
 check(info.timer === false, 'no turn timer in practice');
 const startSub = (await page.textContent('#start-sub')).replace(/\s+/g, ' ').trim();
@@ -297,11 +301,13 @@ await searchHere();
 }
 check(await kind() === 'found' && sameSet(await revealIds(), [top1]), 'the card found is shown large');
 {
-  const r = await page.evaluate(() => { const c = document.querySelector('#handoff-found .big-card'); return c && { img: c.querySelector('img')?.getAttribute('src'), name: c.querySelector('.bc-name')?.textContent, desc: c.querySelector('.bc-desc')?.textContent, w: c.getBoundingClientRect().width }; });
+  const r = await page.evaluate(() => { const col = document.querySelector('#handoff-found .found-type'), c = col?.querySelector('.big-card'); return c && { img: c.querySelector('img')?.getAttribute('src'), name: col.querySelector('.ft-name')?.textContent, desc: col.querySelector('.ft-desc')?.textContent, w: c.getBoundingClientRect().width }; });
   const meta = await game(id => { const c = window.__game.activePlayer().hand.find(c => c.id === id); return window.__game.rules.cards[c.type]; }, top1);
   check(r && /assets\/cards\/face\//.test(r.img) && r.name === meta.name && r.desc === meta.desc && r.w >= 150,
     `with its card face, its name and what it does ("${r?.name}", ${Math.round(r?.w)} px wide)`);
-  check(/You search .+ and find an? /.test(await revealText()), 'and the search is described');
+  // (round 4: the reveal is short: the kicker, "You found a ...", the card with its one line, and nothing more)
+  check(/^You search /.test((await page.textContent('#handoff-kicker')).trim()) && /^You found an? /.test((await page.textContent('#handoff-title')).trim()), 'the kicker says where you searched and the title what you found');
+  check((await revealText()).trim() === '', 'and there is no long sentence: no "you search ... and find", no Lantern tally, no limit note');
   check(!(await visible('#hand-fan')) && !(await visible('#search-spot')), 'the fan and the icon step aside while it is shown');
 }
 await shot('ui-search-reveal');
@@ -532,6 +538,7 @@ console.log('\n6b. a Linen Store');
   await searchHere();
   check(await kind() === 'found' && sameSet(await revealIds(), top), 'both cards are shown large');
   const toast = (await revealText()).trim();
+  const title = (await page.textContent('#handoff-title')).trim();
   await shot('ui-search-linen');
   await next();
   const ls = await game(ids => ({
@@ -540,7 +547,7 @@ console.log('\n6b. a Linen Store');
   }), top);
   check(ls.n === before + 2 && ls.has, `the first search there draws two cards (${before} -> ${ls.n}), the top two of the deck`);
   check(ls.ap === 3 && !ls.full, 'for one action, with no prompt while there is room for both');
-  check(/find an? .+ and an? /.test(toast), `the message names both cards ("${toast.slice(0, 80)}")`);
+  check(toast === '' && /^You found (an? .+ and an? .+|2 .+)$/.test(title), `the title names both cards, and there is nothing else to read ("${title}")`);
   check((await spot()).mode === null, 'and the room gives up its draw once, like any other: no icon now');
 
   // Six cards in hand: both cards are KEPT (8 in hand) — the hand limit is settled only at the end of the
@@ -558,8 +565,10 @@ console.log('\n6b. a Linen Store');
   await searchHere();
   check(await kind() === 'found' && sameSet(await revealIds(), ['ls1', 'ls2']), 'with 6 cards in hand the reveal shows both new cards');
   const keepText = await revealText();
-  check(/You hold 8 cards, more than 6: keep them all for now, and discard 2 when you end your turn\./.test(keepText), `and says calmly that they are kept for now ("…${keepText.slice(-80)}")`);
+  check(keepText.trim() === '', 'and says nothing about the limit (round 4: the hand fan says it)');
   await next();
+  check(await page.waitForFunction(() => document.querySelector('#hand-fan .fan-limit')?.textContent === 'Cards 8/6 · discard 2 at end of turn', null, { timeout: 4000, polling: 30 }).then(() => true, () => false),
+    'the moment it closes the fan says "Cards 8/6 · discard 2 at end of turn"');
   const kept = await game(() => {
     const g = window.__game, p = g.activePlayer();
     return { ids: p.hand.map(c => c.id), discard: g.state.discardPile.map(c => c.id), ap: p.actionPoints, overlay: !document.getElementById('discard-overlay').hidden };
@@ -590,13 +599,13 @@ console.log('\n6b. a Linen Store');
   await tap('#btn-discard-done');
   await page.click('#discard-cards .card-tile[data-card-id="k3"]'); await page.waitForTimeout(80);
   await tap('#btn-discard-done');
-  const d1 = await page.evaluate(() => ({ btn: document.getElementById('btn-discard-done').textContent.trim(), n: window.__game.activePlayer().hand.length, turn: window.__game.state.turn }));
-  check(d1.n === 6 && d1.btn === 'Keep these 6' && d1.turn === turn0, 'after two discards: 6 cards, "Keep these 6", still the same turn');
-  await tap('#btn-discard-done');
+  // (round 4: the discard that reaches the limit finishes the screen by itself: the card is seen leaving for half a
+  // second, then it closes and the turn passes. There is no "Keep these 6" step.)
+  await page.waitForFunction(() => document.getElementById('discard-overlay').hidden, null, { timeout: 6000, polling: 50 });
   await page.waitForTimeout(150);
   const after = await game(() => ({ turn: window.__game.state.turn, open: !document.getElementById('discard-overlay').hidden,
     discard: window.__game.state.discardPile.map(c => c.id), hand: window.__game.activePlayer().hand.map(c => c.id) }));
-  check(!after.open && after.turn === turn0 + 1, 'then the turn passes');
+  check(!after.open && after.turn === turn0 + 1, 'after the second discard (6 cards) the screen closes by itself and the turn passes: no "Keep these 6"');
   check(after.discard.includes('k1') && after.discard.includes('k3') && after.hand.length === 6 && after.hand.includes('ls1') && after.hand.includes('ls2'),
     'the two chosen Knives went to the discard pile; the new cards were kept');
   check(!(await page.evaluate(() => { const el = document.querySelector('#hand-fan .fan-limit'); return el && !el.hidden; })), 'and the reminder is gone');
@@ -619,11 +628,12 @@ await tap('#btn-restart-practice');
 await tap('#btn-ask-yes');
 check(await game(() => window.__game.hotelRooms().length) === 1 && before7 > 1, 'Restart practice builds a new hotel: just the lobby again');
 await give(0, [{ id: 'fl7', type: 'flashlight' }]);
-for (const t of ['lounge', 'ballroom', 'grandCorridor', 'dining', 'library', 'kitchen', 'corridorE', 'corridorW', 'corridorN', 'corridorS', 'infirmary1', 'infirmary2', 'linenStore1', 'linenStore2', 'switchboard', 'cornerCorridor', 'storage', 'stairs', 'serviceCorridor', 'backCorridor', 'housekeeping']) {
+for (const t of ['lounge', 'ballroom', 'grandCorridor', 'dining', 'library', 'kitchen', 'corridorE', 'corridorW', 'corridorN', 'corridorS', 'infirmary1', 'infirmary2', 'linenStore1', 'linenStore2', 'switchboard', 'cornerCorridor', 'storage', 'stairs', 'serviceCorridor', 'backCorridor', 'housekeeping', 'cloakroom', 'suite416']) {
   await game(id => window.__game.revealTile(id), t);
 }
 const rooms = await game(() => window.__game.floor.roomList.filter(r => r.searchable).map(r => r.id));
-check(rooms.length >= 15, `the hotel has grown to ${rooms.length} searchable rooms`);
+// (a full hotel: 24 tiles less the Fire Exit and the three rooms whose action takes the search's place: both Infirmaries and the Switchboard)
+check(rooms.length === 20, `the hotel has grown to ${rooms.length} searchable rooms (20 in a full hotel)`);
 let searched = 0;
 const notes7 = [];
 for (const r of rooms) {
@@ -648,8 +658,11 @@ check(held >= 3, `searching ${searched} rooms turned up ${held} Lanterns`);
     await searchHere();
     if (await kind() === 'found') { notes7.push(await revealText()); await next(); }
   }
+  // (round 4: the reveal no longer says "You now hold N Lanterns": the Lantern chip on the guest panel keeps the count)
   const n = await game(() => window.__game.lanterns());
-  check(notes7.some(t => new RegExp(`You now hold ${n} Lanterns?\\.`).test(t)), `the search message keeps count of the Lanterns you hold ("…${(notes7.at(-1) || '').slice(-28)}")`);
+  check(!notes7.some(t => /You now hold|more than \d|keep them all/.test(t)), 'the search reveals carry no tally and no limit talk');
+  await page.waitForTimeout(250);
+  check((await page.textContent('#lantern-count')).trim() === `${n}/3`, `and the Lantern chip keeps count of the Lanterns you hold ("${(await page.textContent('#lantern-count')).trim()}")`);
 }
 check(sameSet(await fanIds(), await handIds()), 'Lanterns are in the hand like any card: the fan shows them');
 await game(() => window.__game.toggleMap());
@@ -664,8 +677,11 @@ await game(() => window.__game.moveToRoom(window.__game.floor.exitRoom));
 await settle();
 await page.waitForTimeout(300);
 check(!(await game(() => window.__game.isFinished())), 'walking into the fire exit does not escape by itself');
-check(await page.evaluate(() => { const b = document.getElementById('btn-room'); return !b.hidden && !b.disabled && b.textContent.includes('Escape'); }), 'an Escape button (1 action) appears there');
-await tap('#btn-room');
+// (round 4: leaving is the Exit icon over the exit's door, the room action icon in its green look; no Escape button in the bottom bar)
+check(!(await page.$('#btn-room')), 'there is no Escape button (and no room button) in the bottom bar any more');
+await page.waitForFunction(() => window.__game.searchSpot().mode === 'ready', null, { timeout: 15000, polling: 100 }).catch(() => {});
+check(await page.evaluate(() => { const s = window.__game.searchSpot(), b = document.getElementById('search-spot'); return s.kind === 'exit' && s.mode === 'ready' && !b.hidden && /^Exit the hotel · 1 action$/.test(b.querySelector('.ss-caption').textContent); }), 'the green Exit icon (1 action) appears there');
+await tap('#search-spot');
 await page.waitForTimeout(300);
 check(await game(() => window.__game.isFinished()), 'Escape with three Lanterns ends the practice run');
 check(await visible('#end-overlay') && /fire exit/i.test(await page.textContent('#end-title')), 'the end screen says so');
@@ -760,7 +776,7 @@ console.log('\n7b. playtest fixes');
     await settle();
     await page.waitForTimeout(300);
     const cb = await confirmBar();
-    check(walking && queued && cb.open && /Move to Fourth Floor Landing/.test(cb.text), `a room tapped during the walk is offered once the guest arrives ("${cb.text}")`);
+    check(walking && queued && cb.open && /Move to 13th Floor Lobby/.test(cb.text), `a room tapped during the walk is offered once the guest arrives ("${cb.text}")`);
     if (cb.open) await tap('#btn-confirm-cancel');
     const mid = await game(() => { const g = window.__game, m = g.activeMover(), c = g.roomCenter(g.activePlayer().currentRoom); return Math.hypot(m.x - c[0], m.z - c[1]); });
     check(mid < 0.05, `the guest stands in the middle of the room they walked to (${mid.toFixed(2)} m off)`);
@@ -870,9 +886,9 @@ console.log('\n7b. playtest fixes');
   await page.click('#discard-cards .card-tile[data-card-id="d7"]'); await page.waitForTimeout(80);
   await tap('#btn-discard-done');
   d = await dsc();
-  check(d.n === 6 && !d.dis && d.btn === 'Keep these 6' && await game(t => window.__game.state.turn === t, t2), 'down to six: "Keep these 6", and the turn has not ended yet');
-  await tap('#btn-discard-done');
-  check(!(await visible('#discard-overlay')) && await game(t => window.__game.state.turn === t + 1, t2), 'then the turn ends');
+  check(d.n === 6 && d.dis && !/Keep these/.test(d.btn), 'down to six: no "Keep these 6" step (the screen finishes by itself)');
+  await page.waitForFunction(() => document.getElementById('discard-overlay').hidden, null, { timeout: 6000, polling: 50 });
+  check(!(await visible('#discard-overlay')) && await game(t => window.__game.state.turn === t + 1, t2), 'it closes by itself and the turn ends');
   await page.waitForTimeout(800);
 
   // A tap on a fan card works while the fan is being re-laid out under the finger (a card arriving,
@@ -928,6 +944,8 @@ console.log('\n7b. playtest fixes');
   await page.evaluate(() => Object.defineProperty(window, 'orientation', { configurable: true, get: () => 0 }));
   for (const [w, h] of [[820, 1180], [768, 1024]]) {
     await page.setViewportSize({ width: w, height: h }); await page.waitForTimeout(250);
+    // (a busy machine may not have drawn the new words yet: wait for them rather than for a fixed time)
+    await page.waitForFunction(() => /turn your iPad sideways/i.test(document.getElementById('rotate-overlay').innerText), null, { timeout: 6000 }).catch(() => {});
     const r = await rot();
     check(r.shown && r.covers && /turn your iPad sideways/i.test(r.text), `${w}×${h}: "Please turn your iPad sideways" covers the game`);
     if (w === 820) await shot('ui-portrait-overlay');
@@ -1032,7 +1050,8 @@ for (const [name, w, h] of [['ipad-landscape', 1180, 820], ['ipad-small', 1024, 
   }
 }
 {
-  // A room button (here the Infirmary's) widens the action row: the fan makes room for it.
+  // In an Infirmary there is no room button any more (round 4: its action is the icon on the furniture, src/ui/searchSpot.js):
+  // the action row stays as narrow as ever and the fan keeps clear of it; the icon is there, and not over the cards.
   await page.setViewportSize({ width: 1024, height: 768 });
   await game(() => { window.__game.revealTile('infirmary2'); window.__game.state.lockedRooms.clear(); });
   await put('infirmary2', 4);
@@ -1040,11 +1059,13 @@ for (const [name, w, h] of [['ipad-landscape', 1180, 820], ['ipad-small', 1024, 
   await fanStill();
   const r = await page.evaluate(() => {
     const hit = (a, b) => a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
-    const btn = document.getElementById('btn-room'), act = document.querySelector('.action-row').getBoundingClientRect(), ctl = document.querySelector('.control-row').getBoundingClientRect();
+    const act = document.querySelector('.action-row').getBoundingClientRect(), ctl = document.querySelector('.control-row').getBoundingClientRect();
     const cards = [...document.querySelectorAll('#hand-fan .fan-card')].map(c => c.getBoundingClientRect());
-    return { shown: !btn.hidden && !!btn.offsetParent, n: cards.length, clear: cards.every(c => !hit(c, act) && !hit(c, ctl)) };
+    const icon = document.getElementById('search-spot'), ib = icon.querySelector('.ss-badge').getBoundingClientRect();
+    return { noBtn: !document.getElementById('btn-room'), icon: !icon.hidden && icon.dataset.kind === 'heal', n: cards.length,
+      clear: cards.every(c => !hit(c, act) && !hit(c, ctl) && !hit(c, ib)) };
   });
-  check(r.shown && r.n === 8 && r.clear, 'ipad-small, in an Infirmary: eight cards stay clear of the wider button row (with its Infirmary button)');
+  check(r.noBtn && r.icon && r.n === 8 && r.clear, 'ipad-small, in an Infirmary: eight cards stay clear of the button row and of the Infirmary icon (there is no room button)');
   await put('library', 4); await settle();
 }
 if (shots) {

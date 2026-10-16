@@ -1,4 +1,4 @@
-# Build the starting room ("Fourth Floor Landing") as one baked, stylised model.
+# Build the starting room ("13th Floor Lobby", once the "Fourth Floor Landing") as one baked, stylised model.
 #
 #   node    tools/lobby-pipeline/dump_lobby.mjs > tools/lobby-pipeline/lobby.json
 #   python3 tools/lobby-pipeline/textures.py

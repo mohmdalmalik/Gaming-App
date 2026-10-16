@@ -1,6 +1,7 @@
 // The in-match Menu panel: what the Menu button (#btn-leave) opens. Resume, Sound (Music and Sound effects,
 // the same Off / Low / Medium / High choices and the same saved settings as the main menu's Settings:
-// src/settings.js), How to play (src/ui/howToPlay.js) and Leave, which asks the game's own question
+// src/settings.js), How to play (src/ui/howToPlay.js), Cards (src/ui/cardsGuide.js: what every card does, a
+// read-only list that opens above the panel like How to play) and Leave, which asks the game's own question
 // ("Leave the match?", main.js) with its safe answer in gold, as it always did.
 //
 // THE TURN CLOCK, exactly as it was. Before this panel, the Menu button opened that question, and while a
@@ -17,10 +18,10 @@ import { GAME_MENU as W } from '../data/gameMenu.js';
 import { SETTING_CHOICES } from '../settings.js';
 import { tooSoon, GUARD_MS } from './tapGuard.js';
 
-export function createGameMenu(doc, { settings, howTo = null, practice = () => false, onSettingChanged = null, onLeave = null } = {}) {
+export function createGameMenu(doc, { settings, howTo = null, cards = null, practice = () => false, onSettingChanged = null, onLeave = null } = {}) {
   const $ = id => doc.getElementById(id);
   const el = {
-    root: $('gamemenu-overlay'), title: $('gm-title'), resume: $('btn-gm-resume'), howto: $('btn-gm-howto'), leave: $('btn-gm-leave'),
+    root: $('gamemenu-overlay'), title: $('gm-title'), resume: $('btn-gm-resume'), howto: $('btn-gm-howto'), cards: $('btn-gm-cards'), leave: $('btn-gm-leave'),
     music: $('gm-music'), sound: $('gm-sound'), musicLabel: $('gm-music-label'), soundLabel: $('gm-sound-label'),
   };
   if (!el.root) return { open() {}, close() {}, swallowTap() { return false; }, get isOpen() { return false; } };
@@ -52,6 +53,7 @@ export function createGameMenu(doc, { settings, howTo = null, practice = () => f
     el.title.textContent = W.title;
     el.resume.textContent = W.resume;
     el.howto.textContent = W.howTo;
+    if (el.cards) el.cards.textContent = W.cards;
     el.leave.textContent = W.leave(practice());
     el.musicLabel.textContent = W.music; el.soundLabel.textContent = W.sound;
     segment(el.music, 'music'); segment(el.sound, 'sound');
@@ -71,6 +73,7 @@ export function createGameMenu(doc, { settings, howTo = null, practice = () => f
     // (`restoreFocus: false`: main.js, when a new match or the main menu takes over.)
     close({ restoreFocus = true } = {}) {
       if (el.root.hidden) return;
+      cards?.close();
       howTo?.close();
       el.root.hidden = true;
       closedAt = performance.now();
@@ -87,13 +90,14 @@ export function createGameMenu(doc, { settings, howTo = null, practice = () => f
   // A tap on the dark round the card resumes, as it closes the question (src/overlays.js), under the same guard.
   el.root.addEventListener('click', e => { if (e.target === el.root && !tooSoon(e, shownAt)) api.close(); });
   el.howto.addEventListener('click', guarded(() => howTo?.open({ focusBack: el.howto })));
+  el.cards?.addEventListener('click', guarded(() => cards?.open({ focusBack: el.cards })));
   // (Leave: the focus goes back to the Menu button first, so the question that opens next remembers it and gives it
   // back on Keep playing, as it did before the panel existed: src/ui/focus.js)
   el.leave.addEventListener('click', guarded(() => { api.close(); onLeave?.(); }));
 
-  // The keyboard: Escape resumes (while How to play is up, Escape closes that first), Tab stays in the panel.
+  // The keyboard: Escape resumes (while How to play or Cards is up, Escape closes that first), Tab stays in the panel.
   doc.addEventListener('keydown', e => {
-    if (el.root.hidden || e.defaultPrevented || howTo?.isOpen) return;
+    if (el.root.hidden || e.defaultPrevented || howTo?.isOpen || cards?.isOpen) return;
     if (e.key === 'Escape') { e.preventDefault(); api.close(); return; }
     if (e.key !== 'Tab') return;
     const ring = [...el.root.querySelectorAll('button:not([disabled])')].filter(b => b.getClientRects().length);

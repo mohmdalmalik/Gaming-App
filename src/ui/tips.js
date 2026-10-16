@@ -79,6 +79,10 @@ export function renderTipsAgain(button, settings, { guard = () => false, after =
 //   latch   about something that has just happened (a card arrived): it waits for a clear moment, for
 //           up to staleMs.
 //   meeting shown beside an open meeting (every other tip waits for the meeting to end).
+// The room icon (the search magnifier, the Infirmary's cross, the Switchboard's headset; src/ui/searchSpot.js) is its badge and
+// its caption: the caption is wider than the button's own box, so a tip beside it, and the parts the tips keep clear of, name both.
+const ICON = '#search-spot .ss-badge, #search-spot .ss-caption';
+const ICONS = '.search-spot .ss-badge, .search-spot .ss-caption';       // (both icons, when a dead guest's cards add a second)
 const DEFS = [
   { id: 'possessedStart', prio: 0, at: '#player-panel', point: '#panel-souls', sides: ['above', 'right'],
     when: s => s.match && s.me.alive && s.me.possessed && s.startedPossessed },
@@ -89,7 +93,7 @@ const DEFS = [
     clear: ['#encounter-overlay .modal'], when: s => s.meeting },
   { id: 'firstTurn', prio: 2, at: '#player-panel', point: '#ap-pips', sides: ['above', 'right'], when: s => s.acting },
   { id: 'moveBar', prio: 3, at: '#confirm-bar', sides: ['above', 'below'], now: true, when: s => s.myTurn && s.moveBar },
-  { id: 'search', prio: 3, at: '#search-spot', sides: ['right', 'left', 'above', 'below'], now: true, when: s => s.acting && s.search === 'live' },
+  { id: 'search', prio: 3, at: ICON, sides: ['right', 'left', 'above', 'below'], now: true, when: s => s.acting && s.search === 'live' },
   { id: 'finalRound', prio: 3, at: '#round', sides: ['below', 'left'], when: s => s.match && s.final },
   { id: 'cardFound', prio: 4, at: '#hand-fan', sides: ['above'], latch: true, when: s => s.gained, done: s => s.cardOpen },
   { id: 'timer', prio: 4, at: '#turn-timer', sides: ['below', 'left'], now: true,
@@ -97,10 +101,10 @@ const DEFS = [
   { id: 'handLimit', prio: 4, at: '#hand-fan', sides: ['above'], when: s => countableCount(s.me.hand) >= rules.handLimit },
   { id: 'lantern', prio: 5, at: '#hand-fan', sides: ['above'], latch: true, when: s => s.match && (s.lanternGained || s.exitFound) },
   { id: 'lanternPractice', prio: 5, at: '#hand-fan', sides: ['above'], latch: true, when: s => !s.match && (s.lanternGained || s.exitFound) },
-  { id: 'switchboard', prio: 5, at: '#btn-room', sides: ['above', 'left'], now: true, when: s => s.match && s.acting && s.job === 'switchboard' },
-  { id: 'switchboardPractice', prio: 5, at: '#btn-room', sides: ['above', 'left'], now: true, when: s => !s.match && s.acting && s.job === 'switchboard' },
-  { id: 'infirmary', prio: 5, at: '#btn-room', sides: ['above', 'left'], now: true, when: s => s.acting && s.job === 'infirmary' },
-  // The first walk into a safe zone in a match (the start, in the Landing, is not an arrival). Not in practice: alone
+  { id: 'switchboard', prio: 5, at: ICON, sides: ['right', 'left', 'above', 'below'], now: true, when: s => s.match && s.acting && s.job === 'switchboard' },
+  { id: 'switchboardPractice', prio: 5, at: ICON, sides: ['right', 'left', 'above', 'below'], now: true, when: s => !s.match && s.acting && s.job === 'switchboard' },
+  { id: 'infirmary', prio: 5, at: ICON, sides: ['right', 'left', 'above', 'below'], now: true, when: s => s.acting && s.job === 'infirmary' },
+  // The first walk into a safe zone in a match (the start, in the Lobby, is not an arrival). Not in practice: alone
   // in the hotel there are no meetings anywhere, and the tip would be used up before the match where it matters.
   { id: 'safeZone', prio: 6, at: '#safe-badge', sides: ['below', 'right'], latch: true, when: s => s.match && s.arrivedSafe },
   // The first use of a round camera button: what the three do.
@@ -114,7 +118,7 @@ const DEFS = [
 // The parts of the interface a tip keeps clear of (whichever are showing), and the tags over the hotel
 // it keeps off when it can (and the player's own guest, see guestBox).
 const CLEAR = ['.hud-top-left', '#feed', '.hud-top-center', '.hud-top-right', '#player-panel', '#hand-fan .fan-card',
-  '#hand-fan .fan-limit', '.hud-bottom-right', '#confirm-bar', '#toast', '#search-spot', '.path-label', '#chat-panel'];
+  '#hand-fan .fan-limit', '.hud-bottom-right', '#confirm-bar', '#toast', ICONS, '.path-label', '#chat-panel'];
 const SOFT = ['.tag-layer > div'];
 const GAP = 12;          // px between the card and what it explains
 const EDGE = 10;         // px kept from the screen's edges
@@ -208,13 +212,16 @@ export function createTips(doc, { situation, settings, camera = null, tagBoxes =
     byeUntil = performance.now() + T.hiddenMs;
   });
 
+  // The box around everything on screen that `sel` names (one part, or several like the room icon's badge and caption), or null.
   function rectOf(sel) {
+    let l = Infinity, t = Infinity, r = -Infinity, b = -Infinity;
     for (const e of doc.querySelectorAll(sel)) {
       if (!shown(e)) continue;
-      const r = e.getBoundingClientRect();
-      if (r.width && r.height) return { l: r.left, r: r.right, t: r.top, b: r.bottom, cx: (r.left + r.right) / 2, cy: (r.top + r.bottom) / 2 };
+      const q = e.getBoundingClientRect();
+      if (!q.width || !q.height) continue;
+      l = Math.min(l, q.left); t = Math.min(t, q.top); r = Math.max(r, q.right); b = Math.max(b, q.bottom);
     }
-    return null;
+    return r > l ? { l, r, t, b, cx: (l + r) / 2, cy: (t + b) / 2 } : null;
   }
 
   // The places beside `a` on one side, nearest first: straight out from the thing (`p`, the arrow's

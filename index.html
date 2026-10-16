@@ -43,7 +43,24 @@
       <div id="feed" class="feed" aria-live="polite" hidden></div>
       <!-- Top-centre: the guests, with clear current-turn and next-player indicators. -->
       <div class="hud-top-center">
-        <div id="players-strip" class="players-strip"></div>
+        <div id="players-strip" class="players-strip">
+          <!-- The guests in turn order (src/hud.js buildStrip), then a thin divider where the round ends (a loop
+               arrow; in the final round, dawn). Under them, the round's own line: "3 turns left in Round 2", on a line
+               that loops back to the first guest (src/ui/roundLabel.js roundReadout). Only public turn order. -->
+          <div class="strip-row">
+            <div id="strip-cards" class="strip-cards"></div>
+            <div id="strip-cap" class="strip-cap" hidden>
+              <svg class="cap-icon ic-loop" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19.4 12.2a7.4 7.4 0 1 1-2.3-5.4"/><path d="M19.8 3.8v4.6h-4.6"/></svg>
+              <svg class="cap-icon ic-dawn" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5.5 17.5a6.5 6.5 0 0 1 13 0"/><path d="M2.5 17.5h19"/><path d="M12 5.5v3M4.6 9.4l2.1 2.1M19.4 9.4l-2.1 2.1"/></svg>
+              <span id="strip-cap-word" class="cap-word">Round ends</span>
+            </div>
+          </div>
+          <div id="strip-round" class="strip-round" hidden>
+            <span class="sr-line sr-l"><i class="sr-head" aria-hidden="true"></i></span>
+            <span id="strip-round-text" class="sr-text" aria-live="polite"></span>
+            <span class="sr-line sr-r"></span>
+          </div>
+        </div>
       </div>
       <div class="hud-top-right">
         <div id="round" class="round-label">Round 1</div>
@@ -96,8 +113,6 @@
             <button id="btn-map" class="ctl map" type="button" aria-label="Open map"><span class="ico">&#x25A4;</span> Map</button>
           </div>
           <div class="action-row">
-            <!-- A room with a job (Infirmary, Switchboard): shown only while standing in one. -->
-            <button id="btn-room" class="btn action room-job" type="button" hidden><span class="btn-main">Infirmary</span><span id="room-sub" class="btn-sub">1 action</span></button>
             <button id="btn-trade" class="btn action" type="button" hidden><span class="btn-main">Trade</span><span class="btn-sub">Safe zone</span></button>
             <button id="btn-end-turn" class="btn primary end" type="button"><span class="btn-main">End turn &#x203A;</span><span id="end-sub" class="btn-sub">Next: —</span></button>
           </div>
@@ -113,10 +128,12 @@
         </span>
       </div>
 
-      <div id="toast" class="toast" hidden></div>
+      <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+      <!-- "Time ran out. The game discarded your ..." (the player's own screen only; src/ui/discard.js note) -->
+      <div id="discard-note" class="discard-note" role="status" aria-live="polite" hidden></div>
 
       <!-- The quick-chat panel (filled from src/data/chat.js by src/ui/chat.js): one tap sends and closes. -->
-      <div id="chat-panel" class="chat-panel" role="dialog" aria-label="Quick chat" hidden></div>
+      <div id="chat-panel" class="chat-panel" role="dialog" aria-label="Quick chat" data-scrolls hidden></div>
     </div>
 
     <!-- Discard-down-to-the-hand-limit modal: the ONLY place the hand limit is settled, when a guest
@@ -125,6 +142,13 @@
       <div class="modal" data-scrolls>
         <div id="discard-kicker" class="discard-kicker" hidden></div>
         <div id="discard-title" class="modal-title">End of your turn: too many cards</div>
+        <!-- The countdown (only where the turn clock is on: src/ui/discard.js). The bar is only a picture; the words
+             are the text ("30 seconds left"), and the hidden status line below is what a screen reader is told at 10 and 5. -->
+        <div id="discard-clock" class="discard-clock" hidden>
+          <div class="dc-words"><span id="dc-secs" class="dc-secs">0</span> <span id="dc-label" class="dc-label">seconds left</span></div>
+          <div class="dc-track" aria-hidden="true"><div id="dc-fill" class="dc-fill"></div></div>
+        </div>
+        <div id="discard-live" class="discard-live" role="status" aria-live="polite"></div>
         <div id="discard-sub" class="modal-sub"></div>
         <div id="discard-cards" class="cards"></div>
         <div class="modal-actions">
@@ -181,7 +205,7 @@
           <span><span class="sw guest"></span> A guest (their initial, or seat number) &#183; the arrow is whose turn it is</span>
           <span><span class="mk drop">&#x25C6;</span> Something on the floor</span>
           <span><span class="sw frontier"></span> Closed door (?)</span>
-          <span><span class="mk infirmary">&#x271A;</span> Infirmary &#183; heal</span>
+          <span><span class="mk infirmary">&#x271A;</span> Infirmary &#183; heal, once per match (dimmed once used)</span>
           <span><span class="mk switchboard">&#x260E;&#xFE0E;</span> Switchboard &#183; count the possessed</span>
           <span><span class="mk linen">&#x2261;</span> Linen Store &#183; 2 cards</span>
           <span><span class="mk">&#x1F512;</span> Locked door &#183; &#x1F513; open this turn only</span>
@@ -253,8 +277,13 @@
             <!-- Only until the player has played a match or finished a practice (src/ui/menu.js, the words:
                  src/data/howToPlay.js). -->
             <p id="menu-hint" class="menu-hint" hidden></p>
-            <div class="menu-row2 three">
+            <!-- Learn (How to play, Cards: src/ui/howToPlay.js, src/ui/cardsGuide.js) and then Settings and Your record:
+                 two rows of two, so the menu still fits without scrolling on the shortest iPad window. -->
+            <div class="menu-row2 learn">
               <button id="btn-menu-howto" class="menu-btn" type="button" data-sfx="open"><span class="mb-main">How to play</span></button>
+              <button id="btn-menu-cards" class="menu-btn" type="button" data-sfx="open"><span class="mb-main">Cards</span></button>
+            </div>
+            <div class="menu-row2">
               <button id="btn-menu-settings" class="menu-btn" type="button"><span class="mb-main">Settings</span></button>
               <button id="btn-menu-record" class="menu-btn" type="button"><span class="mb-main">Your record</span></button>
             </div>
@@ -395,6 +424,19 @@
       </div>
     </div>
 
+    <!-- The padlock of a locked door was tapped: which key or pick to open it with (src/ui/lockChoice.js
+         fills the buttons; the room stays in view behind a light veil). -->
+    <div id="lock-overlay" class="overlay lock-overlay" hidden>
+      <div class="card lock-card">
+        <div class="lock-kicker">Locked door</div>
+        <h1 id="lock-title" class="lock-title">&nbsp;</h1>
+        <p id="lock-cost" class="lock-cost"></p>
+        <div id="lock-options" class="lock-options"></div>
+        <p id="lock-warn" class="lock-warn" hidden></p>
+        <button id="btn-lock-cancel" class="btn lock-cancel" type="button">Not now</button>
+      </div>
+    </div>
+
     <div id="end-overlay" class="overlay center" hidden>
       <div class="card">
         <!-- A match: "Victory" or "Defeat" for the player's side (src/overlays.js showEnd; practice has none). -->
@@ -426,6 +468,7 @@
         <div class="gm-actions">
           <button id="btn-gm-resume" class="btn primary big" type="button" data-sfx="close">Resume</button>
           <button id="btn-gm-howto" class="btn big" type="button" data-sfx="open">How to play</button>
+          <button id="btn-gm-cards" class="btn big" type="button" data-sfx="open">Cards</button>
           <button id="btn-gm-leave" class="btn big" type="button">Leave the match</button>
         </div>
       </div>
@@ -445,6 +488,20 @@
             <button id="btn-howto-back" class="btn big" type="button" data-sfx="click">Back</button>
             <button id="btn-howto-next" class="btn primary big" type="button" data-sfx="click">Next</button>
           </span>
+        </div>
+      </div>
+    </div>
+
+    <!-- The Cards screen (src/ui/cardsGuide.js; the words: src/data/cardsGuide.js and the cards' own lines in
+         src/data/rules.js): every kind of card and what it does, read-only. From the main menu, the in-match Menu
+         and the last How to play page; above all three. The list is drawn the first time it opens. -->
+    <div id="cards-overlay" class="overlay center cardsguide" role="dialog" aria-modal="true" aria-labelledby="cards-title" hidden>
+      <div class="card cardsguide-card">
+        <div id="cards-kicker" class="howto-kicker">Every card in the game</div>
+        <h1 id="cards-title">Cards</h1>
+        <ul id="cards-list" class="cardsguide-list" data-scrolls tabindex="0" aria-label="Every card and what it does"></ul>
+        <div class="cardsguide-actions">
+          <button id="btn-cards-close" class="btn primary big" type="button">Close</button>
         </div>
       </div>
     </div>

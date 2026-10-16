@@ -22,23 +22,26 @@ const EXPECT = {
   // the game's own buttons
   'btn-restart-practice': 'click', 'btn-chat': 'open', 'btn-leave': 'click', 'btn-private': 'open',
   'btn-rotate-left': 'click', 'btn-rotate-right': 'click', 'btn-centre': 'click', 'btn-map': 'open',
-  'btn-room': 'click', 'btn-trade': 'click', 'btn-end-turn': 'click',
+  'btn-trade': 'click', 'btn-end-turn': 'click',
   'btn-confirm-move': 'click', 'btn-confirm-cancel': 'close',
   'btn-discard-done': 'close',
   'btn-hand-close': 'close', 'btn-hand-prev': 'click', 'btn-hand-next': 'click', 'btn-map-close': 'close',
   'btn-handoff-next': 'click', 'btn-offer-give': 'click',
   'btn-chat-gg': 'select',
   // the in-match Menu panel (src/ui/gameMenu.js) and How to play (src/ui/howToPlay.js)
-  'btn-gm-resume': 'close', 'btn-gm-howto': 'open', 'btn-gm-leave': 'click',
-  'btn-howto-close': 'close', 'btn-howto-back': 'click', 'btn-howto-next': 'click',
+  'btn-gm-resume': 'close', 'btn-gm-howto': 'open', 'btn-gm-cards': 'open', 'btn-gm-leave': 'click',
+  'btn-howto-close': 'close', 'btn-howto-back': 'click', 'btn-howto-next': 'click', 'btn-howto-cards': 'open',
+  // the Cards screen (src/ui/cardsGuide.js): opened from the main menu, the Menu panel and the last How to play page
+  'btn-cards-close': 'close',
   // the menu
   'btn-su-suggest': 'click', 'btn-su-go': 'click', 'btn-profile': 'open',
-  'btn-menu-bots': 'open', 'btn-menu-practice': 'click', 'btn-menu-settings': 'open', 'btn-menu-record': 'open', 'btn-menu-howto': 'open',
+  'btn-menu-bots': 'open', 'btn-menu-practice': 'click', 'btn-menu-settings': 'open', 'btn-menu-record': 'open', 'btn-menu-howto': 'open', 'btn-menu-cards': 'open',
   'btn-av-rename': 'click', 'btn-av-done': 'close', 'btn-bots-back': 'close', 'btn-bots-find': 'click',
   'btn-mm-cancel': 'close', 'btn-tips-again': 'select', 'btn-settings-done': 'close',
   'btn-record-back': 'close', 'btn-record-reset': 'click', 'btn-record-keep': 'click', 'btn-record-yes': 'click',
   // the full-screen overlays
   'btn-begin': 'click', 'btn-notice-ok': 'click', 'btn-ask-no': 'click', 'btn-ask-yes': 'click',
+  'btn-lock-cancel': 'close',            // the lock choice (src/ui/lockChoice.js): Not now; its "Use ..." buttons have no id, a plain click
   'btn-keep-exploring': 'click', 'btn-end-menu': 'click', 'btn-restart': 'click',
   'btn-error-menu': 'click', 'btn-error-reload': 'click', 'boot-reload': 'click',
 };

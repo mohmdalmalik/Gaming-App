@@ -9,6 +9,7 @@ import * as THREE from 'three';
 import { unitBox, unitPlane, lambert, tinted, makeShadow, easeOutCubic } from './materials.js';
 import { applyXray } from './xray.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { reducedMotion } from '../motion.js';
 
 let seedCounter = 0;
 
@@ -298,6 +299,14 @@ const BAR_SIGN_OUT = 0.45;   // and how far it hangs out from the doorway, on th
 
 const INTO = { north: [0, 1], south: [0, -1], east: [-1, 0], west: [1, 0] };   // into the room from its wall
 
+// The padlock sign over a locked door: its size, larger (KEYABLE_SCALE times) while the active guest stands next to
+// the door holding a key or a pick, and the least a finger's tap on it counts for, in CSS px (44: a touch target).
+const PADLOCK_SIZE = 0.62, KEYABLE_SCALE = 1.35, LOCK_TAP_MIN = 30;
+// What a key or a pick does to the door, in seconds (playUnlock): a key's padlock pops open, then the door is
+// let go to swing open (UNLOCK_HOLD); a pick that snaps shakes the padlock and rattles the door.
+const UNLOCK_OPEN_AT = 0.15, UNLOCK_HOLD = 0.45, SNAP_TIME = 0.6;
+const _right = new THREE.Vector3(), _p = new THREE.Vector3(), _q = new THREE.Vector3();   // (reused: nothing is made per frame)
+
 // Doors and doorways. A CLOSED door (one that leads to a room not yet revealed) is a walnut door
 // leaf standing in the opening, with the fogged, unknown room beyond it (src/render/fog.js). Opening
 // it swings the leaf into the new room, and from then on it is an open doorway. Doors are not what
@@ -314,6 +323,7 @@ const INTO = { north: [0, 1], south: [0, -1], east: [-1, 0], west: [1, 0] };   /
 // `camera` (optional): the barricade sign hangs out on the side of the doorway facing it.
 export function createDoorwayViews(floor, cfg, scene, { isLocked = () => false, standingIn = () => null, openedNow = () => false, isBarricaded = () => false, camera = null } = {}) {
   const views = new Map();
+  let animating = 0;          // doors showing what a key or pick did to them (playUnlock)
   const t = cfg.walls.thickness, H = cfg.walls.height;
   const warm = new THREE.Color(cfg.palette.frontier);
   const radial = gradientTexture();
@@ -466,12 +476,19 @@ export function createDoorwayViews(floor, cfg, scene, { isLocked = () => false, 
     scene.add(warn);
     // and a padlock sign in front of the locked door, seen from anywhere (it faces the camera)
     const mark = new THREE.Sprite(padlockMat);
-    mark.scale.set(0.62, 0.62, 1);
+    mark.scale.set(PADLOCK_SIZE, PADLOCK_SIZE, 1);
     mark.renderOrder = 7;
     mark.visible = false;
     scene.add(mark);
+    // where the sign rests (a shake or a pop moves it from here and back), on the side of the door in front of it
+    const markHome = new THREE.Vector3();
+    const placeMark = (ix, iz) => { markHome.set(d.center[0] + ix * 0.45, 1.5, d.center[1] + iz * 0.45); mark.position.copy(markHome); };
     const view = {
-      kind: 'open', doorway: d, strip, leaf, warn, mark, locked: null, shut: null, openedNow: false,
+      kind: 'open', doorway: d, strip, leaf, warn, mark, markHome, locked: null, shut: null, openedNow: false,
+      // the locked room this door guards (null when it is not locked); `keyable`: the active guest stands next to it
+      // holding a key or a pick, so its padlock is drawn larger (setKeyable); `anim`: what a key or pick just did
+      // to it (playUnlock), { kind: 'open' | 'fail', t }, until it is over
+      lockRoom: null, keyable: false, keyShown: false, anim: null,
       bar: null, barricaded: false,
       sync() {
         // A barricade: boards across the doorway while it is sealed (both ways, for every guest).
@@ -480,6 +497,7 @@ export function createDoorwayViews(floor, cfg, scene, { isLocked = () => false, 
         this.bar?.set(this.barricaded);
         const inRoom = lockedRoom();
         const locked = !!inRoom;
+        this.lockRoom = inRoom;
         const shut = locked && standingIn() !== inRoom;     // open for the guest inside, shut to everyone else
         // A key has this door open for the rest of the turn: an OPEN padlock hangs in front of it, so
         // the scene shows it will lock again (the closed padlock comes back when it does).
@@ -488,7 +506,7 @@ export function createDoorwayViews(floor, cfg, scene, { isLocked = () => false, 
         mark.material = keyed ? padlockOpenMat : padlockMat;
         if (keyed) {
           const [ix, iz] = INTO[d.sideFor(keyed === d.a ? d.b : d.a)];
-          mark.position.set(d.center[0] + ix * 0.45, 1.5, d.center[1] + iz * 0.45);
+          placeMark(ix, iz);
         }
         if ((locked === this.locked && shut === this.shut) || !leaf) { warn.visible = !!locked; mark.visible = (!!locked || !!keyed) && !!leaf; return; }
         this.locked = locked; this.shut = shut;
@@ -508,13 +526,13 @@ export function createDoorwayViews(floor, cfg, scene, { isLocked = () => false, 
           const deep = 1.0;
           warn.scale.set(along ? d.width + 0.6 : deep, 1, along ? deep : d.width + 0.6);
           warn.position.set(d.center[0] + ix * (t + deep / 2), 0.036, d.center[1] + iz * (t + deep / 2));
-          mark.position.set(d.center[0] + ix * 0.45, 1.5, d.center[1] + iz * 0.45);
+          placeMark(ix, iz);
         }
       },
       setState() { this.sync(); },
-      // (an open doorway is not tapped: the room beyond it is)
+      // (an open doorway is not tapped: the room beyond it is — except its padlock and its locked door, pickLock)
       setUsable() {},
-      dispose() { scene.remove(strip, warn, mark); if (leaf) scene.remove(leaf); this.bar?.dispose(); },
+      dispose() { if (this.anim) { this.anim = null; animating--; } scene.remove(strip, warn, mark); if (leaf) scene.remove(leaf); this.bar?.dispose(); },
     };
     view.sync();
     return view;
@@ -545,6 +563,38 @@ export function createDoorwayViews(floor, cfg, scene, { isLocked = () => false, 
 
   const at = d => `${d.center[0].toFixed(2)},${d.center[1].toFixed(2)}`;
 
+  // A padlock sign each frame: at rest its size (larger, with a slow swell, while it is the one to tap), and
+  // while a key or pick is showing its outcome (playUnlock) the pop of one that opens or the shake of one
+  // that snaps. When it ends the sign goes back to rest, in the picture its door's state wants.
+  function animateLock(v, time, dt) {
+    const mark = v.mark, a = v.anim;
+    if (!a) {
+      const k = v.keyable && mark.visible ? KEYABLE_SCALE * (reducedMotion() ? 1 : 1 + 0.05 * Math.sin(time * 3)) : 1;
+      if (k !== v.keyShown) { v.keyShown = k; mark.scale.set(PADLOCK_SIZE * k, PADLOCK_SIZE * k, 1); }
+      return;
+    }
+    a.t += dt;
+    if (a.t >= (a.kind === 'open' ? UNLOCK_HOLD + 0.1 : SNAP_TIME)) {
+      v.anim = null; animating--;
+      mark.position.copy(v.markHome);
+      mark.material = v.openedNow ? padlockOpenMat : padlockMat;
+      v.keyShown = 1; mark.scale.set(PADLOCK_SIZE, PADLOCK_SIZE, 1);
+      return;
+    }
+    mark.position.copy(v.markHome);
+    let k;
+    if (a.kind === 'open') {
+      mark.material = a.t < UNLOCK_OPEN_AT ? padlockMat : padlockOpenMat;
+      k = 1 + 0.3 * Math.sin(Math.PI * Math.min(1, a.t / 0.3));
+    } else {
+      if (camera) _right.setFromMatrixColumn(camera.matrixWorld, 0); else _right.set(1, 0, 0);
+      mark.position.addScaledVector(_right, Math.sin(a.t * 50) * 0.07 * (1 - a.t / SNAP_TIME));
+      k = 1.15;
+    }
+    v.keyShown = k;
+    mark.scale.set(PADLOCK_SIZE * k, PADLOCK_SIZE * k, 1);
+  }
+
   return {
     views,
     // Catch up with the hotel: a view for every door and doorway, the leaf of a door that has just
@@ -567,7 +617,50 @@ export function createDoorwayViews(floor, cfg, scene, { isLocked = () => false, 
     reset() {
       for (const v of views.values()) v.dispose();
       views.clear();
+      animating = 0;
     },
+    // Is a locked door of `rooms` (the locked rooms next to the active guest) under the finger at screen point
+    // (x, y)? The padlock sign counts within a finger's width of it (at least LOCK_TAP_MIN px each way), the shut
+    // door itself wherever the ray `raycaster` (already aimed at that point) meets it. `rect`: the canvas's box.
+    // Returns { room, doorway, distance } (distance along the ray; 0 for the sign, which is drawn over everything,
+    // so it wins) or null. Only called on a tap.
+    pickLock(raycaster, camera, rect, x, y, rooms) {
+      let best = null;
+      _right.setFromMatrixColumn(camera.matrixWorld, 0);
+      for (const v of views.values()) {
+        if (v.kind !== 'open' || !v.lockRoom || !v.locked || !rooms.includes(v.lockRoom)) continue;
+        const hit = { room: v.lockRoom, doorway: v.doorway.id, distance: 0 };
+        if (v.mark.visible) {
+          _p.copy(v.mark.position).project(camera);
+          _q.copy(v.mark.position).addScaledVector(_right, v.mark.scale.x / 2).project(camera);
+          const sx = rect.left + (_p.x + 1) / 2 * rect.width, sy = rect.top + (1 - _p.y) / 2 * rect.height;
+          const half = Math.abs(_q.x - _p.x) / 2 * rect.width;           // the sign's radius on screen
+          if (_p.z < 1 && Math.hypot(x - sx, y - sy) <= Math.max(LOCK_TAP_MIN, half * 1.2)) return hit;
+        }
+        if (v.shut && v.leaf?.visible) {
+          const meet = raycaster.intersectObject(v.leaf.userData.leaf, false)[0];
+          if (meet && (!best || meet.distance < best.distance)) best = { ...hit, distance: meet.distance };
+        }
+      }
+      return best;
+    },
+    // The active guest's turn: these locked rooms are next to where they stand and they hold a key or a pick
+    // (and an action to use it with), so their padlocks are drawn larger — the sign to tap.
+    setKeyable(rooms) {
+      for (const v of views.values()) if (v.kind === 'open') v.keyable = !!v.lockRoom && rooms.includes(v.lockRoom);
+    },
+    // A key or pick has just been used on the door `doorwayId` (the rules have already settled it: `opened`).
+    // Opened: the padlock pops open and, a beat later, the shut door swings open. Snapped (a pick that failed):
+    // the padlock shakes and the door rattles, and stays shut. With Reduce Motion neither moves: the door is
+    // simply in its new state. (The sounds are cued by main.js.)
+    playUnlock(doorwayId, opened) {
+      const v = views.get(doorwayId);
+      if (!v || v.kind !== 'open' || reducedMotion()) return;
+      if (!v.anim) animating++;
+      v.anim = { kind: opened ? 'open' : 'fail', t: 0 };
+    },
+    // Is a door showing the outcome of a key or pick right now? (The turn does not end by itself over it.)
+    get animating() { return animating > 0; },
     // One of each thing a doorway can show later in a game (a locked door's leaf, padlocks and red
     // glow, a barricade's boards and sign), with the real materials, for the warm-up at the start of a
     // game (main.js warmUp): drawn once out of sight so their shaders are built before they are needed.
@@ -603,16 +696,20 @@ export function createDoorwayViews(floor, cfg, scene, { isLocked = () => false, 
             if (ax) sg.position.z = d.center[1] + out; else sg.position.x = d.center[0] + out;
           }
         }
+        if (v.kind === 'open') animateLock(v, time, dt);
         const leaf = v.leaf;
         if (!leaf) continue;
         const u = leaf.userData;
         // A barricaded doorway swings its door shut behind the boards (an open leaf beside them would
         // still read as an open door, and could hide them); it swings open again when they come down.
-        const target = v.bar?.on ? 0 : u.target;
+        // A door a key has just opened is held shut for the beat the padlock takes to pop open (playUnlock).
+        const hold = v.anim?.kind === 'open' && v.anim.t < UNLOCK_HOLD;
+        const target = v.bar?.on || hold ? 0 : u.target;
         if (u.swing < target) u.swing = Math.min(target, u.swing + dt / 0.45);
         else if (u.swing > target) u.swing = Math.max(target, u.swing - dt / 0.45);   // a door locking again swings shut
-        // swing away from the room the door belongs to, into the room that was revealed
-        leaf.rotation.y = swingAngle(u, easeOutCubic(u.swing));
+        // swing away from the room the door belongs to, into the room that was revealed (a pick that snapped
+        // makes the shut door rattle in its frame)
+        leaf.rotation.y = swingAngle(u, easeOutCubic(u.swing)) + (v.anim?.kind === 'fail' ? Math.sin(v.anim.t * 50) * 0.025 * (1 - v.anim.t / SNAP_TIME) : 0);
         const rv = roomViews.get(u.room);
         let h = rv ? rv.sideHeight(u.side) : H;
         // An open door stands in the next room: it is as tall as the taller of the two walls there

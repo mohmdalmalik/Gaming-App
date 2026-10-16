@@ -7,10 +7,12 @@
 //
 //   PUBLIC (everyone sees it)
 //     the round, whose turn it is, the dawn round; every revealed room with its doors, closed doors,
-//     locks, barricades, whether its one card draw has been used and whether a dead guest's things lie
-//     on its floor; where every guest stands, their health, alive / dead / escaped; which pairs have
+//     locks, barricades, whether its one card draw has been used, whether an Infirmary has been used up
+//     (once per room, the whole match) and whether a dead guest's things lie on its floor; where every
+//     guest stands, their health, alive / dead / escaped; which pairs have
 //     already met in which room this round; the public event list (state.events: who walked where,
-//     opened, searched, traded, attacked, rang the Switchboard and what it said, ...); how many room
+//     opened, searched, traded, attacked, rang the Switchboard and what it said, was treated in an
+//     Infirmary (and which one: it is then spent for everyone), ...); how many room
 //     tiles are still to come (the room deck's size, never its order).
 //   PRIVATE (only this guest)
 //     its own hand (Possession cards included), role, action points and health; its own private event
@@ -40,6 +42,7 @@ export function botView(state, floor, seat, cursor = { pub: 0, inbox: 0 }) {
     job: r.job || null,
     locked: !!state.lockedRooms?.has(r.id),               // its door is locked right now
     searched: !!state.searchedRooms?.has(r.id),            // its one card draw is used
+    spent: !!state.spentInfirmaries?.has(r.id),            // an Infirmary that has been used (once per room: public, in the log)
     drops: (state.roomDrops?.get(r.id) || []).length > 0,  // a dead guest's things lie here (not what or how many)
     doors: (r.doorways || []).map(d => ({ id: d.id, to: d.otherRoom(r.id), barricaded: !!state.barricades?.has(d.id) })),
     closed: (r.frontier || []).filter(f => !f.jammed).map(f => f.id),   // closed doors that can be opened
@@ -58,6 +61,8 @@ export function botView(state, floor, seat, cursor = { pub: 0, inbox: 0 }) {
     maxHealth: rules.maxHealth,
     handLimit: rules.handLimit,
     apPerTurn: rules.actionPointsPerTurn,
+    infirmaryCost: rules.actionCost.infirmary,
+    switchboardCost: rules.actionCost.switchboard,
     lobby: floor.start?.room ?? null,
     exitRoom: floor.exitRoom ?? null,          // set only once the Fire Exit has been revealed
     roomTilesLeft: floor.deck?.length ?? 0,    // how many room tiles are still to come (24 minus the rooms on the
@@ -70,7 +75,6 @@ export function botView(state, floor, seat, cursor = { pub: 0, inbox: 0 }) {
       alive: !!me.alive,
       possessed: !!me.possessed,
       hand: me.hand.map(c => ({ id: c.id, type: c.type, ...(c.shots != null ? { shots: c.shots } : {}) })),
-      rangSwitchboardThisTurn: state.switchboardCalls?.get(me.id) === state.turn,
     },
     // (no names or ids: a bot needs neither, and they could hint at who is a person)
     players: state.players.map(p => ({

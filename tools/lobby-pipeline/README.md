@@ -1,6 +1,6 @@
 # Starting-room pipeline (Blender → baked glTF → game)
 
-Builds the "Fourth Floor Landing" as one stylised model with its lighting baked in, matching the
+Builds the "13th Floor Lobby" (first called the "Fourth Floor Landing") as one stylised model with its lighting baked in, matching the
 style target `docs/art-reference.jpg`. Not part of the running game; the game only loads the output
 in `assets/models/lobby/` (through `src/render/bakedRoom.js`).
 

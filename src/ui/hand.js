@@ -3,7 +3,7 @@
 // card in the hand fan (src/ui/handFan.js) or the "Private details" link; ‹ › step through the hand.
 // Private to the player (only they look at this screen): it shows their Lanterns, their Possession cards and who they
 // have unmasked. Tap outside the panel, or Close, to put it away.
-import { activePlayer, adjacentLockedRooms, isBarricaded, playersInRoom, doorBetween, moveCostInto } from '../game/state.js';
+import { activePlayer, adjacentLockedRooms, isBarricaded, playersInRoom, doorBetween } from '../game/state.js';
 
 // The hand shown is the viewer's own (state.viewerIndex: the player). Its actions work only on their turn.
 const viewerOf = state => state.players[state.viewerIndex ?? state.activeIndex] || activePlayer(state);
@@ -13,6 +13,7 @@ import { CARDS, countableCount } from '../game/cards.js';
 import { bigCard, sortHand, cardDesc, handLimitWarning } from './cards.js';
 import { makePortrait } from './portrait.js';
 import { soulsHeld, soulsChip } from './souls.js';
+import { lockWarning } from './lockChoice.js';
 
 export function createHand(doc, cfg, { onUseBandage, onUnlock, onBarricade, onEspresso, onHandMirror }) {
   const overlay = doc.getElementById('hand-overlay');
@@ -137,7 +138,7 @@ export function createHand(doc, cfg, { onUseBandage, onUnlock, onBarricade, onEs
     const apNote = notMine ? (p.alive ? 'You can use it on your own turn.' : 'You are out of the match.') : 'No actions left this turn.';
     if (card.type === 'lantern') {
       const held = p.hand.filter(c => c.type === 'lantern').length;
-      line(`<b>Escape:</b> you hold ${held} of ${rules.lanternsToEscape}. A clean guest carrying ${rules.lanternsToEscape} Lanterns escapes from the fire exit with the Escape button (${rules.actionCost.escape} action).${p.possessed ? ' While you are possessed it will not open for you.' : ''}`);
+      line(`<b>Escape:</b> you hold ${held} of ${rules.lanternsToEscape}. A clean guest carrying ${rules.lanternsToEscape} Lanterns escapes from the Fire Exit by tapping the Exit icon (${rules.actionCost.escape} action).${p.possessed ? ' While you are possessed it will not open for you.' : ''}`);
       if (!state.practice) {
         line('<b>In a trade:</b> in an ordinary trade it goes to the other guest like any card — pass them to one guest. If they handed you a Possession card, your Lantern blocks it: both cards are used up and you learn who tried.', 'd-tag');
       }
@@ -168,9 +169,7 @@ export function createHand(doc, cfg, { onUseBandage, onUnlock, onBarricade, onEs
         const sealed = isBarricaded(state, doorBetween(floor, p.currentRoom, roomId)?.id);
         if (sealed) line(`The ${name} door is barricaded: no key or pick can get you through it until the barricade comes down.`, 'd-tag');
         // Allowed, but the door locks again when the turn ends: say so when there is no action left to go in.
-        else if (!noAp && p.actionPoints - rules.actionCost.useCard < moveCostInto(state, roomId) && !p.hand.some(c => c.type === 'espresso')) {
-          line('You will have no action left to go in: the door locks again when your turn ends.', 'd-tag d-warn');
-        }
+        else if (!noAp && lockWarning(state, p, roomId)) line(lockWarning(state, p, roomId), 'd-tag d-warn');
         actionBtn(`Open the ${name} door · ${rules.actionCost.useCard} action`, noAp || sealed, () => onUnlock(card.id, roomId));
       }
       return;

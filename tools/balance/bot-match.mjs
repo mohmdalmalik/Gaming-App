@@ -245,6 +245,8 @@ function collect(state, table, profiles, base) {
     firstTrades, firstFriendly, friendlyThenAttempt, firstAttempt, early,
     blockDecisions,
     exitFound: floor.exitRoom != null,
+    infirmaryUses: state.events.filter(e => e.type === 'infirmary').length,      // each Infirmary works once a match
+    switchboardRings: state.events.filter(e => e.type === 'switchboard').length,  // 2 actions each, as often as a guest likes
     seats,
     chat, clockMs: base.clockMs, exploit: base.exploit,
   };
@@ -303,6 +305,7 @@ export function summarise(list) {
       possessedOnPossessed: attacks.filter(a => a.byPossessed && a.victimPossessed).length / n,
     },
     escapes: list.filter(m => m.how === 'escape').length / n,
+    infirmaryUses: mean(list.map(m => m.infirmaryUses)), switchboardRings: mean(list.map(m => m.switchboardRings)),
     exitFound: list.filter(m => m.exitFound).length / n,
     blockRate: bt ? bd / bt : 0, blocksDecidedPerMatch: bd / n,
     actionsPerTurn: actions / turns, waitPerTurnMs: wait / turns,
@@ -349,6 +352,7 @@ function print(players, s) {
     `${s.attackSplit.cleanOnClean.toFixed(2)} / ${s.attackSplit.cleanOnPossessed.toFixed(2)} / ${s.attackSplit.possessedOnClean.toFixed(2)} / ${s.attackSplit.possessedOnPossessed.toFixed(2)}`);
   line('Escapes', pct(s.escapes * s.n, s.n));
   line('Fire Exit found', pct(s.exitFound * s.n, s.n));
+  line('Infirmary treatments / Switchboard rings per match', `${s.infirmaryUses.toFixed(2)} / ${s.switchboardRings.toFixed(2)}`);
   line('Clean bots handing over a Lantern to block (of their trades)', `${pct(s.blockRate, 1)} (${s.blocksDecidedPerMatch.toFixed(2)} per match)`);
   line('Actions per bot turn; estimated thinking time per bot turn', `${s.actionsPerTurn.toFixed(2)}; ${(s.waitPerTurnMs / 1000).toFixed(1)} s`);
   line('Refused actions (all matches); most in one turn; unfinished', `${s.refusals}; ${s.maxRefusalTurn}; ${s.unfinished}`);

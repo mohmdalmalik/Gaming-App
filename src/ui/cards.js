@@ -56,7 +56,7 @@ export const prepareSoulCards = (ids, opts) => prepareSoulFaces(ids, CARD_FACE.p
 // are swapped for these there (main.js switches it on in practice only). The rules' own words are in
 // src/data/rules.js and are unchanged.
 const PRACTICE_DESC = {
-  lantern: 'Three of them let you escape through the fire exit.',
+  lantern: 'Three let you escape through the Fire Exit.',
 };
 let practiceWording = false;
 export function usePracticeWording(on) { practiceWording = !!on; }

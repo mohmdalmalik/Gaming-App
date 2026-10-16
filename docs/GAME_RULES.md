@@ -10,21 +10,21 @@ Guests are trapped on a hotel floor. Lanterns are the way out: a clean guest car
 
 ## Turn
 - 4 action points (AP), never carried over.
-- Open a closed door of your room: 1 AP (see Doors and exploring). Move into an adjacent room through an open doorway: 1 AP. Escape from the Fire Exit: 1 AP. Search: 1 AP. Use a card: 1 AP (Espresso: free). Use a room's job (Infirmary, Switchboard): 1 AP.
-- Your guest always stands in the middle of the room they are in; there is no walking around inside a room. You act by tapping: tap a room to open or enter it, tap a room's furniture to search it (you don't walk to it).
-- 45-second timer for the active player's actions. It pauses during meetings and while you read a private screen. The bots' turns use the same clock. When it runs out, the turn ends. ?timer=off disables it.
+- Open a closed door of your room: 1 AP (see Doors and exploring). Move into an adjacent room through an open doorway: 1 AP. Escape from the Fire Exit: 1 AP. Search: 1 AP. Use a card: 1 AP (Espresso: free). Use a room's job: Infirmary 1 AP, Switchboard 2 AP.
+- Your guest always stands in the middle of the room they are in; there is no walking around inside a room. You act by tapping: tap a room to open or enter it, tap a room's furniture to search it or, in an Infirmary or the Switchboard, to use the room's job (you don't walk to it).
+- 45-second timer for the active player's actions. It pauses during meetings and while you read a private screen. The bots' turns use the same clock. When it runs out, the turn ends; if you hold more than the hand limit, random ordinary cards are discarded for you first (see Hand limit). ?timer=off disables it.
 - A round = every living guest takes one turn.
 - Dawn deadline: the match lasts at most 8 rounds. The round is shown as "Round 3 of 8", and the final round before dawn is clearly marked.
 
 ## Health
-- 4 health bars. Bandage restores 1 (max 4). The Infirmary restores 2 (max 4).
+- 4 health bars. Bandage restores 1 (max 4). The Infirmary restores 2 (max 4), once per Infirmary per match (see Rooms with jobs).
 - At 0 health a guest dies and is out of the game. Everything they carried drops in that room, except Possession cards, which leave the game.
 
 ## Meetings
 - Entering a room that holds a guest you have not met in that room this round forces a meeting. If several are there, choose one.
 - The entering guest chooses TRADE or ATTACK.
 - The same two guests cannot be forced to meet again in the same room in the same round. Meeting in a different room triggers a new meeting.
-- The Fourth Floor Landing (where everyone starts) is a safe zone: no meetings, no trades and no attacks. The Fire Exit is also a safe zone: no meetings or attacks, but two guests there may agree to trade.
+- The 13th Floor Lobby (where everyone starts) is a safe zone: no meetings, no trades and no attacks. The Fire Exit is also a safe zone: no meetings or attacks, but two guests there may agree to trade.
 
 ### Trade
 - Both guests secretly choose one card to give; the cards swap at the same time. Results are private: each guest sees only what they received and what the trade did to them.
@@ -46,6 +46,7 @@ Guests are trapped on a hotel floor. Lanterns are the way out: a clean guest car
 - Each possessed guest's Possession cards are their own souls, with their own face on them. You can only possess with your own souls, and you never hold anyone else's.
 - The chain: a guest who becomes possessed gets two souls of their own (the card that possessed them is used up): two tries. Each guest they possess gets two tries the same way. A Lantern block still burns the card used (the Lantern and the Possession card are both thrown away); a guest who dies takes their souls out of the game.
 - Possessed guests see a private reminder on their own screen only: red eyes on their own guest and portrait, a crimson POSSESSED plate, souls to trade, their Possession cards in the hand, and red eyes on any guest they know for certain is possessed.
+- A guest who learns for certain that another guest is possessed (a Hand Mirror shows them a Possession card, or their Lantern blocked a Possession card), whichever side they are on, sees that guest marked "Possessed" on their own top guest strip: a crimson frame, an eye badge and the word. It is on their own screen only and only for guests they are certain about; red eyes stay a possessed guest's private reminder.
 - Possession cards never count toward the hand limit and can't be discarded.
 - How many cards a guest holds is private: the table never shows other guests' card counts (only a Hand Mirror reveals a hand). Your own count is shown only to you.
 
@@ -84,19 +85,21 @@ Guests are trapped on a hotel floor. Lanterns are the way out: a clean guest car
 
 ### Rooms with jobs
 - Linen Store ×2: the first search here draws 2 cards instead of 1.
-- Infirmary ×2: 1 AP to restore 2 health (maximum 4).
-- Switchboard ×1: 1 AP, once per player per turn. Everyone learns how many guests are currently possessed, but not who.
+- Infirmary ×2: 1 AP to restore 2 health (maximum 4). Each Infirmary works once per match, for whoever uses it first; after that it is spent for everyone, and the whole table can see that it is spent. A guest at full health cannot use it, and then nothing is spent.
+- Switchboard ×1: 2 AP, as often as you can pay for. Everyone learns how many guests are currently possessed, but not who.
+- The Infirmaries and the Switchboard cannot be searched: the room's job takes the place of the search, and no card is drawn there (only cards dropped there can be picked up: see Searching). The Linen Store can be searched.
 
 ## Searching
-- 1 AP. If dropped cards are lying in the room, you take them all — dropped items can always be picked up. Otherwise you draw one card (two in a Linen Store); each room gives one card draw per match.
+- 1 AP. If dropped cards are lying in the room, you take them all — dropped items can always be picked up, even in an Infirmary or the Switchboard. Otherwise you draw one card (two in a Linen Store); each room gives one card draw per match, except the Infirmaries and the Switchboard, which give none.
 - Search results are private: only the searcher sees what they found. The table only sees that someone searched.
 - When the deck runs out, shuffle the discard pile into a new deck.
 
 ## Cards and deck (6 players)
 - Possession: the first possessed guest's 3 souls; each guest possessed later gets 2 of their own. Never in the deck.
-- Draw deck (48): Lantern ×14, Bandage ×7, Flashlight ×5, Knife ×4, Barricade ×4, Lock Pick ×4, Hand Mirror ×3, Espresso ×3, Revolver ×2, Master Key ×2.
+- Draw deck (50): Lantern ×16, Bandage ×7, Flashlight ×5, Knife ×4, Barricade ×4, Lock Pick ×4, Hand Mirror ×3, Espresso ×3, Revolver ×2, Master Key ×2.
 - Lantern: give it in a trade to block a possession attempt; three of them let a clean guest escape.
 - Hand Mirror: 1 AP. Choose a guest in your room; they show you their whole hand in private. Used up.
 - Espresso: free to use (no AP). Gain 2 extra AP this turn. Used up.
 - Starting hand: 4 cards. Every guest, the possessed guest included, is dealt 1 Lantern and 3 cards from the deck with the Lanterns taken out; the remaining Lanterns are then shuffled back into the deck.
 - Hand limit: 6, checked at the end of your turn. During your turn you keep everything you find or receive, even past 6; when you end your turn with more than 6, you choose cards to discard until you hold 6. Cards received on someone else's turn are settled at the end of your own next turn. Lanterns count like other cards; Possession cards don't count.
+- The discard has a time limit. The turn clock keeps running while you choose, but you always get at least 10 seconds. When it runs out, random ordinary cards are discarded for you, only as many as needed to bring you down to 6, and your turn ends; never Possession cards, and a Lantern can be among them. The same happens at once if the 45-second clock runs out while you hold more than 6. The table sees no more than it sees for a normal discard; you are told, privately, which cards went. With no clock (Practice, or ?timer=off) the discard has no time limit.

@@ -212,9 +212,16 @@ export function liftDoorTexture() {
   });
 }
 
-// Floor-indicator dial: a cream half-disc with floor numbers, inside a brass rim (needle is a mesh).
-export function dialTexture() {
-  return canvasTexture('dial', 256, 160, (g, w, h) => {
+// Floor-indicator dial: a cream half-disc with the floor marks (`labels`, left to right, from the layout:
+// src/menu/lobbyLayout.js lift.dial), inside a brass rim (the needle is a mesh). Drawn in a 256 x 160
+// design space and scaled to a 384 x 240 canvas, so the marks stay crisp when the camera pushes in.
+// Plain lining figures (not old-style ones, whose 3, 4, 5, 7 and 9 sink below the line), and the two-digit
+// marks are drawn a little narrow, so neighbours near the top of the arc never touch.
+export function dialTexture(labels) {
+  const K = 1.5;
+  return canvasTexture('dial:' + labels.join(','), 256 * K, 160 * K, (g) => {
+    g.scale(K, K);
+    const w = 256, h = 160;
     g.clearRect(0, 0, w, h);
     const cx = w / 2, cy = h - 18, R = 112;
     g.fillStyle = '#b08a45';
@@ -222,12 +229,16 @@ export function dialTexture() {
     g.fillStyle = '#efe2c2';
     g.beginPath(); g.arc(cx, cy, R, Math.PI, 0); g.closePath(); g.fill();
     g.fillStyle = '#2a1a10';
-    g.font = 'bold 20px Georgia, serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
-    const labels = ['L', '1', '2', '3', '4', '5', '6'];
+    g.font = 'bold 27px "Times New Roman", Times, "Liberation Serif", serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
     labels.forEach((t, i) => {
       const a = Math.PI + (i / (labels.length - 1)) * Math.PI;
-      g.fillText(t, cx + Math.cos(a) * (R - 22), cy + Math.sin(a) * (R - 22));
-      g.fillRect(cx + Math.cos(a) * (R - 6) - 1, cy + Math.sin(a) * (R - 6) - 1, 3, 3);
+      const c = Math.cos(a), s = Math.sin(a);
+      g.save();
+      g.translate(cx + c * (R - 20), cy + s * (R - 20) + 1);
+      if (t.length > 1) g.scale(0.84, 1);
+      g.fillText(t, 0, 0);
+      g.restore();
+      g.fillRect(cx + c * (R - 5) - 1, cy + s * (R - 5) - 1, 3, 3);
     });
     g.fillStyle = '#b08a45'; g.beginPath(); g.arc(cx, cy, 9, 0, Math.PI * 2); g.fill();
   }, { srgb: true });

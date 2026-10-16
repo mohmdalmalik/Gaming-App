@@ -70,9 +70,9 @@ check(!['suite410', 'suite412', 'suite414', 'suite418', 'gardenLounge'].some(id 
     resetHotel(floor, 1);
     const room = placeTile(floor, def, [3, 3], rot);
     if (room.job !== (def.job || null)) jobOk = false;
-    if (def.job && (!room.searchable || room.dark || room.locked || room.safe)) jobOk = false;
+    if (def.job && (room.searchable !== (def.job === 'linenStore') || room.dark || room.locked || room.safe)) jobOk = false;
   }
-  check(jobOk, 'placed in any orientation, a tile keeps its job (and a job room stays searchable, lit, unlocked)');
+  check(jobOk, 'placed in any orientation, a tile keeps its job (a Linen Store stays searchable, an Infirmary and the Switchboard stay unsearchable; none dark, locked or safe)');
 }
 
 console.log('\nthe lobby');
@@ -336,7 +336,7 @@ console.log('\nthe starting deal');
     const { hands, deck } = deal(shuffle(buildDrawDeck(rules.deck), rng), n, rng);
     const lanterns = h => h.filter(c => c.type === 'lantern').length;
     if (hands.length !== n || !hands.every(h => h.length === rules.startingHandSize && lanterns(h) === 1)) ok = false;
-    if (lanterns(deck) !== rules.deck.lantern - n || deck.length + n * rules.startingHandSize !== 48) ok = false;
+    if (lanterns(deck) !== rules.deck.lantern - n || deck.length + n * rules.startingHandSize !== Object.values(rules.deck).reduce((a, b) => a + b, 0)) ok = false;
   }
   check(ok, 'every guest (1, 4, 5 or 6 at the table) is dealt exactly 1 Lantern + 3 other cards; the other Lanterns stay in the pile');
 }

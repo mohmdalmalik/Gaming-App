@@ -291,8 +291,10 @@ export function createHandoff(doc) {
       show('Done', onContinue);
     },
 
-    // What a search turned up, for the searcher only: each card large, with its name and what it
-    // does, then the search's own words. `soft` (practice) keeps the room visible behind it.
+    // What a search turned up, for the searcher only: each card large, and under it its name and what it
+    // does in one short line, said ONCE for each kind of card (two Lanterns share one line). Nothing
+    // else: no tally, no hand-limit talk (the hand fan says "Cards 8/6 · discard 2 at end of turn").
+    // `lines` (optional) adds notes below. `soft` (practice) keeps the room visible behind it.
     privateFound(player, { kicker, title, cards = [], lines = [], button, soft = false }, onContinue) {
       reset('found');
       if (soft) el.overlay.classList.add('soft');
@@ -301,7 +303,22 @@ export function createHandoff(doc) {
       if (cards.length) {
         el.found.hidden = false;
         el.found.classList.toggle('pair', cards.length > 1);
-        for (const c of cards) el.found.appendChild(bigCard(doc, c));
+        // One column per kind (a card with its own words, like a Revolver with one shot left, is its own kind).
+        const kinds = new Map();
+        for (const c of cards) {
+          const key = `${c.type}|${cardDesc(c.type, c)}`;
+          if (!kinds.has(key)) kinds.set(key, []);
+          kinds.get(key).push(c);
+        }
+        for (const same of kinds.values()) {
+          const col = doc.createElement('div'); col.className = 'found-type'; col.style.setProperty('--n', same.length);   // (--n: its share of the row when there are many columns)
+          const faces = doc.createElement('div'); faces.className = 'found-faces';
+          for (const c of same) faces.appendChild(bigCard(doc, c, { text: false }));
+          const nm = doc.createElement('div'); nm.className = 'ft-name'; nm.textContent = CARDS[same[0].type]?.name ?? same[0].type;
+          const words = doc.createElement('div'); words.className = 'ft-desc'; words.textContent = cardDesc(same[0].type, same[0]);
+          col.append(faces, nm, words);
+          el.found.appendChild(col);
+        }
       }
       renderNotes(player, lines);
       show(button || (cards.length ? 'Add to my hand' : 'Continue'), onContinue);

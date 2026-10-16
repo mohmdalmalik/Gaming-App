@@ -7,6 +7,9 @@
 // reception, the lift and the seated guests who board it are centre-right. The player's own avatar
 // (`player`) stands by the lift and boards first; the wardrobe screen frames it (`wardrobeCamera`).
 
+// The marks on the lift's floor dial (see `lift.dial`).
+const DIAL_MARKS = ['L', '2', '4', '6', '8', '10', '12', '14', '16', '18', '20'];
+
 export const lobbyLayout = {
   room: {
     x0: -12, x1: 8.4,          // floor extent
@@ -32,15 +35,24 @@ export const lobbyLayout = {
     front: [3.2, -4.75],         // just outside the doors
     watchLeft: [-2.2, 1.4],      // where a strolling guest steps aside to (out of the camera's way)
     watchRight: [4.1, 2.5],
-    floors: 6,                   // dial: L, 1 … 6
-    destination: 4,              // the Fourth Floor Landing (the game's starting room)
+    // The floor dial over the doors. The hotel is tall, so its marks run L, 2, 4 ... 20 (the odd floors are
+    // skipped on purpose). As the doors shut the needle climbs from L and comes to rest in the gap between
+    // the 12 and the 14: the hidden floor the guests are stuck on, which has no mark of its own. (The game's
+    // starting room is called the 13th Floor Lobby, src/data/hotel.js: the owner's own name for it.)
+    dial: DIAL_MARKS,
+    floors: DIAL_MARKS.length - 1,                     // needle steps from the first mark to the last
+    destination: DIAL_MARKS.indexOf('12') + 0.5,       // where it rests, in steps from L: between the 12 and the 14
   },
   archway: { x: -2.95, width: 1.6, height: 3.0 },
 
   reception: {
     x0: -0.95, x1: 1.55, front: -3.35, depth: 0.62, height: 0.98,
     keys: { x0: -0.75, x1: 1.35, y0: 1.3, y1: 2.75 },
-    clock: { x: 0.3, y: 3.65, r: 0.46 },
+    // The wall clock and its sunburst, in the plaster band above the panelling: centred between the two
+    // pilasters either side (x = -1.65 and 2.0) and clear of the frieze below, so nothing crowds a pilaster
+    // or the brass line, from the idle camera and from the camera's push toward the lift alike.
+    // `burst`: the rays stand `gap` m off the clock's face and are `len` m long.
+    clock: { x: 0.175, y: 3.95, r: 0.4, burst: { gap: 0.26, len: 0.34 } },
   },
 
   stairs: { x: -4.75, steps: 15, tread: 0.32, rise: 0.175, z0: -5.5, z1: -3.6 },

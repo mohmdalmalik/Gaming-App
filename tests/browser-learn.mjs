@@ -3,7 +3,7 @@
 //   node tests/browser-learn.mjs [--url http://127.0.0.1:8123/] [--only a,b,c,d] [--sizes 1024x694,1024x768,1180x820,1366x1024]
 //
 //   a  the main menu: the hint under Practice alone (until a match is played or a practice finished; a match left early
-//      does not count), the How to play button beside Settings and Your record, the menu still fitting; How to play:
+//      does not count), How to play beside Cards and Settings beside Your record, the menu still fitting; How to play:
 //      five pages with Back / Next / Close, Back and Next where the finger left them from page to page, touch targets
 //      of 44 px, the keyboard (focus moves in, Tab stays inside, the arrow keys turn pages, Escape closes, the focus
 //      goes back), the second tap of a double tap on Next turns one page; at the four iPad sizes
@@ -74,11 +74,12 @@ if (only.includes('a')) {
       const hint = await page.evaluate(() => { const h = document.getElementById('menu-hint'); return h.hidden ? null : h.textContent; });
       check(hint === 'New to Hotel Escape? Practice alone is the best place to start.', `a new player sees the hint: "${hint}"`);
       const hb = await box(page, '#menu-hint'), pb = await box(page, '#btn-menu-practice'), rb = await box(page, '.menu-row2');
-      check(hb && pb && rb && hb.t >= pb.b - 6 && hb.b <= rb.t + 2, `...under Practice alone, above the row of three (hint ${Math.round(hb?.t)}-${Math.round(hb?.b)}, Practice ends ${Math.round(pb?.b)}, the row starts ${Math.round(rb?.t)})`);
+      check(hb && pb && rb && hb.t >= pb.b - 6 && hb.b <= rb.t + 2, `...under Practice alone, above the first row of small buttons (hint ${Math.round(hb?.t)}-${Math.round(hb?.b)}, Practice ends ${Math.round(pb?.b)}, the row starts ${Math.round(rb?.t)})`);
       const panel = await box(page, '.menu-panel');
       check(panel.t >= 0 && panel.b <= H, `the main menu still fits (${Math.round(panel.t)}-${Math.round(panel.b)} of ${H})`);
       const row = await page.evaluate(() => [...document.querySelectorAll('.menu-row2 .menu-btn')].map(b => { const r = b.getBoundingClientRect(); return { id: b.id, w: r.width, h: r.height, y: Math.round(r.top), over: b.scrollWidth > b.clientWidth + 1 }; }));
-      check(row.map(b => b.id).join() === 'btn-menu-howto,btn-menu-settings,btn-menu-record' && row.every(b => b.y === row[0].y), 'How to play, Settings and Your record share one row');
+      // (round 4: How to play and Cards share a row, Settings and Your record the one under it)
+      check(row.map(b => b.id).join() === 'btn-menu-howto,btn-menu-cards,btn-menu-settings,btn-menu-record' && row[0].y === row[1].y && row[2].y === row[3].y && row[2].y > row[0].y, 'How to play and Cards share one row, Settings and Your record the next');
       check(row.every(b => b.h >= 44 && b.w >= 44 && !b.over), `...each a touch target of 44 px or more, its words inside (${row.map(b => `${Math.round(b.w)}x${Math.round(b.h)}`).join(' ')})`);
       await page.screenshot({ path: `${outDir}/a-menu-${W}x${H}.png` });
 
@@ -254,7 +255,7 @@ async function matchChecks(W, H, role) {
     });
     let ps = await panelState();
     check(ps.open && !ps.ask && ps.title === 'Menu', 'the Menu button opens the Menu panel (not the question)');
-    check(ps.main.join('|') === 'Resume|How to play|Leave the match' && ps.resumeGold, `...Resume (in gold), How to play, Leave the match (${ps.main.join(' | ')})`);
+    check(ps.main.join('|') === 'Resume|How to play|Cards|Leave the match' && ps.resumeGold, `...Resume (in gold), How to play, Cards, Leave the match (${ps.main.join(' | ')})`);
     check(ps.rows.join('|') === 'Off Low Medium* High|Off Low Medium High*', `...Music and Sound effects, with the same Off / Low / Medium / High as Settings (${ps.rows.join(' / ')})`);
     check(ps.card.t >= 0 && ps.card.b <= H && ps.card.l >= 0 && ps.card.r <= W, `...it fits (${Math.round(ps.card.t)}-${Math.round(ps.card.b)} of ${H})`);
     check(ps.targets.every(b => b.w >= 44 && b.h >= 44), `...every button a touch target of 44 px or more (smallest ${Math.round(Math.min(...ps.targets.map(b => b.h)))} px tall)`);

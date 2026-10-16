@@ -648,9 +648,11 @@ if (only.includes('seats')) {
       const proto = CanvasRenderingContext2D.prototype, orig = proto.fillText;
       proto.fillText = function (t, ...a) { window.__texts.push(String(t)); return orig.call(this, t, ...a); };
     });
-    await page.click('#btn-map'); await page.waitForTimeout(1200);
-    const texts = await ev(() => window.__texts);
     const marks = guestMarks(await ev(() => window.__game.state.players.map(p => p.name)));
+    await page.click('#btn-map'); await page.waitForTimeout(1200);
+    // (a busy machine may not have drawn the plan within that time: wait until every mark has been written, up to 8 s more)
+    await page.waitForFunction(m => m.every(x => window.__texts.includes(x)), marks, { timeout: 8000, polling: 250 }).catch(() => {});
+    const texts = await ev(() => window.__texts);
     check(marks.every(m => texts.includes(m)), `the plan writes every guest's mark in their dot (${marks.join(' ')})`);
     const dots = await ev(cs => {
       const c = document.getElementById('map-canvas'), x = c.getContext('2d'), d = x.getImageData(0, 0, c.width, c.height).data;

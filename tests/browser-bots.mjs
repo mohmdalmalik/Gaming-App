@@ -9,11 +9,11 @@
 // 3b. quick chat: the two tabs, "Choose a guest" (Back, the double-tap guard), a line about a guest in the
 //    feed and a bubble, a line about you, the bots hearing it; the end screen's chat row (in 5)
 // 4. meetings: the player walks in on a bot (trade); a bot walks in on the player (trade, attack)
-// 5. playing possessed: the role screen and the reminder; trading a Possession card to a bot
-// 6. out of the match: "You are out", skip to the result, the end screen with every role, Play again,
-//    Main menu, the Menu button mid-match
+// 5. out of the match: a bot attacks you ("hit you"), "You are out", skip to the result, the end screen with
+//    every role, Play again, Main menu, the Menu button mid-match
+// 6. playing possessed: the role screen and the reminder; trading a Possession card to a bot
 // 7. whole matches with a simple stand-in player: no stalls, no errors, every match ends
-import { launch, giveCard } from './smoke-lib.mjs';
+import { launch, giveCard, discardDown } from './smoke-lib.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -83,17 +83,18 @@ async function untilMyTurn(timeout = 400000) {
 }
 // Answer whatever the bots put in front of the player: a card to give (the first one), a private note,
 // a yes/no (accept), an attack result, a notice, the "You are out" question (watch).
-async function answerScreens() {
+// (`keep`, a pattern: a meeting panel whose words match it is left up, for a check that wants to read it.)
+async function answerScreens({ keep = null } = {}) {
   for (let i = 0; i < 12; i++) {
-    const s = await game(() => {
-      const g = window.__game;
+    const s = await game(keepSrc => {
+      const g = window.__game, panel = document.getElementById('encounter-overlay');
       if (g.handoffOpen()) return g.handoffKind();
-      if (!document.getElementById('encounter-overlay').hidden) return 'meeting';
+      if (!panel.hidden) return keepSrc && new RegExp(keepSrc).test(document.getElementById('encounter-body').innerText) ? 'keep' : 'meeting';
       if (g.noticeOpen()) return 'notice';
       if (g.askOpen()) return 'ask';
       return null;
-    });
-    if (!s) return;
+    }, keep?.source ?? null);
+    if (!s || s === 'keep') return;
     if (s === 'pick') await giveCard(page);
     else if (s === 'choice') await page.click('#offer-intent .btn');
     else if (s === 'meeting') { const b = await page.$('#encounter-actions .btn:not([disabled])'); if (b) await b.click(); else await page.waitForTimeout(250); }
@@ -102,6 +103,20 @@ async function answerScreens() {
     else await page.click('#btn-handoff-next');
     await page.waitForTimeout(150);
   }
+}
+
+// End the player's turn and wait until it has really passed (true), or give up (false). The game ignores End turn for 700 ms
+// after a turn begins, so that a double tap cannot end the next turn too (src/main.js: END_TURN_GUARD_MS): a check that ends
+// the turn the moment it has started is swallowed without a word, and the turn then simply stays the player's. So this asks
+// again until the turn number has moved on (and settles the discard screen if the hand is over the limit).
+async function endMyTurn(timeout = 30000) {
+  const turn = await game(() => window.__game.state.turn);
+  for (const end = Date.now() + timeout; Date.now() < end;) {
+    await game(() => window.__game.endTurn());
+    if (await visible('#discard-overlay')) await discardDown(page);
+    if (await page.waitForFunction(t => window.__game.state.turn !== t || window.__game.isFinished(), turn, { timeout: 1200, polling: 50 }).then(() => true, () => false)) return true;
+  }
+  return false;
 }
 
 // ------------------------------------------------------------------------------------------------
@@ -292,7 +307,7 @@ console.log('\n4. meetings');
     };
     t.attackWith = (i, j) => (j === me ? null : origAttack(i, j));
   }, myRoom);
-  await game(() => window.__game.endTurn());
+  await endMyTurn();
   await waitFor(() => window.__game.handoffKind() === 'pick' || window.__game.isFinished() || window.__game.myTurn(), null, 400000);
   const picked = await game(() => window.__game.handoffKind() === 'pick');
   check(picked, 'a bot walks in on you and asks for a trade: you choose a card in private');
@@ -359,21 +374,28 @@ console.log('\n5. out of the match, the end screen');
     const g = window.__game, me = g.state.players[g.humanSeat()];
     me.health = 1;
     const t = g.bots(), room = () => me.currentRoom;
-    const orig = t.nextAction.bind(t), origAttack = t.attackWith.bind(t);
+    const orig = t.nextAction.bind(t), origAttack = t.attackWith.bind(t), origMeet = t.meetWhom.bind(t);
     window.__killer = null;
-    // The killer starts next door: the next guest to act, with a knife, in a room beside the player's (the lobby will do:
-    // it is only the player's room that must not be a safe one). The computer guests roam widely now: a killer picked by
-    // whoever happened to act first could be far away, or already in the player's room (a guest who is there already is not
-    // forced to meet them again, and walks off). This check is about what an attack looks like on the player's screen,
-    // not about how far a bot walks or where it starts.
+    // The killer is the NEXT guest to act, so nobody else moves between the player's End turn and the attack, and it starts
+    // next door, with a knife, in a known room whose doorway into the player's room is open (the lobby will do: it is only the
+    // player's room that must not be a safe one). Everything the attack depends on is arranged here, whatever came before:
+    // - two guests who have met in a room this round are not forced to meet there again (state.encounterLocks), and the player
+    //   may have walked in on this very guest earlier in the round (section 4): that pair's lock is cleared;
+    // - when the killer walks in and several guests are there, it picks the player (meetWhom).
+    // This check is about what an attack looks like on the player's screen, not about how far a bot walks or where it starts.
     {
       const k = g.nextPlayer(), here = g.floor.rooms.get(room());
-      const nb = [...here.neighbours].find(id => g.state.discovered.has(id) && !g.lockedRooms().includes(id));
+      const nb = (here.doorways || []).filter(d => !g.state.barricades?.has(d.id)).map(d => d.otherRoom(room()))
+        .find(id => g.state.discovered.has(id) && !g.lockedRooms().includes(id));
       if (k && k.index !== me.index && k.alive && nb) {
         k.currentRoom = nb;
         const mid = g.roomCenter(nb); g.movers[k.index].reset(mid[0], mid[1]);
         if (!k.hand.some(card => card.type === 'knife')) k.hand.push({ id: `test-knife-${k.index}`, type: 'knife' });
         window.__killer = k.index;
+        for (const key of [...g.state.encounterLocks]) {        // ('roomId:a-b', src/game/state.js: encounterKey)
+          const [r, pair] = key.split(':');
+          if (r === room() && pair.split('-').map(Number).every(x => x === k.index || x === me.index)) g.state.encounterLocks.delete(key);
+        }
       }
     }
     // A guest of the clean side must be left alive when the player dies, or the match is over at once and there is no
@@ -391,15 +413,35 @@ console.log('\n5. out of the match, the end screen');
       if (window.__killer === i && p.currentRoom !== room() && p.actionPoints >= 2 && me.alive) return { k: 'move', to: room() };
       return orig(i);
     };
+    t.meetWhom = (i, who) => (i === window.__killer && who.includes(me.index) ? me.index : origMeet(i, who));
     t.attackWith = (i, j) => (i === window.__killer && j === me.index ? p_knife(i) : origAttack(i, j));
     function p_knife(i) { return g.state.players[i].hand.find(c => c.type === 'knife')?.id ?? null; }
   });
-  const safeNow = await game(() => { const g = window.__game; return g.floor.rooms.get(g.state.players[g.humanSeat()].currentRoom).safe; });
+  // (a safe room has no attacks; a locked one cannot be walked into)
+  const safeNow = await game(() => { const g = window.__game, r = g.state.players[g.humanSeat()].currentRoom; return g.floor.rooms.get(r).safe || g.lockedRooms().includes(r); });
   if (!safeNow) {
-    await game(() => window.__game.endTurn());
-    await waitFor(() => !document.getElementById('encounter-overlay').hidden || window.__game.isFinished(), null, 400000).catch(() => {});
-    const hit = await game(() => /hit you/.test(document.getElementById('encounter-body').innerText));
-    check(hit, 'a bot attacks you: the result says "hit you"');
+    let hit = false, why = '';
+    if (!await endMyTurn()) why = 'End turn did not pass the turn';
+    else {
+      // The killer plays the turn that comes next. (Another computer guest can still walk in on the player and meet them first;
+      // its meeting is answered, and the wait goes on.) The panel is read only while it is up: its words stay in it, out of sight,
+      // from the last meeting, and must never be taken for what just happened.
+      const killerTurn = await game(() => window.__game.state.turn);
+      for (const end = Date.now() + 400000; Date.now() < end;) {
+        const s = await game(() => {
+          const g = window.__game, up = !document.getElementById('encounter-overlay').hidden;
+          return { body: up ? document.getElementById('encounter-body').innerText : '', fin: g.isFinished(), turn: g.state.turn };
+        });
+        if (/hit you/.test(s.body)) { hit = true; break; }
+        if (s.fin) { why = 'the match ended first'; break; }
+        if (s.turn > killerTurn) { why = 'the killer\'s turn passed without an attack'; break; }
+        await answerScreens({ keep: /hit you/ });
+        await page.waitForTimeout(250);
+      }
+      if (!hit && !why) why = 'no attack came in 400 s';
+    }
+    if (!hit) why += await game(() => { const g = window.__game, me = g.state.players[g.humanSeat()], k = g.state.players[window.__killer]; return `; the killer (${k?.name}) is in ${k?.currentRoom}, you are in ${me.currentRoom}; turn ${g.state.turn}; the feed: ${g.publicLog().slice(-4).join(' | ')}`; });
+    check(hit, `a bot attacks you: the result says "hit you"${hit ? '' : ` (${why})`}`);
     await shot('12-attacked');
     if (hit) {
       await settle();
@@ -506,9 +548,7 @@ for (let m = 0; m < MATCHES; m++) {
       if (await game(() => window.__game.myTurn() && window.__game.inActionPhase() && !window.__game.isFinished())) {
         await game(() => window.__game.endTurn());
         // over the hand limit: discard the first card until the turn passes
-        for (let d = 0; d < 6 && await visible('#discard-overlay'); d++) {
-          await page.click('#discard-cards .card-tile'); await page.click('#btn-discard-done'); await page.waitForTimeout(150);
-        }
+        if (await visible('#discard-overlay')) await discardDown(page);     // (the last discard closes the screen by itself)
       }
     }
     if (!s.alive && await game(() => window.__game.askOpen())) await page.click('#btn-ask-yes');

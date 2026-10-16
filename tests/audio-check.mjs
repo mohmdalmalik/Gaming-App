@@ -45,7 +45,8 @@ async function answerScreens() {
       if (!document.getElementById('encounter-overlay').hidden) return 'meeting';
       if (g.noticeOpen()) return 'notice';
       if (g.askOpen()) return 'ask';
-      if (document.getElementById('discard-overlay') && !document.getElementById('discard-overlay').hidden) return 'discard';
+      const dsc = document.getElementById('discard-overlay');
+      if (dsc && !dsc.hidden) return dsc.classList.contains('leaving') ? 'leaving' : 'discard';     // ('leaving': the last discard is on its way out; the screen closes by itself)
       return null;
     });
     if (!k) return;
@@ -56,6 +57,7 @@ async function answerScreens() {
       else if (k === 'notice') await page.click('#btn-notice-ok', { timeout: 3000 });
       else if (k === 'ask') await page.click('#btn-ask-no', { timeout: 3000 });
       else if (k === 'discard') { await page.click('#discard-cards .card-tile', { timeout: 3000 }); await page.click('#btn-discard-done', { timeout: 3000 }); }
+      else if (k === 'leaving') await page.waitForTimeout(300);
       else await page.click('#btn-handoff-next', { timeout: 3000 });
     } catch { /* the screen changed meanwhile */ }
     await page.waitForTimeout(150);

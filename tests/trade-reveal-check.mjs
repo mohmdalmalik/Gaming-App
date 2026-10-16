@@ -93,10 +93,12 @@ async function trade(mode) {
     const eyes = () => ev(T => {
       const g = window.__game, img = document.querySelectorAll('#players-strip .mini-player')[T]?.querySelector('.mini-portrait img');
       // (the portrait's look: img.dataset.look, src/ui/portrait.js — a runtime portrait's address says nothing)
-      return { strip: !!img && img.dataset.look === 'possessed', hotel: !!g.characters[T].debug().possessedEyes, loaded: !!g.characters[T].debug().loaded };
+      // (`mark`: the strip's "Possessed" marker, src/ui/stripModel.js: for either side, from what the viewer knows)
+      const cell = document.querySelectorAll('#players-strip .mini-player')[T];
+      return { strip: !!img && img.dataset.look === 'possessed', hotel: !!g.characters[T].debug().possessedEyes, loaded: !!g.characters[T].debug().loaded, mark: !!cell && cell.classList.contains('known') };
     }, T);
     const pre = await eyes();
-    check(!pre.strip && !pre.hotel, `before the trade: no red eyes on the partner (strip ${pre.strip}, hotel ${pre.hotel})`);
+    check(!pre.strip && !pre.hotel && !pre.mark, `before the trade: no red eyes and no "Possessed" marker on the partner (strip ${pre.strip}, hotel ${pre.hotel}, marker ${pre.mark})`);
     const before = await ev(T => { const g = window.__game, me = g.state.players[g.humanSeat()], t = g.state.players[T];
       return { me: me.hand.map(c => c.id), them: t.hand.map(c => c.id), lanterns: me.hand.filter(c => c.type === 'lantern').length, souls: me.hand.filter(c => c.type === 'possession').length,
         theirSouls: t.hand.filter(c => c.type === 'possession').map(c => c.id), meId: me.id, tId: t.id, tName: t.name }; }, T);
@@ -155,7 +157,7 @@ async function trade(mode) {
     check(await ev(() => window.__game.tradeRevealOutcome()) === mode, `the scene plays "${mode}"`);
     // While the scene has not yet shown it: still no red eyes on them, anywhere behind it.
     const during = await eyes();
-    check(!during.strip && !during.hotel, `as the scene starts: no red eyes on the partner yet (strip ${during.strip}, hotel ${during.hotel})`);
+    check(!during.strip && !during.hotel && !during.mark, `as the scene starts: no red eyes and no strip marker on the partner yet (strip ${during.strip}, hotel ${during.hotel}, marker ${during.mark})`);
     // The faces on the soul cards in the scene.
     const faces = await ev(() => ({
       mine: document.querySelector('.tr-rail.mine .tr-front img')?.dataset.soul ?? null,
@@ -233,6 +235,8 @@ async function trade(mode) {
     // Back in the game: red eyes on a guest the player now knows is possessed (and only while possessed).
     await page.waitForTimeout(1200);
     const post = await eyes();
+    // (the strip's marker is for a clean player too, once the scene has shown the Lantern block: no red eyes for them)
+    check(post.mark === (plan.reveals || mode === 'blocked'), `after it: the strip marks ${before.tName} "Possessed" ${plan.reveals || mode === 'blocked' ? 'now that the player knows' : 'never (nothing learned)'} (marker ${post.mark})`);
     check(post.loaded && post.strip === plan.reveals && post.hotel === plan.reveals,
       `after it: red eyes on ${before.tName} ${plan.reveals ? 'in the strip and in the hotel' : 'nowhere (a clean player never sees them)'} (strip ${post.strip}, hotel ${post.hotel}, model loaded ${post.loaded})`);
     if (plan.reveals || plan.role === 'possessed') {

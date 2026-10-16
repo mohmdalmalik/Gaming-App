@@ -173,7 +173,7 @@ export function buildLobbySet(L) {
   const keysMat = new THREE.MeshLambertMaterial({ map: TX.keyBoardTexture() });
   const winMat = new THREE.MeshBasicMaterial({ map: TX.windowTexture() });
   const doorMat = new THREE.MeshLambertMaterial({ map: TX.liftDoorTexture() });
-  const dialMat = new THREE.MeshLambertMaterial({ map: TX.dialTexture(), transparent: true, alphaTest: 0.05, emissive: new THREE.Color('#3a2a14') });
+  const dialMat = new THREE.MeshLambertMaterial({ map: TX.dialTexture(L.lift.dial), transparent: true, alphaTest: 0.05, emissive: new THREE.Color('#3a2a14') });
   disposables.push(lam, lamDouble, glowMat, floorMat, wallMat, rugMat, runnerMat, keysMat, winMat, doorMat, dialMat);
 
   const S = new Batch();          // solid Lambert, vertex colours
@@ -297,25 +297,28 @@ export function buildLobbySet(L) {
   // call button plate
   S.box(0.12, 0.26, 0.03, lx1 + 0.42, 1.1, wallZ + 0.015, C.brass);
   const callGlow = glows.add({ type: 'bill', pos: [lx1 + 0.42, 1.14, wallZ + 0.06], size: [0.12, 0.12], color: '#ffb35a', intensity: 0.6 });
-  // floor dial above the fan: plate + needle (moving)
-  const dialY = PT + 0.3;   // on the plaster just above the brass frieze
-  const DS = 1.35;   // dial scale
-  const dialG = new THREE.PlaneGeometry(0.72 * DS, 0.45 * DS);
+  // floor dial above the fan: plate + needle (moving). Its marks are in the layout (`lift.dial`), drawn
+  // by TX.dialTexture; the plate sits on the plaster just above the brass frieze.
+  const DS = 1.45;                   // dial scale (as large as the camera's push toward the doors leaves room for, on a short screen)
+  const dialH = 0.45 * DS;           // the plate is 0.72 x 0.45 m at scale 1 (the texture's 256 x 160 shape)
+  const dialBottom = PT + 0.12;
+  const dialG = new THREE.PlaneGeometry(0.72 * DS, dialH);
   const dial = new THREE.Mesh(dialG, dialMat);
-  dial.position.set(lift.x, dialY + 0.12, wallZ + 0.06);
+  dial.position.set(lift.x, dialBottom + dialH / 2, wallZ + 0.06);
   dial.name = 'lift-dial';
   group.add(dial);
-  const needleG = new THREE.BoxGeometry(0.022, 0.21 * DS, 0.01); needleG.translate(0, 0.1 * DS, 0);
+  const needleG = new THREE.BoxGeometry(0.016 * DS, 0.23 * DS, 0.01); needleG.translate(0, 0.1 * DS, 0);
   const needle = new THREE.Mesh(needleG, new THREE.MeshBasicMaterial({ color: '#1a0f08' }));
   needle.position.set(lift.x, 0, wallZ + 0.075);
-  // the dial texture's pivot is 18 px above its bottom edge (texture 160 px tall = 0.45 m)
-  needle.position.y = dialY + 0.12 - 0.225 * DS + (18 / 160) * 0.45 * DS;
+  // the dial texture's pivot is 18/160 of the plate's height above its bottom edge
+  needle.position.y = dialBottom + (18 / 160) * dialH;
   needle.name = 'lift-needle';
   group.add(needle);
   disposables.push(dialG, needleG, needle.material);
-  const dingGlow = glows.add({ type: 'bill', pos: [lift.x, dialY + 0.5, wallZ + 0.08], size: [0.4, 0.4], color: '#ffcf7a', intensity: 0.15 });
-  S.box(0.12, 0.08, 0.04, lift.x, dialY + 0.5, wallZ + 0.03, C.brass);
-  G.add(new THREE.SphereGeometry(0.04, 8, 6), '#ffe2a0', lift.x, dialY + 0.5, wallZ + 0.06);
+  const dialTop = dialBottom + dialH;
+  const dingGlow = glows.add({ type: 'bill', pos: [lift.x, dialTop + 0.2, wallZ + 0.08], size: [0.4, 0.4], color: '#ffcf7a', intensity: 0.15 });
+  S.box(0.12, 0.08, 0.04, lift.x, dialTop + 0.2, wallZ + 0.03, C.brass);
+  G.add(new THREE.SphereGeometry(0.04, 8, 6), '#ffe2a0', lift.x, dialTop + 0.2, wallZ + 0.06);
   // a thin line of light between the shut doors: the car is lit and waiting
   const seamGlow = washes.add({ type: 'wall', pos: [lift.x, LH / 2, wallZ - 0.2], normal: [0, 0, 1], size: [0.14, LH * 1.05], color: '#ffd08a', intensity: 0.8 });
   // doors: two brass leaves at the back of the reveal
@@ -413,11 +416,12 @@ export function buildLobbySet(L) {
     S.add(unitBox, '#1a100a', ck.x + 0.09, ck.y + 0.06, wallZ + 0.1, 0, 0, -1.0, 0.025, 0.24, 0.01);
     S.add(unitBox, '#1a100a', ck.x - 0.12, ck.y + 0.12, wallZ + 0.105, 0, 0, 0.75, 0.02, 0.36, 0.01);
     // sunburst behind the clock
+    const burst = ck.burst || { gap: 0.32, len: 0.42 };
     for (let i = 0; i < 12; i++) {
       const a = (i / 11 - 0.5) * Math.PI * 0.9;
-      S.add(unitBox, C.brassDark, ck.x + Math.sin(a) * (ck.r + 0.32), ck.y + Math.cos(a) * (ck.r + 0.32), wallZ + 0.02, 0, 0, -a, 0.035, 0.42, 0.02);
+      S.add(unitBox, C.brassDark, ck.x + Math.sin(a) * (ck.r + burst.gap), ck.y + Math.cos(a) * (ck.r + burst.gap), wallZ + 0.02, 0, 0, -a, 0.035, burst.len, 0.02);
     }
-    glows.add({ type: 'wall', pos: [ck.x, ck.y - 0.2, wallZ + 0.12], normal: [0, 0, 1], size: [2.4, 2.0], color: '#ff9a40', intensity: 0.18 });
+    glows.add({ type: 'wall', pos: [ck.x, ck.y - 0.2, wallZ + 0.12], normal: [0, 0, 1], size: [2.0, 1.7], color: '#ff9a40', intensity: 0.18 });
   }
 
   // --- stairs rising to the left along the back wall: marble treads, red runner, brass rail ---

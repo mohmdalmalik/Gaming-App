@@ -71,7 +71,7 @@ export function resetState(state, floor, seed) {
   state.lockedRooms = new Set();         // locked rooms whose (single) door is locked right now
   state.openLocks = new Map();           // roomId -> { by, turn, doorway }: unlocked until the end of `by`'s turn
   state.barricades = new Map();          // doorwayId -> { by: playerId, until: turn number }
-  state.switchboardCalls = new Map();    // playerId -> the turn they last rang the Switchboard
+  state.spentInfirmaries = new Set();    // room ids of the Infirmaries already used (each works once per match; PUBLIC, like searchedRooms)
 
   state.activeIndex = 0;
   state.round = 1;             // one round = every living guest has taken a turn
@@ -100,7 +100,9 @@ export function logPublic(state, text) {
 // The same facts as the log, as data, so nobody has to read log text. Seats are player.index.
 //   PUBLIC  state.events — what the whole table sees: turn, enter, open, search, trade, noTrade, attack,
 //           mirror, switchboard, unlock, barricade, infirmary, escape, relock. Never a role, a hand, a
-//           card count or a private result.
+//           card count or a private result. (The infirmary event names its room: that Infirmary is then
+//           spent for everyone. A hand-limit discard, chosen or random after the clock ran out, makes no
+//           event at all.)
 //   PRIVATE player.inbox — what only that guest learns: traded (what they gave and got), blocked /
 //           blockedThem (a Lantern block), possessed / converted, soulSpent / alreadyPossessed (a soul
 //           handed to a guest already possessed), soulsCrossed (two possessed guests both handed over a
@@ -167,6 +169,11 @@ export function lockedAgainst(state, doorway, fromRoom = null) {
   if (fromRoom == null) return isLocked(state, doorway.a) || isLocked(state, doorway.b);
   return isLocked(state, doorway.otherRoom(fromRoom));
 }
+
+// An Infirmary that has been used: each Infirmary room works ONCE per match, for whoever uses it first, and is
+// spent for everyone after that (approved rule, round 4). Public, like a searched room: the use is in the log
+// and in the public events (type 'infirmary', with the room).
+export const isSpent = (state, roomId) => state.spentInfirmaries?.has(roomId) ?? false;
 
 export const isBarricaded = (state, doorwayId) => !!state.barricades?.has(doorwayId);
 // A Barricade stands until the guest who placed it starts their next turn.

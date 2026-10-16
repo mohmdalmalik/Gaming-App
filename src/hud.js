@@ -1,45 +1,38 @@
 // On-screen interface: the top guest strip (with current-turn / next indicators), the
 // bottom-left active-player panel (portrait, name, health segments, action pips), the turn-action
 // buttons (with costs / reasons), a move-confirm bar and toasts. (The hand is src/ui/handFan.js;
-// searching is the icon over the room's search spot, src/ui/searchSpot.js.) Portraits are
+// searching, leaving through the Fire Exit, healing in an Infirmary and ringing the Switchboard are the icon over the
+// room's furniture, src/ui/searchSpot.js.) Portraits are
 // illustrated placeholders (see ui/portrait.js) so real art can drop in later without changing
-// this logic. Possession is never revealed on the public strip (only a possessed player sees red eyes
-// on the guests they KNOW are possessed: src/ui/allies.js), and neither is how many cards anyone holds
-// (docs/GAME_RULES.md > Possession: card counts are private).
+// this logic. Possession is never revealed on the public strip: only the VIEWER's own knowledge shows, a crimson
+// "Possessed" marker on the guests they certainly know are possessed (either side; src/ui/stripModel.js,
+// src/ui/allies.js), with red eyes too for a possessed viewer. Neither is how many cards anyone holds
+// (docs/GAME_RULES.md > Possession: card counts are private). The strip also says where the round ends and how
+// many turns are left in it (src/ui/roundLabel.js roundReadout), from the public turn order only.
 //
 // The panel, the hand and the buttons are the VIEWER's — the person looking at the screen
 // (state.viewerIndex: in practice the only guest; in a match the player, whose seat is random). On the
 // other guests' turns the panel stays the player's own, the buttons wait, and the strip shows who is
 // playing.
-import { activePlayer, nextPlayer, playersInRoom, canEscape, canTradeVoluntarily } from './game/state.js';
-import { canUseRoom } from './game/actions.js';
+import { activePlayer, nextPlayer, playersInRoom, canTradeVoluntarily } from './game/state.js';
 import { rules } from './data/rules.js';
 import { countableCount } from './game/cards.js';
 import { makePortrait } from './ui/portrait.js';
 import { avatarKey } from './data/wardrobe.js';
 import { soulsHeld, soulsChip } from './ui/souls.js';
-import { redEyedAllies } from './ui/allies.js';
-import { roundLabel, finalRoundShort, isFinal } from './ui/roundLabel.js';
+import { redEyedAllies, knownPossessedIds } from './ui/allies.js';
+import { roundLabel, finalRoundShort, isFinal, roundReadout } from './ui/roundLabel.js';
+import { stripGuests } from './ui/stripModel.js';
 import { tooSoon } from './ui/tapGuard.js';
 import { guestMarks } from './table.js';
 import { LANTERN_CHIP } from './data/howToPlay.js';
 
-// The room-job button (Infirmary, Switchboard): its label, what it does for its cost, and a plain
-// reason when it can't be used. A Linen Store has no button — its job is in the search itself.
 const plural = n => `${n} action${n === 1 ? '' : 's'}`;
 // The question before End turn, while actions are left (they are lost when the turn ends): the real number.
 export const endTurnAsk = n => `You still have ${plural(n)}. End turn?`;
-const ROOM_JOB = {
-  infirmary: { name: 'Infirmary', does: () => `Heal ${rules.infirmaryHeal} · ${plural(rules.actionCost.infirmary)}` },
-  switchboard: { name: 'Switchboard', does: () => `Call · ${plural(rules.actionCost.switchboard)}` },
-};
-const ROOM_REASON = {
-  full: 'Full health',
-  ap: 'No actions left',
-  usedThisTurn: 'Called this turn',
-  finished: '—',
-  dead: '—',
-};
+
+// The little eye on a guest the viewer certainly knows is possessed (the strip's badge; the same red eyes as the portraits).
+const EYE_BADGE = '<svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true"><path d="M1.6 12S5.6 5 12 5s10.4 7 10.4 7-4 7-10.4 7S1.6 12 1.6 12z" fill="#fff"/><circle cx="12" cy="12" r="4.4" fill="#c0242f"/><circle cx="12" cy="12" r="1.8" fill="#2a0508"/><circle cx="10.5" cy="10.5" r="1" fill="#fff"/></svg>';
 
 const viewerOf = state => state.players[state.viewerIndex ?? state.activeIndex] || activePlayer(state);
 
@@ -47,6 +40,11 @@ export function createHud(doc, cfg) {
   const el = {
     root: doc.getElementById('hud'),
     strip: doc.getElementById('players-strip'),
+    cards: doc.getElementById('strip-cards'),            // (the guests' cells, in turn order, inside the strip)
+    cap: doc.getElementById('strip-cap'),                // (the divider where the round ends)
+    capWord: doc.getElementById('strip-cap-word'),
+    roundLine: doc.getElementById('strip-round'),        // ("3 turns left in Round 2", under the guests)
+    roundText: doc.getElementById('strip-round-text'),
     room: doc.getElementById('room-name'),
     safeBadge: doc.getElementById('safe-badge'),
     round: doc.getElementById('round'),
@@ -71,10 +69,6 @@ export function createHud(doc, cfg) {
     apPips: doc.getElementById('ap-pips'),
     ap: doc.getElementById('action-points'),
     private: doc.getElementById('btn-private'),
-    // (`room` above is the room-name header; the room's job button is `roomJob`.)
-    roomJob: doc.getElementById('btn-room'),
-    roomJobMain: doc.querySelector('#btn-room .btn-main'),
-    roomJobSub: doc.getElementById('room-sub'),
     trade: doc.getElementById('btn-trade'),
     endTurn: doc.getElementById('btn-end-turn'),
     endMain: doc.querySelector('#btn-end-turn .btn-main'),
@@ -95,37 +89,117 @@ export function createHud(doc, cfg) {
   let confirmKind = 'move';     // what the bar asks: 'move' (Move / Cancel) or 'end' (End turn / Keep playing)
   let confirmShownAt = 0;       // when the bar last began asking something else (the double-tap guard of 'end')
   let mini = null;            // the top-strip guest cells
+  let lastFloor = null;       // (the floor of the last update: the strip's own refresh in syncStrip needs it)
+  let stripIds = null, stripPoss = false, stripSig = '';   // what the strip's "Possessed" markers were last drawn from (syncStrip)
+  let roundKey = '';          // the strip's round line, so it only touches the page when it changes
   let portraitKey = '';       // so the panel portrait only rebuilds when it must
   let soulsKey = '';          // so the panel's souls counter only rebuilds when it must
   let lanternKey = '';        // so the Lanterns chip only touches the page when the count changes
   let endLine = { own: '', shared: '' };   // End turn's second line: the guest's own words / the shared words
 
-  // Top strip: one always-neutral portrait per guest, built once for the roster.
+  // Top strip: one always-neutral portrait per guest, built once for the roster. Each cell: the turn flag, the
+  // portrait (the initial in its corner, health on its lower edge), the name and where they are. The red-eye badge and the
+  // "Possessed" tag are in every cell but hidden (and empty) until the viewer certainly knows that guest is possessed.
   function buildStrip(state) {
-    el.strip.innerHTML = '';
+    el.cards.innerHTML = '';
+    el.root.style.setProperty('--n', state.players.length);      // (styles.css sizes the cells, and keeps the feed clear of them, by how many there are)
     const marks = guestMarks(state.players.map(p => p.name));      // (the initial in the portrait's corner, so the colour is not the only mark)
     mini = state.players.map((p, i) => {
       const cell = doc.createElement('div');
       cell.className = 'mini-player';
       cell.style.setProperty('--player-color', p.color);
       const flag = doc.createElement('div'); flag.className = 'mini-flag';
+      const wrap = doc.createElement('div'); wrap.className = 'mini-pwrap';      // (the portrait clips its picture; the badge and the tag sit on its edge)
       const port = doc.createElement('div'); port.className = 'mini-portrait'; port.dataset.mark = marks[i];
       port.appendChild(makePortrait(doc, p, { possessed: false })); // never reveal roles here (but see `red` below)
+      // Health is public: hearts on a dark band across the portrait's lower edge (the stats are drawn by setHearts).
+      const stats = doc.createElement('span'); stats.className = 'mini-stats';
+      const eye = doc.createElement('span'); eye.className = 'mini-eye'; eye.hidden = true; eye.innerHTML = EYE_BADGE;
+      wrap.append(port, stats, eye);
+      const tag = doc.createElement('div'); tag.className = 'mini-known';      // ("Possessed", under the portrait: filled in and shown only for a guest the viewer knows)
       // The guest's username, on one line (a long one ends in "…"; the full name on hover).
       const name = doc.createElement('div'); name.className = 'mini-name u'; name.textContent = p.name; name.title = p.name;
       // PUBLIC information only: where they are and their health. A hidden role is never shown here,
       // and neither is how many cards anyone holds (approved rule, docs/GAME_RULES.md > Possession: a
       // Possession card or a Lantern block changes counts unevenly). Your own count is in your own hand.
-      // Two short lines: the room (its short name, full name on hover), then health.
+      // The room (its short name, full name on hover) under the name.
       const where = doc.createElement('div'); where.className = 'mini-where';
       const room = doc.createElement('span'); room.className = 'mini-room';
-      const stats = doc.createElement('span'); stats.className = 'mini-stats';
-      where.append(room, stats);
-      cell.append(flag, port, name, where);
-      el.strip.appendChild(cell);
-      return { cell, flag, where, room, stats, port, red: false };
+      where.append(room);
+      cell.append(flag, wrap, tag, name, where);
+      el.cards.appendChild(cell);
+      return { cell, flag, where, room, stats, port, eye, tag, red: false, key: '' };
     });
+    roundKey = '';
   }
+
+  // Health as hearts, full ones bright and empty ones dim (the text is still "♥♥♥♡", so it reads without the colour).
+  function setHearts(node, n) {
+    const full = doc.createElement('span'); full.className = 'hf'; full.textContent = '♥'.repeat(n);
+    const empty = doc.createElement('span'); empty.className = 'he'; empty.textContent = '♡'.repeat(Math.max(0, rules.maxHealth - n));
+    node.replaceChildren(full, empty);
+    node.classList.toggle('low', n <= 1);
+  }
+
+  // The strip itself, from the model (src/ui/stripModel.js: turn order, flags, and the guests the viewer CERTAINLY knows
+  // are possessed; src/ui/roundLabel.js: turns left in the round). A cell is touched only when its row changed, the round
+  // line only when its words did, so a turn that changes little costs little.
+  function drawStrip(state, floor) {
+    if (!mini || mini.length !== state.players.length) buildStrip(state);
+    const p = viewerOf(state);
+    stripIds = knownPossessedIds(state, p); stripPoss = !!p.possessed; stripSig = stripSignature(stripIds, stripPoss);
+    // Red eyes on the guests the player KNOWS are possessed, while possessed themselves (approved;
+    // src/ui/allies.js): the player's own screen only, from what they know, never from a real role.
+    // (The clearer "Possessed" marker, below, is for either side: a clean guest who learned it sees it too, without red eyes.)
+    const allies = redEyedAllies(state, p);
+    const rows = stripGuests(state, p);
+    let anyKnown = false;
+    state.players.forEach((q, i) => {
+      const g = rows[i], m = mini[i];
+      if (g.known) anyKnown = true;
+      const red = allies.has(q.id);
+      const place = floor.rooms.get(q.currentRoom);
+      const where = g.out ? 'Escaped' : !q.alive ? 'Dead' : (place?.short || place?.name || '—');
+      const key = `${red}|${g.active}|${g.next}|${g.dead}|${g.out}|${g.me}|${g.known}|${g.flag}|${where}|${q.health}`;
+      if (key === m.key) return;
+      m.key = key;
+      if (m.red !== red) { m.red = red; m.port.replaceChildren(makePortrait(doc, q, { possessed: red })); m.cell.classList.toggle('ally', red); }
+      m.cell.classList.toggle('active', g.active);
+      m.cell.classList.toggle('next', g.next);
+      m.cell.classList.toggle('dead', g.dead);
+      m.cell.classList.toggle('escaped', g.out);
+      m.cell.classList.toggle('me', g.me);
+      m.flag.textContent = g.flag;
+      // The viewer's own knowledge only: a crimson frame, the eye badge and the word "Possessed", never on a guest they are unsure of.
+      m.cell.classList.toggle('known', g.known);
+      m.eye.hidden = !g.known;
+      m.tag.classList.toggle('on', g.known);
+      m.tag.textContent = g.known ? 'Possessed' : '';
+      m.room.textContent = where;
+      m.room.title = g.out || !q.alive ? '' : (place?.name ?? '');
+      // Health only: no card count for anyone (see buildStrip).
+      if (rules.healthEnabled && !g.out && q.alive) {
+        setHearts(m.stats, q.health);
+        m.stats.setAttribute('aria-label', `Health ${q.health} of ${rules.maxHealth}`);
+      } else { m.stats.replaceChildren(); m.stats.removeAttribute('aria-label'); }
+    });
+    el.strip.classList.toggle('has-known', anyKnown);
+    // Where the round ends: "3 turns left in Round 2", the divider after the last guest, and in the final round, dawn.
+    const ro = roundReadout(state);
+    const rk = ro ? `${ro.text}|${ro.final}|${ro.last}` : '';
+    if (rk !== roundKey) {
+      roundKey = rk;
+      el.roundLine.hidden = el.cap.hidden = !ro;
+      el.strip.classList.toggle('final', !!ro?.final);
+      el.strip.classList.toggle('last-turn', !!ro?.last);
+      el.roundText.textContent = ro ? ro.text : '';
+      el.capWord.textContent = ro ? ro.capWord : '';
+    }
+  }
+
+  // What the markers on the strip depend on: the guests the viewer knows are possessed, and whether they are possessed
+  // themselves (that turns on the red eyes). A new string means the strip has to be drawn again.
+  const stripSignature = (ids, possessed) => `${possessed ? 1 : 0}:${[...ids].join(',')}`;
 
   function renderHealth(n) {
     el.health.innerHTML = '';
@@ -160,7 +234,7 @@ export function createHud(doc, cfg) {
     // back on in the next game only if the player is possessed there.)
     hide() { el.root.hidden = true; el.tint.hidden = true; },
     // A new table: the strip is built again for its guests.
-    rebuild() { mini = null; portraitKey = ''; soulsKey = ''; lanternKey = ''; },
+    rebuild() { mini = null; portraitKey = ''; soulsKey = ''; lanternKey = ''; stripSig = ''; roundKey = ''; },
     update(state, floor) {
       const active = activePlayer(state);
       const p = viewerOf(state);
@@ -186,9 +260,17 @@ export function createHud(doc, cfg) {
       const room = floor.rooms.get(p.currentRoom);
       el.room.textContent = room?.name ?? '—';
       el.safeBadge.hidden = !room?.safe;
-      // "Round 3 of 8"; the last round before dawn is marked in words and colour.
+      // "Round 3 of 8"; the last round before dawn is marked in words and colour: "Final round" on a second line,
+      // so the label is no wider than the buttons under it (the guest strip beside it is wide).
       const last = isFinal(state) && !state.finished;
-      el.round.textContent = last ? `${roundLabel(state)} · ${finalRoundShort}` : roundLabel(state);
+      const roundWords = roundLabel(state), roundK = last ? `${roundWords}|final` : roundWords;
+      if (el.round.dataset.k !== roundK) {
+        el.round.dataset.k = roundK;
+        if (last) {
+          const note = doc.createElement('span'); note.className = 'round-note'; note.textContent = finalRoundShort;
+          el.round.replaceChildren(`${roundWords} `, note);
+        } else el.round.textContent = roundWords;
+      }
       el.round.classList.toggle('final', last);
       // Practice is a single guest: the top strip of other players has nothing to show.
       el.topCenter.hidden = state.players.length < 2;
@@ -227,68 +309,16 @@ export function createHud(doc, cfg) {
       }
       hud.syncEndTurn(state);
 
-      // A room with a job: its button shows only while standing in one (Infirmary, Switchboard).
-      // The Fire Exit uses the same button for Escape. It is enabled only for a guest it would let
-      // out, so nobody gives themselves away by trying: a possessed guest carrying the Lanterns sees
-      // exactly what a clean guest short of Lanterns sees ("Clean + 3 Lanterns"), so the button never
-      // says which of the two it is. (Enabled means "this guest can escape now" — and escaping ends the
-      // match at once.) With no actions left it reads the same for everyone. Practice has nothing to
-      // hide, so it says plainly when Lanterns are missing. When it is enabled (this guest can win now)
-      // it is the gold button: only this player sees their own screen.
-      const job = ROOM_JOB[room?.job];
-      el.roomJob.hidden = (!job && !room?.isExit) || !mine;
-      if (room?.isExit) {
-        const short = p.actionPoints < rules.actionCost.escape;
-        const barred = !canEscape(state, floor, p);
-        el.roomJobMain.textContent = 'Escape';
-        el.roomJob.disabled = state.finished || short || barred;
-        el.roomJob.classList.toggle('primary', !el.roomJob.disabled);
-        el.roomJobSub.textContent = state.finished ? '—' : short ? 'No actions left'
-          : barred ? (state.practice ? `Need ${rules.lanternsToEscape} Lanterns` : `Clean + ${rules.lanternsToEscape} Lanterns`)
-            : plural(rules.actionCost.escape);
-      } else if (job) {
-        const use = canUseRoom(state, floor, p);
-        el.roomJobMain.textContent = job.name;
-        el.roomJob.classList.remove('primary');
-        el.roomJob.disabled = !use.ok;
-        el.roomJobSub.textContent = use.ok ? job.does() : (ROOM_REASON[use.reason] || 'Unavailable');
-      }
+      // (No room button: searching, leaving through the Fire Exit, healing in an Infirmary and ringing the Switchboard are
+      // each the icon over the room's furniture, src/ui/searchSpot.js, main.js onEscape / onRoom.)
 
       // Voluntary trade: only in a safe zone that allows it (the Fire Exit, never the lobby), with
       // someone else there to trade with.
       el.trade.hidden = !mine || !canTradeVoluntarily(state, floor, p);
 
-      // Top strip: current-turn + next-player indicators.
-      if (!mini || mini.length !== state.players.length) buildStrip(state);
-      const nextIdx = !state.finished && next ? next.index : -1;
-      // Red eyes on the guests the player KNOWS are possessed, while possessed themselves (approved;
-      // src/ui/allies.js): the player's own screen only, from what they know, never from a real role.
-      const allies = redEyedAllies(state, p);
-      state.players.forEach((q, i) => {
-        const red = allies.has(q.id);
-        if (mini[i].red !== red) { mini[i].red = red; mini[i].port.replaceChildren(makePortrait(doc, q, { possessed: red })); mini[i].cell.classList.toggle('ally', red); }
-        const active = i === state.activeIndex && !state.finished;
-        const out = !!state.escaped?.has(q.id);
-        mini[i].cell.classList.toggle('active', active);
-        mini[i].cell.classList.toggle('next', i === nextIdx && !active);
-        mini[i].cell.classList.toggle('dead', !q.alive);
-        mini[i].cell.classList.toggle('escaped', out);
-        const isMe = match && q === p;
-        mini[i].cell.classList.toggle('me', isMe);
-        mini[i].flag.textContent = out ? 'Out' : active ? (isMe || !match ? 'Your turn' : 'Playing')
-          : i === nextIdx ? (isMe ? 'You · next' : 'Next') : isMe ? 'You' : '';
-        if (mini[i].where) {
-          const hearts = rules.healthEnabled ? '♥'.repeat(q.health) + '♡'.repeat(Math.max(0, rules.maxHealth - q.health)) : '';
-          const place = floor.rooms.get(q.currentRoom);
-          mini[i].room.textContent = out ? 'Escaped' : !q.alive ? 'Dead' : (place?.short || place?.name || '—');
-          mini[i].room.title = out || !q.alive ? '' : (place?.name ?? '');
-          // Health only: no card count for anyone (see buildStrip).
-          const health = out || !q.alive ? '' : hearts;
-          if (mini[i].stats.textContent !== health) mini[i].stats.textContent = health;
-          if (health) mini[i].stats.setAttribute('aria-label', `Health ${q.health} of ${rules.maxHealth}`);
-          else mini[i].stats.removeAttribute('aria-label');
-        }
-      });
+      // Top strip: current-turn + next-player indicators, who the viewer knows is possessed, how far round the round is.
+      lastFloor = floor;
+      drawStrip(state, floor);
     },
     // --- Turn timer ---------------------------------------------------------------------------
     // Shown only while the active player's action phase is running. It is hidden (and not
@@ -333,6 +363,7 @@ export function createHud(doc, cfg) {
         el.souls.replaceChildren(...(on ? [soulsChip(doc, soulsHeld(p), { compact: true, owner: p.id })] : []));
       }
       hud.syncLanterns(p);
+      hud.syncStrip(state);
     },
     // The Lanterns chip: the VIEWER's own Lanterns out of the number that opens the Fire Exit ("✦ 1/3"). Their
     // own hand only, shown the same way whatever their role (a possessed guest can hold Lanterns too, and
@@ -348,6 +379,19 @@ export function createHud(doc, cfg) {
       el.lanternCount.textContent = LANTERN_CHIP.text(n, need);
       el.lanternChip.setAttribute('aria-label', LANTERN_CHIP.aria(n, need));
     },
+    // The strip's "Possessed" markers follow what the viewer knows. update() draws them; this cheap check (it runs with
+    // syncTell, every frame) catches the moments nothing else refreshes the page, such as a trade scene letting a held-back
+    // guest go. It draws again only when what the markers depend on changed.
+    syncStrip(state) {
+      if (!mini || !lastFloor) return;
+      const p = viewerOf(state);
+      if (!p) return;
+      const ids = knownPossessedIds(state, p);
+      if (ids === stripIds && !!p.possessed === stripPoss) return;     // (the usual frame: nothing new, nothing made)
+      const sig = stripSignature(ids, !!p.possessed);
+      stripIds = ids; stripPoss = !!p.possessed;
+      if (sig !== stripSig) drawStrip(state, lastFloor);
+    },
     // End turn's second line: "Discard N first" (the player's own card count), or who is next. Cheap
     // (touches the page only on a change), so main.js runs it every frame.
     syncEndTurn(state) {
@@ -359,8 +403,10 @@ export function createHud(doc, cfg) {
     hideTimer() { el.timer.hidden = true; el.timer.classList.remove('low'); },
     // `seconds`: how long it stays (default cfg.ui.toastDuration); a longer message asks for longer.
     toast(message, seconds = cfg.ui.toastDuration) {
-      el.toast.textContent = message;
+      // (shown first, then written: a screen reader speaks text that appears in a live region it can already reach,
+      // so a refusal like "No actions left." is heard, not only seen)
       el.toast.hidden = false;
+      el.toast.textContent = message;
       clearTimeout(toastTimer);
       toastTimer = setTimeout(() => { el.toast.hidden = true; }, seconds * 1000);
     },

@@ -199,7 +199,7 @@ const handPractice = TIPS.handLimit.text(rules, { ...YOU, practice: true });
 check(!/clock|random/.test(handPractice) && /you choose what to discard/.test(handPractice), `...but not in practice, which has no clock ("${handPractice}")`);
 check(/You may keep 8 cards/.test(otherTips.handLimit), '...and the limit follows the rules');
 check(new RegExp(`more than ${rules.handLimit} cards, the game discards the extras at random`).test(realTips.timer) && /more than 8 cards/.test(otherTips.timer) && /33 seconds/.test(otherTips.timer), `the clock tip says what the clock does to a hand over the limit ("${realTips.timer}"), with the rules' numbers`);
-check(TIPS.safeZone.text(rules, {}).includes('Fourth Floor Landing') && TIPS.safeZone.text(rules, {}).includes('Fire Exit'), 'the safe-zone tip names the two safe rooms (from the hotel data)');
+check(TIPS.safeZone.text(rules, {}).includes('13th Floor Lobby') && TIPS.safeZone.text(rules, {}).includes('Fire Exit'), 'the safe-zone tip names the two safe rooms (from the hotel data)');
 check(/Drag/.test(TIPS.camera.text(rules, {})) && /[Pp]inch/.test(TIPS.camera.text(rules, {})), 'the camera tip says drag and pinch');
 check(/arrows/.test(TIPS.cameraButtons.text(rules, {})) && /target/.test(TIPS.cameraButtons.text(rules, {})), 'the round-buttons tip says what the arrows and the target do');
 

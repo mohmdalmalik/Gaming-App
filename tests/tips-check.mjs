@@ -17,7 +17,7 @@
 //               toward what it explained), goes, the setting is saved, and nothing more shows.
 //   Settings    Tips reads Off; "Show tips again" forgets the tips seen and turns tips on.
 //   practice    no tip while the Menu panel or a question is up; then "Your turn" is back (it was forgotten).
-//   new tips    (Round 2) the safe zone (on the first WALK into one, not at the start in the Landing; once), pinch and
+//   new tips    (Round 2) the safe zone (on the first WALK into one, not at the start in the Lobby; once), pinch and
 //               drag (on the player's own turn while the camera has not been touched; a drag, a pinch or a round
 //               button counts as touched, so it never comes then), the round camera buttons (the first time one is
 //               used; says what all three do): each whole on screen over no part of the interface; the safe-zone
@@ -289,7 +289,7 @@ try {
   const textOf = () => ev(() => document.querySelector('#tip .tip-text').textContent);
   // The tips look at the game a few times a second (every 200 ms, on a frame): wait until they surely have looked.
   const looked = () => ev(() => new Promise(res => { let n = 0; const t0 = performance.now(); const f = () => { if (++n >= 3 && performance.now() - t0 > 600) res(); else requestAnimationFrame(f); }; requestAnimationFrame(f); }));
-  // Out of the Landing into the room next to it and back, by the game's own walk (the guest's room follows where it
+  // Out of the Lobby into the room next to it and back, by the game's own walk (the guest's room follows where it
   // stands, so setting it by hand does not hold).
   const walkOutAndBack = async () => {
     const at = room => poll(r => window.__game.activePlayer().currentRoom === r && !window.__game.activeMover().walking && !window.__game.activeMover().path.length, room, 40000);
@@ -297,12 +297,12 @@ try {
     check(!!await at('lounge'), '(the guest walks into the Lounge)');
     await looked();
     await ev(() => window.__game.moveToRoom('hall'));
-    check(!!await at('hall'), '(and back into the Landing)');
+    check(!!await at('hall'), '(and back into the Lobby)');
   };
 
-  // 1. a match with the camera untouched: "Look around" comes up; the Landing at the start is no arrival
+  // 1. a match with the camera untouched: "Look around" comes up; the Lobby at the start is no arrival
   await fresh(Q);
-  check(!(await tips()).seen.includes('safeZone') && !(await tips()).queued.includes('safeZone'), 'the start, in the Landing, is not a safe-zone arrival: no safe-zone tip');
+  check(!(await tips()).seen.includes('safeZone') && !(await tips()).queued.includes('safeZone'), 'the start, in the Lobby, is not a safe-zone arrival: no safe-zone tip');
   check(!!await showing('camera'), 'pinch and drag: "Look around" comes up on the player\'s own turn while the camera is untouched');
   await page.waitForTimeout(700);
   w = await where();
@@ -323,7 +323,7 @@ try {
   check(!!w && w.inside && !w.over.length, `...whole on screen, over no part of the interface${w?.over.length ? `: ${w.over.join(', ')}` : ''}`);
   check(!!w && w.box.t >= badge.bottom - 1, `...below the badge it explains (card from ${Math.round(w?.box.t)}, the badge ends ${Math.round(badge.bottom)})`);
   const txt2 = await textOf();
-  check(/No meetings and no attacks/.test(txt2) && /Fourth Floor Landing/.test(txt2) && /Fire Exit/.test(txt2), `...and says what a safe zone is ("${txt2}")`);
+  check(/No meetings and no attacks/.test(txt2) && /13th Floor Lobby/.test(txt2) && /Fire Exit/.test(txt2), `...and says what a safe zone is ("${txt2}")`);
   await shot('safe-zone');
   await gotIt();
   check((await saved()).seen.includes('safeZone'), '...remembered once put away');

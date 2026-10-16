@@ -4,7 +4,9 @@
 
 Two halves. The screen changes the owner asked for that touch no rule (a bigger guest strip, the turn flow, the lock choice, the
 Exit icon, the Cards screen; DECISIONS.md 'Round 4, the guest strip' and 'Round 4, the turn flow, the lock choice'), and then the
-rule changes the owner approved on 15 Oct 2026, with their screens. The version number is not changed in this entry.
+rule changes the owner approved on 15 Oct 2026, with their screens. On 16 Oct 2026 the owner approved the card descriptions as written, the
+wording of the rule changes in `docs/GAME_RULES.md` (written in), the crimson "Possessed" mark on the guest strip for both sides (for guests
+they are certain about), and renamed the starting room the **13th Floor Lobby**. This round is published as **v0.7**.
 
 - **The Infirmaries and the Switchboard are no longer searched.** The room's own action takes the place of the search icon: a cross
   on the Infirmary's cabinet, a headset on the Switchboard's desk, on the same spot as the magnifier. These rooms give no card.

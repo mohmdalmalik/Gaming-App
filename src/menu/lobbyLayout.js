@@ -38,7 +38,7 @@ export const lobbyLayout = {
     // The floor dial over the doors. The hotel is tall, so its marks run L, 2, 4 ... 20 (the odd floors are
     // skipped on purpose). As the doors shut the needle climbs from L and comes to rest in the gap between
     // the 12 and the 14: the hidden floor the guests are stuck on, which has no mark of its own. (The game's
-    // starting room is still called the Fourth Floor Landing, src/data/hotel.js: that name is the owner's call.)
+    // starting room is called the 13th Floor Lobby, src/data/hotel.js: the owner's own name for it.)
     dial: DIAL_MARKS,
     floors: DIAL_MARKS.length - 1,                     // needle steps from the first mark to the last
     destination: DIAL_MARKS.indexOf('12') + 0.5,       // where it rests, in steps from L: between the 12 and the 14

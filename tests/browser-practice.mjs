@@ -776,7 +776,7 @@ console.log('\n7b. playtest fixes');
     await settle();
     await page.waitForTimeout(300);
     const cb = await confirmBar();
-    check(walking && queued && cb.open && /Move to Fourth Floor Landing/.test(cb.text), `a room tapped during the walk is offered once the guest arrives ("${cb.text}")`);
+    check(walking && queued && cb.open && /Move to 13th Floor Lobby/.test(cb.text), `a room tapped during the walk is offered once the guest arrives ("${cb.text}")`);
     if (cb.open) await tap('#btn-confirm-cancel');
     const mid = await game(() => { const g = window.__game, m = g.activeMover(), c = g.roomCenter(g.activePlayer().currentRoom); return Math.hypot(m.x - c[0], m.z - c[1]); });
     check(mid < 0.05, `the guest stands in the middle of the room they walked to (${mid.toFixed(2)} m off)`);

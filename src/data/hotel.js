@@ -66,7 +66,7 @@ const FLICKER = { color: '#c4c8d4', intensity: 0.55, ambient: 0.38, flicker: { m
 
 export const hotel = {
   id: 'hotel',
-  name: 'Fourth Floor',
+  name: '13th Floor',
   tileSize: 8,
   doorWidth: 1.2,
   // The lobby starts with this many open doorways, chosen at random each match (3 or 4). A
@@ -89,8 +89,8 @@ export const hotel = {
   // The start tile: the dressed lobby (src/data/dressing.js), kept exactly as it was.
   lobby: {
     id: 'hall',
-    name: 'Fourth Floor Landing',
-    short: 'Landing',       // (the top guest strip has room for a short name only)
+    name: '13th Floor Lobby',
+    short: 'Lobby',         // (the top guest strip has room for a short name only)
     role: 'lobby',
     safe: true,             // safe zone: no meetings, no attacks
     noTrade: true,          // ...and no trades either (the Fire Exit, also safe, still allows voluntary trades)

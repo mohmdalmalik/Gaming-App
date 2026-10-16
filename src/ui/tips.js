@@ -104,7 +104,7 @@ const DEFS = [
   { id: 'switchboard', prio: 5, at: ICON, sides: ['right', 'left', 'above', 'below'], now: true, when: s => s.match && s.acting && s.job === 'switchboard' },
   { id: 'switchboardPractice', prio: 5, at: ICON, sides: ['right', 'left', 'above', 'below'], now: true, when: s => !s.match && s.acting && s.job === 'switchboard' },
   { id: 'infirmary', prio: 5, at: ICON, sides: ['right', 'left', 'above', 'below'], now: true, when: s => s.acting && s.job === 'infirmary' },
-  // The first walk into a safe zone in a match (the start, in the Landing, is not an arrival). Not in practice: alone
+  // The first walk into a safe zone in a match (the start, in the Lobby, is not an arrival). Not in practice: alone
   // in the hotel there are no meetings anywhere, and the tip would be used up before the match where it matters.
   { id: 'safeZone', prio: 6, at: '#safe-badge', sides: ['below', 'right'], latch: true, when: s => s.match && s.arrivedSafe },
   // The first use of a round camera button: what the three do.

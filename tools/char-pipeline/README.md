@@ -169,3 +169,104 @@ ribbon "rolls" along curves + grooves projected onto the surface) meshed by surf
 the grooves protected. Build time ~2 min (the hair volume). Eleanor: 31.8k tris, 1.17 MB.
 Eleanor's head close-up on the sheet is turned ~9 deg: compare it with `face@9`, and at 423 px/m (her head is smaller
 than 0.30 H).
+
+## Parts pipeline (the wardrobe's swappable pieces, `parts/`)
+The six guests above are each ONE finished model. The wardrobe needs them cut into **pieces** that share one body and
+one rig, so any hair, face, moustache, top, neckwear, trousers and shoes mix (format: the wardrobe W1 contract, sections
+3, 4 and 9; the game reads `assets/characters/parts/manifest.json` and `src/data/partsIndex.js`). The kits above are
+imported and never changed.
+```bash
+export LD_LIBRARY_PATH=/usr/local/lib/python3.11/dist-packages/bpy/lib     # bpy's own libraries, in this environment
+python3 tools/char-pipeline/parts/build.py m                     # every male piece -> assets/characters/parts/m/ (about 6 min)
+python3 tools/char-pipeline/parts/build.py m --only hairStyle_sidePart   # one item (all its face variants; a piece others
+                                                                 # shade, e.g. a face, also rebuilds them)
+python3 tools/char-pipeline/parts/build.py m --out <scratch>/draft/m     # a draft anywhere (also pieces not shipped)
+python3 tools/char-pipeline/parts/build.py m --list              # the items, what each is baked with and what it shades
+python3 tools/char-pipeline/parts/manifest.py --check            # ALWAYS after a build: writes the manifest + index, checks
+                                                                 # (format, budgets, shadow patches, holes through a hair or
+                                                                 # moustache shell; the index carries each piece's red-eye
+                                                                 # result, `redEye`, which the data's eyesShow reads)
+python3 tools/char-pipeline/parts/manifest.py --check --parts <scratch>/draft   # check a draft (writes only its manifest.json)
+python3 tools/char-pipeline/parts/poke.py --body m --item all --out <dir> [--record]       # poke-through test (bpy)
+node tools/char-pipeline/parts/review.mjs --body m --item hairStyle_swept --port 9521 --out <dir> [--record]
+     # the review sheet + red-eye test (own static server on that port, one headless browser); --item all; --parts <draft>;
+     # --mirror victor,marcus,henry (a classic man from pieces vs today's GLB); --grid hair,facial,neck,walk,heel
+     # (every combination close up)
+```
+Files: `tables.py` (bones, slots, the material -> palette table, who shades whom, budgets, the six Looks), `glb.py`
+(read / write / repack a GLB, no Blender), `core.py` (group, bake in context, shadow patches, export + the post-step:
+uint8 weights summing to 255, `Rig` / mesh node names, metallic 0 / roughness 1 / double-sided, scene extras),
+`build.py` (the driver), `male/spec.py` (body `m`: every item, its builder, bake settings, context, what it shades),
+`manifest.py`, `poke.py`, `record.py` (writes a test result into a file's extras), `review.mjs` + `review/review.html`
+(the sheets) + `review/assemble-dev.js` (a dev copy of the proof's assembler; the sheets switch to the game's own
+`src/render/avatarParts.js` once it exists).
+
+How a piece is made: built with the kit in ONE Blender scene against the shared body (so every file has the same
+inverse bind matrices), joined, **baked in context** (ambient occlusion with the body and its usual neighbours: a hair
+with its face, top and neckwear), skinned to the shared rig, exported, post-processed. The shadow a piece casts on
+another (hair on the forehead, the jacket hem on the trousers, a bow tie on the shirt) is a **shadow patch** in its
+scene extras: per target file, per material, vertex indices and multipliers, with the target's hash (`against`) so a
+rebuilt target is never shaded wrongly. Patch vertices the caster itself hides (the trouser top under the jacket, the
+skull under the hair) are left out (`core.hidden_by`): they are never seen, and the files stay under the byte cap.
+
+Body `m` (decisions, `male/spec.py`):
+- The body is **Victor's**: his proportions, rig, Idle and Walk; it holds the neck and the hands. Victor from pieces is
+  pixel-identical to today's `victor.glb` (mirror test: mean difference 0.02 / 255).
+- **Each classic face is its own head** (skull, ears, eyes, brows, nose, mouth; Henry's own round frames inside his face as
+  `builtInGlasses`), because the skull IS most of the face here. A face sits on the shared neck the way it sat on its own
+  body (the head axis keeps its distance to the neck axis). Every hair and moustache is fitted to every face: the plain
+  file fits Victor's face, `~face_marcus` / `~face_henry` variants fit the others (3 x 5 hairs, 3 x 2 moustaches; the
+  moustache height and size are set per face).
+- **Every top is cut on Victor's jacket body and arm joints**: Marcus's suit and Henry's dinner jacket are a touch
+  slimmer and keep their own lapels, buttons, pockets, vent or seam, shirt V, sleeves and colours. All tops share ONE
+  collar fitting zone (the same shirt collar and chest from the collar to the tie knot; the waistcoat matches its depth
+  there), so the bow ties and the tie fit every top. The long tie lies 9 mm forward (it covers every top's studs) and has
+  one fitted variant for the waistcoat (`neck_tie~top_waistcoat`: it tucks under the waistcoat's V).
+- New pieces fixed from the proof's review: the **Side part** has a natural hairline (soft point, receding temples, no
+  straight cut), one soft sideburn tab and three broad comb lines (pass 3: every groove END stays well above the
+  hairline: `sculpt_hair` snaps a groove point along a ray from the head centre, and near the hairline that ray can
+  land on an inner crossing and cut a hole from inside the thin edge, as pass 2 did four times); the **Waistcoat**'s shirtsleeves have folds (in the geometry and painted into
+  the bake) and a cooler white, so they read as cotton in the warm lobby light, not as bare arms.
+- The trouser hems follow the heel a little (`heel_follow`): at toe-off today's guests show the shoe's heel through the
+  back of the hem; now the hem rests on it.
+- Budgets (`tables.py`): Marcus's and Henry's hair shells run 88 segments round (was 92) to meet the 8,000 cap.
+
+Body `f` (the women: `female/spec.py`, its own driver `female/build.py`, same options as `build.py` plus `--just`, a
+quick draft of only the asked pieces; about 8 min for all 32 files; then `manifest.py --check` as always):
+```bash
+python3 tools/char-pipeline/parts/female/build.py                          # every female piece -> assets/characters/parts/f/
+python3 tools/char-pipeline/parts/female/build.py --out <scratch>/draft/f  # a draft;  --only <ids> [--just];  --list
+node tools/char-pipeline/parts/female/grids.mjs --port 9531 --out <dir> [--parts <draft>]   # every hair / earring / belt /
+     # gown on every face or gown, and the gowns walking (the "every piece mixes" sheets)
+node tools/char-pipeline/parts/review.mjs --body f --item all --port 9531 --out <dir> [--mirror clara,eleanor,beatrice]
+```
+- **ONE shared body** for Clara, Eleanor and Beatrice (not the fallback of three gown bodies): it holds the neck and
+  yoke, the bare arms and soft hands, the bare legs; Clara's legs, pumps, shoulders and rig; arms set a little wider
+  than Clara's (Eleanor's wrists: her ballgown is 0.26 m wide at hand height). Mirror test: each woman from pieces is
+  within 1-1.6 % of pixels of today's model at the game camera.
+- **Every bodice shares one upper torso** (30.6-34.5 %, the neckline-to-shoulder zone) and one yoke fitted inside it
+  just below every neckline; below it each gown keeps its own bust, waist, sleeves and skirt (walk-safe skirt weights
+  from dress_kit). Eleanor's shoulders and bateau neckline sit ~1.3 % lower; Beatrice's bodice top comes 2.2 cm forward.
+- **Faces** are whole heads at their own heights (Eleanor's 3.8 cm higher), on the shared neck. The skull is open only
+  under the CROWN every hairstyle covers (`spec.CROWN`; a new style must cover it too). **Hair** is fitted to every face:
+  each style is built by its own guest's builder round the target skull, aligned on the skull top (3 x 3 files).
+  **Earrings** (extras, 'ears') sit at each face's lobe (3 x 3); **belts** are fitted to each gown (2 x 3) and take the
+  gown's own skin weights.
+- Folded in: Eleanor's chin shadow on the neck rides in her face's patch on the body; the hair's shadow on the gowns is an
+  extra patch kept 3 % lighter (`patch_soft`, it keeps the long styles under the byte cap); the gold belt shades every
+  gown the same.
+- Known, as today: the curled fingertips rest inside the ballgown's and A-line's folds at rest (today's Eleanor and
+  Beatrice do the same).
+- Red-eye: every face, gown, belt and earring scores 0.99-1.00. The hairstyles score 0.75-0.97 in the facing views. The
+  low ones all come from the exact side view (heading 90): there the eye NEAREST the camera stays 100 % visible with every
+  style on every face, and what the fringe covers is the sliver of the far eye seen over the bridge of the nose (today's
+  Beatrice: 0.756, her own bob hides that sliver completely; from pieces 0.757).
+
+Tests: `poke.py` (contract 9.4; inside / outside by ray parity, 6 directions; vertices that leave past an OPEN edge, a hem
+or a cuff, are not pokes; the one exemption: the shoe's top rim in the bottom 20 mm of the closed trouser leg, where the
+hem can only lift off it) and a front check for neckwear (no stud in front of a visible tie or bow). The women's
+gown and belt pairs use its `vis` mode: a point hidden under the cover at rest that can be SEEN through it at a pose,
+2 mm further out than at rest (gowns overlap themselves and a belt is an open band, where parity misreads). The red-eye test
+(contract 9.3) reports two scores: **strict** (the contract's words: every view whose reference shows 30 ID pixels) and
+**facing** (only headings where the face is toward the camera); from behind, at 135 degrees, today's own swept hair
+hides the 40-60 pixel sliver of eye that shows past the cheek, so the strict rule cannot be the shipping gate.

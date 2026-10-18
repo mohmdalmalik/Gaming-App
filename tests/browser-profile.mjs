@@ -21,6 +21,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { makeRng } from '../src/game/cards.js';
 import { rollProfiles } from '../src/bots/profiles.js';
+import { lookAlike } from '../src/data/wardrobe.js';
 
 const args = process.argv.slice(2);
 const baseUrl = args.includes('--url') ? args[args.indexOf('--url') + 1] : 'http://127.0.0.1:8123/';
@@ -180,8 +181,8 @@ console.log('\n5. a match from the menu');
   const seats = await game(() => window.__game.seats());
   check(seats.length === 4 && seats.every((x, i) => x.id === `p${i + 1}`), 'seat ids p1..p4 by seat');
   check(seats.filter(x => x.you).length === 1 && seats.find(x => x.you).name === 'Marlowe_x', 'your seat carries your username');
-  check(new Set(seats.map(x => x.avatar?.base)).size === 4 && seats.every(x => x.avatar?.v === 1), 'every seat has an avatar; no two in one look');
-  check(await game(() => window.__game.state.players.every((p, i) => p.avatar && p.avatar.base === window.__game.seats()[i].avatar.base)), 'the rules\' players carry the avatar (display only)');
+  check(seats.every(x => x.avatar?.v === 2) && !seats.some((x, i) => seats.some((y, j) => j > i && lookAlike(x.avatar, y.avatar))), 'every seat has an avatar (v2); no two alike');
+  check(await game(() => window.__game.state.players.every((p, i) => p.avatar && JSON.stringify(p.avatar) === JSON.stringify(window.__game.seats()[i].avatar))), 'the rules\' players carry the avatar (display only)');
   if (await game(() => window.__game.handoffKind()) === 'role') await page.click('#btn-handoff-next');
   await page.waitForTimeout(500);
   const strip = await game(() => [...document.querySelectorAll('#players-strip .mini-name')].map(e => e.textContent));

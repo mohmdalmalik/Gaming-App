@@ -8,17 +8,19 @@
 //      names that read like a role refused ("NotPossessed", "Clean_"); real names the filter once caught pass
 //      (Nazir, Shital, Pornchai, Scunthorpe …)
 //   2. suggestions: 1000 of them, every one valid, never the one to avoid; every bot username is valid
-//   3. the profile: its shape; repairs of damaged, old and not-owned data (a valid name kept, bad avatar
-//      slots and locked items back to the look's own, unknown inventory ids dropped; no valid name: none)
-//   4. the account (a memory store): sign up, rename, set an avatar (made safe), owns (free items only),
+//   3. the profile (version 2): its shape; repairs of damaged, old and not-owned data (a valid name kept, bad avatar
+//      values back to the Look's own, a pending item never, an unlockable one only while the testing switch is on or
+//      when owned, unknown inventory ids dropped; no valid name: none); a version 1 profile migrated
+//   4. the account (a memory store): sign up, rename, set an avatar (made safe), owns (free items and the inventory),
 //      onChange and its unsubscribe, a frozen profile, kept across a new start, a damaged save repaired
 //      and saved back, a store that keeps nothing (not persistent, still works for the visit); a saved name
 //      no longer allowed keeps the id, avatar and first date for the new one (nameLost); a newer version's
 //      profile is read and never written over (readOnly); a saved look called "constructor" or
 //      "__proto__" (any built-in name) and a store that throws when read never crash
 //   5. the first avatar: last round's "Your guest" seeds it ('p6' is Clara's look); 'random' rolls one
-//   6. the table: seat ids p1..pN and colours by seat; bots' avatars deterministic, free items only, no two
-//      in one look nor in yours; bots never take your name (case ignored), with the same random draws
+//   6. the table: seat ids p1..pN and colours by seat; bots' avatars deterministic, already safe, about one in three
+//      wearing an unlockable item, no two alike nor like yours; bots never take your name (case ignored), with the
+//      same random draws
 //   7. seeded tables keep their seats: the 5 burnt draws give the same seat, bots and possessed seat as
 //      the old shuffle of the six named guests did
 //   8. the feed reads lines with names put aside: "nora searched Kitchen." next to a guest named
@@ -38,8 +40,11 @@ import { USERNAME, checkUsername, sameName, suggestUsername, reservedWords, isFi
 import { PROFILE_VERSION, newProfile, repairProfile, startingAvatar } from '../src/account/profile.js';
 import { createAccount, memoryStore, PROFILE_KEY } from '../src/account/account.js';
 import { SEAT_COLORS, seatTable, botAvatars, STAND_IN } from '../src/table.js';
-import { ITEMS, BASES, itemId, normaliseAvatar, originalAvatar } from '../src/data/wardrobe.js';
-import { randomAvatar } from '../src/data/randomAvatar.js';
+import { ITEMS, LOOKS, itemId, normaliseAvatar, lookAlike, genderOf, isFree, lookOf, UNLOCK_ALL_FOR_TESTING } from '../src/data/wardrobe.js';
+import { randomAvatar, unlockablesWorn } from '../src/data/randomAvatar.js';
+// (a classic Look, as an avatar)
+const originalAvatar = id => normaliseAvatar(LOOKS[id]);
+const ON = UNLOCK_ALL_FOR_TESTING;       // (the testing switch: unlockable items are wearable while it is on)
 import { feedLine } from '../src/ui/feed.js';
 
 const t0 = Date.now();
@@ -99,11 +104,13 @@ console.log('\nsuggestions');
 console.log('\nthe profile');
 {
   const p = newProfile({ username: 'nora', now: Date.UTC(2026, 9, 12) });
-  check(p.version === PROFILE_VERSION && PROFILE_VERSION === 1, 'version 1');
+  check(p.version === PROFILE_VERSION && PROFILE_VERSION === 2, 'version 2');
   check(/^local-[0-9a-f]{16}$/.test(p.id), `a random device id (${p.id})`);
   check(p.username === 'nora' && Array.isArray(p.inventory) && p.inventory.length === 0, 'username, an empty inventory');
   check(p.createdAt === '2026-10-12T00:00:00.000Z' && p.updatedAt === p.createdAt && p.nameChangedAt === p.createdAt, 'createdAt, updatedAt, nameChangedAt');
-  check(JSON.stringify(p.avatar) === JSON.stringify(normaliseAvatar(p.avatar)) && p.avatar.v === 1, 'an avatar made of catalogue ids');
+  check(JSON.stringify(p.avatar) === JSON.stringify(normaliseAvatar(p.avatar)) && p.avatar.v === 2, 'an avatar (v2) made of catalogue ids');
+  check(JSON.stringify(p.looks) === '[null,null,null]', 'three empty saved Looks');
+  check(unlockablesWorn(p.avatar) === 0, "a new player's first look wears free items only");
   check(newProfile({ username: 'x1x' }).id !== newProfile({ username: 'x1x' }).id, 'every new profile has its own id');
 
   const keep = repairProfile(JSON.stringify(p));
@@ -115,13 +122,29 @@ console.log('\nthe profile');
     inventory: ['glasses.monocle', 'bogus.item', 42, 'glasses.monocle'], id: '../../etc', createdAt: 'yesterday' });
   const a = broken.profile?.avatar;
   check(broken.repaired && broken.profile?.username === 'nora', 'damaged avatar data: the name is kept, the profile repaired');
-  check(a?.base === 'clara' && a.skin === originalAvatar('clara').skin && a.eyes === 'blue', 'an unknown value goes back to the look\'s own; good values stay');
-  check(a && a.glasses === 'none' && a.main === originalAvatar('clara').main && a.metal === 'gold' && a.hair === originalAvatar('clara').hair && a.frame === 'tortoise',
-    'locked "Coming soon" items never come back from a save (monocle, Gatsby gold, rose gold, platinum, gold frames)');
+  check(a?.face === 'clara' && a.dress === 'column' && a.colours.skin === originalAvatar('clara').colours.skin && a.colours.eyes === 'blue', 'an unknown value goes back to the Look\'s own; good values stay');
+  check(a && a.glasses === 'none', 'an item whose art is not made yet (the Monocle) never comes back from a save, even owned');
+  check(a && (ON ? a.colours.main === 'gatsby' && a.colours.metal === 'roseGold' && a.colours.hair === 'platinum' && a.colours.frame === 'goldFrame'
+    : a.colours.main === originalAvatar('clara').colours.main && a.colours.metal === 'gold' && a.colours.hair === originalAvatar('clara').colours.hair && a.colours.frame === 'tortoise'),
+    ON ? 'unlockable colours come back from a save while the testing switch is on (Gatsby gold, rose gold, platinum, gold frames)'
+      : 'unlockable colours not owned never come back from a save (Gatsby gold, rose gold, platinum, gold frames)');
   check(JSON.stringify(broken.profile?.inventory) === '["glasses.monocle"]', 'the inventory keeps known item ids only, once each');
   check(/^local-[0-9a-f]{16}$/.test(broken.profile?.id) && !Number.isNaN(Date.parse(broken.profile?.createdAt)), 'a bad id and a bad date are replaced');
   const old = repairProfile({ username: 'Theo_22' });
-  check(old.profile && old.repaired && old.profile.version === 1 && old.profile.avatar?.v === 1, 'an old profile with only a name gets the rest');
+  check(old.profile && old.repaired && old.profile.version === 2 && old.profile.avatar?.v === 2, 'an old profile with only a name gets the rest');
+  // a version 1 profile: migrated, the look kept, written back once
+  const v1 = { version: 1, id: 'local-0123456789abcdef', username: 'nora', avatar: { v: 1, base: 'marcus', skin: 'deep', hair: 'copper', eyes: 'green', glasses: 'oval', frame: 'jet', main: 'plum', accent: 'brass', metal: 'silver' },
+    inventory: ['glasses.monocle', 'hair.platinum'], createdAt: '2026-10-12T00:00:00.000Z', updatedAt: '2026-10-13T00:00:00.000Z', nameChangedAt: '2026-10-12T00:00:00.000Z' };
+  const m = repairProfile(JSON.stringify(v1));
+  const ma = m.profile?.avatar;
+  check(m.repaired && m.profile?.version === 2 && JSON.stringify(m.profile.looks) === '[null,null,null]', 'a version 1 profile becomes version 2 (repaired: written back once)');
+  check(ma && ma.body === 'm' && ma.face === 'marcus' && ma.hairStyle === 'sideSwept' && ma.top === 'lounge' && ma.neck === 'tie' && ma.glasses === 'oval'
+    && JSON.stringify(ma.colours) === JSON.stringify({ skin: 'deep', hair: 'copper', eyes: 'green', main: 'plum', accent: 'brass', metal: 'silver', frame: 'jet', lips: 'natural' }),
+    `its avatar is the Look it was, in its own colours (${JSON.stringify(ma)})`);
+  check(JSON.stringify(m.profile?.inventory) === JSON.stringify(v1.inventory) && m.profile.createdAt === v1.createdAt && m.profile.updatedAt === v1.updatedAt && m.profile.id === v1.id,
+    'its inventory ids (each keeps its meaning), id and dates are kept');
+  const again = repairProfile(JSON.stringify(m.profile));
+  check(!again.repaired && JSON.stringify(again.profile) === JSON.stringify(m.profile), 'read again, the migrated profile is sound: nothing more to repair');
 }
 
 // --- 4. the account -----------------------------------------------------------------------------------
@@ -140,7 +163,7 @@ console.log('\nthe account');
   check(r1.ok && acct.profile?.username === 'velvet_owl' && heard.join() === 'velvet_owl', 'sign up: the profile, and listeners hear it');
   check(Object.isFrozen(acct.profile) && Object.isFrozen(acct.profile.avatar), 'the profile handed out is frozen (a copy: nobody changes it behind the account)');
   const saved = JSON.parse(store.load());
-  check(saved.username === 'velvet_owl' && saved.version === 1, `saved in the store (key ${PROFILE_KEY})`);
+  check(saved.username === 'velvet_owl' && saved.version === 2, `saved in the store (key ${PROFILE_KEY})`);
   const avatarBefore = acct.profile.avatar;
   t += 60000;
   const r2 = await acct.rename('Velvet_Owl2');
@@ -149,12 +172,16 @@ console.log('\nthe account');
   const r3 = await acct.rename('Fire_Exit');
   check(!r3.ok && /belongs to the hotel/.test(r3.error) && acct.profile.username === 'Velvet_Owl2', 'a refused rename changes nothing');
   const r4 = await acct.setAvatar({ v: 1, base: 'henry', skin: 'deep', hair: 'silver', eyes: 'green', glasses: 'monocle', frame: 'goldFrame', main: 'gatsby', accent: 'brass', metal: 'gold' });
-  check(r4.ok && r4.avatar.base === 'henry' && r4.avatar.skin === 'deep' && r4.avatar.glasses === originalAvatar('henry').glasses && r4.avatar.frame === 'tortoise' && r4.avatar.main === originalAvatar('henry').main,
-    'setAvatar keeps free choices and refuses locked ones (monocle, gold frames, Gatsby gold)');
+  check(r4.ok && r4.avatar.face === 'henry' && r4.avatar.colours.skin === 'deep' && r4.avatar.glasses === originalAvatar('henry').glasses
+    && r4.avatar.colours.frame === (ON ? 'goldFrame' : 'tortoise') && r4.avatar.colours.main === (ON ? 'gatsby' : originalAvatar('henry').colours.main),
+    `setAvatar keeps free choices, never a pending one (the Monocle), and unlockable ones only ${ON ? 'while the testing switch is on' : 'when owned'} (gold frames, Gatsby gold)`);
   check(JSON.stringify(acct.profile.avatar) === JSON.stringify(r4.avatar), 'the profile wears what setAvatar returned');
-  const free = ITEMS.filter(i => i.unlock === 'free').map(itemId), locked = ITEMS.filter(i => i.unlock !== 'free').map(itemId);
-  check(free.every(id => acct.owns(id)) && !locked.some(id => acct.owns(id)) && !acct.owns('glasses.nothing'), `owns: the ${free.length} free items, none of the ${locked.length} locked ones`);
-  check(locked.length === 6 && ['hair.platinum', 'glasses.monocle', 'frame.goldFrame', 'main.champagne', 'main.gatsby', 'metal.roseGold'].every(id => locked.includes(id)), 'exactly the six "Coming soon" items are locked');
+  const free = ITEMS.filter(isFree).map(itemId), locked = ITEMS.filter(i => !isFree(i)).map(itemId);
+  check(free.every(id => acct.owns(id)) && !locked.some(id => acct.owns(id)) && !acct.owns('glasses.nothing'), `owns (real ownership, whatever the testing switch): the ${free.length} free items, none of the ${locked.length} unlockable ones`);
+  check(['hair.platinum', 'glasses.monocle', 'frame.goldFrame', 'main.champagne', 'main.gatsby', 'metal.roseGold'].every(id => locked.includes(id)), "today's six locked items are still unlockable ones");
+  const g1 = await acct.grant('glasses.monocle'), g2 = await acct.grant('glasses.monocle'), g3 = await acct.grant('main.gatsby'), g4 = await acct.grant('hair.black');
+  check(g1.ok && g1.added && g2.ok && !g2.added && !g3.ok && !g4.ok && JSON.stringify(acct.profile.inventory) === '["glasses.monocle"]' && acct.owns('glasses.monocle')
+    && JSON.parse(store.load()).inventory.includes('glasses.monocle'), 'grant: an achievement item once (saved, owned); never a Boutique item or a free one');
   const n = heard.length;
   off();
   await acct.rename('someone_else');
@@ -165,7 +192,7 @@ console.log('\nthe account');
   // a damaged save is repaired and written back
   const hurt = memoryStore(JSON.stringify({ ...saved, avatar: { base: 'nobody', skin: 42 } }));
   const fixed = createAccount({ store: hurt });
-  check(fixed.profile?.username === 'velvet_owl' && fixed.profile.avatar.base === 'victor' && JSON.parse(hurt.load()).avatar.base === 'victor', 'a damaged save: the name kept, the avatar repaired and saved back');
+  check(fixed.profile?.username === 'velvet_owl' && fixed.profile.avatar.face === 'victor' && JSON.parse(hurt.load()).avatar.face === 'victor', 'a damaged save: the name kept, the avatar repaired and saved back');
   const lost = createAccount({ store: memoryStore('{"username":"7up"}') });
   check(lost.profile === null, 'a save with a bad name: no profile (the register asks again)');
   // a name allowed once and reserved since: the register asks for a new one, everything else is kept
@@ -173,20 +200,23 @@ console.log('\nthe account');
   const renamed = createAccount({ store: since });
   check(renamed.profile === null && renamed.nameLost, 'a saved name no longer allowed: no profile yet, the register says why (nameLost)');
   await renamed.signUp('kitchen_porter', { avatar: originalAvatar('victor') });
-  check(renamed.profile?.username === 'kitchen_porter' && renamed.profile.id === saved.id && renamed.profile.avatar.base === 'clara'
+  check(renamed.profile?.username === 'kitchen_porter' && renamed.profile.id === saved.id && renamed.profile.avatar.face === 'clara'
     && renamed.profile.createdAt === '2026-01-02T00:00:00.000Z' && !renamed.nameLost, '...then the new name keeps the id, the avatar and the first date');
   // a profile saved by a newer version: read, never written over (its newer fields are not lost)
-  const newer = JSON.stringify({ ...saved, version: 2, coins: 99, friends: ['a'] });
+  const newer = JSON.stringify({ ...saved, version: 3, coins: 99, friends: ['a'] });
   const v2store = memoryStore(newer);
   const v2 = createAccount({ store: v2store });
   check(v2.readOnly && v2.profile?.username === saved.username && v2store.load() === newer, 'a newer version\'s profile is read (readOnly) and not written back');
   await v2.setAvatar(originalAvatar('henry')); await v2.rename('later_name');
   check(v2.profile.username === 'later_name' && v2store.load() === newer, '...changes last for the visit; the saved newer profile is untouched');
+  const g5 = await v2.grant('glasses.monocle');
+  check(!g5.ok && g5.added && v2.owns('glasses.monocle') && v2store.load() === newer,
+    'grant on a read-only profile: worn for the visit, but ok: false (not saved), so main.js grants it again later');
   // a damaged save of any shape never stops the page
   for (const base of ['constructor', '__proto__', 'toString', 'hasOwnProperty', 'valueOf']) {
     let ok = true, acct = null;
     try { acct = createAccount({ store: memoryStore(JSON.stringify({ ...saved, avatar: { base } })) }); } catch { ok = false; }
-    check(ok && acct.profile?.avatar.base === 'victor', `a saved look called "${base}" is repaired, never a crash`);
+    check(ok && acct.profile?.avatar.face === 'victor', `a saved look called "${base}" is repaired, never a crash`);
   }
   const throwing = createAccount({ store: { load: () => { throw new Error('boom'); }, save: () => true, works: () => true, watch: () => () => {} } });
   check(throwing.profile === null, 'a store that throws when read: no profile, no crash');
@@ -195,7 +225,7 @@ console.log('\nthe account');
   check(none.persistent === false && none.profile === null, 'blocked storage: not persistent, no profile');
   const r5 = await none.signUp('nightowl_7');
   check(r5.ok && none.profile?.username === 'nightowl_7' && none.persistent === false, 'blocked storage: sign-up still works for this visit');
-  check((await none.setAvatar(originalAvatar('clara'))).ok && none.profile.avatar.base === 'clara', 'blocked storage: the avatar changes for this visit too');
+  check((await none.setAvatar(originalAvatar('clara'))).ok && none.profile.avatar.face === 'clara', 'blocked storage: the avatar changes for this visit too');
   // a store that fails on write later: persistent turns false
   let writes = 0;
   const flaky = { load: () => null, save: () => (++writes < 2), works: () => true, watch: () => () => {} };
@@ -207,17 +237,21 @@ console.log('\nthe account');
   // sign up with a chosen first avatar
   const chosen = createAccount({ store: memoryStore() });
   await chosen.signUp('marigold_', { avatar: originalAvatar('beatrice') });
-  check(chosen.profile.avatar.base === 'beatrice', 'sign-up may take a first avatar');
+  check(chosen.profile.avatar.face === 'beatrice', 'sign-up may take a first avatar');
 }
 
 // --- 5. the first avatar ------------------------------------------------------------------------------
 console.log('\nthe first avatar');
 {
   check(JSON.stringify(startingAvatar('nora', 'p6')) === JSON.stringify(originalAvatar('clara')), 'last round\'s "Your guest" Clara (p6): her look in her colours');
-  check(startingAvatar('nora', 'Henry').base === 'henry' && startingAvatar('nora', 'p1').base === 'victor', 'a guest by name or by roster id');
+  check(startingAvatar('nora', 'Henry').face === 'henry' && startingAvatar('nora', 'p1').face === 'victor', 'a guest by name or by roster id');
   const r = startingAvatar('nora', 'random');
-  check(JSON.stringify(r) === JSON.stringify(normaliseAvatar(randomAvatar('nora'))) && JSON.stringify(startingAvatar('nora')) === JSON.stringify(r), "'random' (or nothing): rolled from the name, the same every time");
-  check(Object.keys(BASES).includes(startingAvatar('anyone', 'nonsense').base), 'anything unknown: a rolled look');
+  check(JSON.stringify(r) === JSON.stringify(normaliseAvatar(randomAvatar('nora', { unlockables: false, swapPieces: false }))) && JSON.stringify(startingAvatar('nora')) === JSON.stringify(r), "'random' (or nothing): rolled from the name, the same every time");
+  const firsts = Array.from({ length: 300 }, (_, k) => startingAvatar(`newplayer${k}`));
+  check(firsts.every(a => lookOf(a)) && new Set(firsts.map(lookOf)).size === 6,
+    "a new player's first look keeps a classic Look's pieces (all six seen; colours and glasses rolled): the stand-in wardrobe offers only the six Looks, so no mix is lost on a tap");
+  const any = startingAvatar('anyone', 'nonsense');
+  check(any.v === 2 && JSON.stringify(normaliseAvatar(any)) === JSON.stringify(any) && unlockablesWorn(any) === 0, 'anything unknown: a rolled look, free items only');
 }
 
 // --- 6. the table -------------------------------------------------------------------------------------
@@ -228,22 +262,24 @@ console.log('\nthe table');
   const looks = botAvatars(bots, { avoid: [me.avatar] });
   const seats = seatTable({ me, bots: bots.map((u, k) => ({ username: u, avatar: looks[k] })), seat: 3 });
   check(seats.length === 6 && seats.every((s, i) => s.id === `p${i + 1}` && s.color === SEAT_COLORS[i]), 'seat ids p1..p6 and colours by seat');
-  check(seats[3].name === 'nora' && seats[3].avatar.base === 'marcus' && seats.filter((s, i) => i !== 3).map(s => s.name).join() === bots.join(), 'you in your seat, the bots in theirs');
+  check(seats[3].name === 'nora' && seats[3].avatar.face === 'marcus' && seats.filter((s, i) => i !== 3).map(s => s.name).join() === bots.join(), 'you in your seat, the bots in theirs');
   check(seats.every(s => s.outfit && typeof s.outfit === 'string'), 'every seat also names its outfit (for the views that still read one)');
   check(STAND_IN.username === 'Guest' && code('Guest') === 'reserved', "the stand-in 'Guest' is a name nobody can take");
-  let clash = 0, lockedWorn = 0, mine = 0, unstable = 0;
+  let clash = 0, unsafe = 0, mine = 0, unstable = 0, worn = 0, n = 0;
   for (let k = 0; k < 400; k++) {
     const rng = makeRng(1000 + k);
     const names = rollProfiles(5, rng).map(p => p.username);
     const you = normaliseAvatar(randomAvatar(`player${k}`));
     const av = botAvatars(names, { avoid: [you] });
-    if (new Set(av.map(a => a.base)).size !== av.length) clash++;
-    if (av.some(a => a.base === you.base)) mine++;
-    if (av.some(a => JSON.stringify(normaliseAvatar(a)) !== JSON.stringify(a))) lockedWorn++;
+    if (av.some((a, i) => av.some((b, j) => j > i && lookAlike(a, b)))) clash++;
+    if (av.some(a => lookAlike(a, you))) mine++;
+    if (av.some(a => JSON.stringify(normaliseAvatar(a, { trusted: true })) !== JSON.stringify(a) || a.v !== 2)) unsafe++;
     if (JSON.stringify(botAvatars(names, { avoid: [you] })) !== JSON.stringify(av)) unstable++;
+    for (const a of av) { n++; worn += unlockablesWorn(a); }
   }
-  check(clash === 0 && mine === 0, `400 tables of six: no two guests in one look, never in yours (${clash} / ${mine})`);
-  check(lockedWorn === 0, 'bots wear free items only');
+  check(clash === 0 && mine === 0, `400 tables of six: no two guests alike, never like you (${clash} / ${mine})`);
+  check(unsafe === 0, "bots' avatars are already safe (v2, nothing to repair)");
+  check(worn / n > 0.25 && worn / n < 0.42, `about one bot in three wears an unlockable item (${(worn / n).toFixed(2)} a bot)`);
   check(unstable === 0, 'the same names give the same looks (deterministic)');
   // bots never take your name
   let took = 0, drift = 0;

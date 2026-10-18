@@ -466,7 +466,9 @@ const stats = await page.evaluate(() => document.querySelector('.perf-stats')?.t
 check(/fps/.test(stats) && /draws/.test(stats), `?stats=1 shows a readout ("${stats}")`);
 const perf = await game(() => { const i = window.__game.view.renderer.info; return { calls: i.render.calls, tris: i.render.triangles, programs: i.programs.length, textures: i.memory.textures, geometries: i.memory.geometries }; });
 console.log(`       lobby view: ${perf.calls} draw calls, ${perf.tris} triangles, ${perf.programs} shader programs, ${perf.textures} textures, ${perf.geometries} geometries`);
-check(perf.calls <= 120, `draw calls within budget (${perf.calls} ≤ 120)`);
+// (the guest is made of pieces now: 2 draw calls, not 20 — measured 56 calls with pieces, 61-69 before; its triangles
+// about the same, 32.8k for Victor's Look against 31.9k)
+check(perf.calls <= 100, `draw calls within budget (${perf.calls} ≤ 100; 120 before pieces)`);
 check(perf.tris <= 150000, `triangles within budget (${perf.tris} ≤ 150k)`);
 
 console.log('\n7b. locked rooms look locked');

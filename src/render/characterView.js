@@ -1,8 +1,8 @@
 // Character view. Three kinds, behind ONE surface { group, def, outfit, update(mover, dt),
 // setActive, setDead, setPossessed, setAvatar, setDef, dispose }:
-//   • a player's avatar (when the seat has an `avatar`: every seat at the table) — one of the six
-//     looks, parsed once per look and cloned with its own colours, eye colour and glasses
-//     (src/render/avatar.js), with Idle/Walk clips cross-faded by movement, the stride matched to speed;
+//   • a player's avatar (when the seat has an `avatar`: every seat at the table) — its pieces on a shared
+//     body, merged once per set of pieces and cloned with its own colours and eye colour: two draw calls
+//     (src/render/avatar.js, avatarParts.js), with Idle/Walk clips cross-faded by movement, the stride matched to speed;
 //   • a real rounded glTF guest (an outfit with a `model`: old fixtures) — the same, loaded on its own;
 //   • the placeholder articulated box figure (everyone else) with a simple procedural walk.
 // The game logic never touches anything inside; travel/collision come from the mover.
@@ -13,7 +13,7 @@ import { bodyTypes, outfits } from '../data/characters.js';
 import { xrayGuest } from './xray.js';
 import { createPossessedEyes } from './possessedLook.js';
 import { loadBase, createAvatarModel, GAME_RIM } from './avatar.js';
-import { BASES, isBase, item } from '../data/wardrobe.js';
+import { LOOK_LABELS, genderOf, geometryKey, item, lookOf } from '../data/wardrobe.js';
 
 const gltfLoader = new GLTFLoader();
 
@@ -54,15 +54,16 @@ function box(geo, color, w, h, d, emissive) {
 }
 
 // (an avatar's stand-in outfit: its body and nominal height are read before the model loads; its colours
-// only if the model cannot be loaded, when the box figure stands in for it)
-const SKIRTS = { clara: 'column', eleanor: 'full', beatrice: 'aline' };
+// only if the model cannot be loaded, when the box figure stands in for it: from the gender, the jacket or
+// dress and the colours)
+const SKIRTS = { column: 'column', ballgown: 'full', aline: 'aline' };
 const avatarOutfit = av => {
-  const def = isBase(av.base) ? BASES[av.base] : null;
-  const main = item('main', av.main)?.value || '#36436a', accent = item('accent', av.accent)?.value || '#1a1a1e';
-  const female = def?.body === 'f';
-  return { name: def?.label || 'Guest', body: female ? 'female' : 'male', modelHeight: 1.66, avatar: true,
-    ...(female ? { bodice: main, skirt: main, skirtStyle: SKIRTS[av.base] || 'aline', sleeves: 'none', ...(av.base === 'clara' ? { sash: accent } : {}) }
-      : { jacket: main, trousers: main, shirt: '#e9e6dc', neckwear: av.base === 'marcus' ? 'tie' : 'bow', neckwearColor: accent }) };
+  const female = genderOf(av?.body) === 'f', c = av?.colours || {};
+  const main = item('main', c.main)?.value || '#36436a', accent = item('accent', c.accent)?.value || '#1a1a1e';
+  const look = lookOf(av);
+  return { name: (look && LOOK_LABELS[look]) || 'Guest', body: female ? 'female' : 'male', modelHeight: 1.66, avatar: true,
+    ...(female ? { bodice: main, skirt: main, skirtStyle: SKIRTS[av.dress] || 'aline', sleeves: 'none', ...(av.belt === 'sash' ? { sash: accent } : {}) }
+      : { jacket: main, trousers: av.legs === 'blackTrousers' ? '#16161a' : main, shirt: '#e9e6dc', neckwear: av.neck === 'tie' ? 'tie' : av.neck === 'none' ? 'none' : 'bow', neckwearColor: accent }) };
 };
 
 export function createCharacterView(playerDef, cfg, scene) {
@@ -128,7 +129,7 @@ export function createCharacterView(playerDef, cfg, scene) {
   let eyes = null, possessedWanted = false;
   let model = null, loadToken = 0, ownGltf = null;   // (avatar: the avatar model; a glTF guest: its own scene)
 
-  // An avatar's model: the look parsed once (shared by every seat in it), cloned with this seat's colours.
+  // An avatar's model: its pieces merged once (shared by every seat wearing them), cloned with this seat's colours.
   // If it cannot be downloaded the box figure stands in (the guest is never invisible), and it is tried
   // once more a few seconds later.
   let placeholderParts = null, retried = false;
@@ -146,7 +147,7 @@ export function createCharacterView(playerDef, cfg, scene) {
   }
   function loadAvatar(av) {
     const token = ++loadToken;
-    loadBase(av.base).then(base => {
+    loadBase(av).then(base => {
       if (token !== loadToken || disposed) return;
       dropModel();
       dropPlaceholder();
@@ -159,7 +160,7 @@ export function createCharacterView(playerDef, cfg, scene) {
       marker.position.y = headY + c.markerHeight;
       startClips(model.root, base.clips.idle, base.clips.walk);
     }).catch(e => {
-      console.warn('character model load failed:', av.base, e && e.message);
+      console.warn('character model load failed:', geometryKey(av), e && e.message);
       if (token !== loadToken || disposed) return;
       if (!model) showPlaceholder();
       if (!retried) { retried = true; setTimeout(() => { if (token === loadToken && !disposed) loadAvatar(av); }, 4000); }
@@ -254,7 +255,7 @@ export function createCharacterView(playerDef, cfg, scene) {
         const tie = box(boxDown, outfit.neckwearColor, 0.05, b.torsoHeight * 0.55, 0.02);
         tie.position.set(0, shoulderY - 0.02, b.chestDepth / 2 + 0.02);
         body.add(tie);
-      } else {
+      } else if (outfit.neckwear !== 'none') {
         const bow = box(boxUp, outfit.neckwearColor, 0.11, 0.045, 0.03);
         bow.position.set(0, shoulderY - 0.06, b.chestDepth / 2 + 0.02);
         body.add(bow);
@@ -349,13 +350,13 @@ export function createCharacterView(playerDef, cfg, scene) {
     group,
     def: playerDef,
     outfit,
-    // The seat's new look (the wardrobe, a reused view): the same look is repainted at once; another look
-    // loads (shared, parsed once) and replaces the figure. (Avatar views only.)
+    // The seat's new look (the wardrobe, a reused view): the same pieces are repainted at once; other pieces
+    // load (shared, merged once) and replace the figure. (Avatar views only.)
     setAvatar(av) {
       if (!avatar || !av) return;
-      const sameBase = av.base === avatar.base;
+      const samePieces = geometryKey(av) === geometryKey(avatar);
       avatar = av;
-      if (sameBase && model) model.setAvatar(av);
+      if (samePieces && model) model.setAvatar(av);
       else loadAvatar(av);
     },
     // A reused view at a new table: the seat it now shows (its colour: ring and marker).

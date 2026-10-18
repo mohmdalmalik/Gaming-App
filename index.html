@@ -344,7 +344,13 @@
           <div class="menu-field"><div class="mf-label">Menu background<span id="set-menuMotion-why" class="mf-why" hidden>Reduce Motion is on</span></div><div id="set-menuMotion" class="seg" role="radiogroup" aria-label="Menu background"></div></div>
           <div class="menu-field"><div class="mf-label">Music</div><div id="set-music" class="seg" role="radiogroup" aria-label="Music"></div></div>
           <div class="menu-field"><div class="mf-label">Sound effects</div><div id="set-sound" class="seg" role="radiogroup" aria-label="Sound effects"></div></div>
-          <div class="menu-field"><div class="mf-label">Quick chat</div><div id="set-chat" class="seg" role="radiogroup" aria-label="Quick chat"></div></div>
+          <!-- Quick chat, and Clearer possessed eyes for colour blindness (src/settings.js clearEyes: in a match, on this
+               device's screen only): two On / Off rows side by side; the note shows where the screen has room. -->
+          <div class="menu-pair">
+            <div class="menu-field"><div class="mf-label">Quick chat</div><div id="set-chat" class="seg" role="radiogroup" aria-label="Quick chat"></div></div>
+            <div class="menu-field"><div class="mf-label">Clearer possessed eyes</div><div id="set-clearEyes" class="seg" role="radiogroup" aria-label="Clearer possessed eyes" aria-describedby="set-clearEyes-note"></div></div>
+          </div>
+          <div id="set-clearEyes-note" class="mf-note set-pair-note">Clearer possessed eyes: brown and hazel eyes show dark in a match, so red eyes stand out.</div>
           <!-- First-match tips (src/ui/tips.js): On / Off, and bring back the ones already seen. -->
           <div class="menu-field"><div class="mf-label">Tips</div><div class="tips-row"><div id="set-tips" class="seg" role="radiogroup" aria-label="Tips"></div><button id="btn-tips-again" class="seg-btn tips-again" type="button">Show tips again</button></div></div>
           <div class="menu-actions">
@@ -447,6 +453,8 @@
         <p id="end-recap" class="end-recap" hidden></p>
         <!-- Your record after this game, one quiet line (src/ui/record.js). -->
         <p id="end-record" class="end-record" hidden></p>
+        <!-- An achievement this match earned (src/ui/honoursEnd.js): checked on the end screen only, never during a match. -->
+        <p id="end-honours" class="end-honours" hidden></p>
         <div id="end-reveal" class="end-reveal" hidden></div>
         <div class="end-actions">
           <button id="btn-keep-exploring" class="btn big" type="button" hidden>Keep exploring</button>

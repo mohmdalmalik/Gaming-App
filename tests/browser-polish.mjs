@@ -540,21 +540,30 @@ if (only.includes('text')) {
         await page.click(back); await page.waitForTimeout(500);
       }
       await page.click('#btn-profile');
-      await settle(page, () => { const e = document.querySelector('.av-chip-soon'); return !!e && e.getClientRects().length > 0; }, null, 30000);
+      // (avatar v2: while the catalogue's testing switch is on nothing says "Coming soon"; the small words are the
+      // line under a row saying what an unlockable item will be: "Achievement: … · unlocked for testing")
+      const SMALL = '.av-chip-soon, .av-kind';
+      await settle(page, () => !!document.querySelector('.av-chip-soon, .av-sw.unlockable'), null, 30000);
       await page.waitForTimeout(400);       // (the page has stopped sliding in)
-      const soon = await ev(() => [...document.querySelectorAll('.av-chip-soon')].map(e => { const cs = getComputedStyle(e); return { fs: parseFloat(cs.fontSize), color: cs.color }; }));
+      const wornHair = await ev(() => document.querySelector('.av-row[data-slot="hair"] .av-sw.on')?.dataset.id);
+      if (!(await ev(() => !!document.querySelector('.av-chip-soon')))) {
+        await page.click('.av-row[data-slot="hair"] .av-sw.unlockable');
+        await settle(page, () => { const e = document.querySelector('.av-kind'); return !!e && e.getClientRects().length > 0; }, null, 10000);
+      }
+      const soon = await ev(sel => [...document.querySelectorAll(sel)].map(e => { const cs = getComputedStyle(e); return { fs: parseFloat(cs.fontSize), color: cs.color }; }), SMALL);
       await ev(() => { const b = document.getElementById('av-body'); b.scrollTop = b.scrollHeight; });
       await page.waitForTimeout(400);
-      const soon2 = await ev(() => [...document.querySelectorAll('.av-chip-soon')].map(e => { const cs = getComputedStyle(e); return { fs: parseFloat(cs.fontSize), color: cs.color }; }));
+      const soon2 = await ev(sel => [...document.querySelectorAll(sel)].map(e => { const cs = getComputedStyle(e); return { fs: parseFloat(cs.fontSize), color: cs.color }; }), SMALL);
       const chips = [...soon, ...soon2];
-      check(chips.length > 0 && chips.every(c => c.fs >= 11), `${tag} wardrobe: "Coming soon" is 11 px or more (${chips[0]?.fs}), was 9.5`);
-      // contrast of "Coming soon" against the wardrobe's panel (the lock chip's plate): 4.5:1 or more
+      check(chips.length > 0 && chips.every(c => c.fs >= 11), `${tag} wardrobe: the small "Coming soon" / "unlocked for testing" words are 11 px or more (${chips[0]?.fs}), was 9.5`);
+      // contrast of those words against the wardrobe's panel: 4.5:1 or more
       const rgbOf = s => s.match(/[\d.]+/g).slice(0, 3).map(Number);
       const lum = ([r, g, b]) => { const f = v => { v /= 255; return v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; }; return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b); };
-      const bg = await ev(() => { const e = document.querySelector('.av-chip-soon'); let n = e; while (n) { const c = getComputedStyle(n).backgroundColor; if (c && !/rgba?\(0, 0, 0, 0\)/.test(c) && !/, 0\)$/.test(c)) return c; n = n.parentElement; } return 'rgb(20, 24, 36)'; });
+      const bg = await ev(sel => { const e = document.querySelector(sel); let n = e; while (n) { const c = getComputedStyle(n).backgroundColor; if (c && !/rgba?\(0, 0, 0, 0\)/.test(c) && !/, 0\)$/.test(c)) return c; n = n.parentElement; } return 'rgb(20, 24, 36)'; }, SMALL);
       const L1 = lum(rgbOf(chips[0].color)), L2 = lum(rgbOf(bg));
       const ratio = (Math.max(L1, L2) + 0.05) / (Math.min(L1, L2) + 0.05);
-      check(ratio >= 4.5, `${tag} wardrobe: "Coming soon" reads at ${ratio.toFixed(1)}:1 against its plate (was 3.85:1)`);
+      check(ratio >= 4.5, `${tag} wardrobe: those words read at ${ratio.toFixed(1)}:1 against their plate (was 3.85:1)`);
+      if (wornHair) await page.click(`.av-row[data-slot="hair"] .av-sw[data-id="${wornHair}"]`).catch(() => {});     // (the test profile's own hair back)
       note('wardrobe', await smallText(page));
       await page.screenshot({ path: path.join(outDir, `${tag}-wardrobe-bottom.png`) });
       await page.click('#btn-av-done').catch(() => {});

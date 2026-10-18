@@ -1,22 +1,32 @@
 // The wardrobe: the avatar screen of the main menu (#menu-avatar; src/ui/menu.js shows it as 'avatar').
-// Your username with "Change name", then, in order: Male / Female (which shows that body's three looks),
-// the look, Skin tone, Hair, Eyes, Glasses (and Frame while glasses are on), Outfit, Accent (only where
-// the look has a tie, bow tie or sash) and Jewellery (the gowns). Every choice shows at once on your own
-// avatar in the menu's 3D lobby (main.js turns the lobby's wardrobe camera on for this screen: onPreview),
-// and is kept when you leave the screen (Done, or Change name), through the account
-// (src/account/account.js setAvatar: made safe there, owned items only).
-// Locked items (src/data/wardrobe.js, unlock 'earn' / 'shop') show with a lock and "Coming soon" and
-// cannot be chosen: nothing can be bought or earned yet. The list scrolls inside the panel; the page
-// never does. While a new look is still on its way (onPreview's promise: true shown, false could not be)
-// the Look row says "Loading…"; a look that cannot be shown says so under the panel (the choice is
-// still kept). Plain words, no emoji. Nothing here touches the game.
-import { BASES, BODIES, SLOT_LABELS, basesFor, bodyOf, item, itemsFor, isAvailable, normaliseAvatar,
-  slotsFor, withBase, withBody } from '../data/wardrobe.js';
+// (The W1 stand-in, kept working on avatar v2 until the new wardrobe screen replaces it.) Your username with "Change
+// name", then, in order: Male / Female (which shows that body's three classic Looks), the Look, Skin tone, Hair, Eyes,
+// Glasses (and Frame while glasses with a frame colour are on), Outfit, Accent (only with a tie, bow tie or sash) and
+// Jewellery (only with something metal). Every choice shows at once on your own avatar in the menu's 3D lobby
+// (main.js turns the lobby's wardrobe camera on for this screen: onPreview), and is kept when you leave the screen
+// (Done, or Change name), through the account (src/account/account.js setAvatar: made safe there, owned items only).
+// An avatar that mixes pieces (a bot-rolled first look) shows no Look chosen ("Your own mix") and keeps its pieces
+// until a Look is picked.
+// Unlockable items (src/data/wardrobe.js: 'achievement' and 'boutique') carry a small mark (a rosette: an
+// achievement; a diamond: the Boutique) and their row says what they will be; while the catalogue's testing switch
+// is on they can be worn, "unlocked for testing". With it off, one not owned shows a lock,
+// says how it is had, and cannot be chosen. The list scrolls inside the panel; the page never does. While a new look is
+// still on its way (onPreview's promise: true shown, false could not be) the Look row says "Loading…"; a look that
+// cannot be shown says so under the panel (the choice is still kept). Plain words, no emoji. Nothing here touches the
+// game.
+import { GENDERS, ITEMS, LOOK_LABELS, SLOT_LABELS, applyLook, canWear, genderOf, isFree, item, itemsFor,
+  labelOf, lookOf, looksFor, normaliseAvatar, slotsFor, unlockedForTesting, withBody, withItem, COLOUR_SLOTS, SLOTS_BY_GENDER } from '../data/wardrobe.js';
+import { achievement } from '../data/achievements.js';
 import { tooSoon } from './tapGuard.js';
 
 const LOCK = '<svg class="av-lock" viewBox="0 0 12 14" aria-hidden="true"><path d="M3.2 6V4.4a2.8 2.8 0 0 1 5.6 0V6" fill="none" stroke="currentColor" stroke-width="1.5"/><rect x="1.4" y="6" width="9.2" height="7" rx="1.6" fill="currentColor"/></svg>';
+// the marks of the two kinds of unlockable item: a rosette (an achievement), a diamond (the Boutique)
+const ROSETTE = '<svg class="av-mark" viewBox="0 0 12 14" aria-hidden="true"><path d="M3.6 8.2 2.4 13l3.6-1.6L9.6 13 8.4 8.2" fill="currentColor" opacity="0.75"/><circle cx="6" cy="5.2" r="4.2" fill="currentColor"/><circle cx="6" cy="5.2" r="2" fill="#0f1118"/></svg>';
+const DIAMOND = '<svg class="av-mark" viewBox="0 0 12 12" aria-hidden="true"><path d="M6 0.8 11.2 6 6 11.2 0.8 6Z" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M6 3.6 8.4 6 6 8.4 3.6 6Z" fill="currentColor"/></svg>';
 const SOON = 'Coming soon';
 const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+// The colour rows and the glasses, in the screen's order (the pieces themselves come with the new wardrobe).
+const ROWS = ['skin', 'hair', 'eyes', 'glasses', 'frame', 'main', 'accent', 'metal'];
 
 // The look of a swatch (CSS background) for an item.
 function swatchStyle(it) {
@@ -36,7 +46,7 @@ export function createAvatarEditor(doc, { account, onPreview, onDone, onRename }
   const btnDone = $('btn-av-done'), btnRename = $('btn-av-rename');
   const menuRoot = $('menu');
   let working = null, saved = null, openedAt = 0, isOpen = false;
-  let soon = null;                  // { slot, id }: the locked item last tapped (its row says "Coming soon")
+  let told = null;                  // { slot, id }: the unlockable item last tapped (its row says what it is)
   let lookLoading = false, previewBad = false, previewSeq = 0;   // (the preview of a new look: on its way / failed)
   if (!host || !body) return { open() {}, close() {}, get isOpen() { return false; }, debug: () => null };
 
@@ -51,8 +61,17 @@ export function createAvatarEditor(doc, { account, onPreview, onDone, onRename }
     requestAnimationFrame(() => menuRoot.classList.remove('snap'));
   };
   const owns = id => !!account?.owns?.(id);
-  const wearable = it => isAvailable(it, owns);
+  const wearable = it => canWear(it, working.body, owns);
   const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+  const chosen = slot => (COLOUR_SLOTS.includes(slot) ? working.colours[slot] : working[slot]);
+  // What an unlockable item will be: "Achievement: Seen through" / "Achievement: a later honour" / "Boutique · opens
+  // later", then "unlocked for testing" while the switch makes it wearable.
+  function kindOf(it) {
+    if (!it || isFree(it)) return '';
+    const what = it.unlock === 'achievement'
+      ? `Achievement: ${achievement(it.achievement)?.label || 'a later honour'}` : 'Boutique · opens later';
+    return unlockedForTesting(it, owns) ? `${what} · unlocked for testing` : wearable(it) ? what : `${what} · ${SOON.toLowerCase()}`;
+  }
 
   function preview() {
     const seq = ++previewSeq;
@@ -69,31 +88,30 @@ export function createAvatarEditor(doc, { account, onPreview, onDone, onRename }
   }
   function pick(av) {
     working = normaliseAvatar(av, { owns });
-    soon = null;
     preview();
     render();
   }
 
   // ---- rows ----
-  function row(slot, label, caption, inner, { chips = false } = {}) {
+  function row(slot, label, caption, inner, { chips = false, kind = '', locked = false } = {}) {
     return `<div class="av-row" data-slot="${slot}">
       <div class="av-label"><span class="av-slot">${esc(label)}</span><span class="av-caption">${caption}</span></div>
+      ${kind ? `<div class="av-kind">${locked ? LOCK : ''}<span>${esc(kind)}</span></div>` : ''}
       <div class="av-opts${chips ? ' chips' : ''}" role="radiogroup" aria-label="${esc(label)}">${inner}</div></div>`;
   }
-  const captionFor = (slot, current) => {
-    if (soon?.slot === slot) { const it = item(slot, soon.id); return `${LOCK}<span>${esc(it?.label || '')} · ${SOON}</span>`; }
-    return esc(current || '');
-  };
-  function chip(slot, id, label, on, locked = false) {
-    return `<button type="button" class="av-chip${on ? ' on' : ''}${locked ? ' locked' : ''}" role="radio" aria-checked="${on}"
-      data-slot="${slot}" data-id="${esc(id)}"${locked ? ` aria-label="${esc(label)}, ${SOON.toLowerCase()}"` : ''}>
-      <span class="av-chip-main">${locked ? LOCK : ''}${esc(label)}</span>${locked ? `<span class="av-chip-soon">${SOON}</span>` : ''}</button>`;
+  const markOf = it => (isFree(it) ? '' : it.unlock === 'achievement' ? ROSETTE : DIAMOND);
+  function chip(slot, id, label, on, it = null) {
+    const locked = !!it && !wearable(it), kind = kindOf(it);
+    return `<button type="button" class="av-chip${on ? ' on' : ''}${locked ? ' locked' : ''}${kind ? ' unlockable' : ''}" role="radio" aria-checked="${on}"
+      data-slot="${slot}" data-id="${esc(id)}"${kind ? ` aria-label="${esc(label)}, ${esc(kind.toLowerCase())}"` : ''}>
+      <span class="av-chip-main">${locked ? LOCK : it ? markOf(it) : ''}${esc(label)}</span>${locked ? `<span class="av-chip-soon">${SOON}</span>` : ''}</button>`;
   }
   function swatch(it, on) {
-    const locked = !wearable(it);
-    return `<button type="button" class="av-sw${on ? ' on' : ''}${locked ? ' locked' : ''}" role="radio" aria-checked="${on}"
-      data-slot="${it.slot}" data-id="${esc(it.id)}" aria-label="${esc(it.label)}${locked ? `, ${SOON.toLowerCase()}` : ''}" title="${esc(it.label)}${locked ? ` (${SOON})` : ''}">
-      <span class="av-dot" style="background:${swatchStyle(it)}"></span>${locked ? `<span class="av-badge">${LOCK}</span>` : ''}</button>`;
+    const locked = !wearable(it), kind = kindOf(it), label = labelOf(it, working.body);
+    const badge = locked ? LOCK : markOf(it);
+    return `<button type="button" class="av-sw${on ? ' on' : ''}${locked ? ' locked' : ''}${kind ? ' unlockable' : ''}" role="radio" aria-checked="${on}"
+      data-slot="${it.slot}" data-id="${esc(it.id)}" aria-label="${esc(label)}${kind ? `, ${esc(kind.toLowerCase())}` : ''}" title="${esc(label)}${kind ? ` (${esc(kind)})` : ''}">
+      <span class="av-dot" style="background:${swatchStyle(it)}"></span>${badge ? `<span class="av-badge">${badge}</span>` : ''}</button>`;
   }
 
   function render() {
@@ -101,20 +119,29 @@ export function createAvatarEditor(doc, { account, onPreview, onDone, onRename }
     if (!av) return;
     const keep = body.scrollTop;
     const html = [];
-    const body0 = bodyOf(av.base);
-    html.push(row('body', 'Body', '', BODIES.map(b => chip('body', b.id, b.label, b.id === body0)).join(''), { chips: true }));
-    html.push(row('base', SLOT_LABELS.base, lookLoading ? `${esc(BASES[av.base].label)} · Loading…` : esc(BASES[av.base].label),
-      basesFor(body0).map(b => chip('base', b, BASES[b].label, b === av.base)).join(''), { chips: true }));
-    for (const slot of slotsFor(av)) {
-      const list = itemsFor(slot, av.base);
-      const cur = item(slot, av[slot]);
+    const gender = genderOf(av.body), look = lookOf(av);
+    html.push(row('body', 'Body', '', GENDERS.map(g => chip('body', g.id, g.label, g.id === gender)).join(''), { chips: true }));
+    // (the Look row keeps the data-slot 'base' of the v1 screen: its styles and tests)
+    const lookCaption = look ? LOOK_LABELS[look] : 'Your own mix';
+    html.push(row('base', SLOT_LABELS.look, lookLoading ? `${esc(lookCaption)} · Loading…` : esc(lookCaption),
+      looksFor(gender).map(id => chip('base', id, LOOK_LABELS[id], id === look)).join(''), { chips: true }));
+    const shown = slotsFor(av);
+    for (const slot of ROWS.filter(s => shown.includes(s))) {
+      const list = itemsFor(slot, av.body);
+      const cur = item(slot, chosen(slot));
       let label = SLOT_LABELS[slot];
-      if (slot === 'accent' && BASES[av.base].accentLabel) label = `${label} · ${BASES[av.base].accentLabel}`;
-      if (slot === 'glasses') {
-        html.push(row(slot, label, captionFor(slot, ''), list.map(it => chip(slot, it.id, it.label, it.id === av[slot], !wearable(it))).join(''), { chips: true }));
-      } else {
-        html.push(row(slot, label, captionFor(slot, cur?.label), list.map(it => swatch(it, it.id === av[slot])).join('')));
+      if (slot === 'accent') {
+        const by = SLOTS_BY_GENDER[gender].map(s => item(s, av[s])).find(it => it?.colours.includes('accent'));
+        if (by) label = `${label} · ${labelOf(by, av.body)}`;
       }
+      // (the item this row talks about: the unlockable one just tapped, else the one worn)
+      const about = told?.slot === slot ? item(slot, told.id) : cur;
+      const kind = kindOf(about), locked = !!about && !wearable(about);
+      const caption = esc(about && about !== cur ? labelOf(about, av.body) : slot === 'glasses' ? '' : labelOf(cur, av.body));
+      const inner = slot === 'glasses'
+        ? list.map(it => chip(slot, it.id, labelOf(it, av.body), it.id === chosen(slot), it)).join('')
+        : list.map(it => swatch(it, it.id === chosen(slot))).join('');
+      html.push(row(slot, label, caption, inner, { chips: slot === 'glasses', kind, locked }));
     }
     body.innerHTML = html.join('');
     body.scrollTop = keep;
@@ -124,7 +151,8 @@ export function createAvatarEditor(doc, { account, onPreview, onDone, onRename }
       : account && account.persistent === false
         ? 'This device is not keeping your choices (private browsing?): they last until you close the page.'
         : previewBad ? 'Preview unavailable — your choices are still saved.'
-          : 'More outfits and accessories are coming soon.';
+          : ITEMS.some(it => unlockedForTesting(it, owns)) ? 'Marked colours (achievements and the Boutique) are unlocked for testing.'
+            : 'More outfits and accessories are coming soon.';
   }
 
   // ---- taps ----
@@ -134,13 +162,19 @@ export function createAvatarEditor(doc, { account, onPreview, onDone, onRename }
     e.preventDefault();
     if (tooSoon(e, openedAt)) return;
     const slot = b.dataset.slot, id = b.dataset.id;
-    if (slot === 'body') { if (id !== bodyOf(working.base)) pick(withBody(working, id, { owns })); return; }
-    if (slot === 'base') { if (id !== working.base) pick(withBase(working, id, { owns })); return; }
+    if (slot === 'body') { told = null; if (id !== genderOf(working.body)) pick(withBody(working, id, { owns })); return; }
+    if (slot === 'base') {
+      // a classic Look: its pieces, your colours and your glasses kept
+      told = null;
+      if (id !== lookOf(working)) pick(withItem(applyLook(working, id, { keepColours: true, owns }), 'glasses', working.glasses, { owns }));
+      return;
+    }
     const it = item(slot, id);
     if (!it) return;
-    if (!wearable(it)) { soon = { slot, id }; render(); return; }   // (locked: "Coming soon", nothing changes)
-    if (working[slot] === id) { if (soon) { soon = null; render(); } return; }
-    pick({ ...working, [slot]: id });
+    told = isFree(it) ? null : { slot, id };
+    if (!wearable(it)) { render(); return; }      // (locked: the row says how it is had; nothing changes)
+    if (chosen(slot) === id) { render(); return; }
+    pick(withItem(working, slot, id, { owns }));
   });
   const click = (el, fn) => el?.addEventListener('click', e => { e.preventDefault(); if (tooSoon(e, openedAt)) return; fn(); });
   click(btnDone, () => onDone?.());
@@ -160,7 +194,7 @@ export function createAvatarEditor(doc, { account, onPreview, onDone, onRename }
       saved = profileAv ? { ...working } : null;
       isOpen = true;
       openedAt = performance.now();
-      soon = null;
+      told = null;
       previewBad = false;
       anchor(true);
       preview();
@@ -175,18 +209,21 @@ export function createAvatarEditor(doc, { account, onPreview, onDone, onRename }
       return save().catch(err => console.warn('your avatar could not be saved:', err));
     },
     get isOpen() { return isOpen; },
-    get avatar() { return working ? { ...working } : null; },
-    // (tests) what the screen shows: the rows, each with its choices, the chosen one and the locked ones
+    get avatar() { return working ? JSON.parse(JSON.stringify(working)) : null; },
+    // (tests) what the screen shows: the rows, each with its choices, the chosen one, the locked ones and the
+    // unlockable ones (marked)
     debug() {
       return {
-        open: isOpen, avatar: working ? { ...working } : null,
+        open: isOpen, avatar: working ? JSON.parse(JSON.stringify(working)) : null,
         rows: [...body.querySelectorAll('.av-row')].map(r => ({
           slot: r.dataset.slot,
           label: r.querySelector('.av-slot')?.textContent || '',
           caption: r.querySelector('.av-caption')?.textContent || '',
+          kind: r.querySelector('.av-kind')?.textContent || '',
           options: [...r.querySelectorAll('button[data-id]')].map(b => b.dataset.id),
           on: r.querySelector('button.on')?.dataset.id ?? null,
           locked: [...r.querySelectorAll('button.locked')].map(b => b.dataset.id),
+          unlockable: [...r.querySelectorAll('button.unlockable')].map(b => b.dataset.id),
         })),
       };
     },

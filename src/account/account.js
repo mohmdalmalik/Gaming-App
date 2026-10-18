@@ -16,7 +16,11 @@
 //   account.signUp(username)       -> Promise<{ ok, error? }>   error: the reason, in plain words
 //   account.rename(username)       -> Promise<{ ok, error? }>
 //   account.setAvatar(avatar)      -> Promise<{ ok, avatar }>   made safe (normaliseAvatar, owned items only)
-//   account.owns(itemId)           -> boolean ('glasses.monocle'): the free items, nothing else yet
+//   account.owns(itemId)           -> boolean ('glasses.monocle'): a free item, or one in the profile's inventory
+//   account.grant(itemId)          -> Promise<{ ok, added }>   an ACHIEVEMENT item earned (src/honours.js, at the end
+//                                  of a match): added to the inventory once, saved, heard (ok: false when it could not
+//                                  be saved). Boutique items are never granted on the device (a store and a server
+//                                  come later)
 //   account.onChange(fn)           -> unsubscribe; fn(profile) after every change (here or in another tab)
 //
 // Callers wait for `ready` before they first read `profile` (a server account has none until then).
@@ -24,13 +28,10 @@
 // save still plays.
 import { checkUsername } from './username.js';
 import { newProfile, repairProfile, startingAvatar } from './profile.js';
-import { ITEMS, itemId, normaliseAvatar } from '../data/wardrobe.js';
+import { itemById, normaliseAvatar, ownsFrom } from '../data/wardrobe.js';
 
+// (the key's name is not the version: the profile inside is version 2, src/account/profile.js)
 export const PROFILE_KEY = 'hotelEscape.profile.v1';
-
-// Nothing can be unlocked yet (the locked items say "Coming soon"): an item id in the inventory grants
-// nothing until unlocking exists, and then a server must check it (never trust the device's list).
-const UNLOCKING = false;
 
 const deepFreeze = o => {
   if (o && typeof o === 'object' && !Object.isFrozen(o)) { Object.freeze(o); for (const v of Object.values(o)) deepFreeze(v); }
@@ -87,7 +88,9 @@ export function createAccount({ store = deviceStore(), now = () => Date.now() } 
       const raw = store.load();
       if (raw === undefined) return { profile: null, readable: false };
       if (raw === null || raw === '') return { profile: null, readable: true };
-      const out = repairProfile(raw, { repairAvatar: av => normaliseAvatar(av, { owns }) });
+      // (owned items: the inventory of the profile being read, repaired first, never the one in memory: at the
+      // first read there is none yet, and another tab's save may carry a new one)
+      const out = repairProfile(raw, { repairAvatar: (av, { inventory }) => normaliseAvatar(av, { owns: ownsFrom(inventory) }) });
       return { profile: out.profile, repaired: out.repaired, readOnly: !!out.readOnly, kept: out.kept || null, readable: true };
     } catch (err) {
       // (no damaged save may stop the page: the register asks for a name again)
@@ -123,12 +126,9 @@ export function createAccount({ store = deviceStore(), now = () => Date.now() } 
     emit();
   });
 
-  function owns(id) {
-    const it = ITEMS.find(i => itemId(i) === id);
-    if (!it) return false;
-    if (it.unlock === 'free') return true;
-    return UNLOCKING && !!profile?.inventory?.includes(id);
-  }
+  // Owned: a free item, or one in the profile's inventory. (Checked on the device only while there is no server; once
+  // there is one, the server checks every item against its own ledger, never trusting the device's list.)
+  const owns = id => ownsFrom(profile?.inventory || [])(id);
   const stamp = () => new Date(now()).toISOString();
   // Ask the browser to keep this site's storage (Safari may clear it after 7 days without a visit), but
   // only where it decides quietly: Firefox asks the player in a pop-up, which is not what a name is for.
@@ -156,6 +156,8 @@ export function createAccount({ store = deviceStore(), now = () => Date.now() } 
       if (kept) {
         // a saved profile whose name is no longer allowed: the new name, everything else kept
         profile = { ...newProfile({ username: check.name, avatar: kept.avatar, id: kept.id, now: now() }), inventory: kept.inventory, createdAt: kept.createdAt };
+        if (kept.looks) profile.looks = kept.looks;
+        profile.avatar = normaliseAvatar(kept.avatar, { owns });
         kept = null;
       } else profile = newProfile({ username: check.name, avatar: normaliseAvatar(avatar || startingAvatar(check.name), { owns }), now: now() });
       write();
@@ -186,6 +188,16 @@ export function createAccount({ store = deviceStore(), now = () => Date.now() } 
         emit();
       }
       return { ok: true, avatar: copy(safe) };
+    },
+
+    async grant(id) {
+      const it = itemById(id);
+      if (!profile || !it || it.unlock !== 'achievement') return { ok: false, added: false };
+      if (profile.inventory.includes(id)) return { ok: true, added: false };
+      profile = { ...profile, inventory: [...profile.inventory, id], updatedAt: stamp() };
+      const saved = write();       // (false: read-only here, or the save failed; main.js grants it again later)
+      emit();
+      return { ok: saved, added: true };
     },
 
     onChange(fn) {

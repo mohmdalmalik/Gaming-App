@@ -1623,6 +1623,8 @@ html, body {
 
 /* The end screen: your record after this game, one quiet line under the result. */
 #end-overlay .card p.end-record { margin: -12px 0 18px; font-family: var(--serif); font-style: italic; font-size: 15px; letter-spacing: 0.02em; color: var(--brass); }
+/* an achievement the match earned (src/ui/honoursEnd.js), as quiet as the record line above it */
+#end-overlay .card p.end-honours { margin: -12px 0 18px; font-family: var(--serif); font-style: italic; font-size: 15px; letter-spacing: 0.02em; color: var(--brass-bright); }
 
 /* === Soul cards and known allies (src/ui/soulFace.js, tradeReveal.js, allies.js) =====================
    Every Possession card is its owner's own soul, with their face in its mirror (one drawn image, so the
@@ -1734,6 +1736,13 @@ html, body {
   #menu-settings .menu-field { margin-bottom: 5px; }
   #menu-settings .mf-label { margin-bottom: 3px; }
 }
+/* Settings > Quick chat and Clearer possessed eyes: two On / Off rows side by side, so the panel is no taller; the
+   one-line note under them only where the screen has room (a screen reader reads it with the row everywhere). */
+.menu-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 0 12px; }
+.menu-pair .menu-field { min-width: 0; }
+.menu-pair .mf-label { white-space: nowrap; letter-spacing: 0.1em; }
+#menu-settings .set-pair-note { margin: -2px 0 10px; font-size: 13px; line-height: 1.35; min-height: 0; }
+@media (max-height: 800px) { #menu-settings .set-pair-note { display: none; } }
 
 /* ==== Profiles: the register, the profile card and usernames at the table ========================
    (src/ui/register.js, src/ui/profileCard.js, src/ui/menu.js; the caps on long usernames in the guest
@@ -1861,6 +1870,12 @@ html, body {
 .av-chip.locked { border-style: dashed; color: var(--muted); }
 .av-chip.locked .av-lock { color: var(--brass); }
 .av-chip-soon { font: 700 11px/1 var(--sans); letter-spacing: 0.08em; text-transform: uppercase; color: #bfae86; }   /* (was brass-dim, 3.85:1: now about 8:1) */
+/* an unlockable item (avatar v2): a rosette (an achievement) or a diamond (the Boutique) on its swatch, and what it
+   will be on a small line under the row's label ("Boutique · opens later · unlocked for testing") */
+.av-mark { display: block; width: 10px; height: 11px; }
+.av-chip .av-mark { width: 11px; height: 12px; color: var(--brass); }
+.av-kind { display: flex; align-items: center; gap: 5px; margin: -1px 0 5px; font: 700 11px/1.2 var(--sans); letter-spacing: 0.08em; text-transform: uppercase; color: #bfae86; }
+.av-kind .av-lock { flex: none; color: var(--brass); }
 .av-note { margin-top: 4px; font-size: 12.5px; line-height: 1.35; color: var(--muted); text-wrap: pretty; }
 #menu-avatar .av-actions { margin-top: 10px; }
 @media (max-height: 800px) {

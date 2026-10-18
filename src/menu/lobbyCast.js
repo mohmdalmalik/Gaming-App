@@ -1,10 +1,11 @@
 // The people in the main-menu lobby: the six guests (in their game outfits), re-dressed staff
 // (manager, concierge) and a couple of background extras. One `Actor` per person.
 //
-// Cheap on purpose (iPad): each guest model ships as ~10-15 primitives (one per colour). They are
-// merged ONCE per model into a single skinned mesh whose colours live in a vertex-colour attribute,
-// so every person on screen is ONE draw call, and re-dressing a person (staff uniforms, extras) is
-// just a different colour attribute on the same shared geometry.
+// Cheap on purpose (iPad): each guest is one of the six classic Looks (src/data/wardrobe.js LOOKS), its pieces
+// assembled ONCE (src/render/avatarParts.js assemble, eyes merged in, its own colours baked into the vertex
+// colours) into a single skinned mesh, so every person on screen is ONE draw call, and re-dressing a person
+// (staff uniforms, extras) is just a different colour attribute on the same shared geometry, by material name
+// (the assembly's `ranges`).
 //
 // Animation: the GLB's 'Idle' and 'Walk' clips (the walk is in place: its phase is driven by the
 // distance walked / the stride length carried in the GLB extras, so feet never slide — the same
@@ -13,15 +14,14 @@
 // planted on the floor, forearms resting on the lap), blended in and out over ~0.6 s.
 //
 // The player's own avatar is the one exception (createAvatarActor): it is the game's own avatar model
-// (src/render/avatar.js: its parts, eye colour and glasses, repainted live by the wardrobe), driven by
-// the same Actor, so it walks, glances and boards like everyone else. ~10-15 draw calls, menu only.
+// (src/render/avatar.js: its pieces, eye colour and glasses, repainted live by the wardrobe), driven by
+// the same Actor, so it walks, glances and boards like everyone else. 2-3 draw calls, menu only.
 import * as THREE from 'three';
-import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
+import { assemble, preload } from '../render/avatarParts.js';
+import { LOOKS } from '../data/wardrobe.js';
 
-const loader = new GLTFLoader();
-const templates = new Map();   // model id -> Promise<template>
+const templates = new Map();   // Look id -> Promise<template>
 
 // The same faint warm rim + fill the game's guests get (src/render/characterView.js, guestLight), so
 // dark suits still read as silhouettes against a dark room. Part of the guests' own shader: no light.
@@ -44,49 +44,29 @@ function castMaterial() {
   return sharedMaterial;
 }
 
-// Load a guest model once and merge its primitives into one skinned mesh with vertex colours.
-// The template remembers which vertex ranges belong to which original material ('Jacket', 'Hair'…)
-// so a copy can be re-dressed by name.
+// A classic Look assembled once, as one skinned mesh with its colours in a vertex-colour attribute (linear RGB, the
+// lobby's own material reads it). The template remembers which vertex ranges belong to which material ('Jacket',
+// 'Hair'…) so a copy can be re-dressed by name.
 function loadTemplate(id) {
   if (templates.has(id)) return templates.get(id);
-  const p = loader.loadAsync(`assets/characters/${id}.glb`).then(gltf => {
-    const root = gltf.scene;
-    let strideLength = 1.1;
-    const parts = [];
-    root.traverse(o => {
-      if (o.userData && typeof o.userData.strideLength === 'number') strideLength = o.userData.strideLength;
-      if (o.isSkinnedMesh) parts.push(o);
-    });
-    if (!parts.length) throw new Error(`no skinned mesh in ${id}`);
-    const geos = [], ranges = {};
-    let offset = 0;
-    for (const m of parts) {
-      const g = m.geometry, n = g.attributes.position.count;
-      const base = m.material.color || new THREE.Color(1, 1, 1);
-      const src = g.attributes.color;
-      const col = new Float32Array(n * 3);
-      for (let i = 0; i < n; i++) {
-        const r = src ? src.getX(i) : 1, gg = src ? src.getY(i) : 1, b = src ? src.getZ(i) : 1;
-        col[i * 3] = base.r * r; col[i * 3 + 1] = base.g * gg; col[i * 3 + 2] = base.b * b;
-      }
-      const ng = new THREE.BufferGeometry();
-      for (const a of ['position', 'normal', 'skinIndex', 'skinWeight']) ng.setAttribute(a, g.attributes[a]);
-      ng.setAttribute('color', new THREE.BufferAttribute(col, 3));
-      if (g.index) ng.setIndex(g.index);
-      geos.push(ng);
-      const name = m.material.name || 'part';
-      (ranges[name] ||= []).push([offset, n]);
-      offset += n;
-    }
-    const merged = mergeGeometries(geos, false);
-    const carrier = parts[0];
-    carrier.geometry = merged;
+  const look = Object.prototype.hasOwnProperty.call(LOOKS, id) ? LOOKS[id] : null;
+  const p = (look ? assemble(look, { mergeEyes: true, bakeColours: true }) : Promise.reject(new Error(`no Look ${id}`))).then(asm => {
+    const root = SkeletonUtils.clone(asm.rig);
+    let carrier = null;
+    root.traverse(o => { if (o.isSkinnedMesh) carrier = o; });
+    if (!carrier) throw new Error(`no skinned mesh in ${id}`);
+    const src = asm.geometry, n = src.attributes.position.count, c = src.attributes.color;
+    const col = new Float32Array(n * 3);
+    for (let i = 0; i < n; i++) { col[i * 3] = c.getX(i); col[i * 3 + 1] = c.getY(i); col[i * 3 + 2] = c.getZ(i); }
+    const g = new THREE.BufferGeometry();
+    for (const a of ['position', 'normal', 'skinIndex', 'skinWeight']) g.setAttribute(a, src.attributes[a]);
+    g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    g.setIndex(src.index);
+    carrier.geometry = g;
     carrier.material = castMaterial();
     carrier.frustumCulled = false;   // skinned: the bind-pose bounds are wrong once posed
-    for (const m of parts.slice(1)) m.parent.remove(m);
-    const idle = gltf.animations.find(a => /idle/i.test(a.name)) || gltf.animations[0];
-    const walk = gltf.animations.find(a => /walk/i.test(a.name)) || gltf.animations[1];
-    return { id, root, strideLength, ranges, baseColor: merged.attributes.color.array.slice(), idle, walk };
+    // (baseColor is the drawn colours themselves: nothing writes them, and a re-dress copies them first)
+    return { id, asm, root, strideLength: asm.strideLength, ranges: asm.ranges, baseColor: col, idle: asm.clips.idle, walk: asm.clips.walk };
   });
   templates.set(id, p);
   return p;
@@ -123,14 +103,16 @@ function dressedGeometry(tpl, mesh, dress) {
   return g;
 }
 
-// Free the shared, merged guest geometry (a later lobby simply loads the models again).
+// Free the shared, merged guest geometry (a later lobby simply assembles the Looks again).
 export function disposeCast() {
-  for (const p of templates.values()) p.then(t => t && t.root.traverse(o => { if (o.isSkinnedMesh) o.geometry.dispose(); })).catch(() => {});
+  for (const p of templates.values()) p.then(t => { if (!t) return; t.root.traverse(o => { if (o.isSkinnedMesh) o.geometry.dispose(); }); t.asm.release(); }).catch(() => {});
   templates.clear();
 }
 
 export function preloadCast(ids) {
-  return Promise.all(ids.map(id => loadTemplate(id).catch(e => { console.warn('lobby: could not load guest', id, e && e.message); return null; })));
+  // (every piece of every Look downloaded at once, then each Look assembled)
+  const looks = ids.map(id => (Object.prototype.hasOwnProperty.call(LOOKS, id) ? LOOKS[id] : null)).filter(Boolean);
+  return preload(looks).then(() => Promise.all(ids.map(id => loadTemplate(id).catch(e => { console.warn('lobby: could not load guest', id, e && e.message); return null; }))));
 }
 
 // ---- small maths helpers --------------------------------------------------------------------

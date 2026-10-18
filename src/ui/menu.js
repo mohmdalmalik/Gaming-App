@@ -10,7 +10,8 @@
 //   bots         how many other guests (3-5) and your role (random, clean, possessed)
 //   matchmaking  the table filling up, guest by guest, as in an online game
 //   settings     bot speed, the view on other guests' turns, graphics, the menu background, music,
-//                sound effects, quick chat and tips (each applied at once, through onSettingChanged;
+//                sound effects, quick chat beside clearer possessed eyes (for colour blindness: read when a
+//                game is set up, src/main.js planGame), and tips (each applied at once, through onSettingChanged;
 //                "Show tips again" brings back the tips already seen: src/ui/tips.js; the version of the
 //                game in a quiet line at the bottom: src/version.js)
 //   record       your record on this device (src/ui/record.js), with a reset that asks first

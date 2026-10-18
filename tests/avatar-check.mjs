@@ -1,37 +1,34 @@
-// Checks for the avatars: the catalogue (src/data/wardrobe.js), the computer guests' looks
-// (src/data/randomAvatar.js), the models, glasses and runtime portraits (src/render/avatar.js,
-// avatarGlasses.js, avatarPortrait.js), the wardrobe screen (src/ui/avatarEditor.js) and your avatar in
-// the menu's lobby (src/menu/lobbyScene.js). Run from tests/ with the static server on 8123:
-//   node avatar-check.mjs [--url http://127.0.0.1:8123/] [--shots DIR] [--skip node,render,portraits,eyes,wardrobe,lift,games]
+// Checks for the avatars as the game draws them (avatar v2: pieces on shared bodies): the guests assembled from their
+// pieces (src/render/avatarParts.js, avatar.js), the glasses (avatarGlasses.js), the runtime portraits
+// (avatarPortrait.js), the red eyes, the wardrobe screen (src/ui/avatarEditor.js) with your avatar in the menu's lobby
+// (src/menu/lobbyScene.js), the lift, and four tables in a row. (The catalogue, the v1 -> v2 migration and the bots'
+// looks are data: tests/wardrobe-check.mjs.) Run from tests/ with the static server on 8123:
+//   node avatar-check.mjs [--url http://127.0.0.1:8123/] [--shots DIR] [--skip render,portraits,eyes,wardrobe,lift,games]
 //
-//   1. node       the catalogue: unique ids, valid colours, exactly the six locked "Coming soon" items, an
-//                 avatar made safe (unknown, locked or damaged values back to the look's own), another
-//                 look or body keeps what it can, the wardrobe's slots per look
-//   2. node       the bots' looks: the same name always gives the same look, free items only, never a
-//                 look already at the table (the player's included) over 2000 tables, all six looks used
-//   3. render     every look takes every value of every slot (the right parts painted, the iris or the
-//                 model's own eyes, the glasses: fitted ones or Henry's own), no console errors; glasses
-//                 for every look and style (built, a sensible size, round the eyes)
-//   4. portraits  each look in its own colours, drawn at run time, matches the shipped picture
-//                 (assets/portraits/*.jpg, normal and possessed): mean error under 3 levels of 255
-//   5. eyes       the red eyes on every look with every eye colour (pixels at the eyes of a portrait), the
-//                 iris colour back when not possessed, and the possessed switch kept through a change of
-//                 eye colour (setAvatar while possessed); the shader programs stay within the budget
-//   6. wardrobe   at 1024x768, 1180x820 and 1366x1024: the page never scrolls, the panel and Done are on
-//                 screen, your avatar stands in the space right of the panel, head to feet; the rows in
-//                 order; the locked items carry a lock and "Coming soon" and cannot be chosen; a pick shows
-//                 on your avatar in the lobby at once; Done keeps it (your profile); Change name opens the
-//                 register in rename mode
-//   7. lift       practice: your avatar boards alone; a match: you with Victor and Clara (Henry in place of
-//                 a guest in your own look: the test profile's Tuxedo is Victor's)
-//   8. games      four tables in a row (Play again): one character view per seat, built from the seats'
-//                 avatars, the others let go; the strip's portraits are the seats' own; geometry, shader
-//                 programs and draw calls stay bounded
+//   3. render     every classic Look takes every colour of every row (the right palette entries, the iris or the
+//                 face's own eyes); every glasses style merged into the guest (no draw call of its own), Henry's own
+//                 frames for Round; glasses fitted to every face (built, a sensible size, round the eyes); every
+//                 hairstyle on every face and every jacket with every tie, every gown with every belt: assembled,
+//                 2-3 draw calls, within the triangle cap, no shadow baked against another version of its piece
+//   4. portraits  each Look's runtime portrait framed like the pictures: the eyes level and in the middle, at 37 %
+//                 of the height (men) or with the whole hairdo in (women); Victor's matches his shipped picture; every
+//                 face has a shipped picture to show until its portrait is drawn
+//   5. eyes       the red eyes on every Look with every eye colour (pixels at the eyes of a portrait), the iris colour
+//                 back when not possessed, and the possessed switch kept through a change of eye colour (setAvatar
+//                 while possessed); the shader programs stay within the budget; the eyewear red-eye test (every
+//                 glasses style on every Look: no style hides more of the red eyes than today's; a new one meets 0.90)
+//   6. wardrobe   at 1024x768, 1180x820 and 1366x1024: the page never scrolls, the panel and Done are on screen, your
+//                 avatar stands in the space right of the panel, head to feet; the rows in order; the unlockable
+//                 items marked (wearable for testing); a pick shows on your avatar in the lobby at once; Done keeps it
+//                 (your profile, v2); Change name opens the register in rename mode
+//   7. lift       practice: your avatar boards alone; a match: you with Henry and Clara (never Victor beside a
+//                 guest who looks like him: the test profile is Victor's Look)
+//   8. games      four tables in a row (Play again): one character view per seat, built from the seats' avatars, the
+//                 others let go; the strip's portraits are the seats' own; geometry, shader programs and draw calls
+//                 stay bounded
 import fs from 'node:fs';
 import { launch } from './smoke-lib.mjs';
-import { BASES, ITEMS, SLOTS, item, itemId, itemsFor, normaliseAvatar, originalAvatar, slotsFor, withBase, withBody,
-  avatarKey, avatarFromGuest, isAvailable, basesFor } from '../src/data/wardrobe.js';
-import { randomAvatar, tableAvatars } from '../src/data/randomAvatar.js';
+import { item } from '../src/data/wardrobe.js';
 import { lobbyLayout } from '../src/menu/lobbyLayout.js';
 
 const args = process.argv.slice(2);
@@ -42,68 +39,7 @@ const skip = new Set((arg('--skip', '') || '').split(',').filter(Boolean));
 if (shots) fs.mkdirSync(shots, { recursive: true });
 const failures = [];
 const check = (cond, msg) => { if (cond) console.log('  ok  ', msg); else { console.log('  FAIL', msg); failures.push(msg); } };
-const BASE_IDS = Object.keys(BASES);
-const LOCKED = ['hair.platinum', 'glasses.monocle', 'frame.goldFrame', 'main.champagne', 'main.gatsby', 'metal.roseGold'];
-const PROGRAM_BUDGET = 28;      // a six-seat match (measured 22; 18 before avatars)
-
-// ---------------------------------------------------------------------------------------------------
-if (!skip.has('node')) {
-  console.log('\n1. the catalogue');
-  const ids = ITEMS.map(itemId);
-  check(new Set(ids).size === ids.length, `every item has its own id (${ids.length} items)`);
-  const hexOk = v => /^#[0-9a-f]{6}$/i.test(v);
-  check(ITEMS.every(it => it.value == null || (Array.isArray(it.value) ? it.value.every(hexOk) : hexOk(it.value) || ['round', 'oval', 'deco', 'pincenez', 'monocle'].includes(it.value))), 'every colour is a 6-digit hex');
-  check(JSON.stringify(ITEMS.filter(it => it.unlock !== 'free').map(itemId).sort()) === JSON.stringify([...LOCKED].sort()), `exactly the six locked items: ${LOCKED.join(', ')}`);
-  check(ITEMS.filter(it => it.slot === 'eyes' && it.value).every(it => { const [r, g, b] = [1, 3, 5].map(i => parseInt(it.value[2].slice(i, i + 2), 16)); return !(r > 2 * g && r > 2 * b) && !(b > 1.3 * g && r > 1.3 * g); }), 'no eye colour is red, pink or violet (red eyes mean possessed)');
-  for (const b of BASE_IDS) {
-    const o = originalAvatar(b);
-    check(JSON.stringify(normaliseAvatar(o)) === JSON.stringify(o), `${b}: its own look is already safe`);
-  }
-  const bad = normaliseAvatar({ base: 'clara', skin: 'nope', hair: 'platinum', eyes: 'red', glasses: 'monocle', frame: 'goldFrame', main: 'gatsby', accent: 12, metal: 'roseGold' });
-  check(bad.base === 'clara' && bad.hair === originalAvatar('clara').hair && bad.glasses === 'none' && bad.main === originalAvatar('clara').main && bad.metal === 'gold' && bad.skin === originalAvatar('clara').skin,
-    `unknown and locked values fall back to the look's own (${JSON.stringify(bad)})`);
-  check(normaliseAvatar(null).base === 'victor' && normaliseAvatar('junk').v === 1, 'nothing at all gives a whole avatar');
-  {
-    // (built-in names of every object are not looks: a saved or received 'constructor' never crashes)
-    let ok = true;
-    for (const b of ['constructor', '__proto__', 'toString', 'hasOwnProperty', 'valueOf']) {
-      try { ok = ok && normaliseAvatar({ base: b }).base === 'victor' && withBase(originalAvatar('clara'), b).base === 'clara' && originalAvatar(b).base === 'victor'; } catch { ok = false; }
-    }
-    check(ok, 'a look called "constructor", "__proto__", "toString", "hasOwnProperty" or "valueOf" is no look: made safe, never a crash');
-  }
-  check(normaliseAvatar({ ...originalAvatar('marcus'), glasses: 'monocle' }, { owns: id => id === 'glasses.monocle' }).glasses === 'monocle', 'an owned locked item is kept (for later: nothing is owned yet)');
-  const m = { ...originalAvatar('marcus'), skin: 'deep', eyes: 'green', glasses: 'oval', main: 'plum', accent: 'brass' };
-  const f = withBody(m, 'f');
-  check(f.base === 'eleanor' && f.skin === 'deep' && f.eyes === 'green' && f.glasses === 'oval' && f.main === 'plum', `Female keeps skin, eyes, glasses and outfit (${f.base})`);
-  check(withBody(f, 'm').base === 'marcus', 'and Male goes back to the same place among the looks');
-  check(withBase(m, 'henry').accent === 'brass' && withBase(m, 'eleanor').accent === originalAvatar('eleanor').accent, 'the accent is kept only where the look has one');
-  check(JSON.stringify(basesFor('m')) === '["victor","marcus","henry"]' && JSON.stringify(basesFor('f')) === '["clara","eleanor","beatrice"]', 'Male: Tuxedo, Suit and tie, Dinner jacket; Female: Column dress, Ballgown, A-line gown');
-  check(JSON.stringify(slotsFor(originalAvatar('victor'))) === '["skin","hair","eyes","glasses","main","accent"]', 'Tuxedo: Skin tone, Hair, Eyes, Glasses, Outfit, Accent');
-  check(JSON.stringify(slotsFor({ ...originalAvatar('eleanor'), glasses: 'round' })) === '["skin","hair","eyes","glasses","frame","main","metal"]', 'Ballgown with glasses: … Glasses, Frame, Outfit, Jewellery (no accent)');
-  check(itemsFor('accent', 'beatrice').length === 0 && itemsFor('metal', 'marcus').length === 0 && itemsFor('metal', 'clara').length === 3, 'accent and jewellery only where the look has them');
-  check(avatarKey(m) !== avatarKey({ ...m, eyes: 'blue' }) && avatarKey(m) === avatarKey({ ...m }), 'the avatar key follows every slot');
-  check(avatarFromGuest('p6')?.base === 'clara' && avatarFromGuest('random') === null, "last round's guest choice gives that look (Clara), Random none");
-
-  console.log('\n2. the computer guests\' looks');
-  const names = ['nightowl', 'fennel', 'velvet_owl', 'brass_lark', 'Mabel', 'cardboardknight', 'grumpy_otter', 'pocketfox', 'echo_echo', 'bramble', 'hollow_reed', 'plum'];
-  check(names.every(n => JSON.stringify(randomAvatar(n)) === JSON.stringify(randomAvatar(n))), 'the same name always gives the same look');
-  let clash = 0, locked = 0, mineTaken = 0;
-  const seen = new Set();
-  const pool = Array.from({ length: 84 }, (_, i) => `guest${i}_${(i * 7919) % 97}`);
-  for (let t = 0; t < 2000; t++) {
-    const me = normaliseAvatar(randomAvatar(`player${t}`));
-    const us = Array.from({ length: 3 + (t % 3) }, (_, k) => pool[(t * 11 + k * 17) % pool.length]);
-    const avs = tableAvatars(us, { taken: [me] });
-    const looks = [me, ...avs].map(a => a.base);
-    if (new Set(looks).size !== looks.length) clash++;
-    if (avs.some(a => a.base === me.base)) mineTaken++;
-    for (const a of avs) { seen.add(a.base); for (const s of SLOTS) if (s !== 'base' && !isAvailable(item(s, a[s]))) locked++; }
-  }
-  check(clash === 0, `2000 tables: never two guests in the same look (${clash})`);
-  check(mineTaken === 0, `never a bot in your look (${mineTaken})`);
-  check(locked === 0, `free items only: no bot wears a locked item (${locked})`);
-  check(seen.size === 6, `all six looks are worn (${[...seen].join(', ')})`);
-}
+const PROGRAM_BUDGET = 28;      // a six-seat match (measured 21 with pieces; 22 before; 18 before avatars)
 
 // ---------------------------------------------------------------------------------------------------
 // The render checks run in the game's own page (a direct link: no menu), small and at a low resolution so
@@ -120,87 +56,152 @@ if (!skip.has('render') || !skip.has('portraits') || !skip.has('eyes')) {
   const { browser, page, messages } = await renderPage();
 
   if (!skip.has('render')) {
-    console.log('\n3. every look, every value; glasses');
+    console.log('\n3. every Look, every colour; glasses; every piece with every piece');
     const r = await page.evaluate(async () => {
       const W = await import('./src/data/wardrobe.js');
       const A = await import('./src/render/avatar.js');
+      const P = await import('./src/render/avatarParts.js');
       const G = await import('./src/render/avatarGlasses.js');
       const THREE = await import('three');
-      const near = (c, hex) => { const t = new THREE.Color(hex); return Math.abs(c.r - t.r) + Math.abs(c.g - t.g) + Math.abs(c.b - t.b) < 1e-4; };
-      const out = { bad: [], applied: 0, glasses: [] };
-      for (const b of Object.keys(W.BASES)) {
-        const base = await A.loadBase(b);
-        const def = W.BASES[b];
-        const model = A.createAvatarModel(base, W.originalAvatar(b));
-        for (const it of W.ITEMS) {
-          if (!W.itemsFor(it.slot, b).length) continue;
-          const av = { ...W.originalAvatar(b), [it.slot]: it.id, ...(it.slot === 'frame' ? { glasses: 'oval' } : {}) };
+      const lin = hex => { const c = new THREE.Color(hex); return [c.r, c.g, c.b]; };
+      const near = (pal, slot, rgb) => Math.abs(pal[slot * 3] - rgb[0]) + Math.abs(pal[slot * 3 + 1] - rgb[1]) + Math.abs(pal[slot * 3 + 2] - rgb[2]) < 1e-4;
+      const calls = m => { let n = 0; m.root.traverse(o => { if (o.isMesh) n += Array.isArray(o.material) ? o.geometry.groups.filter(g => o.material[g.materialIndex]?.visible !== false).length : 1; }); return n; };
+      const out = { bad: [], applied: 0, glasses: [], fits: [], mixes: { n: 0, bad: [] } };
+      const COLOURS = ['skin', 'hair', 'eyes', 'main', 'accent', 'metal', 'frame'];
+      for (const id of Object.keys(W.LOOKS)) {
+        const look = W.LOOKS[id];
+        const base = await A.loadBase(look);
+        const model = A.createAvatarModel(base, look);
+        const pal = model.mesh.material.userData.palette;
+        for (const slot of COLOURS) for (const it of W.itemsFor(slot, look.body)) {
+          const av = W.withItem(look, slot, it.id);
+          if (av.colours[slot] !== it.id) continue;      // (not wearable on this Look)
           model.setAvatar(av);
           out.applied++;
-          const part = n => model.parts[n]?.material;
+          const P2 = W.paletteHex(av);
           let ok = true;
-          if (it.slot === 'skin') ok = def.parts.skin.every(n => near(part(n).color, it.value)) && (def.parts.lips || []).every(n => near(part(n).color, it.lips));
-          if (it.slot === 'hair') ok = def.parts.hair.every(n => near(part(n).color, it.value)) && def.parts.brow.every(n => !part(n) || near(part(n).color, it.brow));
-          if (it.slot === 'main' || it.slot === 'accent' || it.slot === 'metal') ok = (def.parts[it.slot] || []).every(n => near(part(n).color, it.value));
-          if (it.slot === 'eyes') {
-            const m = model.parts.Eye.mesh.material;
-            ok = it.value ? m.userData.possessedUniforms && near(m.userData.possessedUniforms.uIrisCore.value, it.value[2]) && m.userData.possessedUniforms.uGlow.value === 0
-              : m === model.parts.Eye.material;
+          if (slot === 'skin') ok = near(pal, P.PALETTE.skin, lin(it.value)) && near(pal, P.PALETTE.lips, lin(it.lips));
+          if (slot === 'hair') ok = near(pal, P.PALETTE.hair, lin(it.value)) && near(pal, P.PALETTE.brow, lin(it.brow));
+          if (slot === 'main') {
+            const m = lin(it.value), l = m[0] * 0.2126 + m[1] * 0.7152 + m[2] * 0.0722;
+            const k = THREE.MathUtils.lerp(0.25, 0.62, THREE.MathUtils.smoothstep(l, 0.02, 0.5));
+            ok = near(pal, P.PALETTE.main, m) && near(pal, P.PALETTE.lapel, m.map(v => v * 0.62)) && near(pal, P.PALETTE.shade, m.map(v => v * k));
           }
-          if (it.slot === 'glasses') {
-            const builtIn = def.builtInGlasses && model.parts[def.builtInGlasses];
-            if (!it.value) ok = !model.glasses && (!builtIn || !builtIn.mesh.visible);
-            else if (builtIn && it.value === 'round') ok = builtIn.mesh.visible && !model.glasses;
-            else ok = !!model.glasses && model.glasses.parent === model.headBone && (!builtIn || !builtIn.mesh.visible);
+          if (slot === 'accent' || slot === 'metal') ok = near(pal, P.PALETTE[slot], lin(it.value));
+          if (slot === 'frame') ok = near(pal, P.PALETTE.frame, lin(P2.frame));
+          if (slot === 'eyes') {
+            const m = model.eyeMesh.material[0];
+            ok = it.value ? !!m.userData.possessedUniforms && m.userData.possessedUniforms.uIrisCore.value.getHexString() === new THREE.Color(it.value[2]).getHexString() && m.userData.possessedUniforms.uGlow.value === 0
+              : m.name === 'Eye' && !m.userData.possessedUniforms;
           }
-          if (it.slot === 'frame') ok = !!model.glasses && near(model.glasses.material.color, it.value);
-          if (!ok) out.bad.push(`${b}:${it.slot}.${it.id}`);
+          if (!ok) out.bad.push(`${id}:${slot}.${it.id}`);
+        }
+        // the glasses: merged into the guest (its own pieces, no draw call of its own); Henry's own frames for Round
+        for (const g of W.itemsFor('glasses', look.body)) {
+          const av = W.withItem(look, 'glasses', g.id);
+          const b2 = await A.loadBase(av);
+          const m2 = A.createAvatarModel(b2, av);
+          const own = W.partKeysFor(av).builtInGlasses;
+          const rng = b2.ranges.Glasses || [];
+          const ok = g.id === 'none' ? !rng.length && !m2.glasses
+            : rng.length === 1 && !!m2.glasses && (own ? b2.builtInGlasses === own : b2.glasses === g.value);
+          out.glasses.push({ id, g: g.id, own: !!own, calls: calls(m2), verts: rng.reduce((s, x) => s + x[1], 0), ok });
+          m2.dispose();
         }
         model.dispose();
+      }
+      // glasses fitted to every face and style (built, a sensible size, round the eyes)
+      for (const body of ['m', 'f']) for (const face of W.itemsFor('face', body)) {
+        const av = W.withItem(W.LOOKS[body === 'm' ? 'victor' : 'clara'], 'face', face.id);
+        const asm = await A.loadBase(av);
         for (const style of ['round', 'oval', 'deco', 'pincenez', 'monocle']) {
-          const geo = G.buildGlasses(base, style);
+          const geo = G.buildGlasses(asm, style);
           const tris = geo ? (geo.index ? geo.index.count : geo.attributes.position.count) / 3 : 0;
-          const e = base.eyes;
-          if (!geo.boundingBox) geo.computeBoundingBox();
-          const bb = geo.boundingBox, front = Math.max(e.left.centre.z, e.right.centre.z);
+          const e = asm.eyes;
+          if (geo && !geo.boundingBox) geo.computeBoundingBox();
+          const bb = geo?.boundingBox, front = Math.max(e.left.centre.z, e.right.centre.z);
           // in front of the eyes (the bridge over the big noses: at most 9 cm), across both eyes (one for the
           // monocle), at eye height
-          const ok = bb.max.z > front && bb.max.z < front + 0.09
+          const ok = !!bb && bb.max.z > front && bb.max.z < front + 0.09
             && bb.min.x < e.left.centre.x && (style === 'monocle' || bb.max.x > e.right.centre.x)
             && bb.min.y < e.left.centre.y && bb.max.y > e.left.centre.y
             && (style === 'pincenez' || style === 'monocle' || bb.min.z < front - 0.08);   // (temples back toward the ears)
-          out.glasses.push({ b, style, tris: Math.round(tris), ok, box: [bb.min.toArray().map(v => +v.toFixed(3)), bb.max.toArray().map(v => +v.toFixed(3))] });
+          out.fits.push({ face: face.id, style, tris: Math.round(tris), ok });
         }
+      }
+      // every hairstyle on every face (moustaches too), every jacket with every tie, every gown with every belt
+      const mixes = [];
+      for (const body of ['m', 'f']) {
+        const start = W.LOOKS[body === 'm' ? 'victor' : 'clara'];
+        for (const face of W.itemsFor('face', body)) for (const hair of W.itemsFor('hairStyle', body)) {
+          let av = W.withItem(W.withItem(start, 'face', face.id), 'hairStyle', hair.id);
+          if (body === 'm') for (const f of W.itemsFor('facial', 'm')) mixes.push(W.withItem(av, 'facial', f.id));
+          else mixes.push(av);
+        }
+        if (body === 'm') for (const top of W.itemsFor('top', 'm')) for (const neck of W.itemsFor('neck', 'm')) mixes.push(W.withItem(W.withItem(start, 'top', top.id), 'neck', neck.id));
+        else for (const dress of W.itemsFor('dress', 'f')) for (const belt of W.itemsFor('belt', 'f')) for (const ex of W.itemsFor('extra', 'f'))
+          mixes.push(W.withItem(W.withItem(W.withItem(start, 'dress', dress.id), 'belt', belt.id), 'extra', ex.id));
+      }
+      const seen = new Set();
+      for (const av of mixes) {
+        const k = W.geometryKey(av);
+        if (seen.has(k)) continue;
+        seen.add(k);
+        const asm = await P.assemble(av);
+        const m = A.createAvatarModel(asm, av);
+        const c = calls(m), tris = asm.stats.tris;
+        out.mixes.n++;
+        if (c < 2 || c > 3 || tris > W.TRIANGLE_CAP || asm.warnings.length) out.mixes.bad.push(`${k}: ${c} calls, ${tris} tris ${asm.warnings.join(' ')}`);
+        m.dispose(); asm.release();
       }
       return out;
     });
-    check(r.bad.length === 0, `${r.applied} values applied on the six looks, each painting what it should${r.bad.length ? ` (wrong: ${r.bad.join(', ')})` : ''}`);
-    const gBad = r.glasses.filter(g => !(g.tris > 300 && g.tris < 6000 && g.ok));
-    check(gBad.length === 0, `glasses for every look and style: built, ${Math.min(...r.glasses.map(g => g.tris))}-${Math.max(...r.glasses.map(g => g.tris))} triangles, in front of the eyes, temples back to the ears${gBad.length ? ` (odd: ${JSON.stringify(gBad)})` : ''}`);
+    check(r.bad.length === 0, `${r.applied} colours applied on the six Looks, each painting its palette entry${r.bad.length ? ` (wrong: ${r.bad.join(', ')})` : ''}`);
+    const gBad = r.glasses.filter(g => !g.ok || g.calls > 3);
+    check(gBad.length === 0, `every glasses style on every Look merged into the guest (${r.glasses.length}: ${Math.min(...r.glasses.map(g => g.calls))}-${Math.max(...r.glasses.map(g => g.calls))} draw calls), Henry's own frames for Round${gBad.length ? ` (odd: ${JSON.stringify(gBad)})` : ''}`);
+    const fBad = r.fits.filter(g => !(g.tris > 300 && g.tris < 6000 && g.ok));
+    check(fBad.length === 0, `glasses fitted to every face and style: built, ${Math.min(...r.fits.map(g => g.tris))}-${Math.max(...r.fits.map(g => g.tris))} triangles, in front of the eyes, temples back to the ears${fBad.length ? ` (odd: ${JSON.stringify(fBad)})` : ''}`);
+    check(r.mixes.n > 40 && r.mixes.bad.length === 0, `${r.mixes.n} mixes of pieces (every hairstyle and moustache on every face, every jacket with every tie, every gown with every belt and earrings) assembled: 2-3 draw calls, within the triangle cap, no stale shadow${r.mixes.bad.length ? ` (odd: ${r.mixes.bad.slice(0, 4).join(' | ')})` : ''}`);
   }
 
   if (!skip.has('portraits')) {
-    console.log('\n4. runtime portraits vs the shipped pictures');
+    console.log('\n4. runtime portraits');
     const r = await page.evaluate(async () => {
       const W = await import('./src/data/wardrobe.js');
       const P = window.__game.portraits();
       const pixels = (src, w, h) => new Promise((res, rej) => { const i = new Image(); i.onload = () => { const c = document.createElement('canvas'); c.width = w; c.height = h; const g = c.getContext('2d', { willReadFrequently: true }); g.drawImage(i, 0, 0, w, h); res(g.getImageData(0, 0, w, h).data); }; i.onerror = rej; i.src = src; });
       const out = [];
-      for (const b of Object.keys(W.BASES)) for (const possessed of [false, true]) {
-        const canvas = await P.draw(W.originalAvatar(b), { possessed, original: true, w: 576, h: 768 });
-        const mine = canvas.getContext('2d', { willReadFrequently: true }).getImageData(0, 0, 576, 768).data;
-        const ref = await pixels(W.shippedPortrait(b, possessed), 576, 768);
-        let sum = 0;
-        for (let i = 0; i < mine.length; i += 4) sum += Math.abs(mine[i] - ref[i]) + Math.abs(mine[i + 1] - ref[i + 1]) + Math.abs(mine[i + 2] - ref[i + 2]);
-        out.push({ b, possessed, mae: +(sum / (576 * 768 * 3)).toFixed(2) });
+      for (const id of Object.keys(W.LOOKS)) {
+        const av = W.LOOKS[id];
+        const canvas = await P.draw(av, { w: 576, h: 768 });
+        const eyes = P.eyesAt(av, 576, 768);
+        let mae = null;
+        try {
+          const ref = await pixels(W.shippedPortraitFor(av), 576, 768);
+          const mine = canvas.getContext('2d', { willReadFrequently: true }).getImageData(0, 0, 576, 768).data;
+          let sum = 0;
+          for (let i = 0; i < mine.length; i += 4) sum += Math.abs(mine[i] - ref[i]) + Math.abs(mine[i + 1] - ref[i + 1]) + Math.abs(mine[i + 2] - ref[i + 2]);
+          mae = +(sum / (576 * 768 * 3)).toFixed(2);
+        } catch { mae = null; }
+        out.push({ id, female: W.genderOf(av.body) === 'f', eyes: eyes.map(p => p.map(v => +v.toFixed(1))), mae, shipped: [W.shippedPortraitFor(av), W.shippedPortraitFor(av, true)] });
       }
       return out;
     });
-    for (const x of r) check(x.mae < 3, `${x.b}${x.possessed ? ' possessed' : ''}: mean error ${x.mae} of 255`);
+    for (const x of r) {
+      const [[lx, ly], [rx, ry]] = x.eyes, mx = (lx + rx) / 2, my = (ly + ry) / 2;
+      // (the crop is 3.5 eye gaps of 0.072 m wide: the eye ovals' own gap is a little narrower)
+      const placed = Math.abs(ly - ry) < 12 && Math.abs(mx - 288) < 20 && (x.female ? my > 768 * 0.3 && my < 768 * 0.47 : Math.abs(my - 768 * 0.37) < 12);
+      check(placed, `${x.id}: the eyes level and in place (${x.eyes.map(p => p.join(',')).join(' / ')} in 576x768)`);
+    }
+    check(r.every(x => x.mae != null), `every face has its shipped picture (${r.map(x => x.shipped[0].split('/').pop()).join(', ')})`);
+    const victor = r.find(x => x.id === 'victor');
+    // (the shipped picture keeps the model's own colours, a little apart from the catalogue's: the hair, the brows)
+    check(victor.mae != null && victor.mae < 6, `Victor's runtime portrait matches his shipped picture (mean error ${victor.mae} of 255)`);
+    console.log(`       (the others, built on the shared bodies: ${r.filter(x => x.id !== 'victor').map(x => `${x.id} ${x.mae}`).join(', ')})`);
   }
 
   if (!skip.has('eyes')) {
-    console.log('\n5. red eyes on every look with every eye colour');
+    console.log('\n5. red eyes on every Look with every eye colour');
     const r = await page.evaluate(async () => {
       const W = await import('./src/data/wardrobe.js');
       const A = await import('./src/render/avatar.js');
@@ -218,33 +219,34 @@ if (!skip.has('render') || !skip.has('portraits') || !skip.has('eyes')) {
         return { red: red / n, mean: mean.map(v => Math.round(v / n)) };
       };
       const out = [];
-      for (const b of Object.keys(W.BASES)) {
-        for (const e of W.ITEMS.filter(it => it.slot === 'eyes')) {
-          const av = { ...W.originalAvatar(b), eyes: e.id };
+      for (const id of Object.keys(W.LOOKS)) {
+        for (const e of W.itemsFor('eyes', W.LOOKS[id].body)) {
+          const av = W.withItem(W.LOOKS[id], 'eyes', e.id);
           const red = await P.draw(av, { possessed: true, w, h });
-          const pts = P.eyesAt(b, w, h);
+          const pts = P.eyesAt(av, w, h);
           const normal = await P.draw(av, { possessed: false, w, h });
-          out.push({ b, eyes: e.id, poss: sample(red, pts), norm: sample(normal, pts) });
+          out.push({ b: id, eyes: e.id, poss: sample(red, pts), norm: sample(normal, pts) });
         }
       }
       // the switch through a change of eye colour while possessed (the wardrobe, a reused view)
-      const base = await A.loadBase('clara');
-      const m = A.createAvatarModel(base, { ...W.originalAvatar('clara'), eyes: 'blue' });
-      const eyeMat = () => m.parts.Eye.mesh.material;
+      const clara = W.LOOKS.clara, withEyes = id => W.withItem(clara, 'eyes', id);
+      const base = await A.loadBase(clara);
+      const m = A.createAvatarModel(base, withEyes('blue'));
+      const eyeMat = () => m.eyeMesh.material[0];
       m.setPossessed(true);
       const s1 = eyeMat().name;
-      m.setAvatar({ ...W.originalAvatar('clara'), eyes: 'green' });
+      m.setAvatar(withEyes('green'));
       const s2 = eyeMat().name, s2red = eyeMat().userData.possessedUniforms?.uIrisCore.value.getHexString();
       m.setPossessed(false);
       const s3 = eyeMat().userData.possessedUniforms?.uIrisCore.value.getHexString();
-      m.setAvatar({ ...W.originalAvatar('clara'), eyes: 'classic' });
+      m.setAvatar(withEyes('classic'));
       m.setPossessed(true); m.setPossessed(false);
-      const s4 = eyeMat() === m.parts.Eye.material;
+      const s4 = eyeMat().name === 'Eye' && !eyeMat().userData.possessedUniforms;
       m.dispose();
       return { out, sw: { s1, s2, s2red, s3, s4 }, programs: window.__game.programCount() };
     });
     const redBad = r.out.filter(x => !(x.poss.red >= 0.3));
-    check(redBad.length === 0, `possessed: red at the eyes on all ${r.out.length} looks x eye colours${redBad.length ? ` (not red: ${redBad.map(x => `${x.b}/${x.eyes} ${x.poss.red.toFixed(2)}`).join(', ')})` : ''}`);
+    check(redBad.length === 0, `possessed: red at the eyes on all ${r.out.length} Looks x eye colours${redBad.length ? ` (not red: ${redBad.map(x => `${x.b}/${x.eyes} ${x.poss.red.toFixed(2)}`).join(', ')})` : ''}`);
     const normBad = r.out.filter(x => x.norm.red > 0.05);
     check(normBad.length === 0, `not possessed: no red at the eyes${normBad.length ? ` (red: ${normBad.map(x => `${x.b}/${x.eyes}`).join(', ')})` : ''}`);
     const hue = { blue: m => m[2] > m[0], green: m => m[1] > m[0] && m[1] > m[2] };
@@ -254,8 +256,85 @@ if (!skip.has('render') || !skip.has('portraits') || !skip.has('eyes')) {
       `red eyes stay on through a change of eye colour (${r.sw.s1} -> ${r.sw.s2}, core #${r.sw.s2red})`);
     const green = item('eyes', 'green').value[2].slice(1);
     check(r.sw.s3 === green, `un-possessed: the new iris comes back (core #${r.sw.s3}, green is #${green})`);
-    check(r.sw.s4, "back to classic eyes, red on and off: the model's own eyes return");
+    check(r.sw.s4, "back to classic eyes, red on and off: the face's own eyes return");
     check(r.programs <= PROGRAM_BUDGET, `shader programs within the budget (${r.programs} <= ${PROGRAM_BUDGET})`);
+
+    // The eyewear red-eye test (contract 9.3, through the game's own model): each glasses style on each Look, the
+    // share of the eyes' pixels still visible with the frames on (ID-coloured eyes, everything else black, 512 x 512,
+    // framed on the eyes from the game camera's direction: pitch 44, distance 16), face-on headings (0, 45, 90, 270,
+    // 315) at Idle 0 and Walk 0.25 / 0.75; the minimum. Today's frames score 0.67-0.79, BELOW the contract's 0.90:
+    // whether that is accepted is the lead's and the owner's decision (W1 review ART-3). Until then this keeps every
+    // style from getting worse than today (git HEAD before W1, the same figures to 3 decimals), and holds any NEW
+    // eyewear (the Monocle, Gold frames: W1-B) to the gate.
+    const EYEWEAR_TODAY = {
+      victor: { round: 0.785, oval: 0.733, deco: 0.748, pincenez: 0.681 }, marcus: { round: 0.748, oval: 0.686, deco: 0.698, pincenez: 0.743 },
+      henry: { round: 0.76, oval: 0.75, deco: 0.786, pincenez: 0.687 }, clara: { round: 0.695, oval: 0.715, deco: 0.707, pincenez: 0.67 },
+      eleanor: { round: 0.716, oval: 0.716, deco: 0.715, pincenez: 0.682 }, beatrice: { round: 0.776, oval: 0.777, deco: 0.755, pincenez: 0.722 },
+    };
+    const ew = await page.evaluate(async () => {
+      const THREE = await import('three');
+      const W = await import('./src/data/wardrobe.js');
+      const A = await import('./src/render/avatar.js');
+      const N = 512;
+      const R = new THREE.WebGLRenderer({ canvas: document.createElement('canvas'), antialias: false });
+      R.setPixelRatio(1); R.setSize(N, N, false);
+      const rt = new THREE.WebGLRenderTarget(N, N), px = new Uint8Array(N * N * 4);
+      const BLACK = new THREE.MeshBasicMaterial({ color: 0x000000, side: THREE.DoubleSide });
+      const ID = new THREE.MeshBasicMaterial({ color: 0xff00ff, side: THREE.DoubleSide, toneMapped: false });
+      const HIDE = new THREE.MeshBasicMaterial({ visible: false });
+      const count = (scene, cam) => {
+        R.setRenderTarget(rt); R.setClearColor(0x000000, 1); R.clear(); R.render(scene, cam);
+        R.readRenderTargetPixels(rt, 0, 0, N, N, px); R.setRenderTarget(null);
+        let n = 0;
+        for (let i = 0; i < px.length; i += 4) if (px[i] > 150 && px[i + 1] < 90 && px[i + 2] > 150) n++;
+        return n;
+      };
+      const without = (geo, spans) => {         // the merged guest with the glasses' triangles left out
+        const idx = geo.index.array, keep = [];
+        for (let t = 0; t < idx.length; t += 3) if (!spans.some(([s, c]) => idx[t] >= s && idx[t] < s + c)) keep.push(idx[t], idx[t + 1], idx[t + 2]);
+        const g = new THREE.BufferGeometry();
+        for (const [k, a] of Object.entries(geo.attributes)) g.setAttribute(k, a);
+        g.setIndex(keep);
+        return g;
+      };
+      const cam = new THREE.PerspectiveCamera(1.4, 1, 1, 100), p = THREE.MathUtils.degToRad(44), out = [];
+      for (const id of Object.keys(W.LOOKS)) {
+        for (const g of W.itemsFor('glasses', W.LOOKS[id].body).filter(g => g.id !== 'none')) {
+          const av = W.withItem(W.LOOKS[id], 'glasses', g.id);
+          const base = await A.loadBase(av);
+          const model = A.createAvatarModel(base, av, { rim: false });
+          const scene = new THREE.Scene(); scene.add(model.root);
+          model.mesh.material = BLACK;
+          const nEye = Array.isArray(model.eyeMesh.material) ? model.eyeMesh.material.length : 1;
+          model.eyeMesh.material = [ID, ...Array(nEye - 1).fill(HIDE)];
+          const full = model.mesh.geometry, bare = without(full, base.ranges.Glasses || []);
+          const mixer = new THREE.AnimationMixer(model.root);
+          let min = 1;
+          for (const [clip, frac] of [['idle', 0], ['walk', 0.25], ['walk', 0.75]]) {
+            for (const h of [0, 45, 90, 270, 315]) {
+              mixer.stopAllAction(); mixer.clipAction(base.clips[clip]).play(); mixer.setTime(frac * base.clips[clip].duration);
+              model.root.rotation.set(0, THREE.MathUtils.degToRad(h), 0); scene.updateMatrixWorld(true);
+              model.eyeMesh.computeBoundingBox();
+              const c = model.eyeMesh.boundingBox.getCenter(new THREE.Vector3()); model.eyeMesh.localToWorld(c);
+              cam.position.set(c.x, c.y + 16 * Math.sin(p), c.z + 16 * Math.cos(p)); cam.lookAt(c); cam.updateProjectionMatrix();
+              const on = count(scene, cam); model.mesh.geometry = bare;
+              const off = count(scene, cam); model.mesh.geometry = full;
+              if (off >= 30) min = Math.min(min, on / off);
+            }
+          }
+          mixer.stopAllAction(); bare.dispose(); scene.remove(model.root); model.dispose();
+          out.push({ look: id, style: g.id, score: +min.toFixed(3), removed: (base.ranges.Glasses || []).reduce((s, [, n]) => s + n, 0) });
+        }
+      }
+      rt.dispose(); R.dispose(); R.forceContextLoss();
+      return { out, gate: W.RED_EYE_GATE };
+    });
+    const worse = ew.out.filter(x => EYEWEAR_TODAY[x.look]?.[x.style] != null && x.score < EYEWEAR_TODAY[x.look][x.style] - 0.02);
+    const fresh = ew.out.filter(x => EYEWEAR_TODAY[x.look]?.[x.style] == null);
+    console.log(`        eyewear red-eye scores (today's in brackets): ${ew.out.map(x => `${x.look}/${x.style} ${x.score}${EYEWEAR_TODAY[x.look]?.[x.style] != null ? ` (${EYEWEAR_TODAY[x.look][x.style]})` : ''}`).join(', ')}`);
+    check(ew.out.length >= 24 && ew.out.every(x => x.removed > 0) && worse.length === 0,
+      `eyewear: no glasses style hides more of the red eyes than today's on any Look (${ew.out.length} measured${worse.length ? `; worse: ${worse.map(x => `${x.look}/${x.style} ${x.score}`).join(', ')}` : ''})`);
+    check(fresh.every(x => x.score >= ew.gate), `eyewear: any new style reaches the red-eye gate ${ew.gate} (${fresh.length ? fresh.map(x => `${x.look}/${x.style} ${x.score}`).join(', ') : 'none offered yet: the Monocle and Gold frames come in W1-B'})`);
   }
   check(!messages.filter(m => !/GPU stall|ReadPixels/i.test(m)).length, `no console errors (render checks)${messages.length ? `: ${messages.slice(0, 4).join(' | ')}` : ''}`);
   await browser.close();
@@ -277,7 +356,7 @@ if (!skip.has('wardrobe')) {
     const tag = `${w}x${h}`;
     const idle = await page.evaluate(() => window.__game.lobbyPlayer());
     const [sx, sz] = lobbyLayout.player.at;      // (its spot by the lift: src/menu/lobbyLayout.js)
-    check(!!idle && Math.abs(idle.x - sx) < 0.05 && Math.abs(idle.z - sz) < 0.05, `${tag}: your avatar stands by the lift in the lobby (${idle?.base} at ${idle?.x?.toFixed(2)}, ${idle?.z?.toFixed(2)})`);
+    check(!!idle && idle.look === 'victor' && Math.abs(idle.x - sx) < 0.05 && Math.abs(idle.z - sz) < 0.05, `${tag}: your avatar (the test profile's v1 Tuxedo: Victor's Look) stands by the lift in the lobby (${idle?.look} at ${idle?.x?.toFixed(2)}, ${idle?.z?.toFixed(2)})`);
     await page.click('#btn-profile');
     await page.waitForFunction(() => window.__game.menuScreen() === 'avatar' && window.__game.lobbyWardrobe()?.k >= 1, null, { timeout: 90000 });
     await sleep(700);
@@ -299,30 +378,23 @@ if (!skip.has('wardrobe')) {
     check(bodyRow.label === 'Body' && await page.evaluate(() => [...document.querySelectorAll('#av-body button[data-slot="body"]')].map(b => b.textContent.trim()).join('/')) === 'Male/Female', `${tag}: the first choice is Male / Female`);
     if (shots) await page.screenshot({ path: `${shots}/wardrobe-${tag}.png` });
     if (w === 1180) {
-      const lockedShown = lay.ed.rows.flatMap(r => r.locked.map(id => `${r.slot}.${id}`));
-      check(['hair.platinum', 'glasses.monocle', 'main.champagne', 'main.gatsby'].every(id => lockedShown.includes(id)), `locked items shown with a lock (${lockedShown.join(', ')})`);
-      check(await page.evaluate(() => [...document.querySelectorAll('#av-body button.locked')].every(b => b.querySelector('.av-lock') && /coming soon/i.test(b.getAttribute('aria-label') || b.textContent))), 'each says "Coming soon"');
+      const marked = lay.ed.rows.flatMap(r => r.unlockable.map(id => `${r.slot}.${id}`));
+      check(['hair.platinum', 'main.champagne', 'main.gatsby'].every(id => marked.includes(id)) && lay.ed.rows.every(r => !r.locked.length), `unlockable items marked and wearable for testing (${marked.join(', ')})`);
       const tapOpt = async (slot, id) => { await page.click(`#av-body button[data-slot="${slot}"][data-id="${id}"]`); await sleep(350); };
-      const before = await page.evaluate(() => window.__game.avatarEditor().avatar);
-      await tapOpt('glasses', 'monocle');
-      const after = await page.evaluate(() => ({ av: window.__game.avatarEditor().avatar, cap: window.__game.avatarEditor().rows.find(r => r.slot === 'glasses').caption }));
-      check(JSON.stringify(after.av) === JSON.stringify(before) && /Monocle · Coming soon/.test(after.cap), `a locked item cannot be chosen ("${after.cap}")`);
       await tapOpt('main', 'claret');
-      check(await page.evaluate(() => window.__game.lobbyPlayer().avatar.main) === 'claret', 'a new outfit colour shows on your avatar at once');
+      check(await page.evaluate(() => window.__game.lobbyPlayer().avatar.colours.main) === 'claret', 'a new outfit colour shows on your avatar at once');
       await tapOpt('glasses', 'round');
+      await page.waitForFunction(() => window.__game.lobbyPlayer()?.glasses, null, { timeout: 60000 }).catch(() => {});
       const rows = await page.evaluate(() => window.__game.avatarEditor().rows.map(r => r.slot).join(','));
       check(/glasses,frame,main/.test(rows) && await page.evaluate(() => window.__game.lobbyPlayer().glasses), `glasses on: Frame appears, the glasses show in the lobby (${rows})`);
-      await tapOpt('frame', 'goldFrame');
-      check(await page.evaluate(() => window.__game.avatarEditor().avatar.frame) !== 'goldFrame', 'gold frames are locked too');
       await tapOpt('body', 'f');
-      await page.waitForFunction(() => ['clara', 'eleanor', 'beatrice'].includes(window.__game.lobbyPlayer()?.base), null, { timeout: 60000 });
+      await page.waitForFunction(() => ['clara', 'eleanor', 'beatrice'].includes(window.__game.lobbyPlayer()?.avatar?.face), null, { timeout: 60000 });
       const fem = await page.evaluate(() => ({ ed: window.__game.avatarEditor(), pl: window.__game.lobbyPlayer() }));
-      check(fem.ed.rows[1].options.join(',') === 'clara,eleanor,beatrice' && fem.pl.avatar.main === 'claret' && fem.pl.avatar.glasses === 'round', `Female: the three gowns; outfit and glasses kept, rebuilt in the lobby (${fem.pl.base})`);
+      check(fem.ed.rows[1].options.join(',') === 'clara,eleanor,beatrice' && fem.pl.avatar.colours.main === 'claret' && fem.pl.avatar.glasses === 'round', `Female: the three gowns; outfit and glasses kept, rebuilt in the lobby (${fem.pl.look})`);
       await tapOpt('base', 'eleanor');
-      await page.waitForFunction(() => window.__game.lobbyPlayer()?.base === 'eleanor', null, { timeout: 60000 });
+      await page.waitForFunction(() => window.__game.lobbyPlayer()?.avatar?.face === 'eleanor', null, { timeout: 60000 });
       const gown = await page.evaluate(() => window.__game.avatarEditor().rows.map(r => r.slot).join(','));
       check(/main,metal$/.test(gown) && !/accent/.test(gown), `Ballgown: Jewellery, no Accent (${gown})`);
-      check(await page.evaluate(() => window.__game.avatarEditor().rows.find(r => r.slot === 'metal').locked.join()) === 'roseGold', 'rose gold jewellery is locked');
       await tapOpt('eyes', 'hazel');
       await sleep(1500);
       if (shots) await page.screenshot({ path: `${shots}/wardrobe-gown-${tag}.png` });
@@ -330,7 +402,7 @@ if (!skip.has('wardrobe')) {
       await page.waitForFunction(() => window.__game.menuScreen() === 'main', null, { timeout: 10000 });
       await sleep(400);
       const saved = await page.evaluate(() => window.__game.profile().avatar);
-      check(saved.base === 'eleanor' && saved.main === 'claret' && saved.glasses === 'round' && saved.eyes === 'hazel', `Done keeps your avatar in your profile (${JSON.stringify(saved)})`);
+      check(saved.v === 2 && saved.face === 'eleanor' && saved.dress === 'ballgown' && saved.colours.main === 'claret' && saved.glasses === 'round' && saved.colours.eyes === 'hazel', `Done keeps your avatar in your profile (${JSON.stringify(saved)})`);
       check(await page.evaluate(() => document.getElementById('view').classList.contains('blurred')), 'back on the main menu, the lobby is soft again');
       await page.waitForFunction(() => window.__game.lobbyWardrobe()?.k === 0, null, { timeout: 60000 });
       await page.click('#btn-profile');
@@ -345,7 +417,7 @@ if (!skip.has('wardrobe')) {
       await page.click('#btn-su-suggest');      // (Cancel, in rename mode)
       await page.waitForFunction(() => window.__game.menuScreen() === 'avatar', null, { timeout: 10000 }).catch(() => {});
       const back = await page.evaluate(() => ({ screen: window.__game.menuScreen(), want: window.__game.lobbyWardrobe()?.want, av: window.__game.avatarEditor().avatar }));
-      check(back.screen === 'avatar' && back.want === 1 && back.av.base === 'eleanor', `Cancel goes back to the wardrobe, its camera and your avatar (${back.screen}, ${back.av.base})`);
+      check(back.screen === 'avatar' && back.want === 1 && back.av.face === 'eleanor', `Cancel goes back to the wardrobe, its camera and your avatar (${back.screen}, ${back.av.face})`);
     }
     check(!messages.length, `${tag}: no console errors${messages.length ? `: ${messages.slice(0, 4).join(' | ')}` : ''}`);
     await browser.close();
@@ -373,9 +445,9 @@ if (!skip.has('lift')) {
     await sleep(500);
     await page.click('#btn-bots-find');
     await page.waitForFunction(() => window.__game.lobbyBoarders(), null, { timeout: 60000 });
-    // (the test profile wears the Tuxedo, Victor's look: Henry boards in his place, so nobody beside you
-    // looks like you from behind)
-    check(JSON.stringify(await page.evaluate(() => window.__game.lobbyBoarders())) === '["you","henry","clara"]', 'a match: you board first, with Clara and Henry (never Victor beside a Tuxedo)');
+    // (the test profile is Victor's Look: Henry boards in Victor's place, so nobody beside you looks like you from
+    // behind: src/data/wardrobe.js lookAlike)
+    check(JSON.stringify(await page.evaluate(() => window.__game.lobbyBoarders())) === '["you","henry","clara"]', 'a match: you board first, with Clara and Henry (never Victor beside his own Look)');
     await sleep(3000);
     if (shots) await page.screenshot({ path: `${shots}/lift-match.png` });
     await page.waitForFunction(() => window.__game.phase() === 'game', null, { timeout: 60000 });
@@ -402,12 +474,13 @@ if (!skip.has('games')) {
     await sleep(1200);
     // (one plain frame of the game: the counts of the hotel's own frame, not a portrait's)
     await page.evaluate(() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))));
-    tables.push(await page.evaluate(() => {
+    tables.push(await page.evaluate(async () => {
+      const W = await import('./src/data/wardrobe.js');
       const g = window.__game;
       const seats = g.seats();
       return {
-        seats: seats.map(s => `${s.name}:${s.avatar.base}`),
-        views: g.characterViewCount(), viewLooks: g.characters.map(c => c.debug().avatar?.base),
+        seats: seats.map(s => `${s.name}:${W.lookOf(s.avatar) || 'mix'}`),
+        views: g.characterViewCount(),
         sameLooks: seats.every((s, i) => JSON.stringify(g.characters[i].debug().avatar) === JSON.stringify(s.avatar)),
         strip: [...document.querySelectorAll('#players-strip .mini-portrait img')].map(i => i.dataset.portrait || ''),
         info: g.renderInfo(), heap: Math.round((performance.memory?.usedJSHeapSize || 0) / 1e6),
@@ -427,12 +500,12 @@ if (!skip.has('games')) {
   }
   const g0 = tables[0].info, gN = tables[3].info;
   console.log('   ', tables.map(T => `geo ${T.info.geometries} tex ${T.info.textures} prog ${T.info.programs} calls ${T.info.calls} heap ${T.heap} MB portraits ${T.cached}`).join(' | '));
-  // (measured before avatars, the same four tables: textures 21-27, draw calls 129-213 at the role screen,
-  // geometry 149 -> 494: the hotel's own room pieces, kept as new rooms are seen; it levels off)
+  // (measured before pieces, the same four tables: textures 21-27, draw calls 129-213 at the role screen; with pieces
+  // a guest is 2-3 draw calls, not 9-15. Geometry grows with the hotel's own room pieces, kept as new rooms are seen)
   check(Math.max(...tables.map(T => T.info.textures)) <= g0.textures + 20, `textures stay level over four tables (${tables.map(T => T.info.textures).join(', ')}): one bone texture per guest, let go with the view`);
   check(gN.geometries < 800, `geometry stays within bounds (${tables.map(T => T.info.geometries).join(', ')})`);
   check(gN.programs <= PROGRAM_BUDGET, `shader programs within the budget (${gN.programs})`);
-  check(Math.max(...tables.map(T => T.info.calls)) < 260, `draw calls as before avatars (${tables.map(T => T.info.calls).join(', ')})`);
+  check(Math.max(...tables.map(T => T.info.calls)) < 200, `draw calls below what they were before pieces (${tables.map(T => T.info.calls).join(', ')}; < 200, was < 260)`);
   check(Math.max(...tables.map(T => T.heap)) < 160, `memory stays bounded (${tables.map(T => T.heap).join(', ')} MB)`);
   check(!messages.length, `no console errors${messages.length ? `: ${messages.slice(0, 4).join(' | ')}` : ''}`);
   await browser.close();

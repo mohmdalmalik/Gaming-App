@@ -2657,3 +2657,134 @@ The owner approved five changes on 15 Oct 2026, after a plain-language before/af
 - **For online play later:** the server owns the clock and calls `endTurnByTimeout` when it runs out; the allowance `max(left, 10)` must be applied the same way for every guest, and the random draw should come from the server's own seeded generator. Nothing about the discard is trusted from a client. One more thing to decide then: because a guest always gets at least 10 seconds on the discard, a turn can run past the 45-second mark; if the server ever shows the active guest's clock to the whole table, a clock that overruns would tell everyone that this guest holds more than the limit. Keep the discard allowance off any table-wide clock (show every seat the same 45-second clock, plus a neutral "thinking" state).
 - **Where the room icon is, for the things that keep clear of it.** The icon is its badge plus its caption, and the caption ("Switchboard · 2 actions") is wider than the button's own box, so the first-time tips, the Explore/Go tags and the accidental-tap dead zone name `.search-spot .ss-badge` and `.search-spot .ss-caption` (both icons, since a dead guest's cards can add a second one), never `#search-spot` alone; a tip's `at` may name several parts and sits beside the box around them (`rectOf`, `src/ui/tips.js`).
 - **Settled by the owner on 16 Oct 2026:** the `docs/GAME_RULES.md` wording (eight changed lines and two added, including the pick-up of a dead guest's cards in the job rooms) was approved and written in; the shorter card descriptions were approved as written; the strip's crimson "Possessed" mark is shown to clean guests too (only for guests they are certain about, on their own screen: GAME_RULES, Possession); the starting room is the 13th Floor Lobby. **Still open:** whether the lift dial's resting gap (between 12 and 14) is the look wanted, and whether the clean side should win more often than the figures above (a later round).
+
+## Wardrobe W1: the parts pipeline and the male pieces (18 Oct 2026 — art and tools; no rule or rule number changed)
+- **What:** `tools/char-pipeline/parts/` builds the guests as swappable pieces on shared bodies (one command per body:
+  `parts/build.py m`; then `parts/manifest.py --check`, which alone writes `assets/characters/parts/manifest.json` and
+  `src/data/partsIndex.js`). Usage and file list: `tools/char-pipeline/README.md`, "Parts pipeline".
+- **Male body = Victor's** (proportions, 19-bone rig, Idle, Walk): Victor from pieces is pixel-identical to today's model.
+- **Each classic face is its own head**, not features on one shared skull: the skull shape is most of each face (Victor's
+  broad jaw, Marcus's narrow cheeks under his smile, Henry's round low face), so refitting them to one skull would have
+  changed who they are. The cost is that every hair and moustache has a fitted copy per face (`~face_marcus`,
+  `~face_henry` variants): 15 hair files and 6 moustache files, built automatically.
+- **Tops are cut on Victor's build**, keeping each guest's own cut and colours; Marcus and Henry are a touch slimmer. One
+  shared collar fitting zone lets every bow tie and tie sit on every top; the long tie has one waistcoat variant (tucked in).
+- **Shadow patches** carry the shadow one piece casts on another (hair on the forehead, the jacket on the trousers), each
+  stamped with the target's hash, so a guest assembled from any pieces shades like a one-piece model and a rebuilt target
+  is never shaded wrongly. Patch vertices the caster itself hides are left out (smaller files, nothing visible lost).
+- **Quality gates** before a piece goes into `assets/`: a review sheet per piece (studio, lobby next to today's guest,
+  game camera at true size, walking, dark room, red eyes), the red-eye test and the poke-through test (both automatic),
+  and the mirror test for the three classic men. Below-the-bar pieces stay in scratch.
+
+## Wardrobe W1: the female checkpoint, one shared body for the women (18 Oct 2026 — art and tools; no rule or rule number changed)
+- **Delivered: the shared female body `f`**, not the fallback (three gown bodies). Clara, Eleanor and Beatrice rebuilt
+  from pieces on it match today's models (mirror test at the game camera, in the lobby, walking, red eyes, close-up), so
+  every female face, hair, gown, belt and earring mixes with every other: 3 faces, 3 hairstyles x 3 faces, 3 gowns,
+  2 belts x 3 gowns, pumps, 3 pairs of earrings x 3 faces (32 files, `assets/characters/parts/f/`).
+- **What is shared and why:** Clara's legs, pumps, shoulders and rig (her column skirt is the tightest round the legs);
+  arms set a little wider than hers, because Eleanor's ballgown is 0.26 m wide at hand height; one upper torso and one
+  neck-to-shoulder yoke for every bodice, so no neckline gaps or pokes. Eleanor's shoulders and bateau neckline sit
+  ~2 cm lower, Beatrice's bodice top 2 cm further forward; faces, hair, gowns and colours are each woman's own.
+- **Hair and earrings are fitted to every face** (each style rebuilt round the other faces' skulls, aligned on the skull
+  top; each earring at the other faces' lobes); belts are fitted to every gown. The skull is open only under the crown
+  that every hairstyle covers: a new female hairstyle must cover it too.
+- Tools: `tools/char-pipeline/parts/female/` (spec, driver, mix sheets); the shared poke test gained a "can it be seen"
+  mode for gowns and belts (overlapping cloth fooled its ray count). Usage: `tools/char-pipeline/README.md`.
+
+## Wardrobe W1: avatar v2, the catalogue, achievements, bots' looks, Clearer possessed eyes (18 Oct 2026 — data and interface; no rule or rule number changed)
+- **Avatar v2** (`src/data/wardrobe.js`, the W1 contract): ids only, one field per piece (`face, hairStyle, facial | makeup,
+  glasses, top, neck, legs | dress, belt, feet, extras`) and `colours` (today's colour ids). The six classic guests are
+  `LOOKS`; `normaliseAvatar` repairs, never rejects, never throws. A v1 avatar is read as the Look it was
+  (`avatarFromV1`): `tests/wardrobe-check.mjs` checks all 9,953,280 v1 combinations of today's catalogue (only the Monocle,
+  which no v1 player could own, falls back). Keys: `avatarKey` (`v2|…`), `geometryKey` (pieces only: a colour is a repaint),
+  `frameKey`; `partKeysFor` resolves a piece's fitted variant (`~face_marcus`) as the contract says.
+- **Profile version 2** (same storage key): a version 1 profile is migrated when read and written back once (its inventory
+  ids keep their meaning; `looks: [null, null, null]` added for W1-B). An older copy of the game in another tab then sees a
+  newer profile and goes read-only, as designed.
+- **Bug A fixed** (an owned item worn was taken off at every load): `repairProfile` repairs the inventory first and hands it
+  to the avatar repair; `account.js` builds `owns` from it, never from the profile in memory (null at the first read; an
+  older one for another tab's save). **Bug B fixed** (seats re-checked with free items only): `seatTable` and the bots
+  normalise `trusted`. Both are checked with the switch off (`wardrobe-check --only switch`), and fail on the code before.
+- **Three kinds of item**: `free`, `achievement` (earned only, never sold), `boutique` (real money later, never earned).
+  `UNLOCK_ALL_FOR_TESTING = true` is the one line that makes them all wearable now; false locks them with no other change
+  (owned ones stay). `account.owns` is real ownership (free, or in the inventory) whatever the switch; `account.grant`
+  adds an achievement item, once. Today's other locked colours: platinum, champagne, rose gold as achievement items with
+  no achievement yet ("a later honour"); Gatsby gold and gold frames as Boutique items (the contract's default: **the
+  owner to confirm**).
+- **Pending**: the ten new items are `artPending` (their art is W1-B); a 3D piece is offered only once the pipeline has
+  built it for that body (`src/data/partsIndex.js`); the six Looks' own pieces stand in while a body has nothing built. The
+  open collar (neck `none`) is held back until it passes review with every jacket. **Commit a body's classic pieces
+  together:** while a body's index lists some of them, a saved look using one not yet built is repaired to the default
+  and written back (by design for a retired piece; only a half-built working tree can cause it).
+- **Bots' looks** (`src/data/randomAvatar.js`, still seeded by the username): a classic Look, each piece kept or swapped
+  for a free one (half the time), weighted colours, glasses for 3 in 10; then **one unlockable item for about one bot in
+  three** (achievement items twice as likely as Boutique ones), only one that would show. Never two guests alike at a
+  table (`lookAlike`: same body, hairstyle and jacket or dress, main colours closer than delta-E 20 in normal vision or any
+  of the three colour-blind simulations); a clash re-rolls with a salt. A new player's first look is free items only.
+- **Achievements** (`src/data/achievements.js`, `src/matchSummary.js`, `src/honours.js`): the five of the brief, read
+  only from the rules' own events at the end of a match, plus the player's own finds (`main.js` logs what `search()`
+  returns: the rules emit no event for it). Practice, test links (`mode, seed, timer, botpace, role, seat, bots, user`),
+  idle matches (under 3 actions) and unfinished ones earn nothing; a win counts for the side you started on and stayed on;
+  the Mirror and the Lantern block only while clean. Checked in `showEnd` only, once per game; an earned item goes into the
+  profile; the end screen says "Achievement earned: Seen through · Monocle" under the record. Kept on the device
+  (`hotelEscape.honours.v1`) until there is a server, which must recompute them from its own events. Choosing your role in
+  the menu still counts (**the owner to confirm**).
+- **Clearer possessed eyes** (Settings, Off by default): `displayAvatar(av, { clearEyes })` turns brown and hazel eyes
+  (marked `nearRed`) into classic dark eyes; `main.js` applies it to every seat in `planGame`, on this device only, so the
+  whole match (models, strip, portraits, soul cards) shows it and the red stays unmistakable. The red itself never
+  changes; the wardrobe and the profile keep the true colour. The row sits beside Quick chat: the Settings panel had no
+  room for a ninth full row at 1024 x 694; its one-line note shows on screens taller than 800 px.
+- **The old wardrobe screen until W1-B**: Male / Female, a classic Look (your colours and glasses kept) and the colour
+  rows as before; a mixed avatar shows no Look chosen ("Your own mix"). Unlockable swatches carry a rosette (achievement)
+  or a diamond (Boutique) and the row says what the item will be ("Boutique · opens later · unlocked for testing").
+
+## Wardrobe W1: guests assembled from pieces in the game (18 Oct 2026 — rendering, tests and docs; no rule or rule number changed)
+- **One merged mesh a guest** (`src/render/avatarParts.js`): each piece's GLB is fetched and parsed once and shared; the
+  pieces a guest wears are merged once (cached by `geometryKey`, counted, the three most recent unheld kept) into ONE
+  skinned mesh, plus ONE eye mesh (the face's `Eye`, and `Shine` as a second group for faces with catchlights) so the
+  possessed look can still swap the eyes. A guest is **2 draw calls** (3 while catchlights show), where a look was 9-15:
+  a six-seat match 82-83 calls a frame instead of 139-141, the menu's lobby 32-33 instead of 39-45, practice 50-56
+  instead of 61-69. Triangles about the same (+2 %). Parts are re-bound to the body's 19 bones by name.
+- **Colours are a palette uniform, not geometry**: every vertex carries `paletteSlot` (its material's entry, contract
+  section 4) and the guests' one shader (`guestPalette1`, body and eyes alike; portraits use it with no rim) multiplies
+  the baked shading by `uPalette[16]`; fixed materials (shirt, shoes, Henry's black trousers) have their colour put
+  into the vertex colour at merge. A colour change writes 48 numbers (0.005 ms) and never merges again; other pieces are
+  another merged mesh, which the caller loads (as before for another look). Lapel and shade are derived exactly as before.
+- **Shadow patches** are multiplied into the guest's own copy of a piece's vertex colours; a patch baked against another
+  version of its target (hash) is skipped with one warning, so a rebuilt piece is never shaded wrongly.
+- **Glasses are merged in** too, on the head bone (fitted per body, face and style, as before from the eyes, brows and
+  head): no draw call or shader of their own. Henry's own frames are his face's `Glasses` piece, merged only with Round.
+- **The lobby's people** are the classic Looks assembled with their colours baked in and the eyes merged: one draw call
+  each, re-dressed by material name as before (`ranges`). The lift never boards a guest who `lookAlike`s you.
+- **Portraits**: one hidden model per set of pieces (8 kept), framing per body + face + hairstyle (`frameKey`), the women's
+  crop from the merged `Hair` vertices, `VERSION` 2. The crop is no longer clamped to the virtual frame: the old tool's
+  clamp put Henry's eyes 2 % low, and with mixed faces every face's eyes now sit at the same height.
+- **Proof** (`tests/browser-avatar-parts.mjs`): the test profile's v1 Tuxedo is read as Victor's Look and saved as v2, and
+  Victor from pieces renders like today's `victor.glb` drawn the old way (0.03-0.11 of 255, every view). Marcus, Henry and
+  the women keep their look; their builds changed slightly with the shared bodies (owner-accepted), so their runtime
+  portraits are no longer the shipped pictures: those pictures show only until a portrait is drawn, and the art builders
+  can regenerate them.
+- Costs measured: a new assembly 8-30 ms after download (median 11 ms), first load of your guest about the same as before
+  (8 small files instead of one, ~1.0 MB instead of ~1.15 MB), JS memory ~12 MB higher after four tables of new bots (the
+  parsed pieces and each merged copy, ~1.2 MB), fewer geometries on the graphics chip.
+
+## Wardrobe W1: fixes after review (18 Oct 2026 — art, data, tests and docs; no rule or rule number changed)
+- **Side part rebuilt**: pass 2 had four 1 cm holes through the hair (at the temples and the front of the part) and two
+  thin sideburn spikes. The groove ends now stay well above the hairline (`sculpt_hair` snaps a groove point along a ray
+  from the head centre; near the hairline that ray can snap to an inner crossing and cut the channel from inside the thin
+  edge), and the sideburn is one soft tab. `manifest.py --check` now FAILS a hair or moustache piece with a hole through
+  its shell beyond its rim (a single missing triangle, as in the curly crop and the women's hair, is only a warning).
+- **Red-eye results reach the data**: `manifest.py` writes each piece's recorded red-eye minimum into
+  `src/data/partsIndex.js` (`redEye`, an addition to contract 3.4), and `eyesShow` keeps a piece file below 0.90 off the
+  guests the game dresses itself (bots, a new player's first look), unless it is a classic Look's own piece (today's
+  guest unchanged: Beatrice's own bob is 0.756 today and as a piece). Until the lead and the owner decide on a side-view
+  rule this keeps the Wavy bob off Clara's and Eleanor's faces and the chignon off Beatrice's (before: 7.5 % of bots).
+- **Eyewear red-eye test** (`tests/avatar-check.mjs`, section 5): today's code-drawn glasses keep 0.67-0.79 of the red
+  eyes, below the contract's 0.90 (not a regression: the same figures as before W1). Whether that is accepted is the
+  owner's decision; the test keeps every style from getting worse than today and holds new eyewear (W1-B) to 0.90.
+- **Small fixes**: an earned item whose art is not in yet is named "(arrives with the new wardrobe)" on the end screen; an
+  achievement saved as earned whose item never reached the profile is granted again (start-up and every end screen;
+  `grant` says `ok: false` when it could not save); a new player's first look keeps a classic Look's pieces until the new
+  wardrobe screen can show other pieces; every bot's pieces download together when the table is planned
+  (`preloadAvatars`); in the lobby a new look is built before the old one is disposed, so the guests' shared shader is
+  not thrown away and built again on every tap (a stall of about a second); the Settings note names its setting.

@@ -1,7 +1,7 @@
 // The player's own settings (the Settings screen of the main menu). Kept on this device only
 // (localStorage); every read and write is guarded, so a private window or blocked storage simply
 // falls back to the defaults. Nothing here is a game rule: these change how the game looks and
-// sounds and how quickly the computer guests play, never what anyone may do.
+// sounds and how quickly the computer guests play, never what anyone may do (and nothing anyone else sees).
 import { reducedMotion } from './motion.js';
 
 const KEY = 'hotelEscape.settings.v1';
@@ -54,11 +54,18 @@ export const SETTING_CHOICES = {
     { value: 'on', label: 'On' },
     { value: 'off', label: 'Off' },
   ],
+  // Clearer possessed eyes (for colour blindness): in a match, brown and hazel eyes show as classic dark eyes on this
+  // device, so the possessed red stands out (src/data/wardrobe.js displayAvatar, applied in src/main.js planGame).
+  // The red itself never changes; the wardrobe and your profile keep the true colours. Private: nobody else sees it.
+  clearEyes: [
+    { value: 'off', label: 'Off' },
+    { value: 'on', label: 'On' },
+  ],
 };
 
 // (the old 'guest' setting, last round's "Your guest", is no longer used: a saved one only picks the first
 // avatar of a player signing the register, src/account/profile.js startingAvatar)
-const DEFAULTS = { botSpeed: 'normal', follow: 'follow', graphics: 'balanced', menuMotion: 'on', music: 'medium', sound: 'high', chat: 'on', tips: 'on', bots: 5, role: 'random' };
+const DEFAULTS = { botSpeed: 'normal', follow: 'follow', graphics: 'balanced', menuMotion: 'on', music: 'medium', sound: 'high', chat: 'on', tips: 'on', clearEyes: 'off', bots: 5, role: 'random' };
 
 function load() {
   try {

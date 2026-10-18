@@ -1,12 +1,12 @@
-// Glasses fitted to ANY of the guest models at run time, from the model's own measurements (the eye
-// ovals, the brows, the face's front surface, the head's width, the ears; src/render/avatar.js measures
-// them once per look), as ONE merged tube geometry in the model's bind-pose space. The caller fixes it to
-// the head bone (src/render/avatar.js attachGlasses): one extra draw call, no skinning, and it follows the
-// head through the walk. Built once per (look, style) and kept (a few kB each).
+// Glasses fitted to ANY guest at run time, from the guest's own measurements (the eye ovals, the brows, the face's
+// front surface, the head's width, the ears: src/render/avatarParts.js measures them from the face and body pieces
+// worn), as ONE merged tube geometry in the guest's bind-pose space. avatarParts.js merges it into the guest's one
+// skinned mesh, every vertex on the head bone (glassesPiece): no extra draw call, and it follows the head through the
+// walk. Built once per (body, face, style) and kept (a few kB each): the hairstyle or the clothes never change the fit.
 //
 // Styles (src/data/wardrobe.js 'glasses' items): round, oval, deco (a rounded square), pincenez (no
-// temples) and monocle (one rim and a cord to the ear; a locked "Coming soon" item). A half-moon shape
-// was tried and dropped: its flat top crosses the guests' big noses.
+// temples) and monocle (one rim and a cord to the ear). A half-moon shape was tried and dropped: its flat top crosses
+// the guests' big noses. Frames only, never a lens: the eyes always show.
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
@@ -29,25 +29,23 @@ function outline(kind, N = 40) {
   return pts;
 }
 
-// `base` is a loaded look (src/render/avatar.js loadBase): its eyes, head and parts.
-export function buildGlasses(base, style) {
-  const key = `${base.id}:${style}`;
+// `fit`: the face's measurements ({ key: 'body:face', eyes, head, brow (the Brow's positions), female }), or an assembly
+// (src/render/avatarParts.js assemble: its `fit`).
+export function buildGlasses(fit, style) {
+  if (fit?.fit) fit = fit.fit;
+  const key = `${fit?.key}:${style}`;
   if (cache.has(key)) return cache.get(key);
-  const E = base.eyes, H = base.head;
+  const E = fit?.eyes, H = fit?.head;
   if (!E || !H) return null;
   const eyeL = E.left.centre, eyeR = E.right.centre;
   const ex = (Math.abs(eyeL.x) + Math.abs(eyeR.x)) / 2, ey = (eyeL.y + eyeR.y) / 2;
   // the brows: the lowest brow point over the eyes (the rim's top stays under it)
   let browMin = Infinity;
-  const brow = base.info.Brow;
+  const brow = fit.brow;
   if (brow) {
-    const bp = brow.mesh.geometry.attributes.position, p = V();
-    for (let v = 0; v < bp.count; v++) {
-      p.fromBufferAttribute(bp, v);
-      if (Math.abs(Math.abs(p.x) - ex) < ex * 0.6) browMin = Math.min(browMin, p.y);
-    }
+    for (let v = 0; v < brow.length; v += 3) if (Math.abs(Math.abs(brow[v]) - ex) < ex * 0.6) browMin = Math.min(browMin, brow[v + 1]);
   }
-  const female = base.def.body === 'f';
+  const female = !!fit.female;
   const tube = female ? 0.0036 : 0.0042;
   const clear = 0.007;
   const R = ex * (style === 'pincenez' ? 0.82 : style === 'oval' ? 0.95 : 1.02);
@@ -103,7 +101,7 @@ export function buildGlasses(base, style) {
       const hinge = ringPoint(side, 0.22);
       const path = [hinge];
       let x = Math.abs(hinge.x);
-      const zEnd = earZ(base, side, ey) - 0.025;
+      const zEnd = earZ(H, side, ey) - 0.025;
       const steps = 8;
       for (let k = 1; k <= steps; k++) {
         const z = hinge.z - 0.01 + (zEnd - hinge.z + 0.01) * (k / steps);
@@ -117,7 +115,7 @@ export function buildGlasses(base, style) {
   }
   if (style === 'monocle') {
     // a fine cord from the rim's outer edge down along the cheek, then back to behind the ear
-    const S = -1, p0 = ringPoint(S, -0.6), ez = earZ(base, S, ey);
+    const S = -1, p0 = ringPoint(S, -0.6), ez = earZ(H, S, ey);
     const cord = [p0, V(p0.x + S * 0.012, p0.y - 0.05, p0.z - 0.03), V(S * (Math.abs(p0.x) + 0.03), p0.y - 0.09, (p0.z + ez) / 2),
       V(S * (H.halfWidth(ey - 0.06, ez + 0.02, S, 0.02, 0.03) + 0.008), ey - 0.06, ez + 0.01)];
     parts.push(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(cord, false, 'centripetal'), 24, tube * 0.45, 4, false));
@@ -130,24 +128,34 @@ export function buildGlasses(base, style) {
 }
 
 // The ear's depth (z) on one side: the head's widest point a little below the eyes.
-function earZ(base, side, ey) {
+function earZ(head, side, ey) {
   let best = null;
-  for (const p of base.head.skin) {
+  for (const p of head.skin) {
     if (p.y < ey - 0.12 || p.y > ey + 0.02 || p.x * side <= 0) continue;
     if (!best || p.x * side > best.x * side) best = p;
   }
   return best ? best.z : -0.05;
 }
 
-// The glasses' geometry for the head bone's space: a Mesh that follows the head (`material` given).
-// (The geometry is in the bind-pose mesh space: headInverse x bindMatrix carries it into the bone's.)
-export function glassesMesh(base, style, material) {
-  const geo = buildGlasses(base, style);
-  if (!geo) return null;
-  const m = new THREE.Mesh(geo, material);
-  m.name = 'glasses';
-  m.frustumCulled = false;
-  m.matrixAutoUpdate = false;
-  m.matrix.copy(base.headInverse).multiply(base.bindMatrix);
-  return m;
+// The glasses as a piece of the guest (src/render/avatarParts.js merges it in): the tubes with the skin of a rigid
+// piece on the head bone (`headIdx`), so they move exactly as a mesh fixed to the head would. No vertex colour (white:
+// the frame colour comes from the guest's palette). Kept with the tubes.
+const pieces = new Map();
+export function glassesPiece(fit, style, headIdx) {
+  if (fit?.fit) fit = fit.fit;
+  const key = `${fit?.key}:${style}:${headIdx}`;
+  if (pieces.has(key)) return pieces.get(key);
+  const tubes = buildGlasses(fit, style);
+  if (!tubes) return null;
+  const n = tubes.attributes.position.count;
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', tubes.attributes.position);
+  g.setAttribute('normal', tubes.attributes.normal);
+  const joints = new Uint8Array(n * 4), weights = new Uint8Array(n * 4);
+  for (let v = 0; v < n; v++) { joints[v * 4] = headIdx; weights[v * 4] = 255; }
+  g.setAttribute('skinIndex', new THREE.BufferAttribute(joints, 4));
+  g.setAttribute('skinWeight', new THREE.BufferAttribute(weights, 4, true));
+  g.setIndex(tubes.index);
+  pieces.set(key, g);
+  return g;
 }

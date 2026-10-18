@@ -335,14 +335,14 @@ console.log('\n5. the graphics context lost and back');
   const a = await page.evaluate(async av => {
     const G = window.__game, gl = G.view.renderer.getContext(), ext = gl.getExtension('WEBGL_lose_context');
     const wait = p => Promise.race([p, new Promise(r => setTimeout(() => r('TIMEOUT'), 90000))]);
-    const asked = G.portraits().url({ ...av, skin: 'bronze' });
+    const asked = G.portraits().url({ ...av, colours: { ...av.colours, skin: 'bronze' } });
     ext.loseContext();
     await new Promise(r => setTimeout(r, 500));
     const lost = gl.isContextLost();
-    const during = G.portraits().url({ ...av, skin: 'brown' });
+    const during = G.portraits().url({ ...av, colours: { ...av.colours, skin: 'brown' } });
     ext.restoreContext();
     await new Promise(r => setTimeout(r, 1200));
-    return { lost, restored: !gl.isContextLost(), asked: String(await wait(asked)), during: String(await wait(during)), after: String(await wait(G.portraits().url({ ...av, skin: 'golden' }))) };
+    return { lost, restored: !gl.isContextLost(), asked: String(await wait(asked)), during: String(await wait(during)), after: String(await wait(G.portraits().url({ ...av, colours: { ...av.colours, skin: 'golden' } }))) };
   }, av);
   check(a.lost && a.restored, 'the context was lost and came back');
   check(a.asked.startsWith('blob:'), 'a portrait asked just before the loss is drawn again afterwards (not the stock picture)');
@@ -357,7 +357,7 @@ console.log('\n5. the graphics context lost and back');
       if (!cut++) { ext.loseContext(); setTimeout(() => ext.restoreContext(), 400); }
       return p;
     };
-    const url = await Promise.race([G.portraits().url({ ...av, skin: 'tan', hair: 'silver' }), new Promise(res => setTimeout(() => res('TIMEOUT'), 90000))]);
+    const url = await Promise.race([G.portraits().url({ ...av, colours: { ...av.colours, skin: 'tan', hair: 'silver' } }), new Promise(res => setTimeout(() => res('TIMEOUT'), 90000))]);
     r.readRenderTargetPixelsAsync = real;
     return { cut, url: String(url), lost: gl.isContextLost() };
   }, av);

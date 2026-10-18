@@ -72,9 +72,16 @@ import { createAvatarEditor } from './ui/avatarEditor.js';
 import { setPortraitService } from './ui/portrait.js';
 import { setSoulPortraits } from './ui/soulFace.js';
 import { createAvatarPortraits } from './render/avatarPortrait.js';
-import { avatarKey, shippedPortrait } from './data/wardrobe.js';
+import { preloadAvatars } from './render/avatar.js';
+import { avatarKey, shippedPortraitFor } from './data/wardrobe.js';
 import { record } from './record.js';
 import { showEndRecord } from './ui/record.js';
+// (achievements, checked on the end screen only; the "Clearer possessed eyes" setting for this screen's match)
+import { matchSummary, isTestLink } from './matchSummary.js';
+import { honours } from './honours.js';
+import { ACHIEVEMENTS } from './data/achievements.js';
+import { showEndHonours } from './ui/honoursEnd.js';
+import { displayAvatar } from './data/wardrobe.js';
 import { createFeed } from './ui/feed.js';
 import { createChatUI } from './ui/chat.js';
 import { createChatChannel } from './social/chat.js';
@@ -134,6 +141,7 @@ const TIMER_OFF = params.get('timer') === 'off';
 const INTRO = params.get('intro') !== 'off';
 const BOT_PACE = Math.max(0, parseFloat(params.get('botpace'))) || 1;
 const forcedSeed = parseInt(params.get('seed'), 10);
+const TEST_LINK = isTestLink(params);     // (a link that forces the match earns no achievement: src/matchSummary.js)
 const newSeed = () => (Number.isFinite(forcedSeed) && forcedSeed > 0 ? forcedSeed
   : PRACTICE && rules.practiceSeed != null ? rules.practiceSeed
     : (Date.now() & 0x7fffffff) || 1);
@@ -177,7 +185,7 @@ setPortraitService(portraits);
 const seatAvatar = id => (cast.find(s => s.id === id) || state?.players?.find(p => p.id === id))?.avatar || null;
 setSoulPortraits({
   key: id => { const av = seatAvatar(id); return av ? avatarKey(av) : null; },
-  url: id => { const av = seatAvatar(id); return av ? portraits.url(av, { possessed: true }).then(u => u || shippedPortrait(av.base, true)) : null; },
+  url: id => { const av = seatAvatar(id); return av ? portraits.url(av, { possessed: true }).then(u => u || shippedPortraitFor(av, true)) : null; },
 });
 const roomViews = new Map();          // roomId -> view, added as rooms are revealed
 // Rooms with real art (the lobby) are dressed as their views appear. The greybox shows until the
@@ -801,6 +809,7 @@ let meetingLive = false;     // a meeting (or a proposed trade) is being played 
 
 // Run `fn` after `ms`, unless a new game has started (or the player went back to the menu) meanwhile.
 let gameToken = 0;
+let foundThisGame = [];      // the cards the player's own searches found this game (the achievements: countHonours)
 // The game the player last looked round the hotel in (dragged, pinched, wheeled, or used a round camera
 // button), and the game they last used a round button in: the camera tips go by these (src/ui/tips.js).
 let camTouchedIn = -1, camButtonIn = -1;
@@ -1205,6 +1214,7 @@ function onSearch() {
   // settled only when the turn ends (endTurnNow -> the discard screen). The reveal says nothing about
   // it: the hand fan shows "Cards 8/6 · discard 2 at end of turn" the moment the reveal closes.
   const found = r.kind === 'found' || r.kind === 'cards' ? r.cards : r.kind === 'card' ? [r.card] : [];
+  foundThisGame.push(...found);            // (your own finds, for the achievements at the end: the rules emit no event for them)
   const then = () => refresh();
   // Search results are PRIVATE: the others learn only that a search happened (the public log). The
   // found cards are shown large on the player's own screen, on a light backdrop with the room still in
@@ -1452,6 +1462,7 @@ function showEnd() {
       `Practice complete: ${rules.lanternsToEscape} Lanterns carried out.\n${floor.roomList.length} rooms of the hotel revealed, on round ${state.round}.`,
       { keepExploring: false, restartLabel: 'Restart practice' });
     countRecord({ practice: true });
+    countHonours();
     return;
   }
   const you = me();
@@ -1487,6 +1498,7 @@ function showEnd() {
     recap: endRecap(state, humanSeat),                                  // (who was possessed first, whom they possessed)
   });
   countRecord({ won: yourSideWon, possessed: !!you.possessed, escaped: state.escaped.has(you.id) });
+  countHonours();
 }
 // Your record (src/record.js): each finished game is counted once, when its end screen shows (it can
 // show again for the same game; Play again and Restart practice deal a new one, a new gameToken). A
@@ -1499,10 +1511,36 @@ function countRecord(result) {
   }
   showEndRecord(document, result);
 }
+// Achievements (src/honours.js): checked once per game, here on the end screen only (never during a match), from the
+// rules' own events and your own finds (src/matchSummary.js: practice, test links and idle matches earn nothing); an
+// item earned goes into your profile (account.grant), and a quiet line under the record says so.
+let honouredGame = -1, honoured = [];
+// An achievement saved as earned whose item never reached the profile (it was read-only in this tab, or the save
+// failed) is granted again: at start-up and on every end screen. grant() adds an item once, so this is safe to repeat.
+function regrantHonours() {
+  try {
+    const earned = honours.get().earned || {};
+    for (const a of ACHIEVEMENTS) if (earned[a.id] && account.profile && !account.owns(a.item)) account.grant(a.item).catch(() => {});
+  } catch (err) { console.warn('achievement items could not be checked:', err); }
+}
+regrantHonours();
+function countHonours() {
+  if (honouredGame !== gameToken) {
+    honouredGame = gameToken;
+    honoured = [];
+    regrantHonours();
+    try {
+      honoured = honours.evaluate(matchSummary(state, humanSeat, { found: foundThisGame, testLink: TEST_LINK }));
+      for (const a of honoured) account.grant(a.item).catch(() => {});
+    } catch (err) { console.warn('achievements could not be checked:', err); }
+  }
+  showEndHonours(document, honoured, { body: account.profile?.avatar?.body });
+}
 
 // A fresh hotel and a fresh deal for the guests at the table now.
 function resetWorld() {
   gameToken++;
+  foundThisGame = [];
   seed = newSeed();
   resetState(state, floor, seed);          // a new random hotel
   state.viewerIndex = humanSeat;
@@ -1580,11 +1618,17 @@ async function loadBots() {
 // a player (src/table.js): you as your profile (name and avatar), each bot as its username and its own
 // avatar (rolled from its name: src/data/randomAvatar.js, never the match's random numbers). The six
 // named guests (Victor, Clara …) stay in the menu's lobby. `seats` (also `cast`): in seat order.
+// (the "Clearer possessed eyes" setting: on this device only, the whole match shows brown and hazel eyes as classic
+// dark eyes, so the possessed red stands out for a colour-blind player: src/data/wardrobe.js displayAvatar)
+const shownHere = seats => {
+  const clearEyes = settings.get('clearEyes') === 'on';
+  return seats.map(s => ({ ...s, avatar: displayAvatar(s.avatar, { clearEyes }) }));
+};
 async function planGame(choice) {
   portraits.resume();                      // (a game is coming: its portraits must be drawn)
   const mine = myIdentity();
   if (choice.practice) {
-    const seats = seatTable({ me: mine, seat: 0 });
+    const seats = shownHere(seatTable({ me: mine, seat: 0 }));
     return { practice: true, seats, cast: seats, humanSeat: 0, profiles: [null], possessedIndex: null, choice };
   }
   const mods = await loadBots();
@@ -1597,7 +1641,8 @@ async function planGame(choice) {
   const seat = Number.isFinite(askedSeat) ? Math.max(0, Math.min(n - 1, askedSeat)) : Math.floor(rng() * n);
   const rolled = mods.profiles.rollProfiles(n - 1, rng, { avoid: [mine.username] });   // (never your name)
   const looks = botAvatars(rolled.map(p => p.username), { avoid: [mine.avatar] });
-  const seats = seatTable({ me: mine, bots: rolled.map((p, k) => ({ username: p.username, avatar: looks[k] })), seat });
+  const seats = shownHere(seatTable({ me: mine, bots: rolled.map((p, k) => ({ username: p.username, avatar: looks[k] })), seat }));
+  preloadAvatars(seats.map(s => s.avatar));    // (every bot's pieces download together, during the lift)
   const profiles = seats.map((_, i) => (i === seat ? null : rolled.shift()));
   let possessedIndex = null;                                   // random, dealt by the rules
   if (choice.role === 'possessed') possessedIndex = seat;
@@ -2512,6 +2557,7 @@ window.__game = {
   skipToEnd: () => skipToEnd(),
   backToMenu: () => backToMenu(),
   record: () => record.get(),        // your record on this device (src/record.js)
+  honours: () => honours.get(),      // your achievements on this device (src/honours.js)
   endOpen: () => overlays.endOpen,
   askOpen: () => overlays.askOpen,
   menuPanelOpen: () => gameMenu.isOpen, howToOpen: () => howTo.isOpen, cardsOpen: () => cardsGuide.isOpen,     // (tests: the in-match Menu panel, How to play, Cards)
@@ -2617,6 +2663,7 @@ window.__game = {
   lobbyPlayer: () => lobby?.debug.player ?? null,
   lobbyWardrobe: () => lobby?.debug.wardrobe ?? null,
   lobbyBoarders: () => lobby?.debug.boarders ?? null,
+  lobbyPeople: () => lobby?.debug.people?.() ?? null,     // (each person in the menu's lobby: draw calls, triangles)
   characterViewCount: () => characterViews.length,
   renderInfo: () => ({ calls: view.renderer.info.render.calls, triangles: view.renderer.info.render.triangles,
     geometries: view.renderer.info.memory.geometries, textures: view.renderer.info.memory.textures, programs: view.renderer.info.programs.length }),

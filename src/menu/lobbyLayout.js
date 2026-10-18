@@ -101,8 +101,8 @@ export const lobbyLayout = {
   motes: [[[-0.6, 3.6, 1.2, 3.9, -2.6, 0.6], 70], [[3.0, 6.6, 0.6, 3.6, -3.6, -0.6], 60]],
   hemisphere: { sky: '#ffdcb0', ground: '#2a1a12', intensity: 0.34 },
 
-  // The people. `model` = a guest GLB in assets/characters; `dress` re-colours parts by material
-  // name. `seat` = [sofa id, seat index]; `at` = standing spot [x, z, heading].
+  // The people. `model` = a classic Look (src/data/wardrobe.js LOOKS: its pieces); `dress` re-colours
+  // parts by material name. `seat` = [sofa id, seat index]; `at` = standing spot [x, z, heading].
   cast: [
     // the guests who board the lift on Play (first `guests` of them, in this order)
     // (recline: how far the trunk leans back into the cushions; feetForward: shin angle, radians)
@@ -129,8 +129,9 @@ export const lobbyLayout = {
 
   // The player's own avatar (src/render/avatar.js, built from their profile by src/menu/lobbyScene.js
   // setPlayerAvatar): standing by the lift, the first to board it (practice: alone; a match: with the
-  // first two guests above, Victor and Clara — never a guest in the player's own look, who would be
-  // taken for them from behind: Henry boards instead). Not in `cast`: it is made from the avatar.
+  // first two guests above, Victor and Clara — never a guest who looks like the player (src/data/wardrobe.js
+  // lookAlike), who would be taken for them from behind: Henry boards instead). Not in `cast`: it is made
+  // from the avatar.
   // (a step right of the reception desk's rounded end and back toward the wall, so the desk is never
   // between the wardrobe camera and the avatar, a gown's skirt included)
   player: { name: 'you', at: [2.3, -4.55, -10], boards: 0.5, boardDelay: 0.05 },

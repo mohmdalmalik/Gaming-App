@@ -10,6 +10,9 @@
 // stalling (readRenderTargetPixelsAsync) -> over the plate (flat navy, or the possessed crimson gradient)
 // -> a JPEG (about 26 kB) -> an object URL, kept by avatarKey + look. The canvas the player sees is never
 // touched, so the menu's 'Still' background and the game's frames are unaffected.
+// Avatars are pieces (src/render/avatarParts.js): one hidden model per set of pieces (geometryKey), repainted per
+// portrait, the 8 used last kept (the oldest let go); the framing is measured once per body, face and hairstyle
+// (frameKey), from the guest's own eyes and, for the women, the whole hairdo (the merged Hair).
 //
 //   const portraits = createAvatarPortraits(renderer, { paused });
 //   portraits.peek(avatar, { possessed })  -> the URL if it is drawn, else null
@@ -17,20 +20,21 @@
 //   portraits.prepare([avatar | { avatar, possessed }, ...])  -> drawn ahead, after anything asked for
 //   portraits.prewarm(avatar)              -> builds the shaders (the menu), so the first draw is quick
 //   portraits.resume()                     -> start drawing (created `paused`: the menu's lobby first)
-//   portraits.draw(avatar, { possessed, original, w, h }) -> Promise<canvas> (tests)
+//   portraits.draw(avatar, { possessed, w, h }) -> Promise<canvas> (tests)
 // While paused, url() and prepare() still queue their portraits (the shipped picture shows meanwhile).
 // The off-screen buffers are let go once nothing has been drawn for a few seconds (RELEASE_MS) and made
 // again when needed. A picture that could not be drawn is tried again after RETRY_MS.
 // Nothing here knows any rule or role: the caller says which look it wants.
 import * as THREE from 'three';
 import { createAvatarModel, loadBase } from './avatar.js';
-import { avatarKey } from '../data/wardrobe.js';
+import { avatarKey, frameKey, genderOf } from '../data/wardrobe.js';
 import { POSSESSED_COLORS } from './possessedLook.js';
 
-const VERSION = 1;                      // (bump when the catalogue's colours or the framing change)
+const VERSION = 2;                      // (bump when the catalogue's colours or the framing change; 2: avatar v2, pieces)
 const NORMAL_BG = '#171b27';
 const FRAME_W = 1200, FRAME_H = 1600;
 const KEEP = 80;                        // portraits kept (about 2 MB); the oldest are let go
+const MODELS = 8;                       // hidden models kept (one per set of pieces); the least recently used go
 const RELEASE_MS = 5000;                // the buffers (about 12 MB on the graphics chip) after the last draw
 const RETRY_MS = 30000;                 // a portrait that failed (its model did not download) is tried again
 const nextFrame = () => new Promise(r => { let done = false; const go = () => { if (!done) { done = true; r(); } }; requestAnimationFrame(go); setTimeout(go, 60); });
@@ -42,7 +46,8 @@ export function createAvatarPortraits(renderer, { w = 384, h = 512, paused = fal
   const key = new THREE.PointLight(new THREE.Color('#ffd9a8'), 22, 9, 2); key.position.set(1.2, 2.6, 1.6); scene.add(key);
   const back = new THREE.PointLight(new THREE.Color('#ffd9a8'), 10, 9, 2); back.position.set(-2.0, 2.4, -1.0); scene.add(back);
   const cam = new THREE.PerspectiveCamera(24, FRAME_W / FRAME_H, 0.1, 100);
-  const models = new Map();             // look id -> { model, mixer, frame }: one model per look, repainted
+  const models = new Map();             // geometryKey -> { base, model, mixer }: one model per set of pieces, repainted
+  const frames = new Map();             // frameKey -> the framing (camera, crop, the eyes' place)
   const cache = new Map();              // key -> { url, promise, failed }
   const urgent = [], later = [];        // jobs: asked for (shown now) first, then drawn ahead
   const timings = [];
@@ -119,26 +124,32 @@ export function createAvatarPortraits(renderer, { w = 384, h = 512, paused = fal
     releaseTimer = setTimeout(() => { if (!running && !drawing && !disposed) { disposeTargets(); plates.clear(); } }, RELEASE_MS);
   }
 
-  // ---- one model per look, posed and framed once ----
+  // ---- one model per set of pieces, posed; framed once per body, face and hairstyle ----
   async function modelFor(av) {
-    const base = await loadBase(av.base);
+    const base = await loadBase(av);
     let m = models.get(base.id);
-    if (!m) {
-      const model = createAvatarModel(base, av, { rim: false });
-      model.root.rotation.y = THREE.MathUtils.degToRad(14);
-      scene.add(model.root);
-      model.root.visible = false;
-      const mixer = new THREE.AnimationMixer(model.root);
-      if (base.clips.idle) mixer.clipAction(base.clips.idle).play();
-      m = { base, model, mixer, frame: null };
-      models.set(base.id, m);
+    if (m) { models.delete(base.id); models.set(base.id, m); return m; }   // (recently used: kept longest)
+    const model = createAvatarModel(base, av, { rim: false });
+    model.root.rotation.y = THREE.MathUtils.degToRad(14);
+    scene.add(model.root);
+    model.root.visible = false;
+    const mixer = new THREE.AnimationMixer(model.root);
+    if (base.clips.idle) mixer.clipAction(base.clips.idle).play();
+    m = { base, model, mixer };
+    models.set(base.id, m);
+    for (const [k, o] of models) {
+      if (models.size <= MODELS) break;
+      if (o === m) continue;
+      models.delete(k); scene.remove(o.model.root); o.mixer.stopAllAction(); o.model.dispose();
     }
     return m;
   }
 
-  // The frame and crop for a look (the pipeline's preview + portrait.mjs + portrait_post.py), measured once.
-  function frameFor(m) {
-    if (m.frame) return m.frame;
+  // The frame and crop for a body, face and hairstyle (the pipeline's preview + portrait.mjs + portrait_post.py),
+  // measured once.
+  function frameFor(m, av) {
+    const fk = frameKey(av);
+    if (frames.has(fk)) return frames.get(fk);
     const { base, model } = m;
     model.root.updateMatrixWorld(true);
     const box = new THREE.Box3().setFromObject(model.root);
@@ -149,9 +160,12 @@ export function createAvatarPortraits(renderer, { w = 384, h = 512, paused = fal
     cam.clearViewOffset();
     cam.aspect = FRAME_W / FRAME_H;
     cam.position.copy(pos); cam.lookAt(look); cam.updateProjectionMatrix(); cam.updateMatrixWorld(true);
-    // the eyes (portrait.mjs): the men's eyeCentre has x = 0, so the tool's 0.072; the women's the eye's x
-    const EC = base.eyeCentre;
-    const EX = EC && Math.abs(EC[0]) > 0.02 ? Math.abs(EC[0]) : 0.072, EY = EC ? EC[1] : 1.373, EZ = EC ? EC[2] : 0.237;
+    // the eyes (portrait.mjs): the men's eyeCentre has x = 0, so the tool's 0.072; the women's pictures were framed on
+    // the eye's own x (their eyeCentre's; the pieces' faces give the middle, so it is measured from the eye ovals)
+    const EC = base.eyeCentre, female = genderOf(base.body) === 'f';
+    const measured = base.eyes ? (Math.abs(base.eyes.left.centre.x) + Math.abs(base.eyes.right.centre.x)) / 2 : 0;
+    const EX = EC && Math.abs(EC[0]) > 0.02 ? Math.abs(EC[0]) : female && measured > 0.02 ? measured : 0.072;
+    const EY = EC ? EC[1] : 1.373, EZ = EC ? EC[2] : 0.237;
     const bone = model.headBone, inv = base.headInverse;
     const eyes = [[-EX, EY, EZ], [EX, EY, EZ]].map(([x, y, z]) => {
       const p = new THREE.Vector3(x, y, z).applyMatrix4(inv).applyMatrix4(bone.matrixWorld).project(cam);
@@ -161,15 +175,13 @@ export function createAvatarPortraits(renderer, { w = 384, h = 512, paused = fal
     const ex = (eyes[0][0] + eyes[1][0]) / 2, ey = (eyes[0][1] + eyes[1][1]) / 2, gap = Math.abs(eyes[1][0] - eyes[0][0]);
     let cw = Math.min(FRAME_W, Math.floor(gap * 3.5)), ch = Math.min(FRAME_H, Math.floor(cw * 4 / 3));
     let eyeFrac = 0.37;
-    const hair = model.parts.Hair?.mesh;
-    if (base.def.body === 'f' && hair) {
+    const hair = base.ranges?.Hair;
+    if (female && hair) {
       // the whole hairdo in: the highest projected hair point within 1.6 eye gaps of the eyes
       let top = ey;
-      const v = new THREE.Vector3();
-      hair.skeleton.update();
-      const n = hair.geometry.attributes.position.count;
-      for (let i = 0; i < n; i++) {
-        hair.getVertexPosition(i, v); v.applyMatrix4(hair.matrixWorld).project(cam);
+      const v = new THREE.Vector3(), mesh = model.mesh;
+      for (const [start, n] of hair) for (let i = start; i < start + n; i++) {
+        mesh.getVertexPosition(i, v); v.applyMatrix4(mesh.matrixWorld).project(cam);
         const px = (v.x + 1) / 2 * FRAME_W, py = (1 - v.y) / 2 * FRAME_H;
         if (Math.abs(px - ex) < gap * 1.6 && py < top) top = py;
       }
@@ -177,15 +189,18 @@ export function createAvatarPortraits(renderer, { w = 384, h = 512, paused = fal
       const need = (ey - top) / (eyeFrac - 0.03);
       if (need > ch) { ch = Math.min(FRAME_H, Math.floor(need)); cw = Math.min(FRAME_W, Math.floor(ch * 3 / 4)); }
     }
-    let x0 = Math.floor(ex - cw / 2), y0 = Math.floor(ey - ch * eyeFrac);
-    x0 = Math.max(0, Math.min(FRAME_W - cw, x0)); y0 = Math.max(0, Math.min(FRAME_H - ch, y0));
+    // (the crop is the camera's view offset, so it may pass the frame's edge: every face's eyes then sit at the same
+    // height, however tall the guest or far forward the head. The picture tool clamped it to its rendered frame,
+    // which put Henry's eyes 2 % low.)
+    const x0 = Math.floor(ex - cw / 2), y0 = Math.floor(ey - ch * eyeFrac);
     // (tests) where the eye ovals' middles land in the frame (measured from the Eye mesh)
     const eyePx = base.eyes ? [base.eyes.left.centre, base.eyes.right.centre].map(c => {
       const p = c.clone().applyMatrix4(base.bindMatrix).applyMatrix4(inv).applyMatrix4(bone.matrixWorld).project(cam);
       return [(p.x + 1) / 2 * FRAME_W, (1 - p.y) / 2 * FRAME_H];
     }) : [];
-    m.frame = { pos, look, crop: { x0, y0, cw, ch }, eyePx };
-    return m.frame;
+    const frame = { pos, look, crop: { x0, y0, cw, ch }, eyePx };
+    frames.set(fk, frame);
+    return frame;
   }
 
   // ---- the plates (portrait_post.py): flat navy, or the possessed crimson gradient with a vignette ----
@@ -221,23 +236,18 @@ export function createAvatarPortraits(renderer, { w = 384, h = 512, paused = fal
     drawing++;
     try { return await drawOne(av, opts); } finally { drawing--; }
   }
-  async function drawOne(av, { possessed = false, original = false, w: W = w, h: H = h } = {}) {
+  async function drawOne(av, { possessed = false, w: W = w, h: H = h } = {}) {
     const t0 = performance.now();
     const m = await modelFor(av);
     if (disposed) return null;
     if (lostNow()) throw CONTEXT_LOST;
     const e0 = epoch;
-    const { model, mixer } = m;
-    if (original) { m.originalModel ||= createAvatarModel(m.base, av, { rim: false, original: true }); }
-    const shown = original ? m.originalModel : model;
-    if (original) { shown.root.rotation.y = model.root.rotation.y; scene.add(shown.root); }
-    else shown.setAvatar(av);
+    const { model: shown, mixer } = m;
+    shown.setAvatar(av);
     shown.setPossessed(possessed);
-    const f = frameFor(m);
-    // (the original-colours model shares the pose: its own mixer, same clip and time)
-    const mix = original ? (m.originalMixer ||= (() => { const mx = new THREE.AnimationMixer(shown.root); if (m.base.clips.idle) mx.clipAction(m.base.clips.idle).play(); return mx; })()) : mixer;
-    mix.setTime(0.4);
-    for (const o of models.values()) { o.model.root.visible = false; if (o.originalModel) o.originalModel.root.visible = false; }
+    const f = frameFor(m, av);
+    mixer.setTime(0.4);
+    for (const o of models.values()) o.model.root.visible = false;
     shown.root.visible = true;
     shown.root.updateMatrixWorld(true);
     cam.clearViewOffset();
@@ -259,7 +269,6 @@ export function createAvatarPortraits(renderer, { w = 384, h = 512, paused = fal
       renderer.setRenderTarget(prevTarget); renderer.setClearColor(prevClear, prevAlpha);
       shown.root.visible = false;
       shown.setPossessed(false);
-      if (original) scene.remove(shown.root);
     }
     const t2 = performance.now();
     const px = T.px;
@@ -372,7 +381,7 @@ export function createAvatarPortraits(renderer, { w = 384, h = 512, paused = fal
       try {
         const m = await modelFor(av);
         m.model.setAvatar(av);
-        frameFor(m);
+        frameFor(m, av);
         const T = makeTargets(w, h);
         m.model.root.visible = true;
         const parallel = !!(renderer.compileAsync && renderer.extensions?.has?.('KHR_parallel_shader_compile'));
@@ -391,9 +400,9 @@ export function createAvatarPortraits(renderer, { w = 384, h = 512, paused = fal
     },
     resume() { if (!paused) return; paused = false; run(); },
     draw,
-    // (tests) the eyes' middles in a W x H portrait of a look already drawn: [[x, y], [x, y]]
-    eyesAt(baseId, W = w, H = h) {
-      const f = models.get(baseId)?.frame;
+    // (tests) the eyes' middles in a W x H portrait of an avatar already drawn: [[x, y], [x, y]]
+    eyesAt(av, W = w, H = h) {
+      const f = av ? frames.get(frameKey(av)) : null;
       if (!f) return null;
       const c = f.crop;
       return f.eyePx.map(([x, y]) => [(x - c.x0) / c.cw * W, (y - c.y0) / c.ch * H]);
@@ -401,13 +410,15 @@ export function createAvatarPortraits(renderer, { w = 384, h = 512, paused = fal
     timings: () => [...timings],
     cached: () => [...cache.values()].filter(e => e.url).length,
     pending: () => urgent.length + later.length,
+    models: () => models.size,
     dispose() {
       disposed = true;
       clearTimeout(releaseTimer);
       for (const e of cache.values()) if (e.url) URL.revokeObjectURL(e.url);
       cache.clear();
-      for (const m of models.values()) { m.model.dispose(); m.originalModel?.dispose(); }
+      for (const m of models.values()) { m.mixer.stopAllAction(); m.model.dispose(); }
       models.clear();
+      frames.clear();
       disposeTargets();
     },
   };

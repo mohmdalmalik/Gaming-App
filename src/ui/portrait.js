@@ -6,16 +6,16 @@
 //
 // A player with an `avatar` (src/data/wardrobe.js: every seat at the table, the profile card) gets their
 // own portrait, drawn at run time by the portrait service main.js hands in (setPortraitService: src/render/
-// avatarPortrait.js, so src/ui keeps no three.js import). Until it is drawn the look's shipped picture
-// (assets/portraits/<look>.jpg, -possessed.jpg) shows, and every <img> of that portrait is swapped in place
-// the moment it is ready. `img.dataset.look` says which state it shows ('normal' | 'possessed'). The profile
+// avatarPortrait.js, so src/ui keeps no three.js import). Until it is drawn the shipped picture of the Look
+// whose face it wears (assets/portraits/<look>.jpg, -possessed.jpg: src/data/wardrobe.js shippedPortraitFor)
+// shows, and every <img> of that portrait is swapped in place the moment it is ready. `img.dataset.look` says which state it shows ('normal' | 'possessed'). The profile
 // card asks for its own first picture instead (`first`: the last one drawn of that avatar, kept on the
 // device; or `plate`: a plain navy plate with a brass silhouette — never another look's face). A picture
 // that cannot be loaded shows that plate too (`portrait-missing`), never a broken-image icon or its alt
 // text spilling out of the tile.
 // PORTRAIT_ART stays for anything still keyed by outfit (tools, old fixtures).
 import { outfits, bodyTypes } from '../data/characters.js';
-import { avatarKey, shippedPortrait } from '../data/wardrobe.js';
+import { avatarKey, shippedPortraitFor } from '../data/wardrobe.js';
 
 let service = null;          // { peek(avatar, { possessed }), url(avatar, { possessed }) -> Promise<url|null> }
 export function setPortraitService(svc) { service = svc || null; }
@@ -37,7 +37,7 @@ function avatarPortrait(doc, player, possessed, { first = null, plate = false, o
   img.dataset.portrait = tag;
   img.addEventListener('error', () => toPlate(img));
   const ready = service?.peek(av, { possessed }) || null;
-  if (ready || first || !plate) img.src = ready || first || shippedPortrait(av.base, possessed);
+  if (ready || first || !plate) img.src = ready || first || shippedPortraitFor(av, possessed);
   else toPlate(img);
   if (ready) onReady?.(ready);
   else if (service) {

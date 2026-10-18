@@ -5,8 +5,8 @@
 // drawn of this avatar, kept on the device (one JPEG, about 30 kB, guarded like every storage access),
 // or a plain plate on a first visit — never another look's face.
 import { makePortrait } from './portrait.js';
-import { avatarKey } from '../data/wardrobe.js';
-import { OUTFIT_OF_BASE, SEAT_COLORS } from '../table.js';
+import { avatarKey, outfitOf } from '../data/wardrobe.js';
+import { SEAT_COLORS } from '../table.js';
 
 const CARD_KEY = 'hotelEscape.cardPortrait.v1';
 function remembered(key) {
@@ -39,7 +39,7 @@ export function createProfileCard(doc, { account, onOpen, guard = () => false } 
     const key = avatarKey(p.avatar);
     if (face && key !== shownKey) {
       shownKey = key;
-      const pic = makePortrait(doc, { id: 'me', name: p.username, color: SEAT_COLORS[0], avatar: p.avatar, outfit: OUTFIT_OF_BASE[p.avatar.base] },
+      const pic = makePortrait(doc, { id: 'me', name: p.username, color: SEAT_COLORS[0], avatar: p.avatar, outfit: outfitOf(p.avatar) },
         { first: remembered(key), plate: true, onReady: url => remember(key, url) });
       if (pic.tagName === 'IMG') { pic.alt = ''; pic.decoding = 'async'; pic.draggable = false; }
       face.replaceChildren(pic);

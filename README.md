@@ -55,10 +55,13 @@ finished a practice), **How to play** and **Cards** side by side, then **Setting
   skin tone, hair, eyes, glasses (and their frame), outfit colour, the accent (bow tie, tie or sash) and
   jewellery. Every pick shows at once on **your own avatar, who stands by the lift in the lobby** (the
   camera moves in on them); it is kept when you leave the screen. Your avatar boards the lift first (alone
-  in practice, with Victor and Clara in a match). A few items show a lock and **"Coming soon"** (Platinum
-  hair, Monocle, Gold frames, Champagne and Gatsby gold outfits, Rose gold jewellery): nothing can be
-  bought or unlocked yet. Every portrait (the guest strip, your panel, the meeting, the trades, the soul
-  cards) is drawn from the guest's avatar while you play; the look's stock picture shows until it is.
+  in practice, with Victor and Clara in a match). Avatars are made of swappable pieces now (avatar v2,
+  `src/data/wardrobe.js`; old saves keep their look). Achievement and Boutique items (Platinum hair,
+  Champagne and Gatsby gold outfits, Rose gold jewellery, Gold frames) carry a small rosette or diamond and
+  are **unlocked for testing** for now (one line locks them); the five achievements are checked on the end
+  screen only, and an earned one says so under your record. Every portrait (the guest strip, your panel, the meeting, the trades, the soul
+  cards) is drawn from the guest's avatar while you play; the stock picture of the Look whose face it wears
+  shows until it is. A guest costs 2 draw calls (its pieces merged once), where a look cost 9-15.
 
 - **Play with bots.** You and 3–5 computer guests (bots), like an online table filling up: choose how
   many others and your role (random, clean guest or possessed), watch the guests join with their online
@@ -370,12 +373,14 @@ src/
                       and the bots' turns, meetings both ways); window.__game debug hooks
   version.js          the version label and date shown in Settings (set at each publish)
   config.js           display / camera / feel tuning
-  settings.js         the player's own settings (bot speed, view, graphics, menu background, music, sound, quick chat, tips), kept on the device
+  settings.js         the player's own settings (bot speed, view, graphics, menu background, music, sound, quick chat, tips, clearer possessed eyes), kept on the device
   motion.js           the device's Reduce Motion setting (prefers-reduced-motion), read live: it holds the two flickering corridors' light steady, the menu lobby Still and, in styles.css, the decorative CSS motion quiet
   record.js           your record (played / won / lost, by side, escapes, practice escapes), kept on the device; counted by main.js at the end screen
+  honours.js          your achievements ("Hotel Honours": progress and what was earned), kept on the device (key hotelEscape.honours.v1); checked by main.js on the end screen only, once per game
+  matchSummary.js     what you did in a finished match, from the rules' own events (pure: a server can reuse it): counts or not (practice, test links, idle), wins by the side you started on, your Mirror and Lantern block while clean, the Lanterns you found
   matchMarker.js      "a match is in progress" marker in localStorage (key hotelEscape.matchInProgress.v1, the time only): written when a real match begins, removed when it ends or is left; still there at the next start of the main menu means the browser cut the match short (src/main.js counts one "Left early" and says so once). Never touched by a direct link (?mode=) or practice
   account/            who you are: account.js (the profile on this device, key 'hotelEscape.profile.v1', behind an
-                      async interface a server account can replace: signUp, rename, setAvatar, owns, onChange),
+                      async interface a server account can replace: signUp, rename, setAvatar, owns, grant, onChange),
                       profile.js (the profile's shape and its repair), username.js (the name rules, reserved
                       words, the light filter, suggestions) — the last two pure (a server can reuse them)
   table.js            who sits where: seats { id p1..pN, username, colour by seat, avatar }; the bots' avatars
@@ -397,10 +402,13 @@ src/
     hotel.js          THE HOTEL: the lobby and the 24-tile room deck (doorways, dark, locked, furniture, moods)
     characters.js     body types and outfits; `roster` (the six named guests) is only a fixture for the Node tests and tools now
     names.js          the words of "Suggest a name", the reserved words (with the rules' log words) and the light filter (base64)
-    wardrobe.js       THE AVATAR CATALOGUE: the six looks (which named parts each slot paints), every item (colours,
-                      eye colours, glasses, frames; 'free' or locked 'earn' / 'shop'), item ids 'slot.key', an
-                      avatar made safe (normaliseAvatar), avatarKey; pure (a server can check avatars with it)
-    randomAvatar.js   a computer guest's look from its username (seeded, free items only, never a look already at the table)
+    wardrobe.js       THE AVATAR CATALOGUE (avatar v2): swappable pieces on shared bodies, the six classic Looks, every item
+                      (pieces, colours, glasses; 'free', 'achievement' or 'boutique'; UNLOCK_ALL_FOR_TESTING, the one-line
+                      switch), item ids 'slot.key', the v1 -> v2 migration, an avatar made safe (normaliseAvatar), the keys,
+                      partKeysFor, paletteHex, lookAlike, displayAvatar; pure (a server can check avatars with it)
+    partsIndex.js     GENERATED by tools/char-pipeline/parts/manifest.py: which bodies and pieces the art has built (never edit)
+    achievements.js   the five achievements (what you do, the item each gives) and the end screen's line
+    randomAvatar.js   a computer guest's look from its username (seeded; about one in three wears an unlockable item; never alike to a guest already at the table)
     chat.js           quick chat: the two tabs of preset lines and the emotes, the cooldown, when the bots may speak
                       (BOT_CHAT) and how they weigh what they hear (BOT_HEAR)
     record.js         the words of Your record and of the end screen's record line
@@ -444,10 +452,13 @@ src/
                       pathPreview.js the dotted path, outline + cost tag of a move to confirm;
                       characterView.js one guest's figure behind one surface (an avatar, a glTF guest or the box stand-in): walking, dying, the possessed look;
                       possessedLook.js the possessed player's own red eyes (shared with the portrait tool);
-                      avatar.js a player's avatar from one of the six models (parsed once per look, cloned
-                      with its own colours, eye colour and glasses); avatarGlasses.js glasses fitted to any
-                      look; avatarPortrait.js the interface portraits drawn from an avatar with the game's
-                      own renderer (cached by look; the stock picture until ready)
+                      avatarParts.js a guest made of pieces: the manifest, each piece's GLB parsed once and
+                      shared, the worn pieces merged once (shadow patches, glasses) into one skinned mesh +
+                      the eyes: 2 draw calls a guest; avatar.js a player's avatar from those pieces (its own
+                      bones, a 16-colour palette uniform: a colour change only repaints, the eye colour,
+                      the possessed eyes); avatarGlasses.js glasses fitted to any face; avatarPortrait.js
+                      the interface portraits drawn from an avatar with the game's own renderer (one model
+                      per set of pieces, framed per face and hairstyle; the stock picture until ready)
   camera.js input.js player.js discovery.js   camera rig (zoom to fit the hotel, free pan, centre on
                                                me), gestures, movement, room→walk glue
   hud.js  map.js  overlays.js   HUD + action bar (room job, Trade, End turn), 2D map, overlays
@@ -473,10 +484,11 @@ src/
     menu.js                           the main menu screens: the register, the main menu, your avatar, Play with bots, the table, the guests joining, Settings, Your record
     register.js                       "Sign the register" (the first visit's username) and Change name
     profileCard.js                    the main menu's card: "Playing as <name> · Adjust avatar ›"
-    avatarEditor.js                   the wardrobe (your avatar): Male / Female, the look, every slot, locked "Coming soon" items
+    avatarEditor.js                   the wardrobe (your avatar), the W1 stand-in on avatar v2: Male / Female, a classic Look, the colours and glasses; unlockable items marked (achievement / Boutique, "unlocked for testing")
     portrait.js                       a guest's portrait: drawn from their avatar (the service main.js hands in), the stock picture until then
     crash.js                          the safety net: every step of a frame runs through it, so one failing step never freezes the picture; the last messages kept; "Something went wrong" (Back to menu, Reload) only after repeated failure
     record.js                         the Your record screen and the end screen's record line (words: src/data/record.js)
+    honoursEnd.js                     the end screen's quiet "Achievement earned: …" line (src/honours.js)
     feed.js                           what the other guests just did (public words), under the room name
     chat.js                           quick chat: the Chat button and its two-tab panel, "Choose a guest" for a line
                                       that names one, speech bubbles over the guests, feed lines, the end screen's
@@ -527,6 +539,15 @@ node tools/char-pipeline/portrait.mjs all                 # private possessed po
 ```
 (`tools/char-pipeline/README.md` lists every tool. `make_victor.py` is Victor's older builder, kept for
 reference.)
+
+**The wardrobe's swappable pieces** (faces, hair, moustaches, tops, neckwear, trousers, shoes on one shared body per
+gender) are built by `tools/char-pipeline/parts/` into `assets/characters/parts/<body>/`; its `manifest.py` alone
+writes `assets/characters/parts/manifest.json` and `src/data/partsIndex.js`:
+```bash
+LD_LIBRARY_PATH=/usr/local/lib/python3.11/dist-packages/bpy/lib python3 tools/char-pipeline/parts/build.py m   # the male pieces
+python3 tools/char-pipeline/parts/manifest.py --check     # always after a build (format, budgets, shadow patches)
+```
+(Review sheets, the red-eye and poke-through tests: "Parts pipeline" in `tools/char-pipeline/README.md`.)
 
 ## Starting-room pipeline (Blender → baked glTF → game)
 The starting room is one model with its light baked in (soft sky light, contact shadows, lamp and
@@ -582,12 +603,15 @@ node tests/browser-build-fixes.mjs # the round 1 fixes in a real browser: End tu
 node tests/trade-reveal-check.mjs # the trade scene: real trades for all seven outcomes (conversion with two new souls of your own, then your role; Lantern block; swap; you possess them; a soul spent on a guest already possessed; two souls crossed): soul faces, hands after, red eyes on known allies
 # (the browser tests' launchers seed a saved profile 'tester' before each page, so the menu opens on the
 #  main screen; tests/browser-profile.mjs starts with none, to check the register)
-node tests/avatar-check.mjs       # avatars: the catalogue and locked items, bots' looks, every look x every value, glasses, runtime portraits vs the stock pictures, red eyes on every look x eye colour, the wardrobe at the three iPad sizes, your avatar in the lift, four tables in a row (memory, draw calls)
+node tests/avatar-check.mjs       # avatars as drawn: every Look x every colour (the palette), every glasses style merged in and fitted to every face, every hairstyle on every face and every outfit mix assembled, runtime portraits framed like the stock pictures, red eyes on every Look x eye colour, the wardrobe at the three iPad sizes, your avatar in the lift, four tables in a row (memory, draw calls)
+node tests/browser-avatar-parts.mjs # guests made of pieces: a v1 profile's Victor from pieces renders like today's whole model (pixel difference), 2 draw calls a guest (3 with catchlights), a colour change repaints only, the possessed eyes, glasses merged in, a six-seat match within 18 calls for its guests, the menu's lobby one call a person
 node tests/polish-check.mjs       # the round 2 polish, pure logic (no browser): the six seat colours stay apart for red-green and blue-yellow colour blindness (a simulation; the old lime set is the control that fails), the guest's initial, the "match in progress" marker (kept, taken once, 6 hours, damaged, blocked storage), the ring's numbers (~1 s; also in the GitHub Action)
 node tests/browser-polish.mjs     # the round 2 polish in a real browser: the app icon and manifest from a sub-path, a match cut short (reload mid-match, Main menu, a finished match, a stale marker, direct links), keyboard focus on the screens over the game, touch scrolling of tall pop-ups, small text and the tight HUD at 1024x768 and 1024x694, the initials and rings [--only head,reload,focus,scroll,text,seats]
 node tests/crash-check.mjs        # the frame safety net (src/ui/crash.js): a failing step is skipped, the card only after repeated failure, the ring of messages (~1 s; also in the GitHub Action)
 node tests/browser-reliability.mjs # start-up and failures in a real browser: an old browser (no import maps), a blocked file (one automatic reload, then the card), slow loading (no false alarm), a failing step (the picture goes on, the card after repeats), the graphics context lost and back (portraits drawn again), the sideways / wider messages, the Version line [--screens]
-node tests/profile-check.mjs      # profiles: the name rules, reserved words and filter, suggestions, profile repair, the account (memory store), seats and bots' avatars, seeded tables, the feed's name masking (~1 s)
+node tests/profile-check.mjs      # profiles: the name rules, reserved words and filter, suggestions, profile repair (version 2, a version 1 profile migrated), the account (memory store, grant), seats and bots' avatars, seeded tables, the feed's name masking (~1 s)
+node tests/wardrobe-check.mjs     # avatar v2 (no browser, ~40 s): the catalogue (the ten new items, the two locked sets, the one-line testing switch), the six Looks and the keys, v1 -> v2 for every v1 combination (about 10 million), making an avatar safe, pending pieces and the fallback gown bodies, the switch on and off with bugs A and B (an owned item kept at load and at the table; --only switch --root DIR runs them against an older copy), bots' looks over 2000 tables (never alike, eyes always show, about one in three wearing an unlockable), the clearer-eyes avatar [--only catalogue,looks,v1,safe,index,switch,bots,game]
+node tests/honours-check.mjs      # the achievements (no browser, ~1 s): each of the five earned from matches scripted through the real rules engine, every rule against abuse (practice, test links, idle, unfinished, the side you started on, the Mirror and the block only while clean), device storage, and main.js checking them on the end screen only, once per game
 node tests/browser-profile.mjs    # the first-run register, the profile card, Change name, blocked storage, usernames at the table, ?user=, long names [--screens] [--sizes 1024x768,1366x1024]
 node tests/tips-check.mjs         # first-match tips ON: where they sit, never blocking, the clock runs on, once per device, Hide tips, Show tips again, the safe-zone / pinch-and-drag / round-buttons tips [--size 1024x768] [--shots DIR] [--new-only: just the new tips]
 node tests/public-events-check.mjs # what the public events may carry (no browser, ~5 s): every public event of a few hundred bot matches has only its documented keys (a role, a hand, a card count or a private result can never ride along), and a new event type must be written down in the test

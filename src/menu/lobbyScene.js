@@ -37,6 +37,7 @@ import { buildLobbySet } from './lobbySet.js';
 import { createActor, createAvatarActor, preloadCast, disposeCast } from './lobbyCast.js';
 import { disposeTextures } from './lobbyTextures.js';
 import { loadBase, createAvatarModel } from '../render/avatar.js';
+import { LOOKS, geometryKey, lookAlike, lookOf } from '../data/wardrobe.js';
 
 // The lobby's own rim light on the guests (src/menu/lobbyCast.js): the player's avatar gets the same.
 const LOBBY_RIM = { color: '#ffd9a8', rim: 0.55, fill: 0.08 };
@@ -188,9 +189,9 @@ export function createLobbyScene({ renderer, cfg, layout = lobbyLayout } = {}) {
   })();
 
   // ---- the player's own avatar ---------------------------------------------------------------------
-  // Built from their profile (src/render/avatar.js: the game's own model, its eye colour and glasses),
-  // standing by the lift (layout `player`). A new look of the same body and cut is a repaint (instant);
-  // another look is rebuilt in the same spot.
+  // Built from their profile (src/render/avatar.js: the game's own model, its pieces, eye colour and glasses),
+  // standing by the lift (layout `player`). New colours on the same pieces are a repaint (instant); other
+  // pieces are assembled and rebuilt in the same spot.
   let player = null;            // { actor, model, base }
   let wantAvatar = null, playerToken = 0;
   function dropPlayer(p) {
@@ -204,9 +205,9 @@ export function createLobbyScene({ renderer, cfg, layout = lobbyLayout } = {}) {
     wantAvatar = av ? { ...av } : null;
     const token = ++playerToken;
     if (!wantAvatar || !L.player) { dropPlayer(player); player = null; return true; }
-    if (player && player.base.id === wantAvatar.base) { player.model.setAvatar(wantAvatar); return true; }
+    if (player && player.base.id === geometryKey(wantAvatar)) { player.model.setAvatar(wantAvatar); return true; }
     try {
-      const base = await loadBase(wantAvatar.base);
+      const base = await loadBase(wantAvatar);
       await ready;
       if (token !== playerToken || disposed || !wantAvatar) return null;
       const model = createAvatarModel(base, wantAvatar, { rim: LOBBY_RIM });
@@ -225,7 +226,10 @@ export function createLobbyScene({ renderer, cfg, layout = lobbyLayout } = {}) {
             if (old.actor.path) actor.walkPath(old.actor.path.map(p => [p.x, p.z]), { speed: old.actor.speed, face: old.actor.arriveFace, onArrive: old.actor.onArrive });
           }
         }
-        dropPlayer(old); actors.set('you', actor);
+        // (the old look stays, hidden, until the new one's shaders are built: disposed first, it would take the
+        // guests' shared shader programs with it, and they would be built again, a stall of about a second a tap)
+        old.actor.group.visible = false;
+        actors.set('you', actor);
       }
       actor.update(0.016);
       // (its shaders, the red / coloured eyes and the glasses' included, built now rather than on a pick)
@@ -234,7 +238,7 @@ export function createLobbyScene({ renderer, cfg, layout = lobbyLayout } = {}) {
           if (renderer.compileAsync && renderer.extensions?.has?.('KHR_parallel_shader_compile')) await renderer.compileAsync(scene, camera);
           else renderer.compile(scene, camera);
         });
-      } catch { /* only an optimisation */ }
+      } catch { /* only an optimisation */ } finally { dropPlayer(old); }
       return true;
     } catch (e) { console.warn('lobby: your avatar could not be shown:', e && e.message); return token === playerToken ? false : null; }
   }
@@ -320,8 +324,8 @@ export function createLobbyScene({ renderer, cfg, layout = lobbyLayout } = {}) {
     // first guests, Victor and Clara). Without it, `prefer` (a cast name) boards too, when they can.
     let pool = L.cast.filter(c => c.boards).sort((a, b) => a.boards - b.boards);
     if (player && actors.get('you') === player.actor) {
-      // (never beside a guest in your own look: from behind, nobody could tell which one is you)
-      pool = pool.filter(c => c.model !== player.base.id);
+      // (never beside a guest who looks like you: from behind, nobody could tell which one is you)
+      pool = pool.filter(c => !(LOOKS[c.model] && lookAlike(LOOKS[c.model], player.model.avatar)));
       pool.unshift(L.player);
     } else {
       const mine = pool.findIndex(c => c.name === prefer);
@@ -572,9 +576,22 @@ export function createLobbyScene({ renderer, cfg, layout = lobbyLayout } = {}) {
     scene, camera, ready, setSize, update, enter, reset, dispose, setPlayerAvatar, setWardrobe,
     // for the preview page and tests
     debug: { actors, set, get seq() { return seq; }, layout: L, setCamera(c) { cameraOverride = c; updateCamera(clock); },
-      get player() { return player ? { avatar: player.model.avatar, base: player.base.id, x: player.actor.x, z: player.actor.z, glasses: !!player.model.glasses, screen: screenOf('you') } : null; },
+      get player() { return player ? { avatar: player.model.avatar, base: player.base.id, look: lookOf(player.model.avatar), x: player.actor.x, z: player.actor.z, glasses: !!player.model.glasses, screen: screenOf('you') } : null; },
       get wardrobe() { return { ...wardrobe }; },
       get boarders() { return seq ? seq.boarders.map(a => a.spec.name) : null; },
+      // (tests) every person in the room: the draw calls and triangles of their figure
+      people() {
+        return [...actors].map(([name, a]) => {
+          let calls = 0, tris = 0;
+          a.group.traverse(o => {
+            if (!o.isMesh || !o.visible) return;
+            const groups = Array.isArray(o.material) ? o.geometry.groups.filter(g => o.material[g.materialIndex]?.visible !== false) : null;
+            calls += groups ? groups.length : 1;
+            tris += groups ? groups.reduce((n, g) => n + g.count, 0) / 3 : (o.geometry.index ? o.geometry.index.count : o.geometry.attributes.position.count) / 3;
+          });
+          return { name, calls, tris };
+        });
+      },
       screenOf },
   };
 }

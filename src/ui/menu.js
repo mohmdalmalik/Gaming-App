@@ -2,11 +2,11 @@
 // behind it; main.js blurs it). Small screens in one panel:
 //   signup       "Sign the register": the first visit asks for a username (src/ui/register.js); the
 //                same screen changes it later ("Change name" on the avatar screen: showRename)
-//   main         your profile card ("Playing as <name> · Adjust avatar ›", src/ui/profileCard.js),
+//   main         your profile card ("Playing as <name> · Wardrobe ›", src/ui/profileCard.js),
 //                Play with bots · Practice alone (with a hint under it for a player who has played nothing
 //                yet) · How to play and Cards side by side (both open a read-only screen above the menu:
 //                src/ui/howToPlay.js, src/ui/cardsGuide.js), then Settings and Your record side by side
-//   avatar       your avatar (the wardrobe: #menu-avatar, built by the avatar screen's own module)
+//   avatar       the Wardrobe: your avatar (#menu-avatar, built by src/ui/wardrobe/wardrobe.js)
 //   bots         how many other guests (3-5) and your role (random, clean, possessed)
 //   matchmaking  the table filling up, guest by guest, as in an online game
 //   settings     bot speed, the view on other guests' turns, graphics, the menu background, music,
@@ -86,7 +86,7 @@ export function createMenu(doc, { onPlayBots, onPractice, onSettingChanged, onSc
     guard: e => tooSoon(e, shownAt),
     onDone: (mode) => show(mode === 'rename' ? 'avatar' : 'main'),
   });
-  // The profile card on the main menu: Adjust avatar opens the avatar screen.
+  // The profile card on the main menu: it opens the Wardrobe (the avatar screen).
   const card = createProfileCard(doc, { account, onOpen: () => show('avatar'), guard: e => tooSoon(e, shownAt) });
 
   // A row of buttons where exactly one is chosen (radio buttons that look like a segmented control).

@@ -415,10 +415,16 @@ if (only.includes('scroll')) {
     return { over, top, label };
   }
   try {
-    // the control that the method works: the wardrobe's list, which has always had data-scrolls, scrolls under it
+    // the control that the method works: the wardrobe's grid, which has always had data-scrolls, scrolls under it (its
+    // Looks: your three slots and the six classic guests)
     await page.goto(baseUrl, { waitUntil: 'domcontentloaded' });
     await menuUp(page); await page.waitForTimeout(800);
     await page.click('#btn-profile');
+    await settle(page, () => !!document.querySelector('#wd-rail button[data-area="looks"]'), null, 30000);
+    await page.waitForTimeout(400);
+    await page.click('#wd-rail button[data-area="looks"]');
+    // (a spacer at its end, as for the pop-ups below, so there is always more to scroll than one swipe)
+    await ev(() => { const b = document.getElementById('av-body'); const sp = document.createElement('div'); sp.className = '__spacer'; sp.style.cssText = 'grid-column:1/-1;height:600px'; b.appendChild(sp); });
     await settle(page, () => { const b = document.getElementById('av-body'); return !!b && b.getClientRects().length > 0 && b.scrollHeight > b.clientHeight; }, null, 30000);
     await page.waitForTimeout(400);       // (the page has stopped sliding in)
     const wr = await ev(() => { const b = document.getElementById('av-body'); b.scrollTop = 0; const q = b.getBoundingClientRect(); return { x: q.left + q.width / 2, y: q.top + 60, over: b.scrollHeight - b.clientHeight }; });
@@ -540,16 +546,16 @@ if (only.includes('text')) {
         await page.click(back); await page.waitForTimeout(500);
       }
       await page.click('#btn-profile');
-      // (avatar v2: while the catalogue's testing switch is on nothing says "Coming soon"; the small words are the
-      // line under a row saying what an unlockable item will be: "Achievement: … · unlocked for testing")
-      const SMALL = '.av-chip-soon, .av-kind';
-      await settle(page, () => !!document.querySelector('.av-chip-soon, .av-sw.unlockable'), null, 30000);
+      // (the Wardrobe, src/ui/wardrobe/wardrobe.js: the smallest words are a tile's status line and, while the
+      // catalogue's testing switch is on, the small "unlocked for testing" note on an Achievement or Boutique tile)
+      const SMALL = '.wd-test';
+      await settle(page, () => !!document.querySelector('#wd-rail button[data-area="hair"]'), null, 30000);
       await page.waitForTimeout(400);       // (the page has stopped sliding in)
-      const wornHair = await ev(() => document.querySelector('.av-row[data-slot="hair"] .av-sw.on')?.dataset.id);
-      if (!(await ev(() => !!document.querySelector('.av-chip-soon')))) {
-        await page.click('.av-row[data-slot="hair"] .av-sw.unlockable');
-        await settle(page, () => { const e = document.querySelector('.av-kind'); return !!e && e.getClientRects().length > 0; }, null, 10000);
-      }
+      await page.click('#wd-rail button[data-area="hair"]');
+      await settle(page, () => { const e = document.querySelector('.wd-test'); return !!e && e.getClientRects().length > 0; }, null, 10000);
+      const wornHair = null;
+      const status = await sizeOf(page, '.wd-mt');
+      check(status.length > 0 && status.every(v => v >= 11), `${tag} wardrobe: the tiles' status words are 11 px or more (${status[0]})`);
       const soon = await ev(sel => [...document.querySelectorAll(sel)].map(e => { const cs = getComputedStyle(e); return { fs: parseFloat(cs.fontSize), color: cs.color }; }), SMALL);
       await ev(() => { const b = document.getElementById('av-body'); b.scrollTop = b.scrollHeight; });
       await page.waitForTimeout(400);
@@ -563,10 +569,10 @@ if (only.includes('text')) {
       const L1 = lum(rgbOf(chips[0].color)), L2 = lum(rgbOf(bg));
       const ratio = (Math.max(L1, L2) + 0.05) / (Math.min(L1, L2) + 0.05);
       check(ratio >= 4.5, `${tag} wardrobe: those words read at ${ratio.toFixed(1)}:1 against their plate (was 3.85:1)`);
-      if (wornHair) await page.click(`.av-row[data-slot="hair"] .av-sw[data-id="${wornHair}"]`).catch(() => {});     // (the test profile's own hair back)
+      if (wornHair) await page.click(`#wd-row .wd-sw[data-id="${wornHair}"]`).catch(() => {});
       note('wardrobe', await smallText(page));
       await page.screenshot({ path: path.join(outDir, `${tag}-wardrobe-bottom.png`) });
-      await page.click('#btn-av-done').catch(() => {});
+      await page.click('#btn-wd-save').catch(() => {});
       await page.waitForTimeout(500);
 
       // the match HUD, a possessed guest (the widest panel), the chat, the map, tips off

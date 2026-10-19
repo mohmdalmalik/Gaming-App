@@ -15,9 +15,12 @@
 //   lobby.setPlayerAvatar(avatar);           // the player's own avatar (src/data/wardrobe.js ids) stands
 //                                            //  by the lift; again with a new look repaints it live
 //                                            //  (another body or look: rebuilt in place)
-//   lobby.setWardrobe(on, { centreX });      // the wardrobe camera on the avatar (eased), the avatar
-//                                            //  shown at screen x = centreX (CSS px; the free space
-//                                            //  right of the menu panel)
+//   lobby.setWardrobe(on, { centreX, shot }); // the wardrobe camera on the avatar (eased), the avatar
+//                                            //  shown at screen x = centreX (CSS px; the middle of the
+//                                            //  wardrobe's stage); shot: 'full' (length), 'half' (to the
+//                                            //  knees) or 'close' (head and shoulders), eased between
+//   lobby.turnWardrobe(yaw, { ease });       // the avatar turned by yaw (radians) on top of its heading
+//                                            //  while the wardrobe is open (a drag); ease: glide there
 //   await lobby.enter({ guests: 3 });        // the boarding; resolves when the lift doors have shut
 //                                            //  (your avatar boards first: alone for 1, with Victor and
 //                                            //  Clara for 3; without one, the first guests by `boards`)
@@ -245,10 +248,45 @@ export function createLobbyScene({ renderer, cfg, layout = lobbyLayout } = {}) {
 
   // ---- the wardrobe camera ----------------------------------------------------------------------
   const W = L.wardrobeCamera;
-  const wardrobe = { want: 0, k: 0, centreX: null };
-  function setWardrobe(on, { centreX = null } = {}) {
+  const wardrobe = { want: 0, k: 0, centreX: null, shot: 'full', shotK: 1, yaw: 0, yawWant: 0, yawEase: false };
+  // The shot's camera (relative to the avatar's feet): { look (height), from, fov }. 'close' and 'half' look at a
+  // height measured from the avatar's own eyes (a shorter body is framed the same).
+  const eyeHeight = () => player?.base?.eyeCentre?.[1] ?? 1.37;
+  function shotPose(name, out = { look: 0, from: [0, 0, 0], fov: 0 }) {
+    const s = (name !== 'full' && W?.[name]) || W;
+    out.look = s.eyeTo != null ? eyeHeight() + s.eyeTo : s.look;
+    out.from[0] = s.from[0]; out.from[1] = s.from[1]; out.from[2] = s.from[2];
+    out.fov = s.fov;
+    return out;
+  }
+  const poseFrom = { look: 0, from: [0, 0, 0], fov: 0 }, poseTo = { look: 0, from: [0, 0, 0], fov: 0 }, pose = { look: 0, from: [0, 0, 0], fov: 0 };
+  function currentPose() {
+    shotPose(wardrobe.shot, poseTo);
+    const k = ease(wardrobe.shotK);
+    pose.look = poseFrom.look + (poseTo.look - poseFrom.look) * k;
+    for (let i = 0; i < 3; i++) pose.from[i] = poseFrom.from[i] + (poseTo.from[i] - poseFrom.from[i]) * k;
+    pose.fov = poseFrom.fov + (poseTo.fov - poseFrom.fov) * k;
+    return pose;
+  }
+  if (W) { shotPose('full', poseFrom); currentPose(); }
+  function setWardrobe(on, { centreX = null, shot = null } = {}) {
     wardrobe.want = on && W ? 1 : 0;
     if (centreX != null) wardrobe.centreX = centreX;
+    if (W && shot && shot !== wardrobe.shot) {
+      // (from wherever the camera is now; straight there while the wardrobe is not on screen yet)
+      const now = currentPose();
+      poseFrom.look = now.look; poseFrom.from = [...now.from]; poseFrom.fov = now.fov;
+      wardrobe.shot = shot;
+      wardrobe.shotK = wardrobe.k > 0 ? 0 : 1;
+      if (wardrobe.shotK === 1) shotPose(shot, poseFrom);
+    }
+    if (!on) { wardrobe.yawWant = 0; wardrobe.yawEase = true; }
+  }
+  // The avatar turned on the stage (a drag): on top of its heading, up to a full turn either way.
+  function turnWardrobe(yaw, { ease: glide = false } = {}) {
+    wardrobe.yawWant = Math.max(-Math.PI, Math.min(Math.PI, +yaw || 0));
+    wardrobe.yawEase = !!glide;
+    if (!glide) wardrobe.yaw = wardrobe.yawWant;
   }
 
   // ---- idle behaviour ---------------------------------------------------------------------------
@@ -447,12 +485,13 @@ export function createLobbyScene({ renderer, cfg, layout = lobbyLayout } = {}) {
     const you = actors.get('you');
     let shift = 0;
     if (k > 0 && W && you) {
-      wTgt.set(you.x, W.look, you.z);
-      wPos.set(you.x + W.from[0], W.look + W.from[1], you.z + W.from[2]);
+      const P = currentPose();
+      wTgt.set(you.x, P.look, you.z);
+      wPos.set(you.x + P.from[0], P.look + P.from[1], you.z + P.from[2]);
       camPos.lerp(wPos, k); camTgt.lerp(wTgt, k);
       camera.position.copy(camPos);
       camera.lookAt(camTgt);
-      fov = THREE.MathUtils.lerp(fov, W.fov, k);
+      fov = THREE.MathUtils.lerp(fov, P.fov, k);
       if (wardrobe.centreX != null) shift = (wardrobe.centreX - viewW / 2) * k;
     }
     setShift(shift);
@@ -503,9 +542,20 @@ export function createLobbyScene({ renderer, cfg, layout = lobbyLayout } = {}) {
   function update(dt /* seconds */, time /* accepted, not needed */) {
     dt = Math.min(Math.max(+dt || 0, 0), 0.5);
     // the wardrobe camera eases in and out (at once when the room is still: the 'Still' background)
-    if (dt > 0 && W) { const step = dt / Math.max(0.05, W.ease || 0.7); wardrobe.k += Math.sign(wardrobe.want - wardrobe.k) * Math.min(step, Math.abs(wardrobe.want - wardrobe.k)); }
+    if (dt > 0 && W) {
+      const step = dt / Math.max(0.05, W.ease || 0.7); wardrobe.k += Math.sign(wardrobe.want - wardrobe.k) * Math.min(step, Math.abs(wardrobe.want - wardrobe.k));
+      // (from one shot to another: the same easing, a little quicker)
+      if (wardrobe.shotK < 1) wardrobe.shotK = Math.min(1, wardrobe.shotK + dt / Math.max(0.05, W.shotEase || 0.6));
+      // (the turn: following the finger, or gliding back to face you)
+      if (wardrobe.yawEase && wardrobe.yaw !== wardrobe.yawWant) {
+        const d = wardrobe.yawWant - wardrobe.yaw;
+        wardrobe.yaw = Math.abs(d) < 0.002 ? wardrobe.yawWant : wardrobe.yaw + d * Math.min(1, dt * 4);
+      }
+    }
     else {
       wardrobe.k = wardrobe.want;
+      wardrobe.shotK = 1;                    // (a still room: the camera cuts, the guest turns at once)
+      wardrobe.yaw = wardrobe.yawWant;
       // (a still room: nobody walks, so a stroller in the wardrobe's view is simply put at their spot)
       if (wardrobe.want && loaded && W?.hold) for (const [name, st] of strolls) {
         const spot = W.hold[name], a = actors.get(name);
@@ -531,6 +581,9 @@ export function createLobbyScene({ renderer, cfg, layout = lobbyLayout } = {}) {
         shadows.set(i++, seat ? a.seat.x : a.x, seat ? a.seat.z : a.z, 0.85, 0.85, 0, seat ? -1 : 0.013);
       }
     }
+    // your avatar turned on the wardrobe's stage (on top of the heading its own steps set)
+    const you = actors.get('you');
+    if (you && W) you.group.rotation.y = you.heading + wardrobe.yaw;
     set.update(clock, camera);
     updateCamera(clock);
   }
@@ -573,11 +626,11 @@ export function createLobbyScene({ renderer, cfg, layout = lobbyLayout } = {}) {
   }
 
   return {
-    scene, camera, ready, setSize, update, enter, reset, dispose, setPlayerAvatar, setWardrobe,
+    scene, camera, ready, setSize, update, enter, reset, dispose, setPlayerAvatar, setWardrobe, turnWardrobe,
     // for the preview page and tests
     debug: { actors, set, get seq() { return seq; }, layout: L, setCamera(c) { cameraOverride = c; updateCamera(clock); },
       get player() { return player ? { avatar: player.model.avatar, base: player.base.id, look: lookOf(player.model.avatar), x: player.actor.x, z: player.actor.z, glasses: !!player.model.glasses, screen: screenOf('you') } : null; },
-      get wardrobe() { return { ...wardrobe }; },
+      get wardrobe() { return { ...wardrobe, pose: { look: pose.look, from: [...pose.from], fov: pose.fov } }; },
       get boarders() { return seq ? seq.boarders.map(a => a.spec.name) : null; },
       // (tests) every person in the room: the draw calls and triangles of their figure
       people() {

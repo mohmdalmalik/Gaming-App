@@ -49,4 +49,7 @@ export const EFFECTS = {
   switchboard: {"file": "sfx-switchboard.mp3", "duration": 2.603},
   escape: {"file": "sfx-escape.mp3", "duration": 2.566},
   steps: {"file": "sfx-steps.mp3", "duration": 5.14, "slices": {"carpet": [[0.04, 0.36], [0.46, 0.36], [0.88, 0.36], [1.3, 0.36]], "wood": [[1.72, 0.36], [2.14, 0.36], [2.56, 0.36], [2.98, 0.36]], "marble": [[3.4, 0.36], [3.82, 0.36], [4.24, 0.36], [4.66, 0.36]]}},
+  snip: {"file": "sfx-snip.mp3", "duration": 0.246},
+  rustle: {"file": "sfx-rustle.mp3", "duration": 0.419},
+  clink: {"file": "sfx-clink.mp3", "duration": 0.7},
 };

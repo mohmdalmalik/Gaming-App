@@ -1020,5 +1020,65 @@
     ]
    }
   }
+ },
+ "sfx:snip": {
+  "file": "assets/audio/sfx-snip.mp3",
+  "kind": "sfx",
+  "bytes": 2551,
+  "channels": 1,
+  "duration": 0.246,
+  "peak_dbfs": -7.37,
+  "true_peak_dbtp": -7.13,
+  "lufs": -22.3,
+  "short_term_max": -22.3,
+  "momentary_max": -22.3,
+  "dc": 5.226985046091921e-07,
+  "ffmpeg_lufs": -70.0,
+  "ffmpeg_true_peak": -7.1,
+  "render_s": 0.9,
+  "library": {
+   "file": "sfx-snip.mp3",
+   "duration": 0.246
+  }
+ },
+ "sfx:rustle": {
+  "file": "assets/audio/sfx-rustle.mp3",
+  "kind": "sfx",
+  "bytes": 4014,
+  "channels": 1,
+  "duration": 0.419,
+  "peak_dbfs": -13.14,
+  "true_peak_dbtp": -13.14,
+  "lufs": -24.2,
+  "short_term_max": -24.4,
+  "momentary_max": -24.2,
+  "dc": 2.3053409085062796e-06,
+  "ffmpeg_lufs": -26.9,
+  "ffmpeg_true_peak": -13.1,
+  "render_s": 0.3,
+  "library": {
+   "file": "sfx-rustle.mp3",
+   "duration": 0.419
+  }
+ },
+ "sfx:clink": {
+  "file": "assets/audio/sfx-clink.mp3",
+  "kind": "sfx",
+  "bytes": 6104,
+  "channels": 1,
+  "duration": 0.7,
+  "peak_dbfs": -12.94,
+  "true_peak_dbtp": -12.42,
+  "lufs": -26.3,
+  "short_term_max": -25.3,
+  "momentary_max": -22.9,
+  "dc": 5.667079326397624e-07,
+  "ffmpeg_lufs": -29.2,
+  "ffmpeg_true_peak": -12.4,
+  "render_s": 0.4,
+  "library": {
+   "file": "sfx-clink.mp3",
+   "duration": 0.7
+  }
  }
 }

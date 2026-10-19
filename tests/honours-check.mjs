@@ -5,7 +5,8 @@
 //   1. the five achievements, each earned from a scripted match: Seen through (your Hand Mirror shows a Possession
 //      card), Saved by the light (your Lantern stops a possession), Lamplighter (3 Lanterns you found, each card
 //      once), Good company (5 clean wins), Dark horse (5 wins as the guest who started possessed); progress counted
-//      as it goes; each earned once, with its date; the end screen's words
+//      as it goes; each earned once, with its date; the end screen's words (each item named for your body, and
+//      "(coming soon)" only until its art is in the parts index); the five as the brief has them
 //   2. the rules against abuse: practice, a test link (every forcing parameter; intro, camera and stats allowed),
 //      an idle match (fewer than 3 actions) and an unfinished one earn nothing and save nothing; a win counts only for
 //      the side you started on and stayed on; the Mirror and the Lantern block count only while you were clean;
@@ -29,7 +30,8 @@ import { matchSummary, isTestLink, TEST_PARAMS, MIN_ACTIONS } from '../src/match
 import { createHonours, HONOURS_KEY } from '../src/honours.js';
 import { createRecord } from '../src/record.js';
 import { showEndHonours } from '../src/ui/honoursEnd.js';
-import { itemById, isPending } from '../src/data/wardrobe.js';
+import { itemById, isPending, usePartIndex, labelOf } from '../src/data/wardrobe.js';
+import { PART_INDEX } from '../src/data/partsIndex.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 let failures = 0;
@@ -147,7 +149,7 @@ check(ACHIEVEMENTS.map(a => a.id).join() === 'seenThrough,savedByTheLight,lampli
   check(same(earnedIds(earned), ['darkHorse']) && earned[0].item === 'extra.blackOrchid', 'the fifth: Dark horse (the black orchid)');
 }
 check(honoursLine([{ label: 'Seen through', itemLabel: 'Monocle' }]) === 'Achievement earned: Seen through · Monocle'
-  && honoursLine([{ label: 'Lamplighter', itemLabel: 'The Poet' }, { label: 'Good company', itemLabel: 'Dress gloves' }]) === 'Achievements earned: Lamplighter · The Poet; Good company · Dress gloves'
+  && honoursLine([{ label: 'Lamplighter', itemLabel: 'The Poet' }, { label: 'Good company', itemLabel: 'Evening gloves' }]) === 'Achievements earned: Lamplighter · The Poet; Good company · Evening gloves'
   && honoursLine([]) === '', 'the end screen\'s line: "Achievement earned: Seen through · Monocle" (nothing when none)');
 {
   // the line on the page (src/ui/honoursEnd.js): an item whose art is not in the game yet says so
@@ -155,10 +157,26 @@ check(honoursLine([{ label: 'Seen through', itemLabel: 'Monocle' }]) === 'Achiev
   const doc = { getElementById: id => (id === 'end-honours' ? el : null) };
   const pending = isPending(itemById('glasses.monocle'), 'm');
   showEndHonours(doc, [ACHIEVEMENTS.find(a => a.id === 'seenThrough')], { body: 'm' });
-  check(pending && !el.hidden && el.textContent === 'Achievement earned: Seen through · Monocle (arrives with the new wardrobe)',
-    'an earned item not wearable yet (the Monocle, art in W1-B) is named with "(arrives with the new wardrobe)"');
+  check(!el.hidden && el.textContent === `Achievement earned: Seen through · Monocle${pending ? ' (coming soon)' : ''}`,
+    pending ? 'an earned item not wearable yet (the Monocle, held back until its drawing passes review) is named with "(coming soon)"'
+      : 'an earned item in the game (the Monocle) is named plainly');
   showEndHonours(doc, [], { body: 'm' });
   check(el.hidden && el.textContent === '', '...and with nothing earned the line is hidden');
+  // the five achievements as the brief has them (W1-B leaves their data as it was), each giving its item, named for
+  // the body: Lantern fob / charm, The Poet / Braided crown
+  const BRIEF = { seenThrough: ['match', 1, 'glasses.monocle', 'Monocle', 'Monocle'], savedByTheLight: ['match', 1, 'extra.lantern', 'Lantern fob', 'Lantern charm'],
+    lamplighter: ['match', 3, 'hairStyle.lamplighter', 'The Poet', 'Braided crown'], goodCompany: ['total', 5, 'extra.eveningGloves', 'Evening gloves', 'Evening gloves'],
+    darkHorse: ['total', 5, 'extra.blackOrchid', 'Black orchid', 'Black orchid'] };
+  check(same(ACHIEVEMENTS.map(a => a.id), Object.keys(BRIEF)) && ACHIEVEMENTS.every(a => { const [scope, goal, gid, m, f] = BRIEF[a.id]; const it = itemById(gid);
+    return a.scope === scope && a.goal === goal && a.item === gid && it?.unlock === 'achievement' && it.achievement === a.id && labelOf(it, 'm') === m && labelOf(it, 'f') === f; }),
+  'the five achievements and their items as the brief has them: Seen through (Monocle), Saved by the light (Lantern fob / charm), Lamplighter (The Poet / Braided crown), Good company (Evening gloves), Dark horse (Black orchid)');
+  // once an item's art is in the game, the line names it plainly (a 3D item becomes wearable with no other change)
+  // (the gloves held out of this index on purpose, whatever the real art: the case of an earned item not built yet)
+  usePartIndex({ ...PART_INDEX, parts: { ...PART_INDEX.parts, f: [...(PART_INDEX.parts.f || []).filter(k => !k.startsWith('extra_eveningGloves')), 'extra_lantern', 'hairStyle_lamplighter'] } });
+  showEndHonours(doc, ACHIEVEMENTS.filter(a => ['savedByTheLight', 'lamplighter', 'goodCompany'].includes(a.id)), { body: 'f' });
+  check(el.textContent === 'Achievements earned: Saved by the light · Lantern charm; Lamplighter · Braided crown; Good company · Evening gloves (coming soon)',
+    `with the Lantern charm and the Braided crown built: named plainly for a woman; the gloves, not built yet, still say so (${el.textContent})`);
+  usePartIndex();
 }
 
 // --- 2. the rules against abuse ---------------------------------------------------------------------------------------

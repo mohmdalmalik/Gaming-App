@@ -57,6 +57,10 @@ export const CUES = {
   win: { stinger: 'win', gain: 0 },
   winPossessed: { stinger: 'winPossessed', gain: 0 },
   lose: { stinger: 'lose', gain: 0 },
+  // the wardrobe (src/ui/wardrobe/wardrobe.js): a hairstyle or moustache put on, clothes, glasses or jewellery
+  snip: { file: 'snip', gain: 0, vary: 0.4, jitter: 1, max: 2, gap: 0.08, low: true },
+  rustle: { file: 'rustle', gain: 0, vary: 0.6, jitter: 1, max: 2, gap: 0.08, low: true },
+  clink: { file: 'clink', gain: 0, vary: 0.3, jitter: 1, max: 2, gap: 0.08, low: true },
   // a footstep of the guest who is walking (opts.surface: carpet | wood | marble)
   step: { file: 'steps', gain: -3, vary: 0.8, jitter: 2, max: 3, gap: 0.12, low: true, sliced: true },
 };

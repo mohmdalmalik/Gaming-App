@@ -179,11 +179,17 @@ export const lobbyLayout = {
     enterTarget: [3.2, 2.0, -5.6],
     enterFov: 34,
   },
-  // The wardrobe screen (src/ui/avatarEditor.js): a closer camera on the player's avatar by the lift,
+  // The wardrobe screen (src/ui/wardrobe/wardrobe.js): a closer camera on the player's avatar by the lift,
   // full length. The vertical field of view is kept at every screen shape; the picture is shifted
-  // sideways (a view offset) so the avatar stands in the middle of the space right of the menu panel.
-  // (`look`: the height looked at on the avatar; `from`: the camera, from that point — a little to its
-  // left, where neither the reception desk's rounded end nor Henry in his armchair comes between; `ease`:
-  // seconds; `hold`: strollers whose walk crosses that view wait out of it, [x, z, heading], while it is open)
-  wardrobeCamera: { look: 0.86, from: [-0.3, 0.55, 2.4], fov: 46, ease: 0.7, hold: { manager: [7.05, -2.75, 90] } },
+  // sideways (a view offset) so the avatar stands in the middle of the wardrobe's stage (between its rail
+  // of areas and its panel of options). (`look`: the height looked at on the avatar; `from`: the camera,
+  // from that point — a little to its left, where neither the reception desk's rounded end nor Henry in his
+  // armchair comes between; `ease`: seconds; `hold`: strollers whose walk crosses that view wait out of it,
+  // [x, z, heading], while it is open.) Two closer shots for some areas, eased between in `shotEase` s:
+  // `close`, head and shoulders (the face, hair, moustache, make-up, eyewear), looking at `eyeTo` below the
+  // guest's own eyes (so a shorter body is framed the same); `half`, to the knees (the extras: earrings to gloves).
+  wardrobeCamera: { look: 0.86, from: [-0.3, 0.55, 2.4], fov: 46, ease: 0.7, hold: { manager: [7.05, -2.75, 90] },
+    shotEase: 0.6,
+    close: { eyeTo: -0.11, from: [-0.55, 0.14, 2.5], fov: 34 },
+    half: { eyeTo: -0.36, from: [-0.45, 0.3, 2.45], fov: 40 } },
 };

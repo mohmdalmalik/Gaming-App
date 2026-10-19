@@ -1,5 +1,22 @@
 # PROGRESS
 
+## Wardrobe W1 (2026-10-18 to 2026-10-19): the guests built from pieces, then the new Wardrobe and ten items
+
+The owner asked for a deeper wardrobe (face, hair, moustache, dress...: pick an area, options on the right, hidden items opened by
+achievements or buying), with quality, theme and graphics the same or better. Owner decisions: swappable pieces on shared bodies with the
+six classic guests as ready-made Looks; achievements and real money only (no game currency), never the same item in both; five
+achievement items and five Boutique items, unlocked for testing for now; bots wear unlockables; a "Clearer possessed eyes" setting;
+the shared women's body approved; hair passes when the nearer eye shows; no eye-visibility limit on glasses (the interface shows who is
+possessed). Published in two steps:
+- **v0.8 (part 1):** the six guests rebuilt from pieces on one man's and one woman's body (they look as before and draw much lighter),
+  avatar and profile v2 with a lossless migration, two wardrobe bugs fixed, five achievements counted on the end screen, the setting,
+  the pieces pipeline (tools/char-pipeline/parts).
+- **v0.9 (part 2):** the new Wardrobe screen (areas on the left, the guest in the middle with a close-up camera and drag to turn,
+  options on the right, try-on, Undo, Surprise me, Looks with the six classics and 3 saved looks, the Hotel Honours page), the ten new
+  items (Monocle, Lantern fob/charm, The Poet/Braided crown, Evening gloves, Black orchid; Smoking jacket, Deco beaded gown, Dalí
+  moustache, Marcel waves, Gold frames), Henry's bow tie, the stock portraits redrawn from the pieces, unused pieces released from memory.
+  Details: docs/DECISIONS.md (Wardrobe W1 sections).
+
 ## Round 4 (2026-10-15): the owner's first iPad feedback, then the approved room, discard and deck rules
 
 Two halves. The screen changes the owner asked for that touch no rule (a bigger guest strip, the turn flow, the lock choice, the

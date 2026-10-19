@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Wardrobe Thumbnails</title>
+<style>
+  :root { --bg: #14161e; --ink: #efe7d6; }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg: #14161e; --ink: #efe7d6; } }
+  :root[data-theme="dark"] { --bg: #14161e; --ink: #efe7d6; }
+  html, body { margin: 0; background: var(--bg); color: var(--ink); font: 14px Georgia, serif; }
+  canvas { display: block; }
+</style>
+<script type="importmap">
+{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.186.0/build/three.module.js",
+               "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.186.0/examples/jsm/" } }
+</script></head><body>
+<script type="module">
+// The wardrobe's tile pictures (driven by tools/char-pipeline/parts/thumbs.mjs; never part of the game). Each piece is
+// drawn by the GAME'S OWN code (src/render/avatar.js: the pieces assembled by src/render/avatarParts.js, its palette
+// shader and rim light, the code-drawn glasses), in neutral colours (one picture per piece, whatever colours a player
+// wears), turned three-quarters, lit like the game's portraits plus the lobby's warm rim, on a transparent background:
+//   - hair, moustaches, glasses, earrings: on an ivory display head (the face piece alone on a plain neck, like a
+//     milliner's head: the face's features, the body and the clothes left out);
+//   - faces: the head with its eyes, brows, mouth and its own Look's hair, on the same plain neck;
+//   - clothes and the other extras: on an invisible body (the skin, head and hair left out: a "ghost mannequin");
+//   - a necklace (a woman's extra at the neck: the Lantern charm): on her gown with the body's own ivory neck and
+//     shoulders, cut below the chin (a dress form's bust), so the chain lies on the neck instead of floating over a
+//     headless gown;
+//   - the body choice (Man / Woman): the whole default guest.
+//   window.thumbs.render({ body, slot, id, w, h }) -> { ok, dataUrl (image/webp), error }
+import * as THREE from 'three';
+import { loadBase, createAvatarModel } from '../../../src/render/avatar.js';
+import { LOOKS, SLOTS_BY_GENDER, genderOf, item, withItem, normaliseAvatar, attachOf } from '../../../src/data/wardrobe.js';
+
+const SS = 2;                                       // supersampling (drawn at twice the size, then scaled down)
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true });
+renderer.setClearColor(0x000000, 0);
+renderer.outputColorSpace = THREE.SRGBColorSpace; renderer.toneMapping = THREE.NeutralToneMapping; renderer.toneMappingExposure = 1.0;
+renderer.localClippingEnabled = true;
+renderer.setPixelRatio(1);
+document.body.appendChild(renderer.domElement);
+const scene = new THREE.Scene();
+// the portraits' lights (src/render/avatarPortrait.js): a warm hemisphere, a warm key in front, a warm back light
+scene.add(new THREE.HemisphereLight(new THREE.Color('#ffffff').lerp(new THREE.Color('#ffd9a8'), 0.45), new THREE.Color('#3a3438'), 0.78));
+const key = new THREE.PointLight(new THREE.Color('#ffe2bc'), 32, 9, 2); key.position.set(1.4, 2.7, 2.0); scene.add(key);
+const back = new THREE.PointLight(new THREE.Color('#ffd9a8'), 14, 9, 2); back.position.set(-2.0, 2.4, -1.2); scene.add(back);
+const cam = new THREE.PerspectiveCamera(18, 1, 0.05, 50);
+const RIM = { color: '#ffd9a8', rim: 0.62, fill: 0.08 };    // (the lobby's rim on the guests, a touch stronger)
+
+// Neutral colours (sRGB): an ivory display head, a mid-brown hair, a charcoal cloth, a black accent, gold.
+const NEUTRAL = { skin: '#ead0ae', hair: '#5a4434', brow: '#2e231c', main: '#3d4970', accent: '#1c1c22', metal: '#e0b060', frame: '#3a2218', lips: '#b8546a' };
+const REAL_SKIN = '#f6c39a';     // (the Man / Woman pictures and the faces: a skin, not a display head)
+const PAL = { skin: 1, lips: 2, hair: 3, brow: 4, main: 5, lapel: 6, shade: 7, accent: 8, metal: 9, frame: 10 };
+function paint(palette, colours) {
+  const put = (k, c) => { palette[PAL[k] * 3] = c.r; palette[PAL[k] * 3 + 1] = c.g; palette[PAL[k] * 3 + 2] = c.b; };
+  for (const [k, hex] of Object.entries(colours)) put(k, new THREE.Color(hex));
+  const m = new THREE.Color(colours.main);
+  put('lapel', m.clone().multiplyScalar(0.62));
+  const lum = 0.2126 * m.r + 0.7152 * m.g + 0.0722 * m.b, t = Math.min(1, Math.max(0, (lum - 0.02) / 0.48)), s = t * t * (3 - 2 * t);
+  put('shade', m.clone().multiplyScalar(0.25 + (0.62 - 0.25) * s));
+}
+
+// The neck's material: matte, with the guests' rim light (src/render/avatar.js guestLight), so it reads as the head does.
+function guestLike(color) {
+  const m = new THREE.MeshLambertMaterial({ color });
+  const rc = new THREE.Color(RIM.color);
+  m.onBeforeCompile = sh => {
+    sh.uniforms.uRimColor = { value: rc }; sh.uniforms.uRim = { value: new THREE.Vector2(RIM.rim, RIM.fill) };
+    sh.fragmentShader = 'uniform vec3 uRimColor;\nuniform vec2 uRim;\n' + sh.fragmentShader.replace('#include <opaque_fragment>', `
+      float rimK = pow(1.0 - clamp(abs(dot(normal, normalize(vViewPosition))), 0.0, 1.0), 2.4);
+      outgoingLight += uRimColor * rimK * uRim.x * (0.35 + 0.65 * diffuseColor.rgb) + diffuseColor.rgb * uRim.y;
+      #include <opaque_fragment>`);
+  };
+  return m;
+}
+
+// What each kind of picture shows (materials kept; the rest of the guest is left out), and its frame: a window of
+// heights on the guest (metres, from the floor) and how far the guest is turned.
+const HEAD = ['Skin', 'Hair'];     // (the body's own skin, the first range at vertex 0, is left out of a display head)
+const KINDS = {
+  hairStyle: { keep: HEAD, eyes: false, clip: 'neck', win: 'head' },
+  facial: { keep: [...HEAD, 'Stache'], eyes: false, clip: 'neck', win: 'head' },
+  glasses: { keep: [...HEAD, 'Glasses'], eyes: false, clip: 'neck', win: 'head' },
+  makeup: { keep: ['Skin', 'Lips', 'Brow', 'Mouth', 'Hair'], eyes: true, clip: 'neck', win: 'head', skin: REAL_SKIN },
+  face: { keep: ['Skin', 'Lips', 'Brow', 'Mouth', 'Hair'], eyes: true, clip: 'neck', win: 'head', skin: REAL_SKIN },
+  earring: { keep: [...HEAD, 'Gold', 'Pearl'], eyes: false, clip: 'neck', win: 'head', yaw: -1.05 },
+  ghost: { drop: ['Skin', 'Hair', 'Brow', 'Stache', 'Mouth', 'Lips', 'Glasses'], eyes: false },
+  necklace: { drop: ['Hair', 'Brow', 'Stache', 'Mouth', 'Lips', 'Glasses'], eyes: false, win: 'bust', yaw: -0.32 },
+  body: { all: true, eyes: true, win: 'full', skin: REAL_SKIN, yaw: 0.42 },
+};
+// Windows [low, high, width] (metres) for the ghost pictures, by slot (or an extra's attach point): the frame holds
+// at least that height and that width; `pitch`: how far above the window's middle the camera sits (x its height).
+const WIN = {
+  m: { top: [0.3, 1.24, 0.6], neck: [0.84, 1.24, 0.5], legs: [0.0, 0.84, 0.5], feet: [-0.04, 0.46, 0.8, 0.45], belt: [0.6, 1.06, 0.55], dress: [0.0, 1.24, 0.6],
+       chest: [0.74, 1.24, 0.62], waist: [0.6, 1.12, 0.62], neck_x: [0.84, 1.24, 0.55], hands: [0.34, 1.16, 0.7] },
+  f: { dress: [-0.02, 1.2, 0.6], belt: [0.56, 1.08, 0.56], feet: [-0.04, 0.42, 0.72, 0.45], top: [0.3, 1.2, 0.6], legs: [0, 0.8, 0.5],
+       chest: [0.74, 1.2, 0.6], waist: [0.6, 1.08, 0.6], neck_x: [0.84, 1.24, 0.55], hands: [0.34, 1.14, 0.7] },
+};
+
+// The guest a piece is shown on: the classic Look that wears it (its gown with its own belt, its suit with its own
+// tie), else the body's first Look; then the piece.
+function avatarFor(body, slot, id) {
+  const g = genderOf(body);
+  const looks = g === 'f' ? ['clara', 'eleanor', 'beatrice'] : ['victor', 'marcus', 'henry'];
+  const all = () => true;
+  const from = looks.find(L => (slot === 'extra' ? LOOKS[L].extras.includes(id) : LOOKS[L][slot] === id)) || looks[0];
+  let av = normaliseAvatar({ ...LOOKS[from], body }, { owns: all });
+  av = { ...av, glasses: 'none', extras: slot === 'extra' ? av.extras.filter(x => x === id) : [] };
+  if (slot === 'body') return normaliseAvatar(av, { owns: all });
+  if (slot === 'extra' && av.extras.includes(id)) return av;      // (withItem would take it off: an extra toggles)
+  return withItem(av, slot, id, { owns: all });
+}
+
+async function render({ body, slot, id, w = 240, h = 200 }) {
+  const av = avatarFor(body, slot, id);
+  const it = slot === 'body' ? null : item(slot, id);
+  const at = slot === 'extra' ? attachOf(it, body) : null;
+  const kind = slot === 'body' ? KINDS.body : slot === 'extra' ? (at === 'ears' ? KINDS.earring : at === 'neck' && genderOf(body) === 'f' ? KINDS.necklace : KINDS.ghost)
+    : KINDS[slot] || KINDS.ghost;
+  const base = await loadBase(av);
+  const model = createAvatarModel(base, av, { rim: RIM });
+  try {
+    // the parts of the guest this picture keeps (by material: the merged mesh's vertex ranges)
+    const mesh = model.mesh, geo = mesh.geometry;
+    const n = geo.attributes.position.count;
+    const hide = new Uint8Array(n);
+    if (!kind.all) {
+      for (const [name, list] of Object.entries(base.ranges || {})) {
+        const off = kind.keep ? !kind.keep.includes(name) : kind.drop.includes(name);
+        // (a display head leaves out the body's skin, at vertex 0; a dress form's bust leaves out the face's)
+        for (const [s0, c] of list) if (off || (kind.clip === 'neck' && s0 === 0) || (kind.win === 'bust' && name === 'Skin' && s0 !== 0)) hide.fill(1, s0, s0 + c);
+      }
+    }
+    const eyeY = base.eyeCentre?.[1] ?? 1.37;
+    let neckY = eyeY - (genderOf(body) === 'f' ? 0.35 : 0.43);
+    // (a display head: the body's skin goes (neck, shoulders, arms); a plain neck is made below the face's own seam)
+    const pos = geo.attributes.position;
+    let neck = null;
+    if (kind.clip === 'neck') {
+      const skins = base.ranges?.Skin || [];
+      const bodySkin = skins.find(r => r[0] === 0);
+      if (bodySkin) hide.fill(1, bodySkin[0], bodySkin[0] + bodySkin[1]);
+      const faceSkin = skins.find(r => r[0] !== 0);
+      if (faceSkin) {
+        let minY = Infinity;
+        for (let v = faceSkin[0]; v < faceSkin[0] + faceSkin[1]; v++) minY = Math.min(minY, pos.getY(v));
+        let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity;
+        for (let v = faceSkin[0]; v < faceSkin[0] + faceSkin[1]; v++) {
+          if (pos.getY(v) > minY + 0.012) continue;
+          x0 = Math.min(x0, pos.getX(v)); x1 = Math.max(x1, pos.getX(v)); z0 = Math.min(z0, pos.getZ(v)); z1 = Math.max(z1, pos.getZ(v));
+        }
+        if (Number.isFinite(x0)) { neck = { y: minY, x: (x0 + x1) / 2, z: (z0 + z1) / 2, rx: (x1 - x0) / 2, rz: (z1 - z0) / 2 }; neckY = minY - 0.085; }
+      }
+    }
+    const idx = geo.index.array, keep = [];
+    for (let i = 0; i < idx.length; i += 3) if (!hide[idx[i]] && !hide[idx[i + 1]] && !hide[idx[i + 2]]) keep.push(idx[i], idx[i + 1], idx[i + 2]);
+    const own = new THREE.BufferGeometry();
+    for (const [k, a] of Object.entries(geo.attributes)) own.setAttribute(k, a);
+    own.setIndex(keep);
+    mesh.geometry = own;
+    if (model.eyeMesh) model.eyeMesh.visible = !!kind.eyes;
+    // (a dark flower shows on a pale stone cloth; everything else on the neutral midnight)
+    const cloth = slot === 'extra' && id === 'blackOrchid' ? { main: '#d8cebb' } : {};
+    paint(mesh.material.userData.palette, { ...NEUTRAL, ...cloth, ...(kind.skin ? { skin: kind.skin } : {}) });
+
+    const root = model.root;
+    let neckMesh = null;
+    if (neck && neck.y > neckY + 0.02) {
+      // the neck: a smooth column from just inside the face's seam down to a flat cut, a touch wider at the foot
+      const r = Math.max(0.03, Math.min(neck.rx, neck.rz * 1.1)), len = neck.y - neckY + 0.012;
+      const cg = new THREE.CylinderGeometry(r * 0.98, r * 1.06, len, 40, 1, false);
+      cg.scale(neck.rx / r, 1, neck.rz / r);
+      const skin = new THREE.Color(kind.skin || NEUTRAL.skin).multiplyScalar(0.86);
+      neckMesh = new THREE.Mesh(cg, guestLike(skin));
+      neckMesh.position.set(neck.x, neckY + len / 2, neck.z);
+      root.add(neckMesh);
+    }
+    scene.add(root);
+    // (three-quarters: turned to the picture's right; a buttonhole or a corsage, on the left breast, the other way)
+    root.rotation.y = kind.yaw ?? (at === 'chest' ? -0.5 : 0.55);
+    root.updateMatrixWorld(true);
+    // the frame: a window of heights, the guest in the middle of it, the camera level with it
+    const g = genderOf(body);
+    let win;
+    if (kind.win === 'head') win = [Math.min(neckY - 0.02, eyeY - 0.36), eyeY + (g === 'f' ? 0.37 : 0.35), 0.5];
+    else if (kind.win === 'full') win = [-0.03, base.height + 0.02, 0.6];
+    else if (kind.win === 'bust') win = [eyeY - 0.45, eyeY - 0.17, 0.38, 0.02];      // (the chest and the foot of the neck)
+    else win = WIN[g][at ? (at === 'neck' ? 'neck_x' : at) : slot] || WIN[g].top;
+    const aspect = w / h;
+    const H = win[1] - win[0], mid = (win[0] + win[1]) / 2;
+    cam.aspect = aspect; cam.fov = 18; cam.updateProjectionMatrix();
+    const t = Math.tan((cam.fov * Math.PI) / 360);
+    const dist = Math.max((H * 1.06) / 2 / t, ((win[2] || 0) * 1.04) / 2 / (t * aspect));
+    cam.position.set(0.0, mid + (win[3] ?? 0.06) * H, dist);
+    cam.lookAt(0, mid, 0);
+    renderer.setSize(w * SS, h * SS, false);
+    renderer.render(scene, cam);
+    // scaled down to the picture's size, then WebP
+    const c = document.createElement('canvas');
+    c.width = w; c.height = h;
+    const ctx = c.getContext('2d');
+    ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(renderer.domElement, 0, 0, w, h);
+    scene.remove(root);
+    if (neckMesh) { root.remove(neckMesh); neckMesh.geometry.dispose(); neckMesh.material.dispose(); }
+    return { ok: true, dataUrl: c.toDataURL('image/webp', 0.86), win };
+  } finally {
+    model.dispose();
+  }
+}
+
+window.thumbs = { render: o => render(o).catch(e => ({ ok: false, error: String(e && e.message || e) })) };
+window.__ready = true;
+</script>
+</body></html>

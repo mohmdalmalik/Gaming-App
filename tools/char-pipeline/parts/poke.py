@@ -9,7 +9,9 @@
 #   under the trouser hem)          top Shirt + Button -> neck (every top the neckwear is drawn on)
 #   body neck -> face (the join under the chin and at the nape stays hidden in every face)
 #   (women) body skin -> dress (yoke under the bodice, arms under the sleeves, legs under the skirt; not the hands)
-#   dress -> belt. These two use the 'vis' test (seen()): gowns overlap themselves (a sleeve cap over the bodice, the
+#   dress -> belt; (men's evening gloves) body hands -> gloves, gloves -> every top (the wrist under the cuffs);
+#   (women's opera gloves) body arms and hands -> gloves, gloves -> every gown's sleeves (not the hands).
+#   These use the 'vis' test (seen()): gowns overlap themselves (a sleeve cap over the bodice, the
 #   rolled neckline) and a belt is an open band, where ray parity misreads a covered point as outside.
 # Not tested (the one exemption, reported in the JSON): feet -> legs leaves out the shoe's top rim, which sits in the
 # bottom 20 mm of the closed trouser leg (its front dips over the shoe): walking, the hem can only lift off that rim (no cloth simulation), by up to
@@ -256,13 +258,25 @@ def pairs_for(key, keys, man_parts, body):
         for l in keys:
             if T.split_key(l)[0] == 'legs': out.append((key, ['Shoe', 'Sole'], l, 'poses+hem'))
     elif slot == 'neck':
-        tops = [f'{fit[0]}_{fit[1]}'] if fit else [t for t in keys if T.split_key(t)[0] == 'top' and not have(f"{key}~{t}")]
+        # (a neck piece fitted to a face, W1-B's Henry bows, is drawn on every top: tested on each)
+        tops = [f'{fit[0]}_{fit[1]}'] if fit and fit[0] == 'top' else [t for t in keys if T.split_key(t)[0] == 'top' and not have(f"{key.split('~')[0]}~{t}")]
         for t in tops: out.append((t, ['Shirt', 'Button'], key, 'poses+front'))
     elif slot == 'dress':                       # (women) the yoke, arms and legs inside the bodice, sleeves and skirt
         out.append(('body', ['Skin'], key, 'poses+nohands+vis'))
     elif slot == 'belt':                        # (women) the gown under the belt it is fitted to
         dress = f'{fit[0]}_{fit[1]}' if fit else f"dress_{first('dress', lambda L: L.get('belt') == ident)}"
         if have(dress): out.append((dress, ['Dress'], key, 'poses+vis'))
+    elif slot == 'extra' and T.gender_of(body) == 'm' and ident == 'eveningGloves':
+        # (W1-B, men's gloves) the hands inside the gloves, and the glove's wrist inside every top's sleeve and cuff
+        out.append(('body', ['Skin'], key, 'poses+vis'))
+        for t in keys:
+            if T.split_key(t)[0] == 'top' and '~' not in t: out.append((key, ['Glove'], t, 'poses+vis'))
+    elif slot == 'extra' and T.gender_of(body) == 'f' and ident == 'eveningGloves':
+        # (W1-B, women's opera gloves) the arms and hands inside the gloves, and the glove inside every gown's sleeves
+        # (not its hands: the gowns' skirts hold the curled fingertips at rest, as they hold the bare hands)
+        out.append(('body', ['Skin'], key, 'poses+vis'))
+        for d in keys:
+            if T.split_key(d)[0] == 'dress' and '~' not in d: out.append((key, ['Glove'], d, 'poses+nohands+vis'))
     return out
 
 def main():

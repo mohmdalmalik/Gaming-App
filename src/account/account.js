@@ -23,12 +23,27 @@
 //                                  come later)
 //   account.onChange(fn)           -> unsubscribe; fn(profile) after every change (here or in another tab)
 //
+// The Looks page (src/account/looks.js; the profile's `looks`: three slots, 0-2, of { name, avatar, savedAt } or null;
+// the six classic Looks are read-only presets, named by their id: 'victor' … 'beatrice'):
+//   account.looks                  the three slots (copies), and account.presets the six classic Looks
+//   account.saveLook(slot, avatar, { name })  -> Promise<{ ok, look, previous, error? }>  saved over whatever was
+//                                  there (`previous`: for Undo); the name kept, or 'Look 1'… for a new one
+//   account.renameLook(slot, name) -> Promise<{ ok, look, error? }>
+//   account.deleteLook(slot)       -> Promise<{ ok, previous }>
+//   account.restoreLook(slot, look) -> Promise<{ ok, look }>   puts back a `previous` (Undo of a save over or a delete)
+//   account.wearLook(slot | presetId, { save = true }) -> Promise<{ ok, avatar, missing }>  the Look as the player can
+//                                  wear it (an item they do not own is listed in `missing`, its default worn instead);
+//                                  saved as their avatar unless save: false (the wardrobe's stage, before Save look)
+// A slot that is not 0-2, or a preset (read-only), gives { ok: false, code, error }.
+//
 // Callers wait for `ready` before they first read `profile` (a server account has none until then).
 // Like src/record.js, every read and write is guarded: a private window, blocked storage or a damaged
 // save still plays.
 import { checkUsername } from './username.js';
 import { newProfile, repairProfile, startingAvatar } from './profile.js';
 import { itemById, normaliseAvatar, ownsFrom } from '../data/wardrobe.js';
+import { checkLookName, defaultLookName, isSlot, isPreset, presetLook, presetLooks, lookAvatar, repairSavedLook,
+  wearing } from './looks.js';
 
 // (the key's name is not the version: the profile inside is version 2, src/account/profile.js)
 export const PROFILE_KEY = 'hotelEscape.profile.v1';
@@ -200,12 +215,76 @@ export function createAccount({ store = deviceStore(), now = () => Date.now() } 
       return { ok: saved, added: true };
     },
 
+    // ---- the Looks page ----
+    get looks() { return copy(profile?.looks || [null, null, null]); },
+    get presets() { return deepFreeze(presetLooks()); },
+
+    async saveLook(slot, avatar, { name } = {}) {
+      const bad = refuse(slot);
+      if (bad) return bad;
+      const previous = profile.looks[slot] || null;
+      let named = null;
+      if (name !== undefined) { named = checkLookName(name); if (!named.ok) return { ok: false, code: named.code, error: named.error }; }
+      const look = { name: named ? named.name : previous?.name || defaultLookName(slot), avatar: lookAvatar(avatar), savedAt: stamp() };
+      setLooks(slot, look);
+      return { ok: true, look: copy(look), previous: copy(previous) };
+    },
+
+    async renameLook(slot, name) {
+      const bad = refuse(slot);
+      if (bad) return bad;
+      const cur = profile.looks[slot];
+      if (!cur) return { ok: false, code: 'empty', error: 'There is no look saved here yet.' };
+      const named = checkLookName(name);
+      if (!named.ok) return { ok: false, code: named.code, error: named.error };
+      if (named.name !== cur.name) setLooks(slot, { ...cur, name: named.name });
+      return { ok: true, look: copy(profile.looks[slot]) };
+    },
+
+    async deleteLook(slot) {
+      const bad = refuse(slot);
+      if (bad) return bad;
+      const previous = profile.looks[slot] || null;
+      if (previous) setLooks(slot, null);
+      return { ok: true, previous: copy(previous) };
+    },
+
+    async restoreLook(slot, look) {
+      const bad = refuse(slot);
+      if (bad) return bad;
+      const back = look ? repairSavedLook(look, slot) : null;
+      setLooks(slot, back);
+      return { ok: true, look: copy(back) };
+    },
+
+    async wearLook(ref, { save = true } = {}) {
+      const from = isPreset(ref) ? presetLook(ref) : isSlot(ref) ? profile?.looks[ref] : null;
+      if (!from) return { ok: false, code: isSlot(ref) ? 'empty' : 'slot', error: isSlot(ref) ? 'There is no look saved here yet.' : 'No such look.' };
+      const w = wearing(from.avatar, owns);
+      if (save && profile) await account.setAvatar(w.avatar);
+      return { ok: true, avatar: copy(w.avatar), missing: w.missing };
+    },
+
     onChange(fn) {
       if (typeof fn !== 'function') return () => {};
       listeners.add(fn);
       return () => listeners.delete(fn);
     },
   };
+  // (the Looks: a slot the player can write, with a profile)
+  function refuse(slot) {
+    if (isPreset(slot)) return { ok: false, code: 'readOnly', error: 'The classic Looks cannot be changed. Save it to one of your own.' };
+    if (!isSlot(slot)) return { ok: false, code: 'slot', error: 'No such look.' };
+    if (!profile) return { ok: false, code: 'noProfile', error: 'Sign the register first.' };
+    return null;
+  }
+  function setLooks(slot, look) {
+    const looks = [...profile.looks];
+    looks[slot] = look;
+    profile = { ...profile, looks, updatedAt: stamp() };
+    write();
+    emit();
+  }
   return account;
 }
 

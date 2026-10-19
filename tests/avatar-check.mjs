@@ -1,6 +1,6 @@
 // Checks for the avatars as the game draws them (avatar v2: pieces on shared bodies): the guests assembled from their
 // pieces (src/render/avatarParts.js, avatar.js), the glasses (avatarGlasses.js), the runtime portraits
-// (avatarPortrait.js), the red eyes, the wardrobe screen (src/ui/avatarEditor.js) with your avatar in the menu's lobby
+// (avatarPortrait.js), the red eyes, the wardrobe screen (src/ui/wardrobe/wardrobe.js) with your avatar in the menu's lobby
 // (src/menu/lobbyScene.js), the lift, and four tables in a row. (The catalogue, the v1 -> v2 migration and the bots'
 // looks are data: tests/wardrobe-check.mjs.) Run from tests/ with the static server on 8123:
 //   node avatar-check.mjs [--url http://127.0.0.1:8123/] [--shots DIR] [--skip render,portraits,eyes,wardrobe,lift,games]
@@ -16,11 +16,12 @@
 //   5. eyes       the red eyes on every Look with every eye colour (pixels at the eyes of a portrait), the iris colour
 //                 back when not possessed, and the possessed switch kept through a change of eye colour (setAvatar
 //                 while possessed); the shader programs stay within the budget; the eyewear red-eye test (every
-//                 glasses style on every Look: no style hides more of the red eyes than today's; a new one meets 0.90)
-//   6. wardrobe   at 1024x768, 1180x820 and 1366x1024: the page never scrolls, the panel and Done are on screen, your
-//                 avatar stands in the space right of the panel, head to feet; the rows in order; the unlockable
-//                 items marked (wearable for testing); a pick shows on your avatar in the lobby at once; Done keeps it
-//                 (your profile, v2); Change name opens the register in rename mode
+//                 glasses style the game draws, held-back ones too, on every Look, both eyes and the nearer eye):
+//                 REPORT ONLY, no gate on eyewear (the owner's decision of 19 Oct 2026)
+//   6. wardrobe   at 1024x768, 1180x820 and 1366x1024: the page never scrolls, the rail, the panel and Save look are
+//                 on screen, your avatar stands on the stage between them, head to feet; the areas in order; a pick
+//                 shows on your avatar in the lobby at once; Save look keeps it (your profile, v2); Change name opens
+//                 the register in rename mode (the screen in full: tests/browser-wardrobe.mjs)
 //   7. lift       practice: your avatar boards alone; a match: you with Henry and Clara (never Victor beside a
 //                 guest who looks like him: the test profile is Victor's Look)
 //   8. games      four tables in a row (Play again): one character view per seat, built from the seats' avatars, the
@@ -259,13 +260,15 @@ if (!skip.has('render') || !skip.has('portraits') || !skip.has('eyes')) {
     check(r.sw.s4, "back to classic eyes, red on and off: the face's own eyes return");
     check(r.programs <= PROGRAM_BUDGET, `shader programs within the budget (${r.programs} <= ${PROGRAM_BUDGET})`);
 
-    // The eyewear red-eye test (contract 9.3, through the game's own model): each glasses style on each Look, the
-    // share of the eyes' pixels still visible with the frames on (ID-coloured eyes, everything else black, 512 x 512,
-    // framed on the eyes from the game camera's direction: pitch 44, distance 16), face-on headings (0, 45, 90, 270,
-    // 315) at Idle 0 and Walk 0.25 / 0.75; the minimum. Today's frames score 0.67-0.79, BELOW the contract's 0.90:
-    // whether that is accepted is the lead's and the owner's decision (W1 review ART-3). Until then this keeps every
-    // style from getting worse than today (git HEAD before W1, the same figures to 3 decimals), and holds any NEW
-    // eyewear (the Monocle, Gold frames: W1-B) to the gate.
+    // The eyewear red-eye test (contract 9.3's method, through the game's own model): each glasses style drawn by the
+    // game on each Look (the held-back Monocle and Gold frames too), the share of the eyes' pixels still visible with
+    // the frames on (ID-coloured eyes, everything else black, 512 x 512, framed on the eyes from the game camera's
+    // direction: pitch 44, distance 16), face-on headings (0, 45, 90, 270, 315) at Idle 0 and Walk 0.25 / 0.75; the
+    // minimum, for both eyes and for the eye nearest the camera. REPORT ONLY: the owner decided on 19 Oct 2026 that
+    // eyewear has no red-eye gate ("it will be clear in the interface, and portrait pictures and also a 'possessed'
+    // tag"): today's frames stay as they are (0.67-0.79 for both eyes, as before W1), new frames are measured and the
+    // numbers reported, never failed. Only the measuring itself is checked (every style on every Look, the frames
+    // merged in). With --shots DIR the numbers are also written to DIR/eyewear-redeye.json.
     const EYEWEAR_TODAY = {
       victor: { round: 0.785, oval: 0.733, deco: 0.748, pincenez: 0.681 }, marcus: { round: 0.748, oval: 0.686, deco: 0.698, pincenez: 0.743 },
       henry: { round: 0.76, oval: 0.75, deco: 0.786, pincenez: 0.687 }, clara: { round: 0.695, oval: 0.715, deco: 0.707, pincenez: 0.67 },
@@ -280,14 +283,18 @@ if (!skip.has('render') || !skip.has('portraits') || !skip.has('eyes')) {
       R.setPixelRatio(1); R.setSize(N, N, false);
       const rt = new THREE.WebGLRenderTarget(N, N), px = new Uint8Array(N * N * 4);
       const BLACK = new THREE.MeshBasicMaterial({ color: 0x000000, side: THREE.DoubleSide });
-      const ID = new THREE.MeshBasicMaterial({ color: 0xff00ff, side: THREE.DoubleSide, toneMapped: false });
+      // each eye its own ID colour (magenta: the guest's left, +x; cyan: its right), so the nearer one can be scored
+      const ID = new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide, toneMapped: false });
       const HIDE = new THREE.MeshBasicMaterial({ visible: false });
       const count = (scene, cam) => {
         R.setRenderTarget(rt); R.setClearColor(0x000000, 1); R.clear(); R.render(scene, cam);
         R.readRenderTargetPixels(rt, 0, 0, N, N, px); R.setRenderTarget(null);
-        let n = 0;
-        for (let i = 0; i < px.length; i += 4) if (px[i] > 150 && px[i + 1] < 90 && px[i + 2] > 150) n++;
-        return n;
+        const eye = [0, 0];
+        for (let i = 0; i < px.length; i += 4) {
+          if (px[i] > 150 && px[i + 1] < 90 && px[i + 2] > 150) eye[0]++;
+          else if (px[i] < 90 && px[i + 1] > 150 && px[i + 2] > 150) eye[1]++;
+        }
+        return eye;
       };
       const without = (geo, spans) => {         // the merged guest with the glasses' triangles left out
         const idx = geo.index.array, keep = [];
@@ -297,19 +304,39 @@ if (!skip.has('render') || !skip.has('portraits') || !skip.has('eyes')) {
         g.setIndex(keep);
         return g;
       };
+      const split = src => {                    // a copy of the eye geometry with one ID colour per eye
+        const pos = src.attributes.position, n = pos.count;
+        let mx = 0; for (let i = 0; i < n; i++) mx += pos.getX(i); mx /= n;
+        const col = new Float32Array(n * 3), sides = [[], []];
+        for (let i = 0; i < n; i++) { const k = pos.getX(i) >= mx ? 0 : 1; col.set(k ? [0, 1, 1] : [1, 0, 1], i * 3); sides[k].push(i); }
+        const g = new THREE.BufferGeometry();
+        for (const [k, a] of Object.entries(src.attributes)) if (k !== 'color') g.setAttribute(k, a);
+        g.setAttribute('color', new THREE.BufferAttribute(col, 3)); g.setIndex(src.index);
+        for (const gr of src.groups) g.addGroup(gr.start, gr.count, gr.materialIndex);
+        return { g, sample: sides.map(l => l.filter((_, k) => k % Math.max(1, Math.floor(l.length / 40)) === 0)) };
+      };
+      const P = new THREE.Vector3();
+      const nearer = (mesh, sample, from) => {    // 0, 1, or -1 when both eyes are about as near (face-on)
+        const d = sample.map(list => { const c = new THREE.Vector3(); for (const i of list) c.add(mesh.getVertexPosition(i, P)); return mesh.localToWorld(c.divideScalar(Math.max(1, list.length))).distanceTo(from); });
+        return Math.abs(d[0] - d[1]) < 0.01 ? -1 : d[0] < d[1] ? 0 : 1;
+      };
       const cam = new THREE.PerspectiveCamera(1.4, 1, 1, 100), p = THREE.MathUtils.degToRad(44), out = [];
+      const styles = W.ITEMS.filter(g => g.slot === 'glasses' && g.draw === 'code');
       for (const id of Object.keys(W.LOOKS)) {
-        for (const g of W.itemsFor('glasses', W.LOOKS[id].body).filter(g => g.id !== 'none')) {
-          const av = W.withItem(W.LOOKS[id], 'glasses', g.id);
+        for (const g of styles) {
+          // (built directly, not made safe: a held-back style is measured too, never offered)
+          const av = { ...W.LOOKS[id], extras: [...W.LOOKS[id].extras], glasses: g.id };
           const base = await A.loadBase(av);
           const model = A.createAvatarModel(base, av, { rim: false });
           const scene = new THREE.Scene(); scene.add(model.root);
           model.mesh.material = BLACK;
           const nEye = Array.isArray(model.eyeMesh.material) ? model.eyeMesh.material.length : 1;
+          const eyeGeo = model.eyeMesh.geometry, ids = split(eyeGeo);
+          model.eyeMesh.geometry = ids.g;
           model.eyeMesh.material = [ID, ...Array(nEye - 1).fill(HIDE)];
           const full = model.mesh.geometry, bare = without(full, base.ranges.Glasses || []);
           const mixer = new THREE.AnimationMixer(model.root);
-          let min = 1;
+          let both = 1, near = 1;
           for (const [clip, frac] of [['idle', 0], ['walk', 0.25], ['walk', 0.75]]) {
             for (const h of [0, 45, 90, 270, 315]) {
               mixer.stopAllAction(); mixer.clipAction(base.clips[clip]).play(); mixer.setTime(frac * base.clips[clip].duration);
@@ -319,22 +346,31 @@ if (!skip.has('render') || !skip.has('portraits') || !skip.has('eyes')) {
               cam.position.set(c.x, c.y + 16 * Math.sin(p), c.z + 16 * Math.cos(p)); cam.lookAt(c); cam.updateProjectionMatrix();
               const on = count(scene, cam); model.mesh.geometry = bare;
               const off = count(scene, cam); model.mesh.geometry = full;
-              if (off >= 30) min = Math.min(min, on / off);
+              const k = nearer(model.eyeMesh, ids.sample, cam.position);
+              if (off[0] + off[1] >= 30) both = Math.min(both, (on[0] + on[1]) / (off[0] + off[1]));
+              const ref = k < 0 ? off[0] + off[1] : off[k], got = k < 0 ? on[0] + on[1] : on[k];
+              if (ref >= 30) near = Math.min(near, got / ref);
             }
           }
-          mixer.stopAllAction(); bare.dispose(); scene.remove(model.root); model.dispose();
-          out.push({ look: id, style: g.id, score: +min.toFixed(3), removed: (base.ranges.Glasses || []).reduce((s, [, n]) => s + n, 0) });
+          mixer.stopAllAction(); bare.dispose(); ids.g.dispose(); model.eyeMesh.geometry = eyeGeo;
+          scene.remove(model.root); model.dispose();
+          out.push({ look: id, style: g.id, held: !!g.artPending, score: +both.toFixed(3), near: +near.toFixed(3), removed: (base.ranges.Glasses || []).reduce((s, [, n]) => s + n, 0) });
         }
       }
       rt.dispose(); R.dispose(); R.forceContextLoss();
-      return { out, gate: W.RED_EYE_GATE };
+      return { out, styles: styles.map(g => g.id) };
     });
-    const worse = ew.out.filter(x => EYEWEAR_TODAY[x.look]?.[x.style] != null && x.score < EYEWEAR_TODAY[x.look][x.style] - 0.02);
-    const fresh = ew.out.filter(x => EYEWEAR_TODAY[x.look]?.[x.style] == null);
-    console.log(`        eyewear red-eye scores (today's in brackets): ${ew.out.map(x => `${x.look}/${x.style} ${x.score}${EYEWEAR_TODAY[x.look]?.[x.style] != null ? ` (${EYEWEAR_TODAY[x.look][x.style]})` : ''}`).join(', ')}`);
-    check(ew.out.length >= 24 && ew.out.every(x => x.removed > 0) && worse.length === 0,
-      `eyewear: no glasses style hides more of the red eyes than today's on any Look (${ew.out.length} measured${worse.length ? `; worse: ${worse.map(x => `${x.look}/${x.style} ${x.score}`).join(', ')}` : ''})`);
-    check(fresh.every(x => x.score >= ew.gate), `eyewear: any new style reaches the red-eye gate ${ew.gate} (${fresh.length ? fresh.map(x => `${x.look}/${x.style} ${x.score}`).join(', ') : 'none offered yet: the Monocle and Gold frames come in W1-B'})`);
+    const ewLine = x => `${x.look} ${x.score}${EYEWEAR_TODAY[x.look]?.[x.style] != null ? ` (today ${EYEWEAR_TODAY[x.look][x.style]})` : ''} / nearer ${x.near}`;
+    console.log('        eyewear red-eye scores, both eyes / the nearer eye (report only, no gate; the owner, 19 Oct 2026):');
+    for (const st of ew.styles) {
+      const rows = ew.out.filter(x => x.style === st);
+      console.log(`          ${st}${rows[0]?.held ? ' (held back until its drawing passes review)' : ''}: ${rows.map(ewLine).join(', ')}`);
+    }
+    const changed = ew.out.filter(x => EYEWEAR_TODAY[x.look]?.[x.style] != null && Math.abs(x.score - EYEWEAR_TODAY[x.look][x.style]) > 0.02);
+    if (changed.length) console.log(`  NOTE  differs from before W1 by more than 0.02 (reported, not a failure): ${changed.map(x => `${x.look}/${x.style} ${x.score} (was ${EYEWEAR_TODAY[x.look][x.style]})`).join(', ')}`);
+    if (shots) fs.writeFileSync(`${shots}/eyewear-redeye.json`, JSON.stringify({ today: EYEWEAR_TODAY, measured: ew.out }, null, 1));
+    check(ew.styles.length >= 4 && ew.out.length === 6 * ew.styles.length && ew.out.every(x => x.removed > 0 && Number.isFinite(x.score) && Number.isFinite(x.near)),
+      `eyewear red-eye test measured (report only): ${ew.styles.length} styles drawn by the game x 6 Looks, every pair of frames merged in and taken out for the reference`);
   }
   check(!messages.filter(m => !/GPU stall|ReadPixels/i.test(m)).length, `no console errors (render checks)${messages.length ? `: ${messages.slice(0, 4).join(' | ')}` : ''}`);
   await browser.close();
@@ -350,6 +386,7 @@ async function menuPage(w, h) {
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 if (!skip.has('wardrobe')) {
+  // (the screen itself, area by area, its tiles, the Looks and the Hotel Honours page: tests/browser-wardrobe.mjs)
   console.log('\n6. the wardrobe');
   for (const [w, h] of [[1024, 768], [1180, 820], [1366, 1024]]) {
     const { browser, page, messages } = await menuPage(w, h);
@@ -359,50 +396,51 @@ if (!skip.has('wardrobe')) {
     check(!!idle && idle.look === 'victor' && Math.abs(idle.x - sx) < 0.05 && Math.abs(idle.z - sz) < 0.05, `${tag}: your avatar (the test profile's v1 Tuxedo: Victor's Look) stands by the lift in the lobby (${idle?.look} at ${idle?.x?.toFixed(2)}, ${idle?.z?.toFixed(2)})`);
     await page.click('#btn-profile');
     await page.waitForFunction(() => window.__game.menuScreen() === 'avatar' && window.__game.lobbyWardrobe()?.k >= 1, null, { timeout: 90000 });
+    // (full length: the Body area)
+    await page.click('#wd-rail button[data-area="body"]');
+    await page.waitForFunction(() => window.__game.lobbyWardrobe()?.shotK >= 1 && window.__game.lobbyWardrobe()?.shot === 'full', null, { timeout: 60000 });
     await sleep(700);
     const lay = await page.evaluate(() => {
-      const se = document.scrollingElement, panel = document.querySelector('#menu .menu-panel').getBoundingClientRect();
-      const done = document.getElementById('btn-av-done').getBoundingClientRect();
-      const hit = document.elementFromPoint(done.left + done.width / 2, done.top + done.height / 2);
-      return { scroll: [se.scrollHeight, innerHeight, se.scrollWidth, innerWidth], panel: panel.toJSON(), done: done.toJSON(), doneHit: hit?.id || hit?.closest('button')?.id,
+      const se = document.scrollingElement, panel = document.getElementById('wd-panel').getBoundingClientRect(), rail = document.getElementById('wd-rail').getBoundingClientRect();
+      const save = document.getElementById('btn-wd-save').getBoundingClientRect();
+      const hit = document.elementFromPoint(save.left + save.width / 2, save.top + save.height / 2);
+      return { scroll: [se.scrollHeight, innerHeight, se.scrollWidth, innerWidth], panel: panel.toJSON(), rail: rail.toJSON(), save: save.toJSON(), saveHit: hit?.id || hit?.closest('button')?.id,
         blurred: document.getElementById('view').classList.contains('blurred'), you: window.__game.lobbyPlayer().screen, ed: window.__game.avatarEditor() };
     });
     check(lay.scroll[0] <= lay.scroll[1] && lay.scroll[2] <= lay.scroll[3], `${tag}: the page does not scroll (${lay.scroll.join(' ')})`);
-    check(lay.panel.top >= 0 && lay.panel.bottom <= h && lay.done.bottom <= h && lay.doneHit === 'btn-av-done', `${tag}: the panel and Done are on screen (panel ${Math.round(lay.panel.top)}-${Math.round(lay.panel.bottom)})`);
+    check(lay.panel.top >= 0 && lay.panel.bottom <= h && lay.save.bottom <= h && lay.saveHit === 'btn-wd-save' && lay.rail.bottom <= h, `${tag}: the rail, the panel and Save look are on screen (panel ${Math.round(lay.panel.top)}-${Math.round(lay.panel.bottom)})`);
     const [fx, fy] = lay.you.feet, [hx, hy] = lay.you.head;
-    check(Math.min(fx, hx) > lay.panel.right + 20 && Math.max(fx, hx) < w - 20 && hy > 0 && fy < h, `${tag}: your avatar stands right of the panel, head to feet on screen (head ${hx.toFixed(0)},${hy.toFixed(0)} feet ${fx.toFixed(0)},${fy.toFixed(0)}; panel ends ${lay.panel.right.toFixed(0)})`);
+    check(Math.min(fx, hx) > lay.rail.right + 20 && Math.max(fx, hx) < lay.panel.left - 20 && hy > 0 && fy < h, `${tag}: your avatar stands between the rail and the panel, head to feet on screen (head ${hx.toFixed(0)},${hy.toFixed(0)} feet ${fx.toFixed(0)},${fy.toFixed(0)}; stage ${lay.rail.right.toFixed(0)}-${lay.panel.left.toFixed(0)})`);
     check(!lay.blurred, `${tag}: the lobby is sharp behind the wardrobe`);
-    const order = lay.ed.rows.map(r => r.slot).join(',');
-    check(order === 'body,base,skin,hair,eyes,glasses,main,accent', `${tag}: the rows in order (${order})`);
-    const bodyRow = lay.ed.rows[0];
-    check(bodyRow.label === 'Body' && await page.evaluate(() => [...document.querySelectorAll('#av-body button[data-slot="body"]')].map(b => b.textContent.trim()).join('/')) === 'Male/Female', `${tag}: the first choice is Male / Female`);
+    const areas = lay.ed.areas.map(a => a.id).join(',');
+    check(areas === 'body,face,hair,moustache,eyewear,outfit,extras,looks', `${tag}: the areas in order (${areas})`);
     if (shots) await page.screenshot({ path: `${shots}/wardrobe-${tag}.png` });
     if (w === 1180) {
-      const marked = lay.ed.rows.flatMap(r => r.unlockable.map(id => `${r.slot}.${id}`));
-      check(['hair.platinum', 'main.champagne', 'main.gatsby'].every(id => marked.includes(id)) && lay.ed.rows.every(r => !r.locked.length), `unlockable items marked and wearable for testing (${marked.join(', ')})`);
-      const tapOpt = async (slot, id) => { await page.click(`#av-body button[data-slot="${slot}"][data-id="${id}"]`); await sleep(350); };
-      await tapOpt('main', 'claret');
+      const tap = async (slot, id) => { await page.click(`#av-body button[data-slot="${slot}"][data-id="${id}"]`); await sleep(350); };
+      await page.click('#wd-rail button[data-area="outfit"]'); await sleep(400);
+      await page.click('#wd-row button[data-slot="main"][data-id="claret"]'); await sleep(350);
       check(await page.evaluate(() => window.__game.lobbyPlayer().avatar.colours.main) === 'claret', 'a new outfit colour shows on your avatar at once');
-      await tapOpt('glasses', 'round');
+      await page.click('#wd-rail button[data-area="eyewear"]'); await sleep(400);
+      await tap('glasses', 'round');
       await page.waitForFunction(() => window.__game.lobbyPlayer()?.glasses, null, { timeout: 60000 }).catch(() => {});
-      const rows = await page.evaluate(() => window.__game.avatarEditor().rows.map(r => r.slot).join(','));
-      check(/glasses,frame,main/.test(rows) && await page.evaluate(() => window.__game.lobbyPlayer().glasses), `glasses on: Frame appears, the glasses show in the lobby (${rows})`);
-      await tapOpt('body', 'f');
+      check(await page.evaluate(() => !!window.__game.avatarEditor().row && window.__game.lobbyPlayer().glasses), 'glasses on: the frame colours appear, the glasses show in the lobby');
+      await page.click('#wd-rail button[data-area="body"]'); await sleep(400);
+      await tap('gender', 'f');
       await page.waitForFunction(() => ['clara', 'eleanor', 'beatrice'].includes(window.__game.lobbyPlayer()?.avatar?.face), null, { timeout: 60000 });
-      const fem = await page.evaluate(() => ({ ed: window.__game.avatarEditor(), pl: window.__game.lobbyPlayer() }));
-      check(fem.ed.rows[1].options.join(',') === 'clara,eleanor,beatrice' && fem.pl.avatar.colours.main === 'claret' && fem.pl.avatar.glasses === 'round', `Female: the three gowns; outfit and glasses kept, rebuilt in the lobby (${fem.pl.look})`);
-      await tapOpt('base', 'eleanor');
+      const fem = await page.evaluate(() => window.__game.lobbyPlayer());
+      check(fem.avatar.colours.main === 'claret' && fem.avatar.glasses === 'round', `Woman: outfit colour and glasses kept, rebuilt in the lobby (${fem.look})`);
+      await page.click('#wd-rail button[data-area="looks"]'); await sleep(400);
+      await tap('look', 'eleanor');
       await page.waitForFunction(() => window.__game.lobbyPlayer()?.avatar?.face === 'eleanor', null, { timeout: 60000 });
-      const gown = await page.evaluate(() => window.__game.avatarEditor().rows.map(r => r.slot).join(','));
-      check(/main,metal$/.test(gown) && !/accent/.test(gown), `Ballgown: Jewellery, no Accent (${gown})`);
-      await tapOpt('eyes', 'hazel');
+      await page.click('#wd-rail button[data-area="face"]'); await sleep(400);
+      await tap('eyes', 'hazel');
       await sleep(1500);
       if (shots) await page.screenshot({ path: `${shots}/wardrobe-gown-${tag}.png` });
-      await page.click('#btn-av-done');
+      await page.click('#btn-wd-save');
       await page.waitForFunction(() => window.__game.menuScreen() === 'main', null, { timeout: 10000 });
       await sleep(400);
       const saved = await page.evaluate(() => window.__game.profile().avatar);
-      check(saved.v === 2 && saved.face === 'eleanor' && saved.dress === 'ballgown' && saved.colours.main === 'claret' && saved.glasses === 'round' && saved.colours.eyes === 'hazel', `Done keeps your avatar in your profile (${JSON.stringify(saved)})`);
+      check(saved.v === 2 && saved.face === 'eleanor' && saved.dress === 'ballgown' && saved.colours.eyes === 'hazel', `Save look keeps your avatar in your profile (${JSON.stringify(saved)})`);
       check(await page.evaluate(() => document.getElementById('view').classList.contains('blurred')), 'back on the main menu, the lobby is soft again');
       await page.waitForFunction(() => window.__game.lobbyWardrobe()?.k === 0, null, { timeout: 60000 });
       await page.click('#btn-profile');

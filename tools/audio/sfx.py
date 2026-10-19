@@ -390,6 +390,38 @@ def fx_cardFlip():
     return mono(mix(0.15, (a, 0.0), (b, 0.055)))
 
 
+
+# --- the wardrobe (src/ui/wardrobe/wardrobe.js: a hairstyle or moustache, clothes, glasses or jewellery put on) -------
+def fx_snip():
+    """A barber's scissors: two quick closes of the blades, each a bright steel tick after a short hiss of steel on
+    steel. Small and dry: it plays on every hairstyle tried."""
+    rng = R(140)
+
+    def cut(f):
+        hiss = swish(0.045, 2800, 6500, 5200, 11000, rng, peak=0.85) * 0.4
+        tick = modes([(3150 * f, 0.012, 0.6), (5240 * f, 0.008, 0.45), (7420 * f, 0.005, 0.25), (1880 * f, 0.02, 0.28)], 0.08, rng)
+        return add(hiss, np.concatenate([np.zeros(samples(0.036)), tick]))
+    return mono(mix(0.32, (cut(1.0), 0.0), (cut(1.07), 0.115, 0, 0.8)))
+
+
+def fx_rustle():
+    """Cloth: a hand smoothing a jacket or a gown, a soft brush of wool and satin with a little grain in it."""
+    rng = R(141)
+    n = samples(0.42)
+    base = swish(0.42, 450, 2000, 900, 3600, rng, peak=0.3)
+    grain_ = bp(white(n, rng), 2600, 7200, 2) * np.clip(smooth_noise(n, rng, 38.0), 0, None)
+    u = np.arange(n) / n
+    shape = np.sin(np.pi * np.clip(u, 0, 1)) ** 1.2
+    return mono(add(base * 0.85, grain_ * shape * 0.22))
+
+
+def fx_clink():
+    """Glass and fine wire: a spectacle lens touched against its frame, a small bright ring that dies quickly."""
+    rng = R(142)
+    y = modes([(2637, 0.2, 0.6), (4183, 0.13, 0.45), (6024, 0.08, 0.3), (7931, 0.05, 0.18), (3313, 0.16, 0.22)], 0.6, rng)
+    y += 0.22 * burst(0.6, 3000, 10000, rng, tau=0.0012)
+    return y
+
 # --- cards --------------------------------------------------------------------------------------
 def fx_bandage():
     rng = R(122)
@@ -723,6 +755,10 @@ EFFECTS = {
     'switchboard': dict(fn=fx_switchboard, lufs=-16.0, stereo=True),
     'escape': dict(fn=fx_escape, lufs=-15.0, stereo=True, bitrate='112k', max_len=3.4),
     'steps': dict(fn=fx_steps, lufs=-22.0, slices=STEP_SLICES, peak=True),
+    # the wardrobe
+    'snip': dict(fn=fx_snip, lufs=-22.0),
+    'rustle': dict(fn=fx_rustle, lufs=-24.0, max_len=0.5),
+    'clink': dict(fn=fx_clink, lufs=-22.5, room=(0.4, 0.1), max_len=0.7),
 }
 
 

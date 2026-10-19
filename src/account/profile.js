@@ -5,7 +5,8 @@
 //     avatar: { v: 2, body, face, … }, catalogue ids only (src/data/wardrobe.js, avatar v2)
 //     inventory: [],                   item ids owned beyond the free ones ('glasses.monocle', 'extra.lantern'):
 //                                      the achievement items earned on this device (account.grant)
-//     looks: [null, null, null],       three saved Looks (v2 avatars) for the new wardrobe; empty for now
+//     looks: [null, null, null],       three saved Looks of the player's own (the wardrobe's Looks page):
+//                                      { name, avatar (v2), savedAt } or null (src/account/looks.js)
 //     createdAt, updatedAt, nameChangedAt }   ISO dates (updatedAt lets a server merge keep the newer)
 // A version 1 profile (an avatar of one of six looks, recoloured) is migrated when it is read: the avatar becomes
 // the v2 Look it was (src/data/wardrobe.js avatarFromV1: lossless), the inventory keeps its ids (each keeps its
@@ -13,9 +14,10 @@
 import { checkUsername } from './username.js';
 import { ITEMS, itemId, normaliseAvatar, avatarFromGuest, ownsFrom } from '../data/wardrobe.js';
 import { randomAvatar } from '../data/randomAvatar.js';
+import { SAVED_LOOKS, emptyLooks, repairSavedLooks } from './looks.js';
 
 export const PROFILE_VERSION = 2;
-export const SAVED_LOOKS = 3;
+export { SAVED_LOOKS };
 
 // A new random id for this device (crypto when the browser or Node has it).
 export function newProfileId() {
@@ -40,7 +42,7 @@ export function newProfile({ username, avatar, now, id } = {}) {
     username,
     avatar: normaliseAvatar(avatar || startingAvatar(username)),
     inventory: [],
-    looks: Array(SAVED_LOOKS).fill(null),
+    looks: emptyLooks(),
     createdAt: at, updatedAt: at, nameChangedAt: at,
   };
 }
@@ -52,7 +54,7 @@ const repairWith = (av, { inventory = [] } = {}) => normaliseAvatar(av, { owns: 
 
 // A version 1 profile as version 2 (the avatar is migrated by the avatar repair itself: normaliseAvatar reads v1).
 export function fromV1(data) {
-  return { ...data, version: PROFILE_VERSION, looks: Array(SAVED_LOOKS).fill(null) };
+  return { ...data, version: PROFILE_VERSION, looks: emptyLooks() };
 }
 
 // A saved profile made safe: { profile, repaired, readOnly?, kept? }. A valid username is kept and anything
@@ -60,9 +62,10 @@ export function fromV1(data) {
 // no profile (null: the register screen asks for a name again), but a name that was valid once and is no longer (a
 // word reserved since) leaves `kept`: { id, avatar, inventory, looks, createdAt } for the new name to keep. A profile
 // saved by a NEWER version is read as well as this one can (`readOnly`: it must not be written over, or the newer
-// fields would be lost). `repairAvatar(av, { inventory })`: how avatars are made safe, given the inventory repaired
-// first (default: the catalogue's, owning the free items and that inventory). A version 1 profile (or one with no
-// version) is migrated to version 2 first.
+// fields would be lost). `repairAvatar(av, { inventory })`: how the worn avatar is made safe, given the inventory
+// repaired first (default: the catalogue's, owning the free items and that inventory). The saved Looks keep what
+// they were saved with (made safe as a shape only; ownership is checked when one is worn: src/account/looks.js). A
+// version 1 profile (or one with no version) is migrated to version 2 first.
 export function repairProfile(raw, { repairAvatar = repairWith, now } = {}) {
   let data = raw;
   if (typeof data === 'string') { try { data = JSON.parse(data); } catch { return { profile: null, repaired: true }; } }
@@ -77,8 +80,7 @@ export function repairProfile(raw, { repairAvatar = repairWith, now } = {}) {
     ? [...new Set(data.inventory.filter(id => typeof id === 'string' && KNOWN_ITEMS.has(id)))] : [];
   const id = typeof data.id === 'string' && /^[A-Za-z0-9_-]{4,64}$/.test(data.id) ? data.id : newProfileId();
   const avatar = repairAvatar(data.avatar && typeof data.avatar === 'object' ? data.avatar : startingAvatar(name.ok ? name.name : 'guest'), { inventory });
-  const saved = Array.isArray(data.looks) ? data.looks : [];
-  const looks = Array.from({ length: SAVED_LOOKS }, (_, k) => (saved[k] && typeof saved[k] === 'object' ? repairAvatar(saved[k], { inventory }) : null));
+  const looks = repairSavedLooks(data.looks);
   if (!name.ok) {
     const once = typeof data.username === 'string' && data.username.trim().length > 0;
     return { profile: null, repaired: true, readOnly, ...(once ? { kept: { id, avatar, inventory, looks, createdAt: created } } : {}) };

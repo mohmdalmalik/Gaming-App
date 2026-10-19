@@ -22,15 +22,26 @@
 // Assemblies are cached by the avatar's pieces (src/data/wardrobe.js geometryKey; baked ones by every colour too) and
 // counted: whoever holds one releases it (src/render/avatar.js does, when the guest is disposed). One nobody holds is
 // kept a little (IDLE_KEEP, the most recent), so the same look again costs no merge, then let go. The parsed pieces
-// themselves are kept for the visit (they are the download).
+// (the download, parsed) are kept while any cached assembly is made from them; one that none uses any more is kept a
+// little too (PART_KEEP, the most recently used: a wardrobe area's pieces, the looks just tried), then let go, so the
+// memory stays bounded however many items the catalogue grows to. The six classic Looks' pieces are never let go
+// (the menu's lobby people and the usual looks). A piece let go is simply fetched again if worn again (the browser's
+// cache usually has it).
 //
 // Shadow patches (the hair's shadow on the forehead, a jacket's hem on the trousers: the pieces' scene extras
 // aoPatches) are multiplied into the assembly's OWN copy of a piece's vertex colours; a cached piece never changes. A
 // patch baked against another version of its target (the target's `hash` differs) is skipped, with one warning.
+//
+// Skin a piece covers completely (its scene extras `hidesSkin`: bone names, e.g. the evening gloves' hands, the opera
+// gloves' forearms too; or { bone, below }: that bone's skin below a height in the bind pose, metres, e.g. the upper
+// arm under the opera gloves' top) is left out of the merged guest: the body's Skin triangles whose three corners
+// follow it (at least half of their weight) are not drawn, so the skin can never show through the piece's seams,
+// whatever the pose or the camera's depth precision. Only the index changes (the vertices stay): nothing else is
+// affected, and a guest without such a piece is exactly as before.
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
-import { partKeysFor, geometryKey, avatarKey, genderOf, paletteHex } from '../data/wardrobe.js';
+import { partKeysFor, geometryKey, avatarKey, genderOf, paletteHex, LOOKS } from '../data/wardrobe.js';
 import { measureEyes } from './possessedLook.js';
 import { glassesPiece } from './avatarGlasses.js';
 
@@ -49,7 +60,9 @@ const DEFAULT_MATERIALS = {
   Glasses: 'frame', Eye: 'eye', Shine: 'eye',
 };
 const EYE_MATERIALS = ['Eye', 'Shine'];       // the eye mesh, in this order (its groups)
+const HIDE_WEIGHT = 0.5;                      // a vertex is under a hiding piece when this much of its skin follows its bones
 const IDLE_KEEP = 3;                          // assemblies nobody holds, kept for a quick return (about 1.2 MB each)
+let PART_KEEP = 24;                           // parsed pieces no assembly uses, kept for a quick return (25-400 kB each)
 
 // ---- the manifest and the pieces --------------------------------------------------------------------------------------
 let manifestP = null;
@@ -66,10 +79,39 @@ export function loadPart(key) {
   let p = parts.get(key);
   if (!p) {
     p = loader.loadAsync(`${ROOT}${key}.glb`).then(gltf => readPart(key, gltf));
-    p.catch(() => parts.delete(key));                 // (a failed download may be tried again)
+    p.catch(() => { if (parts.get(key) === p) parts.delete(key); unused.delete(key); });   // (a failed download may be tried again)
     parts.set(key, p);
   }
+  if (!partUse.get(key)) touchUnused(key);
   return p;
+}
+
+// ---- letting go of parsed pieces nobody uses (least recently used first) ------------------------------------------------
+const partUse = new Map();        // key -> how many cached (or building) assemblies are made from it
+const unused = new Map();         // keys of loaded pieces no assembly uses, least recently used first
+let pinned = null, letGo = 0;
+// (the six classic Looks' pieces: never let go)
+const pinnedKeys = () => pinned || (pinned = new Set(Object.values(LOOKS).flatMap(L => { const k = partKeysFor(L); return [k.body, ...k.parts]; })));
+function touchUnused(key) {
+  unused.delete(key);
+  if (!pinnedKeys().has(key)) unused.set(key, true);
+  trimParts();
+}
+function trimParts() {
+  while (unused.size > PART_KEEP) {
+    const key = unused.keys().next().value;
+    unused.delete(key);
+    if (parts.delete(key)) letGo++;     // (the parsed piece is garbage once no assembly holds its arrays)
+  }
+}
+// An assembly made from these pieces enters (+1) or leaves (-1) the cache.
+function useParts(keys, d) {
+  for (const k of keys) {
+    const n = (partUse.get(k) || 0) + d;
+    if (n > 0) { partUse.set(k, n); unused.delete(k); continue; }
+    partUse.delete(k);
+    if (parts.has(k)) touchUnused(k);
+  }
 }
 // A parsed piece: its primitives (one per material, in the file's order), its scene extras, the rig's extras and
 // clips (the body), and its bones' names in joint order.
@@ -132,6 +174,7 @@ function trimIdle() {
     if (!asm || asm.refs > 0) continue;
     cache.delete(ck);
     asm.dispose();
+    useParts(asm.stats.files, -1);
   }
 }
 
@@ -249,6 +292,30 @@ function mergeInto(acc) {
   geo.computeBoundingSphere();
   return { geometry: geo, groups };
 }
+// The same geometry without the triangles whose three corners follow the hidden bones by at least HIDE_WEIGHT
+// (`below`: a Map of joint index -> the height under which that bone's skin is hidden; Infinity: all of it): the
+// attributes are shared, only the index is new. -> the geometry, or the same one if no triangle goes.
+function withoutBones(g, below) {
+  const si = g.attributes.skinIndex, sw = g.attributes.skinWeight, pos = g.attributes.position, n = si.count;
+  const under = new Uint8Array(n);
+  for (let v = 0; v < n; v++) {
+    let w = 0;
+    const y = pos.getY(v);
+    for (let c = 0; c < 4; c++) { const h = below.get(si.getComponent(v, c)); if (h !== undefined && y < h) w += sw.getComponent(v, c); }
+    under[v] = w >= HIDE_WEIGHT ? 1 : 0;
+  }
+  const src = g.index ? g.index.array : null, count = src ? src.length : n;
+  const keep = [];
+  for (let t = 0; t < count; t += 3) {
+    const a = src ? src[t] : t, b = src ? src[t + 1] : t + 1, c = src ? src[t + 2] : t + 2;
+    if (!(under[a] && under[b] && under[c])) keep.push(a, b, c);
+  }
+  if (keep.length === count) return g;
+  const o = new THREE.BufferGeometry();
+  for (const [k, a] of Object.entries(g.attributes)) o.setAttribute(k, a);
+  o.setIndex(new THREE.BufferAttribute(n > 65535 ? new Uint32Array(keep) : new Uint16Array(keep), 1));
+  return o;
+}
 // A geometry that shares everything with the piece's but has its own copy of the vertex colours (for the patches).
 function ownColours(g) {
   const o = new THREE.BufferGeometry();
@@ -257,8 +324,12 @@ function ownColours(g) {
   return o;
 }
 
-async function build(av, cacheKey, { mergeEyes, bakeColours }) {
-  const keys = partKeysFor(av);
+async function build(av, cacheKey, opts) {
+  const keys = partKeysFor(av), files = [keys.body, ...keys.parts];
+  useParts(files, +1);              // (its pieces are kept while it is built, and while it is cached)
+  try { return await buildFrom(av, cacheKey, opts, keys); } catch (err) { useParts(files, -1); throw err; }
+}
+async function buildFrom(av, cacheKey, { mergeEyes, bakeColours }, keys) {
   const [body, ...pieces] = await Promise.all([loadPart(keys.body), ...keys.parts.map(loadPart)]);
   const manifest = await loadManifest().catch(() => null);
   const t0 = performance.now();
@@ -312,6 +383,17 @@ async function build(av, cacheKey, { mergeEyes, bakeColours }) {
       }
     }
   }
+  // the body's skin under a piece that covers it (hidesSkin: the gloves' hands): left out
+  const hide = new Map();
+  for (const w of worn) {
+    for (const h of Array.isArray(w.src.extras.hidesSkin) ? w.src.extras.hidesSkin : []) {
+      const bone = typeof h === 'string' ? h : h?.bone, y = typeof h === 'string' ? Infinity : Number(h?.below);
+      // (bone names as the pipeline writes them, 'hand.L'; the loader drops the dot from the rig's own: 'handL')
+      const i = typeof bone === 'string' ? names.indexOf(THREE.PropertyBinding.sanitizeNodeName(bone)) : -1;
+      if (i >= 0 && !Number.isNaN(y)) hide.set(i, Math.max(hide.get(i) ?? -Infinity, y));
+    }
+  }
+  if (hide.size) for (const q of prims) if (q.w.src === body && q.pr.name === 'Skin') q.geometry = withoutBones(q.geometry, hide);
   // the guest's measurements: the eyes (the face's Eye), the head (head-weighted Skin), the brows (the glasses' fit)
   const face = keys.eyesFrom ? worn.find(w => `${bodyId}/${w.part}` === keys.eyesFrom) : null;
   const eyePrim = face?.src.prims.find(p => p.name === 'Eye');
@@ -403,7 +485,7 @@ async function build(av, cacheKey, { mergeEyes, bakeColours }) {
       refs++;
       const at = idle.indexOf(cacheKey);
       if (at >= 0 && cache.get(cacheKey) === asm) idle.splice(at, 1);
-      if (!cache.has(cacheKey)) cache.set(cacheKey, asm);   // (let go while nobody held it: back in the cache)
+      if (!cache.has(cacheKey)) { cache.set(cacheKey, asm); useParts(files, +1); }   // (let go while nobody held it: back in the cache)
       disposed = false;
       return asm;
     },
@@ -420,5 +502,8 @@ async function build(av, cacheKey, { mergeEyes, bakeColours }) {
 
 // (tests) what is loaded and cached
 export function partsDebug() {
-  return { parts: [...parts.keys()], assemblies: [...cache.values()].map(a => ({ key: a.cacheKey, refs: a.refs, tris: a.stats.tris })), idle: [...idle] };
+  return { parts: [...parts.keys()], assemblies: [...cache.values()].map(a => ({ key: a.cacheKey, refs: a.refs, tris: a.stats.tris })), idle: [...idle],
+    unused: [...unused.keys()], pinned: pinnedKeys().size, letGo, keep: PART_KEEP };
 }
+// (tests and probes) how many unused parsed pieces are kept (Infinity: never let go, as before)
+export function setPartKeep(n) { PART_KEEP = n; trimParts(); }

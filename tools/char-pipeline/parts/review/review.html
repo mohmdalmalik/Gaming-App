@@ -218,7 +218,32 @@ async function idGuest(o, keys, hideFace, omit) {
     if (m.material.name === 'Eye') m.material = ID_EYE; else if (m.material.name === 'Shine') m.visible = false; else m.material = ID_BLACK;
   });
   if (hideFace) G.merged.visible = false;        // a face's own test: the eyes alone are the reference
+  G.split = splitEyes(G.eyes);
   return G;
+}
+// The nearer-eye rule (the owner, 19 Oct 2026: a piece passes when the eye NEAREST the camera shows): each eye gets
+// its own ID colour (magenta: the guest's left, +x; cyan: its right) on a copy of the Eye geometry (the library's is
+// shared, never changed), and a few vertices of each eye tell which one is nearer the camera in each view.
+const ID_EYES = new THREE.MeshBasicMaterial({ vertexColors: true });
+function splitEyes(sm) {
+  const src = sm.geometry, pos = src.attributes.position, n = pos.count;
+  let mx = 0; for (let i = 0; i < n; i++) mx += pos.getX(i); mx /= n;
+  const col = new Float32Array(n * 3), sides = [[], []];
+  for (let i = 0; i < n; i++) { const s = pos.getX(i) >= mx ? 0 : 1; col.set(s ? [0, 1, 1] : [1, 0, 1], i * 3); sides[s].push(i); }
+  const g = new THREE.BufferGeometry();
+  for (const [k, a] of Object.entries(src.attributes)) if (k !== 'color') g.setAttribute(k, a);
+  g.setAttribute('color', new THREE.BufferAttribute(col, 3)); g.setIndex(src.index);
+  sm.geometry = g; sm.material = ID_EYES;
+  return { geometry: g, sample: sides.map(l => l.filter((_, k) => k % Math.max(1, Math.floor(l.length / 40)) === 0)) };
+}
+const EYE_P = new THREE.Vector3();
+function nearerEye(G, from) {          // 0 (left), 1 (right), or -1 when they are about as near (face-on, from behind)
+  const d = G.split.sample.map(list => {
+    const c = new THREE.Vector3();
+    for (const i of list) c.add(G.eyes.getVertexPosition(i, EYE_P));
+    return G.eyes.localToWorld(c.divideScalar(Math.max(1, list.length))).distanceTo(from);
+  });
+  return Math.abs(d[0] - d[1]) < 0.01 ? -1 : d[0] < d[1] ? 0 : 1;
 }
 function countId(G, heading, clip, frac) {
   show(G, { yaw: heading }); pose(G, clip, frac);
@@ -230,8 +255,12 @@ function countId(G, heading, clip, frac) {
   renderer.setSize(512, 512); const rt = new THREE.WebGLRenderTarget(512, 512, { samples: 0 });
   renderer.setRenderTarget(rt); renderer.render(scene, cam); const px = new Uint8Array(512 * 512 * 4);
   renderer.readRenderTargetPixels(rt, 0, 0, 512, 512, px); renderer.setRenderTarget(null); rt.dispose();
-  let n = 0; for (let i = 0; i < px.length; i += 4) if (px[i] > 150 && px[i + 1] < 90 && px[i + 2] > 150) n++;
-  return n;
+  const eye = [0, 0];               // ID pixels of each eye (magenta: left, cyan: right)
+  for (let i = 0; i < px.length; i += 4) {
+    if (px[i] > 150 && px[i + 1] < 90 && px[i + 2] > 150) eye[0]++;
+    else if (px[i] < 90 && px[i + 1] > 150 && px[i + 2] > 150) eye[1]++;
+  }
+  return { n: eye[0] + eye[1], eye, near: nearerEye(G, cam.position) };
 }
 async function redeye(o) {
   for (const g of Object.values(groups)) g.visible = false;
@@ -239,17 +268,24 @@ async function redeye(o) {
   // strict (the contract's words): every view whose reference shows >= 30 ID pixels scores. facing: only the views
   // where the face is turned toward the camera (heading within 90 degrees): from behind (135 / 225) the eye is at
   // most a sliver past the cheek, which today's own guests hide too (reported, not hidden: see the README)
-  const views = []; let min = 1, scored = 0, fmin = 1, fscored = 0;
+  // near (the nearer-eye rule, the owner's decision of 19 Oct 2026): over the same facing views, only the eye nearest
+  // the camera is scored (both eyes when they are about as near: face-on); the far eye may hide behind hair
+  const views = []; let min = 1, scored = 0, fmin = 1, fscored = 0, nmin = 1, nscored = 0;
   for (const [clip, frac] of [['Idle', 0], ['Walk', 0.25], ['Walk', 0.75]]) for (let h = 0; h < 360; h += 45) {
     // heading relative to the camera: the camera looks from +z, so a guest turned by h shows that side
-    const w = countId(A, h, clip, frac), wo = countId(B, h, clip, frac);
+    const cw = countId(A, h, clip, frac), cwo = countId(B, h, clip, frac), w = cw.n, wo = cwo.n;
     const ratio = wo >= 30 ? w / wo : null, facing = h <= 90 || h >= 270;
     if (ratio != null) { scored++; min = Math.min(min, ratio); if (facing) { fscored++; fmin = Math.min(fmin, ratio); } }
-    views.push({ heading: h, clip, frac, facing, with: w, without: wo, ratio: ratio == null ? null : +ratio.toFixed(3) });
+    const k = cwo.near, ref = k < 0 ? wo : cwo.eye[k], got = k < 0 ? w : cw.eye[k];
+    const nratio = ref >= 30 ? got / ref : null;
+    if (nratio != null && facing) { nscored++; nmin = Math.min(nmin, nratio); }
+    views.push({ heading: h, clip, frac, facing, with: w, without: wo, ratio: ratio == null ? null : +ratio.toFixed(3),
+                 nearer: k < 0 ? 'both' : k ? 'right' : 'left', eyesWith: cw.eye, eyesWithout: cwo.eye, nearRatio: nratio == null ? null : +nratio.toFixed(3) });
   }
-  A.dispose(); B.dispose();
+  A.split.geometry.dispose(); B.split.geometry.dispose(); A.dispose(); B.dispose();
   return { min: +fmin.toFixed(3), scored: fscored, pass: fscored > 0 && fmin >= 0.9,
-           strict: { min: +min.toFixed(3), scored, pass: scored > 0 && min >= 0.9 }, views };
+           strict: { min: +min.toFixed(3), scored, pass: scored > 0 && min >= 0.9 },
+           near: { min: +nmin.toFixed(3), scored: nscored, pass: nscored > 0 && nmin >= 0.9 }, views };
 }
 
 // ---- the mirror test: a classic man from pieces next to today's shipped model -------------------------------------------

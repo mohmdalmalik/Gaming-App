@@ -178,6 +178,7 @@ def body_order(bodies):
 def build(check=False, quiet=False):
     errors, warnings, missing, stale = [], [], [], []
     bodies, parts, index_parts, index_tris, built_in, red_eye = {}, {}, {}, {}, {}, {}
+    red_eye_near = {}       # (the nearer-eye score, review.mjs --record: the game's gate since the owner's decision of 19 Oct)
     heaviest = {}
     newest = 0.0
     dirs = sorted(d for d in PARTS_DIR.glob('*') if d.is_dir()) if PARTS_DIR.exists() else []
@@ -281,13 +282,14 @@ def build(check=False, quiet=False):
                        patches={tk: sum(len(m['idx']) for m in p.get('mats', {}).values()) for tk, p in sorted((r['extras'].get('aoPatches') or {}).items())})
             for extra in ('eyeCentre', 'builtInGlasses', 'attach'):
                 if extra in r['extras']: ent[extra] = r['extras'][extra]
-            for extra in ('redEyeMin', 'poke'):
+            for extra in ('redEyeMin', 'redEyeNearMin', 'poke'):
                 if extra in r['extras']: ent[extra] = r['extras'][extra]
             parts[f'{b}/{k}'] = ent
             index_tris[f'{b}/{k}'] = r['tris']
             bg = r['extras'].get('builtInGlasses')
             if bg: built_in[f'{b}/{k}'] = bg.get('style')
             if isinstance(r['extras'].get('redEyeMin'), (int, float)): red_eye[f'{b}/{k}'] = r['extras']['redEyeMin']
+            if isinstance(r['extras'].get('redEyeNearMin'), (int, float)): red_eye_near[f'{b}/{k}'] = r['extras']['redEyeNearMin']
     order = body_order(bodies)
     gen = datetime.datetime.fromtimestamp(newest, datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ') if newest else None
     manifest = dict(v=1, generated=gen, bones=T.BONES, bodies={b: bodies[b] for b in order}, parts=parts,
@@ -304,6 +306,8 @@ def build(check=False, quiet=False):
           # (the red-eye test's recorded minimum per piece, review.mjs --record: the data keeps a piece below the gate
           # off the guests it dresses itself, src/data/wardrobe.js eyesShow)
           '  redEye: {' + ', '.join(f"'{k}': {v}" for k, v in red_eye.items()) + '},',
+          # (the same test scored on the eye nearest the camera: what eyesShow gates on, the owner's rule of 19 Oct 2026)
+          '  redEyeNear: {' + ', '.join(f"'{k}': {v}" for k, v in red_eye_near.items()) + '},',
           '};', '']
     _atomic_write(INDEX_JS, '\n'.join(js))
     fail = bool(errors or missing or stale)

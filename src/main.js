@@ -68,7 +68,8 @@ import { usePracticeWording, prepareSoulCards } from './ui/cards.js';
 import { redEyedAllies, knownPossessedIds } from './ui/allies.js';
 import { createMenu } from './ui/menu.js';
 // (avatars: the wardrobe screen, the runtime portraits and the soul cards' faces from each seat's avatar)
-import { createAvatarEditor } from './ui/avatarEditor.js';
+import { createWardrobe } from './ui/wardrobe/wardrobe.js';
+import { createHonoursPage } from './ui/honours.js';
 import { setPortraitService } from './ui/portrait.js';
 import { setSoulPortraits } from './ui/soulFace.js';
 import { createAvatarPortraits } from './render/avatarPortrait.js';
@@ -2252,19 +2253,29 @@ const menu = createMenu(document, {
   onHowToPlay: opts => howTo.open(opts),
   onCards: opts => cardsGuide.open(opts),
 });
-// The wardrobe (src/ui/avatarEditor.js, the menu's 'avatar' screen): every pick shows at once on your
-// avatar in the lobby, which the lobby's wardrobe camera frames in the space right of the panel, sharp
-// (not blurred); your choices are kept when you leave the screen (account.setAvatar).
-const avatarEditor = createAvatarEditor(document, {
-  account,
+// The Wardrobe (src/ui/wardrobe/wardrobe.js, the menu's 'avatar' screen): every pick shows at once on your
+// avatar in the lobby, which the lobby's wardrobe camera frames in the middle of the screen's stage, sharp
+// (not blurred), close up or full length as the area asks; Save look keeps it (account.setAvatar), Cancel
+// puts back the look you came in with. The Hotel Honours page (src/ui/honours.js) opens from its top bar and
+// from the end screen's achievement line.
+const avatarEditor = createWardrobe(document, {
+  account, honours,
   onPreview: av => lobby?.setPlayerAvatar(av),
   onDone: () => menu.show('main'),
   onRename: () => menu.showRename(),
+  onShot: shot => { if (wardrobeOpen) lobby?.setWardrobe(true, { centreX: wardrobeCentre(), shot }); },
+  onTurn: (yaw, opts) => lobby?.turnWardrobe?.(yaw, opts),
+  onHonours: ({ at } = {}) => honoursPage.open({ at, from: 'wardrobe' }),
+  preload: list => preloadAvatars(list),
+  portraitUrl: av => portraits.url(av),
 });
+const honoursPage = createHonoursPage(document, { honours, account, onTryOn: id => avatarEditor.tryOn(id) });
+document.getElementById('end-honours')?.addEventListener('click', e => { e.preventDefault(); honoursPage.open({ from: 'end' }); });
 let wardrobeOpen = false;
+// (the middle of the wardrobe's stage, between its rail of areas and its panel of options)
 function wardrobeCentre() {
-  const r = document.querySelector('#menu .menu-panel')?.getBoundingClientRect();
-  return r ? (Math.min(r.right, window.innerWidth * 0.6) + window.innerWidth) / 2 : window.innerWidth * 0.7;
+  const r = document.getElementById('wd-stage')?.getBoundingClientRect();
+  return r && r.width > 0 ? r.left + r.width / 2 : window.innerWidth * 0.42;
 }
 function onMenuScreen(name, prev) {
   const open = name === 'avatar';
@@ -2275,7 +2286,7 @@ function onMenuScreen(name, prev) {
   const framing = open || (name === 'signup' && (prev === 'avatar' || wardrobeOpen));
   if (framing === wardrobeOpen) return;
   wardrobeOpen = framing;
-  lobby?.setWardrobe(framing, { centreX: wardrobeCentre() });
+  lobby?.setWardrobe(framing, { centreX: wardrobeCentre(), shot: avatarEditor.shot });
   if (phase === 'menu' && !DIRECT) { container.classList.toggle('blurred', !framing); applyPixelRatio(); }
 }
 window.addEventListener('resize', () => { if (wardrobeOpen) lobby?.setWardrobe(true, { centreX: wardrobeCentre() }); });
@@ -2355,7 +2366,7 @@ if (DIRECT) {
       lobby.setSize(view.size.w, view.size.h);
       // (your avatar by the lift; the wardrobe's camera if that screen is already open)
       lobby.setPlayerAvatar(avatarEditor.isOpen ? avatarEditor.avatar : account.profile?.avatar || null);
-      if (wardrobeOpen) lobby.setWardrobe(true, { centreX: wardrobeCentre() });
+      if (wardrobeOpen) lobby.setWardrobe(true, { centreX: wardrobeCentre(), shot: avatarEditor.shot });
       return lobby.ready;
     })
     .then(() => {
@@ -2660,6 +2671,7 @@ window.__game = {
   // views alive (one per seat: views not at the table are let go), the renderer's counts.
   portraits: () => portraits,
   avatarEditor: () => avatarEditor.debug(),
+  honoursPage: () => honoursPage.debug(),
   lobbyPlayer: () => lobby?.debug.player ?? null,
   lobbyWardrobe: () => lobby?.debug.wardrobe ?? null,
   lobbyBoarders: () => lobby?.debug.boarders ?? null,

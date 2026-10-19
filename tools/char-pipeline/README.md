@@ -62,7 +62,8 @@ gitignored; recreate it with `ln -sfn ../../tests/node_modules tools/char-pipeli
 | `capture.mjs` | real-game screenshots at any viewport/dpr, N camera rotations (+ crops on Victor), hand/map open, `--still` freezes CSS animations; `--pre x,z` walks there first, `--prerot n` rotates the camera first, `--walk x,z --midwalk ms` screenshots mid-walk (use a clear hall edge, e.g. `--pre 3,3 --walk 0,3`) |
 | `walk_check.mjs` | drives walks/turns/interrupt/doorway from the real game; verifies stride in use, phase-vs-distance, mesh-vs-mover, settle; records a webm + frames |
 | `record_smooth.mjs` | deterministic 30 fps recording: steps the page clock per frame, screenshots, encodes a webm in-browser |
-| `portrait.mjs` + `portrait_post.py` | interface portraits rendered from the model: the possessed one uses the game's own red eyes (`src/render/possessedLook.js`) on the plum-crimson plate; the normal one is rewritten only with `--normal` |
+| `portrait.mjs` + `portrait_post.py` | interface portraits rendered from the model: the possessed one uses the game's own red eyes (`src/render/possessedLook.js`) on the plum-crimson plate; the normal one is rewritten only with `--normal`. Since Wardrobe W1-B the stock pictures come from `stock-portraits.mjs` instead |
+| `stock-portraits.mjs` | the six Looks' stock pictures (`assets/portraits/<look>{,-possessed}.jpg`, 576 x 768) drawn by the game's own portrait code from the current pieces, so they match the runtime portraits exactly: `--port N` compares, `--write` rewrites the Looks that differ (run it after any change to a classic Look's pieces) |
 | `scene_stats.mjs` | live draw calls / triangles / programs with Victor loaded |
 | `make_panels.py` | cuts `ref/victor-sheet.png` into `ref/panels/` (front, tq, side, back, face close-ups, elevated) |
 | `compare.py` | sheet panel vs render silhouette at equal displayed height: IoU, width per 4 % band, overlay image |
@@ -185,13 +186,20 @@ python3 tools/char-pipeline/parts/build.py m --list              # the items, wh
 python3 tools/char-pipeline/parts/manifest.py --check            # ALWAYS after a build: writes the manifest + index, checks
                                                                  # (format, budgets, shadow patches, holes through a hair or
                                                                  # moustache shell; the index carries each piece's red-eye
-                                                                 # result, `redEye`, which the data's eyesShow reads)
+                                                                 # results: `redEyeNear`, the nearer eye, which the data's
+                                                                 # eyesShow gates on, and `redEye`, both eyes, reported)
 python3 tools/char-pipeline/parts/manifest.py --check --parts <scratch>/draft   # check a draft (writes only its manifest.json)
 python3 tools/char-pipeline/parts/poke.py --body m --item all --out <dir> [--record]       # poke-through test (bpy)
 node tools/char-pipeline/parts/review.mjs --body m --item hairStyle_swept --port 9521 --out <dir> [--record]
      # the review sheet + red-eye test (own static server on that port, one headless browser); --item all; --parts <draft>;
      # --mirror victor,marcus,henry (a classic man from pieces vs today's GLB); --grid hair,facial,neck,walk,heel
      # (every combination close up)
+node tools/char-pipeline/parts/thumbs.mjs --port 9635 [--body m,f] [--only m/hairStyle_swept] [--out <scratch dir>]
+     # the wardrobe's tile pictures (thumbs.html: the game's own code, neutral colours, three-quarters, the portraits'
+     # lights and the lobby's rim): hair, moustaches, glasses and earrings on an ivory display head, faces with their
+     # own hair, clothes on an invisible body; -> assets/characters/parts/thumbs/<body>/<slot>_<id>.webp (240 x 200,
+     # 3-6 kB) and src/data/thumbsIndex.js (GENERATED). Run it after new pieces reach the index; the wardrobe shows a
+     # placeholder tile for a piece with no picture, and tests/browser-wardrobe.mjs says which are missing
 ```
 Files: `tables.py` (bones, slots, the material -> palette table, who shades whom, budgets, the six Looks), `glb.py`
 (read / write / repack a GLB, no Blender), `core.py` (group, bake in context, shadow patches, export + the post-step:
@@ -230,6 +238,28 @@ Body `m` (decisions, `male/spec.py`):
 - The trouser hems follow the heel a little (`heel_follow`): at toe-off today's guests show the shoe's heel through the
   back of the hem; now the hem rests on it.
 - Budgets (`tables.py`): Marcus's and Henry's hair shells run 88 segments round (was 92) to meet the 8,000 cap.
+- **W1-B men's items** (all in `male/spec.py`, after the W1-A pieces, which build exactly as before):
+  - **The Poet** (`hairStyle_lamplighter`, x 3 faces): tousled S-waves to the collar line, built with Beatrice's lock-band
+    hair (`guests/beatrice.py band_hair`, imported, unchanged) round each face's skull; its own SDF box (a wider one: the
+    crown volume touched the shared `_box` and opened a hole, which `--check` caught). Red eyes: nearer eye 1.0, both
+    eyes 0.65-0.77 (in profile the far eye goes behind the waves: allowed by the owner's nearer-eye rule).
+  - **Dalí moustache** (`facial_dali`, x 3 faces): one waxed tube, the bar flattened on the lip and the points rising
+    beside the nose; per face the bar height, its width and how high the points reach (always below the eyes). 972
+    triangles, the handlebar's count.
+  - **Smoking jacket** (`top_smoking`): Victor's jacket body with the dinner jacket's shawl line and shirt (the shared
+    collar zone: every bow tie and tie fits), a quilted one-sided shawl (`quilted_panel`: top surface + edge wall, no
+    hidden underside), turned-back cuffs, piped pockets and two frog closures, all `Trim` (the accent colour); velvet
+    mottling and the quilting seams are painted after the bake (`velvet`). It keeps only its darker shadow patches
+    (`patch_below` 0.985, read by `build.py`) to stay under its byte cap with room for the recorded tests.
+  - **Extras** (attach points from the contract): `extra_blackOrchid~top_<top>` (chest: on each top's lapel, the
+    waistcoat's left breast; placed on the top's OUTERMOST surface by a ray, `outer_hit`), `extra_lantern~top_<top>`
+    (waist: a fine chain from the front button to the left pocket and a small brass lantern; on the waistcoat only the
+    lantern, hung from its own chain), `extra_eveningGloves` (hands: the hand builder at +2.2 mm, coarser, with a wrist
+    welt, a pearl button and three stitched points). They take the skin weights of what they lie on.
+  - **Henry's bows**: `neck_bow~face_henry` and `neck_bowFull~face_henry` sit 1.2 cm lower and 6 mm forward, because
+    his head is further forward on the shared neck and his chin hid the bows from the game camera. A neck piece may now
+    be fitted to a face (`neck(..., face_fit=)`); `poke.py` tests such a variant on every top, and has a gloves pair
+    (hands inside the gloves, the glove's wrist inside every top's cuff).
 
 Body `f` (the women: `female/spec.py`, its own driver `female/build.py`, same options as `build.py` plus `--just`, a
 quick draft of only the asked pieces; about 8 min for all 32 files; then `manifest.py --check` as always):
@@ -261,6 +291,24 @@ node tools/char-pipeline/parts/review.mjs --body f --item all --port 9531 --out 
   low ones all come from the exact side view (heading 90): there the eye NEAREST the camera stays 100 % visible with every
   style on every face, and what the fringe covers is the sliver of the far eye seen over the bridge of the nose (today's
   Beatrice: 0.756, her own bob hides that sliver completely; from pieces 0.757).
+- **W1-B women's items** (`female/w1b.py`, registered by two lines at the end of `female/spec.py`; the W1-A pieces build
+  exactly as before):
+  - **Braided crown** (`hairStyle_lamplighter`, x 3 faces) and **Marcel waves** (`hairStyle_marcel`, x 3 faces) are
+    written against the face they are fitted to (its skull top, chin, ears), so one description fits every face; both
+    measure the skull radially (`male_extras.radial_skull`: `sd_skull`'s horizontal slices give a thin cap a nub on the
+    crown). The crown's plait is three closed ribbon strands round the head (a whole number of plait cycles, so each
+    strand closes on itself and the hole check sees no open loop). The finger waves are a sawtooth relief on S-shaped
+    crest lines, a sculpted front roll, and a painted mirror shine on every crest.
+  - **Deco beaded gown** (`dress_decoBeaded`): the shared torso, the ballgown's cap sleeves, a V neck, a straight bodice
+    to a dropped waist (55 %), the column skirt's walk-safe weights to mid-calf and a beaded fringe (the metal colour);
+    the beadwork (`Gold`) lies on the gown with its weights. Both belts have a fit for it (at the dropped waist). The
+    classic hairstyles do NOT cast a shadow patch on it: one more patch takes the waves and the wavy bob over their byte
+    cap (the new styles do).
+  - **Extras**: `extra_lantern~dress_<gown>` (neck: a fine chain on the outermost surface of neck and gown, a brass
+    lantern pendant), `extra_blackOrchid~dress_<gown>` (chest: two orchids and three buds at her left shoulder, the men's
+    flower and colours), `extra_eveningGloves` (hands: long opera gloves on the arm's own stations to 45.6 %, the palm and
+    wrist as one envelope; under the A-line's long sleeves only the hands show). `poke.py` has the women's gloves pair
+    (arms and hands inside the gloves; the gloves inside every gown's sleeves, hands exempt as for the gowns).
 
 Tests: `poke.py` (contract 9.4; inside / outside by ray parity, 6 directions; vertices that leave past an OPEN edge, a hem
 or a cuff, are not pokes; the one exemption: the shoe's top rim in the bottom 20 mm of the closed trouser leg, where the
@@ -270,3 +318,26 @@ gown and belt pairs use its `vis` mode: a point hidden under the cover at rest t
 (contract 9.3) reports two scores: **strict** (the contract's words: every view whose reference shows 30 ID pixels) and
 **facing** (only headings where the face is toward the camera); from behind, at 135 degrees, today's own swept hair
 hides the 40-60 pixel sliver of eye that shows past the cheek, so the strict rule cannot be the shipping gate.
+Since the owner's decision of 19 Oct 2026 ("Allow if the nearer eye shows") the gate is a third score, **near**: the same
+facing views, each eye in its own ID colour, and only the eye nearest the camera scored (both eyes when they are about as
+near, face-on). `--record` writes `redEyeMin` (facing, both eyes) and `redEyeNearMin` (near) into the piece's extras;
+`manifest.py` copies both into the manifest and `src/data/partsIndex.js` (`redEye`, `redEyeNear`). Every piece built
+by 19 Oct scores 1.0 on the nearer eye, the Wavy bob on Clara's and Eleanor's faces and the chignon on Beatrice's
+included (their far eye goes behind the hair in profile). Glasses are drawn by the game's code: no red-eye gate on
+eyewear (the owner, 19 Oct 2026); `tests/avatar-check.mjs` section 5 measures and reports every style. Note: the
+two recorded numbers add about 20 bytes to a file; `top_tux` was 4 bytes from its byte cap, so it carries only
+`redEyeMin` (1.0, which the data uses in its place).
+
+Fixes after the W1-B review (19 Oct 2026):
+- **`hidesSkin`** (scene extras, from a spec's `extras`): the body's skin a piece covers completely, as bone names
+  (`'hand.L'`) or `{ 'bone': 'upperarm.L', 'below': 0.9025 }` (that bone's skin below a height, metres, bind pose);
+  the game leaves those Skin triangles out of the guest (`src/render/avatarParts.js`). The gloves use it; the women's
+  build asserts the glove top has not moved from `GLOVE_HIDE_BELOW`.
+- **The orchid** (`male/spec.py` `orchid_parts` / `orchid_paint`; the same code copied into `female/w1b.py`: change both
+  together): sepals, petals, a frilled lip and a column, tinted near-black plum after the bake over a lavender base.
+- **`copy_weights_surface(objs, src)`** (`female/w1b.py`): the exact weights of the nearest triangle of `src` for each
+  vertex (the Deco gown's hem bead lines and fringe); `copy_weights_from`'s k-nearest blend let thin details slide
+  through the cloth while walking.
+- **Henry's bows**: `HENRY_BOW_SPAN` / `HENRY_BOW_SWEEP` (shorter wings, less back-sweep on his face only).
+- **`thumbs.html`**: a woman's necklace is drawn on a dress form's bust (her gown, the body's neck and shoulders, no
+  face).

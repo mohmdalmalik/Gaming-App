@@ -36,7 +36,12 @@ const EXPECT = {
   // the menu
   'btn-su-suggest': 'click', 'btn-su-go': 'click', 'btn-profile': 'open',
   'btn-menu-bots': 'open', 'btn-menu-practice': 'click', 'btn-menu-settings': 'open', 'btn-menu-record': 'open', 'btn-menu-howto': 'open', 'btn-menu-cards': 'open',
-  'btn-av-rename': 'click', 'btn-av-done': 'close', 'btn-bots-back': 'close', 'btn-bots-find': 'click',
+  'btn-av-rename': 'click', 'btn-bots-back': 'close', 'btn-bots-find': 'click',
+  // the Wardrobe (src/ui/wardrobe/wardrobe.js): Surprise me plays the dice's own cue and Save look the lift bell when
+  // the look is saved (both from the code: data-sfx none), the Honours pill and the end screen's achievement line open
+  // the Hotel Honours page (src/ui/honours.js), whose Done closes it
+  'btn-wd-honours': 'open', 'btn-wd-undo': 'click', 'btn-wd-surprise': 'none', 'btn-wd-cancel': 'close', 'btn-wd-save': 'none',
+  'end-honours': 'open', 'btn-hn-done': 'close',
   'btn-mm-cancel': 'close', 'btn-tips-again': 'select', 'btn-settings-done': 'close',
   'btn-record-back': 'close', 'btn-record-reset': 'click', 'btn-record-keep': 'click', 'btn-record-yes': 'click',
   // the full-screen overlays
@@ -129,6 +134,19 @@ for (const file of srcFiles) {
 }
 for (const m of html.matchAll(/data-sfx="(\w+)"/g)) used.set(m[1], 'index.html');
 for (const [name, where] of used) if (name !== 'none') check(!!CUES[name], `'${name}' (asked for in ${where}) is a cue of the mix table`);
+
+// The wardrobe's own cues (its tiles say theirs with data-sfx): every one is in the mix table, and each kind of choice
+// has its sound (a snip for hair and moustaches, a rustle for clothes, a clink for glasses and jewellery, the lift bell
+// on Save look).
+console.log('\nthe wardrobe\'s sounds (src/ui/wardrobe/areas.js WARDROBE_CUES)');
+{
+  const { WARDROBE_CUES } = await import('../src/ui/wardrobe/areas.js');
+  for (const [what, cue] of Object.entries(WARDROBE_CUES)) check(!!CUES[cue], `${what} plays '${cue}', a cue of the mix table`);
+  check(WARDROBE_CUES.hairStyle === 'snip' && WARDROBE_CUES.facial === 'snip', 'hair and moustaches: the snip');
+  check(['top', 'neck', 'legs', 'dress', 'belt', 'feet'].every(s => WARDROBE_CUES[s] === 'rustle'), 'clothes: the rustle');
+  check(WARDROBE_CUES.glasses === 'clink' && WARDROBE_CUES.extra === 'clink', 'glasses and jewellery: the clink');
+  check(WARDROBE_CUES.save === 'liftDing' && WARDROBE_CUES.colour === 'tick' && WARDROBE_CUES.tryOn === 'mirror', 'Save look: the lift bell; a colour: the tick; a try-on: the mirror');
+}
 
 console.log(failures ? `\n${failures} FAILED` : '\nALL BUTTON SOUND CHECKS PASSED');
 process.exit(failures ? 1 : 0);

@@ -108,7 +108,7 @@ def main():
             r = np.clip(b_ / np.maximum(a_, 1e-4), 0.0, 1.0)
             if tgt['lift']:
                 s = np.array([tgt['lift'].get(mn, 1.0) for mn in C.vertex_materials(meshes[tk])]); r = 1.0 - (1.0 - r) * s
-            idx = np.nonzero(r < 0.995)[0]
+            idx = np.nonzero(r < it.get('patch_below', 0.995))[0]     # (an item may keep only its darker shading: W1-B's smoking jacket)
             hid = C.hidden_by(meshes[tk], idx, meshes[k]) if len(idx) else np.zeros(0, bool)
             idx = idx[~hid]
             patches.setdefault(k, {})[tk] = (idx, r[idx])

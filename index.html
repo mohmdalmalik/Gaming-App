@@ -17,6 +17,7 @@
 <link rel="manifest" href="./manifest.webmanifest">
 <title>Hotel Escape</title>
 <link rel="stylesheet" href="./styles.css">
+<link rel="stylesheet" href="./wardrobe.css">
 <script type="importmap">
 {
   "imports": {
@@ -266,10 +267,10 @@
           <div class="menu-kicker">A hidden-role game for 4&#8211;6 guests</div>
           <h1 class="menu-title">Hotel Escape</h1>
           <p class="menu-tag">Someone in this hotel is already possessed.</p>
-          <!-- Your profile (src/ui/profileCard.js): opens your avatar. -->
+          <!-- Your profile (src/ui/profileCard.js): opens the Wardrobe. -->
           <button id="btn-profile" class="profile-card" type="button" hidden>
             <span id="pc-portrait" class="pc-portrait"></span>
-            <span class="pc-text"><span class="pc-kicker">Playing as</span><span id="pc-name" class="pc-name"></span><span class="pc-edit">Adjust avatar &#x203A;</span></span>
+            <span class="pc-text"><span class="pc-kicker">Playing as</span><span id="pc-name" class="pc-name"></span><span class="pc-edit">Wardrobe &#x203A;</span></span>
           </button>
           <div class="menu-buttons">
             <button id="btn-menu-bots" class="menu-btn primary" type="button" disabled><span class="mb-main">Play with bots</span><span class="mb-sub">Join a table of 4&#8211;6 guests</span></button>
@@ -290,20 +291,6 @@
           </div>
           <!-- (the count of what has loaded so far is the start-up script's, at the bottom of this page) -->
           <div id="menu-loading" class="menu-loading">Opening the hotel&#8230;<span id="menu-loading-count" class="boot-count"></span></div>
-        </section>
-
-        <!-- Your avatar: the wardrobe (src/ui/avatarEditor.js); it previews on your avatar in the lobby. -->
-        <section id="menu-avatar" class="menu-screen" hidden>
-          <div class="menu-kicker">Your avatar</div>
-          <div class="av-head">
-            <h2 id="av-name" class="menu-h2 av-name"></h2>
-            <button id="btn-av-rename" class="av-rename" type="button">Change name</button>
-          </div>
-          <div id="av-body" class="av-body" data-scrolls></div>
-          <div id="av-note" class="av-note"></div>
-          <div class="menu-actions av-actions">
-            <button id="btn-av-done" class="menu-btn primary small" type="button">Done</button>
-          </div>
         </section>
 
         <section id="menu-bots" class="menu-screen" hidden>
@@ -392,6 +379,49 @@
           </div>
         </section>
       </div>
+
+      <!-- The Wardrobe (src/ui/wardrobe/wardrobe.js; the look: wardrobe.css): the menu's 'avatar' screen, over the live
+           lobby where your guest stands large by the lift. Left, the areas as brass key fobs; middle, the stage (your
+           name, Hotel Honours, Undo, Surprise me, drag to turn); right, the options for the area and Save look. -->
+      <section id="menu-avatar" class="menu-screen wardrobe" aria-label="Wardrobe" hidden>
+        <nav id="wd-rail" class="wd-rail" aria-label="Wardrobe areas"></nav>
+        <div id="wd-stage" class="wd-stage">
+          <div id="wd-drag" class="wd-drag" tabindex="0" role="img" aria-label="Your guest. Drag, or use the left and right arrow keys, to turn them round."></div>
+          <div class="wd-plaque">
+            <div class="wd-plaque-t"><div class="wd-kicker">Your avatar</div><h2 id="av-name" class="wd-name"></h2></div>
+            <button id="btn-av-rename" class="wd-iconbtn" type="button" aria-label="Change name" title="Change name"><svg class="wi" aria-hidden="true" focusable="false"><use href="#i-pencil"/></svg></button>
+          </div>
+          <button id="btn-wd-honours" class="wd-pill" type="button" data-sfx="open" aria-label="Hotel Honours"><span class="wd-rosette"><svg class="wi" aria-hidden="true" focusable="false"><use href="#i-rosette"/></svg></span><span class="wd-pill-l">Hotel Honours</span><span id="wd-honours-count" class="wd-pill-n"></span></button>
+          <div id="wd-tryon" class="wd-tryon" role="status" hidden></div>
+          <p id="av-note" class="wd-note" role="status" hidden></p>
+          <div id="wd-curtain" class="wd-curtain" aria-hidden="true"></div>
+          <div class="wd-actions">
+            <button id="btn-wd-undo" class="wd-act" type="button" data-sfx="click"><span class="wd-ab"><svg class="wi" aria-hidden="true" focusable="false"><use href="#i-undo"/></svg></span><span class="wd-al">Undo</span></button>
+            <button id="btn-wd-surprise" class="wd-act" type="button" data-sfx="none"><span class="wd-ab"><svg class="wi" aria-hidden="true" focusable="false"><use href="#i-dice"/></svg></span><span class="wd-al">Surprise me</span></button>
+          </div>
+          <div id="wd-turn" class="wd-turn" aria-hidden="true">
+            <svg class="wd-ring" viewBox="0 0 230 34"><ellipse cx="115" cy="15" rx="108" ry="12" fill="none" stroke="rgba(232,202,128,.8)" stroke-width="1.5" stroke-dasharray="1.5 5" stroke-linecap="round"/><path d="M14 8.5 l-7 6.5 9 2.5" fill="none" stroke="#f0d48e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M216 21.5 l7 -6.5 -9 -2.5" fill="none" stroke="#f0d48e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            <span class="wd-turn-t">Drag to turn</span>
+          </div>
+          <div id="wd-fitting" class="wd-fitting" hidden><span class="wd-fit-dot"></span>Fitting&#8230;</div>
+        </div>
+        <aside id="wd-panel" class="wd-panel" aria-labelledby="wd-title">
+          <div class="wd-head">
+            <div><div id="wd-kicker" class="wd-kicker">Wardrobe</div><h2 id="wd-title" class="wd-title"></h2></div>
+            <div id="wd-count" class="wd-count"></div>
+          </div>
+          <div class="wd-deco" aria-hidden="true"><i></i></div>
+          <div id="wd-tabs" class="wd-tabs" role="tablist" aria-label="Choose what to show" hidden></div>
+          <div id="wd-row" class="wd-row" hidden></div>
+          <div class="wd-gridwrap"><div id="av-body" class="wd-grid" role="group" data-scrolls></div></div>
+          <div id="wd-foot" class="wd-foot">
+            <button id="btn-wd-cancel" class="wd-btn ghost" type="button">Cancel</button>
+            <button id="btn-wd-save" class="wd-btn primary" type="button" data-sfx="none">Save look</button>
+          </div>
+          <div id="wd-ask" class="wd-ask" role="alertdialog" aria-live="polite" hidden></div>
+          <div id="wd-card" class="wd-card" role="dialog" hidden></div>
+        </aside>
+      </section>
     </div>
 
     <!-- Black between the lobby and the game (the lift doors close, the screen fades, the game opens). -->
@@ -453,8 +483,9 @@
         <p id="end-recap" class="end-recap" hidden></p>
         <!-- Your record after this game, one quiet line (src/ui/record.js). -->
         <p id="end-record" class="end-record" hidden></p>
-        <!-- An achievement this match earned (src/ui/honoursEnd.js): checked on the end screen only, never during a match. -->
-        <p id="end-honours" class="end-honours" hidden></p>
+        <!-- An achievement this match earned (src/ui/honoursEnd.js): checked on the end screen only, never during a match.
+             A tap opens the Hotel Honours page (src/ui/honours.js). -->
+        <button id="end-honours" class="end-honours" type="button" data-sfx="open" hidden></button>
         <div id="end-reveal" class="end-reveal" hidden></div>
         <div class="end-actions">
           <button id="btn-keep-exploring" class="btn big" type="button" hidden>Keep exploring</button>
@@ -496,6 +527,19 @@
             <button id="btn-howto-back" class="btn big" type="button" data-sfx="click">Back</button>
             <button id="btn-howto-next" class="btn primary big" type="button" data-sfx="click">Next</button>
           </span>
+        </div>
+      </div>
+    </div>
+
+    <!-- The Hotel Honours page (src/ui/honours.js; the look: wardrobe.css): your achievements and the pieces they earn.
+         From the wardrobe's top bar and the end screen's achievement line; above both. -->
+    <div id="honours-overlay" class="hn" hidden>
+      <div class="hn-scrim"></div>
+      <div class="hn-sheet">
+        <div id="hn-side" class="hn-side"></div>
+        <div class="hn-main">
+          <div class="hn-top"><button id="btn-hn-done" class="wd-btn hn-done" type="button"><svg class="wi" aria-hidden="true" focusable="false"><use href="#i-check"/></svg>Done</button></div>
+          <div id="hn-list" class="hn-list" role="list" data-scrolls></div>
         </div>
       </div>
     </div>

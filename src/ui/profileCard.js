@@ -1,5 +1,5 @@
 // The profile card on the main menu (#btn-profile): your portrait, "Playing as", your username and
-// "Adjust avatar ›". The whole card is one button: it opens the avatar screen (src/ui/menu.js). It
+// "Wardrobe ›". The whole card is one button: it opens the Wardrobe (the avatar screen, src/ui/menu.js). It
 // follows the account (src/account/account.js): a new name or a new look shows at once.
 // Its portrait is drawn in the game (once the menu's lobby is up): until then the card shows the last one
 // drawn of this avatar, kept on the device (one JPEG, about 30 kB, guarded like every storage access),
@@ -35,7 +35,7 @@ export function createProfileCard(doc, { account, onOpen, guard = () => false } 
     btn.hidden = !p;
     if (!p) return;
     if (nameEl) { nameEl.textContent = p.username; nameEl.title = p.username; }
-    btn.setAttribute('aria-label', `Playing as ${p.username}. Adjust avatar`);
+    btn.setAttribute('aria-label', `Playing as ${p.username}. Open the Wardrobe`);
     const key = avatarKey(p.avatar);
     if (face && key !== shownKey) {
       shownKey = key;

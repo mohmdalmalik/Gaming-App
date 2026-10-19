@@ -1,6 +1,6 @@
 {
  "v": 1,
- "generated": "2026-10-18T22:34:11Z",
+ "generated": "2026-10-19T13:08:24Z",
  "bones": [
   "root",
   "hips",
@@ -138,6 +138,33 @@
     "passed": true
    }
   },
+  "f/belt_sash~dress_decoBeaded": {
+   "file": "f/belt_sash~dress_decoBeaded.glb",
+   "body": "f",
+   "slot": "belt",
+   "id": "sash",
+   "fit": "dress_decoBeaded",
+   "tris": 720,
+   "verts": 443,
+   "bytes": 35160,
+   "materials": {
+    "Sash": "accent"
+   },
+   "colourSlots": [
+    "accent"
+   ],
+   "hash": "df57b4146732",
+   "patches": {
+    "dress_decoBeaded": 706
+   },
+   "poke": {
+    "pokes": 0,
+    "frontPierce": 0,
+    "pairs": 1,
+    "poses": 5,
+    "passed": true
+   }
+  },
   "f/belt_thin": {
    "file": "f/belt_thin.glb",
    "body": "f",
@@ -219,6 +246,33 @@
     "passed": true
    }
   },
+  "f/belt_thin~dress_decoBeaded": {
+   "file": "f/belt_thin~dress_decoBeaded.glb",
+   "body": "f",
+   "slot": "belt",
+   "id": "thin",
+   "fit": "dress_decoBeaded",
+   "tris": 720,
+   "verts": 432,
+   "bytes": 31776,
+   "materials": {
+    "Gold": "metal"
+   },
+   "colourSlots": [
+    "metal"
+   ],
+   "hash": "48fd34fdc99b",
+   "patches": {
+    "dress_decoBeaded": 439
+   },
+   "poke": {
+    "pokes": 0,
+    "frontPierce": 0,
+    "pairs": 1,
+    "poses": 5,
+    "passed": true
+   }
+  },
   "f/dress_aline": {
    "file": "f/dress_aline.glb",
    "body": "f",
@@ -227,7 +281,7 @@
    "fit": null,
    "tris": 7300,
    "verts": 4017,
-   "bytes": 222884,
+   "bytes": 222900,
    "materials": {
     "Dress": "main"
    },
@@ -240,6 +294,7 @@
     "feet_pumps": 147
    },
    "redEyeMin": 1,
+   "redEyeNearMin": 1,
    "poke": {
     "pokes": 0,
     "frontPierce": 0,
@@ -256,7 +311,7 @@
    "fit": null,
    "tris": 6668,
    "verts": 3704,
-   "bytes": 205692,
+   "bytes": 205712,
    "materials": {
     "Dress": "main"
    },
@@ -269,6 +324,7 @@
     "feet_pumps": 126
    },
    "redEyeMin": 1,
+   "redEyeNearMin": 1,
    "poke": {
     "pokes": 0,
     "frontPierce": 0,
@@ -285,7 +341,7 @@
    "fit": null,
    "tris": 6520,
    "verts": 3570,
-   "bytes": 198920,
+   "bytes": 198940,
    "materials": {
     "Dress": "main"
    },
@@ -298,10 +354,173 @@
     "feet_pumps": 253
    },
    "redEyeMin": 1,
+   "redEyeNearMin": 1,
    "poke": {
     "pokes": 0,
     "frontPierce": 0,
     "pairs": 1,
+    "poses": 5,
+    "passed": true
+   }
+  },
+  "f/dress_decoBeaded": {
+   "file": "f/dress_decoBeaded.glb",
+   "body": "f",
+   "slot": "dress",
+   "id": "decoBeaded",
+   "fit": null,
+   "tris": 8188,
+   "verts": 6712,
+   "bytes": 332956,
+   "materials": {
+    "Dress": "main",
+    "Gold": "metal"
+   },
+   "colourSlots": [
+    "main",
+    "metal"
+   ],
+   "hash": "da8bce63b4fa",
+   "patches": {
+    "body": 817,
+    "feet_pumps": 9
+   },
+   "redEyeMin": 1,
+   "redEyeNearMin": 1,
+   "poke": {
+    "pokes": 0,
+    "frontPierce": 0,
+    "pairs": 1,
+    "poses": 5,
+    "passed": true
+   }
+  },
+  "f/extra_blackOrchid~dress_aline": {
+   "file": "f/extra_blackOrchid~dress_aline.glb",
+   "body": "f",
+   "slot": "extra",
+   "id": "blackOrchid",
+   "fit": "dress_aline",
+   "tris": 1340,
+   "verts": 904,
+   "bytes": 49624,
+   "materials": {
+    "Petal": "fixed"
+   },
+   "colourSlots": [],
+   "hash": "63303b9b5dfa",
+   "patches": {},
+   "attach": "chest",
+   "redEyeMin": 1,
+   "redEyeNearMin": 1,
+   "poke": {
+    "pokes": 0,
+    "frontPierce": 0,
+    "pairs": 0,
+    "poses": 5,
+    "passed": true
+   }
+  },
+  "f/extra_blackOrchid~dress_ballgown": {
+   "file": "f/extra_blackOrchid~dress_ballgown.glb",
+   "body": "f",
+   "slot": "extra",
+   "id": "blackOrchid",
+   "fit": "dress_ballgown",
+   "tris": 1340,
+   "verts": 904,
+   "bytes": 49636,
+   "materials": {
+    "Petal": "fixed"
+   },
+   "colourSlots": [],
+   "hash": "55eac257985e",
+   "patches": {},
+   "attach": "chest",
+   "redEyeMin": 1,
+   "redEyeNearMin": 1,
+   "poke": {
+    "pokes": 0,
+    "frontPierce": 0,
+    "pairs": 0,
+    "poses": 5,
+    "passed": true
+   }
+  },
+  "f/extra_blackOrchid~dress_column": {
+   "file": "f/extra_blackOrchid~dress_column.glb",
+   "body": "f",
+   "slot": "extra",
+   "id": "blackOrchid",
+   "fit": "dress_column",
+   "tris": 1340,
+   "verts": 904,
+   "bytes": 49624,
+   "materials": {
+    "Petal": "fixed"
+   },
+   "colourSlots": [],
+   "hash": "bc9174759418",
+   "patches": {},
+   "attach": "chest",
+   "redEyeMin": 1,
+   "redEyeNearMin": 1,
+   "poke": {
+    "pokes": 0,
+    "frontPierce": 0,
+    "pairs": 0,
+    "poses": 5,
+    "passed": true
+   }
+  },
+  "f/extra_blackOrchid~dress_decoBeaded": {
+   "file": "f/extra_blackOrchid~dress_decoBeaded.glb",
+   "body": "f",
+   "slot": "extra",
+   "id": "blackOrchid",
+   "fit": "dress_decoBeaded",
+   "tris": 1340,
+   "verts": 904,
+   "bytes": 49644,
+   "materials": {
+    "Petal": "fixed"
+   },
+   "colourSlots": [],
+   "hash": "0c7d49e8820c",
+   "patches": {},
+   "attach": "chest",
+   "redEyeMin": 1,
+   "redEyeNearMin": 1,
+   "poke": {
+    "pokes": 0,
+    "frontPierce": 0,
+    "pairs": 0,
+    "poses": 5,
+    "passed": true
+   }
+  },
+  "f/extra_eveningGloves": {
+   "file": "f/extra_eveningGloves.glb",
+   "body": "f",
+   "slot": "extra",
+   "id": "eveningGloves",
+   "fit": null,
+   "tris": 1492,
+   "verts": 874,
+   "bytes": 49428,
+   "materials": {
+    "Glove": "fixed"
+   },
+   "colourSlots": [],
+   "hash": "5cd271acaec3",
+   "patches": {},
+   "attach": "hands",
+   "redEyeMin": 1,
+   "redEyeNearMin": 1,
+   "poke": {
+    "pokes": 0,
+    "frontPierce": 0,
+    "pairs": 5,
     "poses": 5,
     "passed": true
    }
@@ -314,7 +533,7 @@
    "fit": null,
    "tris": 336,
    "verts": 172,
-   "bytes": 14228,
+   "bytes": 14244,
    "materials": {
     "Gold": "metal"
    },
@@ -325,6 +544,7 @@
    "patches": {},
    "attach": "ears",
    "redEyeMin": 1,
+   "redEyeNearMin": 1,
    "poke": {
     "pokes": 0,
     "frontPierce": 0,
@@ -341,7 +561,7 @@
    "fit": "face_beatrice",
    "tris": 336,
    "verts": 172,
-   "bytes": 14276,
+   "bytes": 14296,
    "materials": {
     "Gold": "metal"
    },
@@ -352,6 +572,7 @@
    "patches": {},
    "attach": "ears",
    "redEyeMin": 1,
+   "redEyeNearMin": 1,
    "poke": {
     "pokes": 0,
     "frontPierce": 0,
@@ -368,7 +589,7 @@
    "fit": "face_eleanor",
    "tris": 336,
    "verts": 172,
-   "bytes": 14272,
+   "bytes": 14292,
    "materials": {
     "Gold": "metal"
    },
@@ -379,6 +600,7 @@
    "patches": {},
    "attach": "ears",
    "redEyeMin": 1,
+   "redEyeNearMin": 1,
    "poke": {
     "pokes": 0,
     "frontPierce": 0,
@@ -395,7 +617,7 @@
    "fit": null,
    "tris": 544,
    "verts": 304,
-   "bytes": 20764,
+   "bytes": 20780,
    "materials": {
     "Gold": "metal"
    },
@@ -406,6 +628,7 @@
    "patches": {},
    "attach": "ears",
    "redEyeMin": 1,
+   "redEyeNearMin": 1,
    "poke": {
     "pokes": 0,
     "frontPierce": 0,
@@ -422,7 +645,7 @@
    "fit": "face_beatrice",
    "tris": 544,
    "verts": 304,
-   "bytes": 20816,
+   "bytes": 20836,
    "materials": {
     "Gold": "metal"
    },
@@ -433,6 +656,7 @@
    "patches": {},
    "attach": "ears",
    "redEyeMin": 1,
+   "redEyeNearMin": 1,
    "poke": {
     "pokes": 0,
     "frontPierce": 0,
@@ -449,7 +673,7 @@
    "fit": "face_eleanor",
    "tris": 544,
    "verts": 304,
-   "bytes": 20816,
+   "bytes": 20832,
    "materials": {
     "Gold": "metal"
    },
@@ -460,6 +684,123 @@
    "patches": {},
    "attach": "ears",
    "redEyeMin": 1,
+   "redEyeNearMin": 1,
+   "poke": {
+    "pokes": 0,
+    "frontPierce": 0,
+    "pairs": 0,
+    "poses": 5,
+    "passed": true
+   }
+  },
+  "f/extra_lantern~dress_aline": {
+   "file": "f/extra_lantern~dress_aline.glb",
+   "body": "f",
+   "slot": "extra",
+   "id": "lantern",
+   "fit": "dress_aline",
+   "tris": 836,
+   "verts": 908,
+   "bytes": 47896,
+   "materials": {
+    "Glass": "fixed",
+    "Gold": "metal"
+   },
+   "colourSlots": [
+    "metal"
+   ],
+   "hash": "f615027b8e52",
+   "patches": {},
+   "attach": "neck",
+   "redEyeMin": 1,
+   "redEyeNearMin": 1,
+   "poke": {
+    "pokes": 0,
+    "frontPierce": 0,
+    "pairs": 0,
+    "poses": 5,
+    "passed": true
+   }
+  },
+  "f/extra_lantern~dress_ballgown": {
+   "file": "f/extra_lantern~dress_ballgown.glb",
+   "body": "f",
+   "slot": "extra",
+   "id": "lantern",
+   "fit": "dress_ballgown",
+   "tris": 836,
+   "verts": 900,
+   "bytes": 47588,
+   "materials": {
+    "Glass": "fixed",
+    "Gold": "metal"
+   },
+   "colourSlots": [
+    "metal"
+   ],
+   "hash": "f272023d8e4d",
+   "patches": {},
+   "attach": "neck",
+   "redEyeMin": 1,
+   "redEyeNearMin": 1,
+   "poke": {
+    "pokes": 0,
+    "frontPierce": 0,
+    "pairs": 0,
+    "poses": 5,
+    "passed": true
+   }
+  },
+  "f/extra_lantern~dress_column": {
+   "file": "f/extra_lantern~dress_column.glb",
+   "body": "f",
+   "slot": "extra",
+   "id": "lantern",
+   "fit": "dress_column",
+   "tris": 836,
+   "verts": 900,
+   "bytes": 47580,
+   "materials": {
+    "Glass": "fixed",
+    "Gold": "metal"
+   },
+   "colourSlots": [
+    "metal"
+   ],
+   "hash": "094a2177c074",
+   "patches": {},
+   "attach": "neck",
+   "redEyeMin": 1,
+   "redEyeNearMin": 1,
+   "poke": {
+    "pokes": 0,
+    "frontPierce": 0,
+    "pairs": 0,
+    "poses": 5,
+    "passed": true
+   }
+  },
+  "f/extra_lantern~dress_decoBeaded": {
+   "file": "f/extra_lantern~dress_decoBeaded.glb",
+   "body": "f",
+   "slot": "extra",
+   "id": "lantern",
+   "fit": "dress_decoBeaded",
+   "tris": 836,
+   "verts": 900,
+   "bytes": 47596,
+   "materials": {
+    "Glass": "fixed",
+    "Gold": "metal"
+   },
+   "colourSlots": [
+    "metal"
+   ],
+   "hash": "9cce96327776",
+   "patches": {},
+   "attach": "neck",
+   "redEyeMin": 1,
+   "redEyeNearMin": 1,
    "poke": {
     "pokes": 0,
     "frontPierce": 0,
@@ -476,7 +817,7 @@
    "fit": null,
    "tris": 336,
    "verts": 172,
-   "bytes": 14232,
+   "bytes": 14248,
    "materials": {
     "Pearl": "fixed"
    },
@@ -485,6 +826,7 @@
    "patches": {},
    "attach": "ears",
    "redEyeMin": 1,
+   "redEyeNearMin": 1,
    "poke": {
     "pokes": 0,
     "frontPierce": 0,
@@ -501,7 +843,7 @@
    "fit": "face_beatrice",
    "tris": 336,
    "verts": 172,
-   "bytes": 14288,
+   "bytes": 14304,
    "materials": {
     "Pearl": "fixed"
    },
@@ -510,6 +852,7 @@
    "patches": {},
    "attach": "ears",
    "redEyeMin": 1,
+   "redEyeNearMin": 1,
    "poke": {
     "pokes": 0,
     "frontPierce": 0,
@@ -526,7 +869,7 @@
    "fit": "face_eleanor",
    "tris": 336,
    "verts": 172,
-   "bytes": 14272,
+   "bytes": 14292,
    "materials": {
     "Pearl": "fixed"
    },
@@ -535,6 +878,7 @@
    "patches": {},
    "attach": "ears",
    "redEyeMin": 1,
+   "redEyeNearMin": 1,
    "poke": {
     "pokes": 0,
     "frontPierce": 0,
@@ -551,7 +895,7 @@
    "fit": null,
    "tris": 6024,
    "verts": 3271,
-   "bytes": 179036,
+   "bytes": 179052,
    "materials": {
     "Brow": "brow",
     "Eye": "eye",
@@ -575,6 +919,7 @@
     0.1638
    ],
    "redEyeMin": 1,
+   "redEyeNearMin": 1,
    "poke": {
     "pokes": 0,
     "frontPierce": 0,
@@ -591,7 +936,7 @@
    "fit": null,
    "tris": 5904,
    "verts": 3192,
-   "bytes": 174264,
+   "bytes": 174280,
    "materials": {
     "Brow": "brow",
     "Eye": "eye",
@@ -614,6 +959,7 @@
     0.1716
    ],
    "redEyeMin": 0.997,
+   "redEyeNearMin": 1,
    "poke": {
     "pokes": 0,
     "frontPierce": 0,
@@ -630,7 +976,7 @@
    "fit": null,
    "tris": 6124,
    "verts": 3303,
-   "bytes": 182272,
+   "bytes": 182288,
    "materials": {
     "Brow": "brow",
     "Eye": "eye",
@@ -654,6 +1000,7 @@
     0.1725
    ],
    "redEyeMin": 0.993,
+   "redEyeNearMin": 1,
    "poke": {
     "pokes": 0,
     "frontPierce": 0,
@@ -696,7 +1043,7 @@
    "fit": null,
    "tris": 11699,
    "verts": 6131,
-   "bytes": 330720,
+   "bytes": 330740,
    "materials": {
     "Hair": "hair"
    },
@@ -712,6 +1059,7 @@
     "face_clara": 760
    },
    "redEyeMin": 0.978,
+   "redEyeNearMin": 1,
    "poke": {
     "pokes": 0,
     "frontPierce": 0,
@@ -728,7 +1076,7 @@
    "fit": "face_beatrice",
    "tris": 11700,
    "verts": 6102,
-   "bytes": 328852,
+   "bytes": 328868,
    "materials": {
     "Hair": "hair"
    },
@@ -744,6 +1092,7 @@
     "face_beatrice": 800
    },
    "redEyeMin": 0.888,
+   "redEyeNearMin": 1,
    "poke": {
     "pokes": 0,
     "frontPierce": 0,
@@ -760,7 +1109,7 @@
    "fit": "face_eleanor",
    "tris": 11699,
    "verts": 6127,
-   "bytes": 331152,
+   "bytes": 331172,
    "materials": {
     "Hair": "hair"
    },
@@ -776,6 +1125,211 @@
     "face_eleanor": 922
    },
    "redEyeMin": 0.942,
+   "redEyeNearMin": 1,
+   "poke": {
+    "pokes": 0,
+    "frontPierce": 0,
+    "pairs": 1,
+    "poses": 5,
+    "passed": true
+   }
+  },
+  "f/hairStyle_lamplighter": {
+   "file": "f/hairStyle_lamplighter.glb",
+   "body": "f",
+   "slot": "hairStyle",
+   "id": "lamplighter",
+   "fit": null,
+   "tris": 11900,
+   "verts": 6556,
+   "bytes": 342928,
+   "materials": {
+    "Hair": "hair"
+   },
+   "colourSlots": [
+    "hair"
+   ],
+   "hash": "2db0dc3b65d5",
+   "patches": {
+    "body": 6,
+    "dress_aline": 0,
+    "dress_ballgown": 0,
+    "dress_column": 0,
+    "dress_decoBeaded": 0,
+    "face_clara": 339
+   },
+   "redEyeMin": 1,
+   "redEyeNearMin": 1,
+   "poke": {
+    "pokes": 0,
+    "frontPierce": 0,
+    "pairs": 1,
+    "poses": 5,
+    "passed": true
+   }
+  },
+  "f/hairStyle_lamplighter~face_beatrice": {
+   "file": "f/hairStyle_lamplighter~face_beatrice.glb",
+   "body": "f",
+   "slot": "hairStyle",
+   "id": "lamplighter",
+   "fit": "face_beatrice",
+   "tris": 11899,
+   "verts": 6496,
+   "bytes": 342356,
+   "materials": {
+    "Hair": "hair"
+   },
+   "colourSlots": [
+    "hair"
+   ],
+   "hash": "8ae0ad194b7a",
+   "patches": {
+    "body": 1,
+    "dress_aline": 0,
+    "dress_ballgown": 0,
+    "dress_column": 0,
+    "dress_decoBeaded": 0,
+    "face_beatrice": 524
+   },
+   "redEyeMin": 1,
+   "redEyeNearMin": 1,
+   "poke": {
+    "pokes": 0,
+    "frontPierce": 0,
+    "pairs": 1,
+    "poses": 5,
+    "passed": true
+   }
+  },
+  "f/hairStyle_lamplighter~face_eleanor": {
+   "file": "f/hairStyle_lamplighter~face_eleanor.glb",
+   "body": "f",
+   "slot": "hairStyle",
+   "id": "lamplighter",
+   "fit": "face_eleanor",
+   "tris": 11899,
+   "verts": 6527,
+   "bytes": 342600,
+   "materials": {
+    "Hair": "hair"
+   },
+   "colourSlots": [
+    "hair"
+   ],
+   "hash": "5454dbb339df",
+   "patches": {
+    "body": 5,
+    "dress_aline": 0,
+    "dress_ballgown": 0,
+    "dress_column": 0,
+    "dress_decoBeaded": 0,
+    "face_eleanor": 422
+   },
+   "redEyeMin": 1,
+   "redEyeNearMin": 1,
+   "poke": {
+    "pokes": 0,
+    "frontPierce": 0,
+    "pairs": 1,
+    "poses": 5,
+    "passed": true
+   }
+  },
+  "f/hairStyle_marcel": {
+   "file": "f/hairStyle_marcel.glb",
+   "body": "f",
+   "slot": "hairStyle",
+   "id": "marcel",
+   "fit": null,
+   "tris": 11600,
+   "verts": 6149,
+   "bytes": 326856,
+   "materials": {
+    "Hair": "hair"
+   },
+   "colourSlots": [
+    "hair"
+   ],
+   "hash": "1fef1cfb4b62",
+   "patches": {
+    "body": 32,
+    "dress_aline": 26,
+    "dress_ballgown": 2,
+    "dress_column": 10,
+    "dress_decoBeaded": 38,
+    "face_clara": 428
+   },
+   "redEyeMin": 0.929,
+   "redEyeNearMin": 1,
+   "poke": {
+    "pokes": 0,
+    "frontPierce": 0,
+    "pairs": 1,
+    "poses": 5,
+    "passed": true
+   }
+  },
+  "f/hairStyle_marcel~face_beatrice": {
+   "file": "f/hairStyle_marcel~face_beatrice.glb",
+   "body": "f",
+   "slot": "hairStyle",
+   "id": "marcel",
+   "fit": "face_beatrice",
+   "tris": 11600,
+   "verts": 6207,
+   "bytes": 332824,
+   "materials": {
+    "Hair": "hair"
+   },
+   "colourSlots": [
+    "hair"
+   ],
+   "hash": "48d358202614",
+   "patches": {
+    "body": 62,
+    "dress_aline": 57,
+    "dress_ballgown": 12,
+    "dress_column": 29,
+    "dress_decoBeaded": 78,
+    "face_beatrice": 664
+   },
+   "redEyeMin": 0.756,
+   "redEyeNearMin": 1,
+   "poke": {
+    "pokes": 0,
+    "frontPierce": 0,
+    "pairs": 1,
+    "poses": 5,
+    "passed": true
+   }
+  },
+  "f/hairStyle_marcel~face_eleanor": {
+   "file": "f/hairStyle_marcel~face_eleanor.glb",
+   "body": "f",
+   "slot": "hairStyle",
+   "id": "marcel",
+   "fit": "face_eleanor",
+   "tris": 11600,
+   "verts": 6148,
+   "bytes": 327132,
+   "materials": {
+    "Hair": "hair"
+   },
+   "colourSlots": [
+    "hair"
+   ],
+   "hash": "2227eb9a5b5e",
+   "patches": {
+    "body": 17,
+    "dress_aline": 16,
+    "dress_ballgown": 0,
+    "dress_column": 0,
+    "dress_decoBeaded": 0,
+    "face_eleanor": 548
+   },
+   "redEyeMin": 0.831,
+   "redEyeNearMin": 1,
    "poke": {
     "pokes": 0,
     "frontPierce": 0,
@@ -792,7 +1346,7 @@
    "fit": null,
    "tris": 12691,
    "verts": 6720,
-   "bytes": 369820,
+   "bytes": 369836,
    "materials": {
     "Hair": "hair"
    },
@@ -808,6 +1362,7 @@
     "face_clara": 918
    },
    "redEyeMin": 0.962,
+   "redEyeNearMin": 1,
    "poke": {
     "pokes": 0,
     "frontPierce": 0,
@@ -824,7 +1379,7 @@
    "fit": "face_beatrice",
    "tris": 12691,
    "verts": 6736,
-   "bytes": 369996,
+   "bytes": 370016,
    "materials": {
     "Hair": "hair"
    },
@@ -840,6 +1395,7 @@
     "face_beatrice": 1029
    },
    "redEyeMin": 0.9,
+   "redEyeNearMin": 1,
    "poke": {
     "pokes": 0,
     "frontPierce": 0,
@@ -856,7 +1412,7 @@
    "fit": "face_eleanor",
    "tris": 12691,
    "verts": 6716,
-   "bytes": 369556,
+   "bytes": 369572,
    "materials": {
     "Hair": "hair"
    },
@@ -872,6 +1428,7 @@
     "face_eleanor": 1037
    },
    "redEyeMin": 0.969,
+   "redEyeNearMin": 1,
    "poke": {
     "pokes": 0,
     "frontPierce": 0,
@@ -888,7 +1445,7 @@
    "fit": null,
    "tris": 11999,
    "verts": 6996,
-   "bytes": 375632,
+   "bytes": 375648,
    "materials": {
     "Hair": "hair"
    },
@@ -904,6 +1461,7 @@
     "face_clara": 945
    },
    "redEyeMin": 0.746,
+   "redEyeNearMin": 1,
    "poke": {
     "pokes": 0,
     "frontPierce": 0,
@@ -920,7 +1478,7 @@
    "fit": "face_beatrice",
    "tris": 11996,
    "verts": 6957,
-   "bytes": 373296,
+   "bytes": 373316,
    "materials": {
     "Hair": "hair"
    },
@@ -936,6 +1494,7 @@
     "face_beatrice": 1044
    },
    "redEyeMin": 0.756,
+   "redEyeNearMin": 1,
    "poke": {
     "pokes": 0,
     "frontPierce": 0,
@@ -952,7 +1511,7 @@
    "fit": "face_eleanor",
    "tris": 11999,
    "verts": 6995,
-   "bytes": 375112,
+   "bytes": 375128,
    "materials": {
     "Hair": "hair"
    },
@@ -968,10 +1527,313 @@
     "face_eleanor": 1063
    },
    "redEyeMin": 0.802,
+   "redEyeNearMin": 1,
    "poke": {
     "pokes": 0,
     "frontPierce": 0,
     "pairs": 1,
+    "poses": 5,
+    "passed": true
+   }
+  },
+  "m/extra_blackOrchid~top_dinner": {
+   "file": "m/extra_blackOrchid~top_dinner.glb",
+   "body": "m",
+   "slot": "extra",
+   "id": "blackOrchid",
+   "fit": "top_dinner",
+   "tris": 580,
+   "verts": 377,
+   "bytes": 23876,
+   "materials": {
+    "Petal": "fixed"
+   },
+   "colourSlots": [],
+   "hash": "7fafa1391814",
+   "patches": {},
+   "attach": "chest",
+   "redEyeMin": 1,
+   "redEyeNearMin": 1,
+   "poke": {
+    "pokes": 0,
+    "frontPierce": 0,
+    "pairs": 0,
+    "poses": 5,
+    "passed": true
+   }
+  },
+  "m/extra_blackOrchid~top_lounge": {
+   "file": "m/extra_blackOrchid~top_lounge.glb",
+   "body": "m",
+   "slot": "extra",
+   "id": "blackOrchid",
+   "fit": "top_lounge",
+   "tris": 580,
+   "verts": 377,
+   "bytes": 23876,
+   "materials": {
+    "Petal": "fixed"
+   },
+   "colourSlots": [],
+   "hash": "7dc87daf31d3",
+   "patches": {},
+   "attach": "chest",
+   "redEyeMin": 1,
+   "redEyeNearMin": 1,
+   "poke": {
+    "pokes": 0,
+    "frontPierce": 0,
+    "pairs": 0,
+    "poses": 5,
+    "passed": true
+   }
+  },
+  "m/extra_blackOrchid~top_smoking": {
+   "file": "m/extra_blackOrchid~top_smoking.glb",
+   "body": "m",
+   "slot": "extra",
+   "id": "blackOrchid",
+   "fit": "top_smoking",
+   "tris": 580,
+   "verts": 377,
+   "bytes": 23880,
+   "materials": {
+    "Petal": "fixed"
+   },
+   "colourSlots": [],
+   "hash": "add955c8e5c4",
+   "patches": {},
+   "attach": "chest",
+   "redEyeMin": 1,
+   "redEyeNearMin": 1,
+   "poke": {
+    "pokes": 0,
+    "frontPierce": 0,
+    "pairs": 0,
+    "poses": 5,
+    "passed": true
+   }
+  },
+  "m/extra_blackOrchid~top_tux": {
+   "file": "m/extra_blackOrchid~top_tux.glb",
+   "body": "m",
+   "slot": "extra",
+   "id": "blackOrchid",
+   "fit": "top_tux",
+   "tris": 580,
+   "verts": 377,
+   "bytes": 23864,
+   "materials": {
+    "Petal": "fixed"
+   },
+   "colourSlots": [],
+   "hash": "d78d83f478ee",
+   "patches": {},
+   "attach": "chest",
+   "redEyeMin": 1,
+   "redEyeNearMin": 1,
+   "poke": {
+    "pokes": 0,
+    "frontPierce": 0,
+    "pairs": 0,
+    "poses": 5,
+    "passed": true
+   }
+  },
+  "m/extra_blackOrchid~top_waistcoat": {
+   "file": "m/extra_blackOrchid~top_waistcoat.glb",
+   "body": "m",
+   "slot": "extra",
+   "id": "blackOrchid",
+   "fit": "top_waistcoat",
+   "tris": 580,
+   "verts": 377,
+   "bytes": 23888,
+   "materials": {
+    "Petal": "fixed"
+   },
+   "colourSlots": [],
+   "hash": "719a07a39cc5",
+   "patches": {},
+   "attach": "chest",
+   "redEyeMin": 1,
+   "redEyeNearMin": 1,
+   "poke": {
+    "pokes": 0,
+    "frontPierce": 0,
+    "pairs": 0,
+    "poses": 5,
+    "passed": true
+   }
+  },
+  "m/extra_eveningGloves": {
+   "file": "m/extra_eveningGloves.glb",
+   "body": "m",
+   "slot": "extra",
+   "id": "eveningGloves",
+   "fit": null,
+   "tris": 1468,
+   "verts": 1012,
+   "bytes": 55748,
+   "materials": {
+    "Glove": "fixed",
+    "Pearl": "fixed"
+   },
+   "colourSlots": [],
+   "hash": "a3a0adc9e1b1",
+   "patches": {},
+   "attach": "hands",
+   "redEyeMin": 1,
+   "redEyeNearMin": 1,
+   "poke": {
+    "pokes": 0,
+    "frontPierce": 0,
+    "pairs": 6,
+    "poses": 5,
+    "passed": true
+   }
+  },
+  "m/extra_lantern~top_dinner": {
+   "file": "m/extra_lantern~top_dinner.glb",
+   "body": "m",
+   "slot": "extra",
+   "id": "lantern",
+   "fit": "top_dinner",
+   "tris": 578,
+   "verts": 658,
+   "bytes": 36232,
+   "materials": {
+    "Glass": "fixed",
+    "Gold": "metal"
+   },
+   "colourSlots": [
+    "metal"
+   ],
+   "hash": "48ce150c71a9",
+   "patches": {},
+   "attach": "waist",
+   "redEyeMin": 1,
+   "redEyeNearMin": 1,
+   "poke": {
+    "pokes": 0,
+    "frontPierce": 0,
+    "pairs": 0,
+    "poses": 5,
+    "passed": true
+   }
+  },
+  "m/extra_lantern~top_lounge": {
+   "file": "m/extra_lantern~top_lounge.glb",
+   "body": "m",
+   "slot": "extra",
+   "id": "lantern",
+   "fit": "top_lounge",
+   "tris": 578,
+   "verts": 658,
+   "bytes": 36236,
+   "materials": {
+    "Glass": "fixed",
+    "Gold": "metal"
+   },
+   "colourSlots": [
+    "metal"
+   ],
+   "hash": "15d54ea0bfba",
+   "patches": {},
+   "attach": "waist",
+   "redEyeMin": 1,
+   "redEyeNearMin": 1,
+   "poke": {
+    "pokes": 0,
+    "frontPierce": 0,
+    "pairs": 0,
+    "poses": 5,
+    "passed": true
+   }
+  },
+  "m/extra_lantern~top_smoking": {
+   "file": "m/extra_lantern~top_smoking.glb",
+   "body": "m",
+   "slot": "extra",
+   "id": "lantern",
+   "fit": "top_smoking",
+   "tris": 578,
+   "verts": 656,
+   "bytes": 36160,
+   "materials": {
+    "Glass": "fixed",
+    "Gold": "metal"
+   },
+   "colourSlots": [
+    "metal"
+   ],
+   "hash": "e682c81177dd",
+   "patches": {},
+   "attach": "waist",
+   "redEyeMin": 1,
+   "redEyeNearMin": 1,
+   "poke": {
+    "pokes": 0,
+    "frontPierce": 0,
+    "pairs": 0,
+    "poses": 5,
+    "passed": true
+   }
+  },
+  "m/extra_lantern~top_tux": {
+   "file": "m/extra_lantern~top_tux.glb",
+   "body": "m",
+   "slot": "extra",
+   "id": "lantern",
+   "fit": "top_tux",
+   "tris": 578,
+   "verts": 656,
+   "bytes": 36144,
+   "materials": {
+    "Glass": "fixed",
+    "Gold": "metal"
+   },
+   "colourSlots": [
+    "metal"
+   ],
+   "hash": "5c58f8af368c",
+   "patches": {},
+   "attach": "waist",
+   "redEyeMin": 1,
+   "redEyeNearMin": 1,
+   "poke": {
+    "pokes": 0,
+    "frontPierce": 0,
+    "pairs": 0,
+    "poses": 5,
+    "passed": true
+   }
+  },
+  "m/extra_lantern~top_waistcoat": {
+   "file": "m/extra_lantern~top_waistcoat.glb",
+   "body": "m",
+   "slot": "extra",
+   "id": "lantern",
+   "fit": "top_waistcoat",
+   "tris": 332,
+   "verts": 396,
+   "bytes": 24284,
+   "materials": {
+    "Glass": "fixed",
+    "Gold": "metal"
+   },
+   "colourSlots": [
+    "metal"
+   ],
+   "hash": "6665a80d971c",
+   "patches": {},
+   "attach": "waist",
+   "redEyeMin": 1,
+   "redEyeNearMin": 1,
+   "poke": {
+    "pokes": 0,
+    "frontPierce": 0,
+    "pairs": 0,
     "poses": 5,
     "passed": true
    }
@@ -984,7 +1846,7 @@
    "fit": null,
    "tris": 7492,
    "verts": 3870,
-   "bytes": 210144,
+   "bytes": 210160,
    "materials": {
     "Brow": "brow",
     "Eye": "eye",
@@ -1012,6 +1874,7 @@
     "material": "Glasses"
    },
    "redEyeMin": 0.946,
+   "redEyeNearMin": 1,
    "poke": {
     "pokes": 0,
     "frontPierce": 0,
@@ -1028,7 +1891,7 @@
    "fit": null,
    "tris": 6404,
    "verts": 3405,
-   "bytes": 183792,
+   "bytes": 183808,
    "materials": {
     "Brow": "brow",
     "Eye": "eye",
@@ -1050,6 +1913,7 @@
     0.207
    ],
    "redEyeMin": 0.96,
+   "redEyeNearMin": 1,
    "poke": {
     "pokes": 0,
     "frontPierce": 0,
@@ -1066,7 +1930,7 @@
    "fit": null,
    "tris": 6596,
    "verts": 3504,
-   "bytes": 188908,
+   "bytes": 188928,
    "materials": {
     "Brow": "brow",
     "Eye": "eye",
@@ -1088,10 +1952,98 @@
     0.2407
    ],
    "redEyeMin": 0.985,
+   "redEyeNearMin": 1,
    "poke": {
     "pokes": 0,
     "frontPierce": 0,
     "pairs": 1,
+    "poses": 5,
+    "passed": true
+   }
+  },
+  "m/facial_dali": {
+   "file": "m/facial_dali.glb",
+   "body": "m",
+   "slot": "facial",
+   "id": "dali",
+   "fit": null,
+   "tris": 972,
+   "verts": 542,
+   "bytes": 34192,
+   "materials": {
+    "Stache": "brow"
+   },
+   "colourSlots": [
+    "hair"
+   ],
+   "hash": "3168027c56f5",
+   "patches": {
+    "face_victor": 128
+   },
+   "redEyeMin": 1,
+   "redEyeNearMin": 1,
+   "poke": {
+    "pokes": 0,
+    "frontPierce": 0,
+    "pairs": 0,
+    "poses": 5,
+    "passed": true
+   }
+  },
+  "m/facial_dali~face_henry": {
+   "file": "m/facial_dali~face_henry.glb",
+   "body": "m",
+   "slot": "facial",
+   "id": "dali",
+   "fit": "face_henry",
+   "tris": 972,
+   "verts": 540,
+   "bytes": 34160,
+   "materials": {
+    "Stache": "brow"
+   },
+   "colourSlots": [
+    "hair"
+   ],
+   "hash": "60264e987c6a",
+   "patches": {
+    "face_henry": 129
+   },
+   "redEyeMin": 1,
+   "redEyeNearMin": 1,
+   "poke": {
+    "pokes": 0,
+    "frontPierce": 0,
+    "pairs": 0,
+    "poses": 5,
+    "passed": true
+   }
+  },
+  "m/facial_dali~face_marcus": {
+   "file": "m/facial_dali~face_marcus.glb",
+   "body": "m",
+   "slot": "facial",
+   "id": "dali",
+   "fit": "face_marcus",
+   "tris": 972,
+   "verts": 542,
+   "bytes": 34124,
+   "materials": {
+    "Stache": "brow"
+   },
+   "colourSlots": [
+    "hair"
+   ],
+   "hash": "50f4228f870d",
+   "patches": {
+    "face_marcus": 115
+   },
+   "redEyeMin": 1,
+   "redEyeNearMin": 1,
+   "poke": {
+    "pokes": 0,
+    "frontPierce": 0,
+    "pairs": 0,
     "poses": 5,
     "passed": true
    }
@@ -1104,7 +2056,7 @@
    "fit": null,
    "tris": 976,
    "verts": 597,
-   "bytes": 37480,
+   "bytes": 37496,
    "materials": {
     "Stache": "brow"
    },
@@ -1116,6 +2068,7 @@
     "face_victor": 231
    },
    "redEyeMin": 1,
+   "redEyeNearMin": 1,
    "poke": {
     "pokes": 0,
     "frontPierce": 0,
@@ -1132,7 +2085,7 @@
    "fit": "face_henry",
    "tris": 976,
    "verts": 597,
-   "bytes": 37036,
+   "bytes": 37052,
    "materials": {
     "Stache": "brow"
    },
@@ -1144,6 +2097,7 @@
     "face_henry": 187
    },
    "redEyeMin": 1,
+   "redEyeNearMin": 1,
    "poke": {
     "pokes": 0,
     "frontPierce": 0,
@@ -1160,7 +2114,7 @@
    "fit": "face_marcus",
    "tris": 976,
    "verts": 601,
-   "bytes": 37392,
+   "bytes": 37408,
    "materials": {
     "Stache": "brow"
    },
@@ -1172,6 +2126,7 @@
     "face_marcus": 203
    },
    "redEyeMin": 1,
+   "redEyeNearMin": 1,
    "poke": {
     "pokes": 0,
     "frontPierce": 0,
@@ -1188,7 +2143,7 @@
    "fit": null,
    "tris": 976,
    "verts": 604,
-   "bytes": 36120,
+   "bytes": 36136,
    "materials": {
     "Stache": "brow"
    },
@@ -1200,6 +2155,7 @@
     "face_victor": 77
    },
    "redEyeMin": 1,
+   "redEyeNearMin": 1,
    "poke": {
     "pokes": 0,
     "frontPierce": 0,
@@ -1216,7 +2172,7 @@
    "fit": "face_henry",
    "tris": 976,
    "verts": 604,
-   "bytes": 36028,
+   "bytes": 36048,
    "materials": {
     "Stache": "brow"
    },
@@ -1228,6 +2184,7 @@
     "face_henry": 60
    },
    "redEyeMin": 1,
+   "redEyeNearMin": 1,
    "poke": {
     "pokes": 0,
     "frontPierce": 0,
@@ -1244,7 +2201,7 @@
    "fit": "face_marcus",
    "tris": 976,
    "verts": 604,
-   "bytes": 36112,
+   "bytes": 36128,
    "materials": {
     "Stache": "brow"
    },
@@ -1256,6 +2213,7 @@
     "face_marcus": 67
    },
    "redEyeMin": 1,
+   "redEyeNearMin": 1,
    "poke": {
     "pokes": 0,
     "frontPierce": 0,
@@ -1296,7 +2254,7 @@
    "fit": null,
    "tris": 7895,
    "verts": 4904,
-   "bytes": 253800,
+   "bytes": 253820,
    "materials": {
     "Hair": "hair"
    },
@@ -1309,6 +2267,7 @@
     "face_victor": 486
    },
    "redEyeMin": 1,
+   "redEyeNearMin": 1,
    "poke": {
     "pokes": 0,
     "frontPierce": 0,
@@ -1325,7 +2284,7 @@
    "fit": "face_henry",
    "tris": 7897,
    "verts": 4641,
-   "bytes": 242560,
+   "bytes": 242580,
    "materials": {
     "Hair": "hair"
    },
@@ -1338,6 +2297,7 @@
     "face_henry": 402
    },
    "redEyeMin": 1,
+   "redEyeNearMin": 1,
    "poke": {
     "pokes": 0,
     "frontPierce": 0,
@@ -1354,7 +2314,7 @@
    "fit": "face_marcus",
    "tris": 7896,
    "verts": 4747,
-   "bytes": 247916,
+   "bytes": 247936,
    "materials": {
     "Hair": "hair"
    },
@@ -1367,6 +2327,97 @@
     "face_marcus": 522
    },
    "redEyeMin": 1,
+   "redEyeNearMin": 1,
+   "poke": {
+    "pokes": 0,
+    "frontPierce": 0,
+    "pairs": 1,
+    "poses": 5,
+    "passed": true
+   }
+  },
+  "m/hairStyle_lamplighter": {
+   "file": "m/hairStyle_lamplighter.glb",
+   "body": "m",
+   "slot": "hairStyle",
+   "id": "lamplighter",
+   "fit": null,
+   "tris": 7799,
+   "verts": 4141,
+   "bytes": 230076,
+   "materials": {
+    "Hair": "hair"
+   },
+   "colourSlots": [
+    "hair"
+   ],
+   "hash": "390b2ce43647",
+   "patches": {
+    "body": 6,
+    "face_victor": 1214
+   },
+   "redEyeMin": 0.652,
+   "redEyeNearMin": 1,
+   "poke": {
+    "pokes": 0,
+    "frontPierce": 0,
+    "pairs": 1,
+    "poses": 5,
+    "passed": true
+   }
+  },
+  "m/hairStyle_lamplighter~face_henry": {
+   "file": "m/hairStyle_lamplighter~face_henry.glb",
+   "body": "m",
+   "slot": "hairStyle",
+   "id": "lamplighter",
+   "fit": "face_henry",
+   "tris": 7799,
+   "verts": 4201,
+   "bytes": 232292,
+   "materials": {
+    "Hair": "hair"
+   },
+   "colourSlots": [
+    "hair"
+   ],
+   "hash": "70c04e279748",
+   "patches": {
+    "body": 8,
+    "face_henry": 1193
+   },
+   "redEyeMin": 0.769,
+   "redEyeNearMin": 1,
+   "poke": {
+    "pokes": 0,
+    "frontPierce": 0,
+    "pairs": 1,
+    "poses": 5,
+    "passed": true
+   }
+  },
+  "m/hairStyle_lamplighter~face_marcus": {
+   "file": "m/hairStyle_lamplighter~face_marcus.glb",
+   "body": "m",
+   "slot": "hairStyle",
+   "id": "lamplighter",
+   "fit": "face_marcus",
+   "tris": 7799,
+   "verts": 4204,
+   "bytes": 234064,
+   "materials": {
+    "Hair": "hair"
+   },
+   "colourSlots": [
+    "hair"
+   ],
+   "hash": "4c7b714d2a9e",
+   "patches": {
+    "body": 0,
+    "face_marcus": 1358
+   },
+   "redEyeMin": 0.649,
+   "redEyeNearMin": 1,
    "poke": {
     "pokes": 0,
     "frontPierce": 0,
@@ -1383,7 +2434,7 @@
    "fit": null,
    "tris": 7832,
    "verts": 3961,
-   "bytes": 218388,
+   "bytes": 218404,
    "materials": {
     "Hair": "hair"
    },
@@ -1396,6 +2447,7 @@
     "face_victor": 751
    },
    "redEyeMin": 0.953,
+   "redEyeNearMin": 1,
    "poke": {
     "pokes": 0,
     "frontPierce": 0,
@@ -1412,7 +2464,7 @@
    "fit": "face_henry",
    "tris": 7832,
    "verts": 3968,
-   "bytes": 219768,
+   "bytes": 219784,
    "materials": {
     "Hair": "hair"
    },
@@ -1425,6 +2477,7 @@
     "face_henry": 861
    },
    "redEyeMin": 1,
+   "redEyeNearMin": 1,
    "poke": {
     "pokes": 0,
     "frontPierce": 0,
@@ -1441,7 +2494,7 @@
    "fit": "face_marcus",
    "tris": 7832,
    "verts": 3971,
-   "bytes": 220424,
+   "bytes": 220444,
    "materials": {
     "Hair": "hair"
    },
@@ -1454,6 +2507,7 @@
     "face_marcus": 909
    },
    "redEyeMin": 0.989,
+   "redEyeNearMin": 1,
    "poke": {
     "pokes": 0,
     "frontPierce": 0,
@@ -1470,7 +2524,7 @@
    "fit": null,
    "tris": 7398,
    "verts": 3846,
-   "bytes": 208220,
+   "bytes": 208240,
    "materials": {
     "Hair": "hair"
    },
@@ -1483,6 +2537,7 @@
     "face_victor": 462
    },
    "redEyeMin": 0.995,
+   "redEyeNearMin": 1,
    "poke": {
     "pokes": 0,
     "frontPierce": 0,
@@ -1499,7 +2554,7 @@
    "fit": "face_henry",
    "tris": 7400,
    "verts": 3865,
-   "bytes": 209112,
+   "bytes": 209128,
    "materials": {
     "Hair": "hair"
    },
@@ -1512,6 +2567,7 @@
     "face_henry": 469
    },
    "redEyeMin": 1,
+   "redEyeNearMin": 1,
    "poke": {
     "pokes": 0,
     "frontPierce": 0,
@@ -1528,7 +2584,7 @@
    "fit": "face_marcus",
    "tris": 7400,
    "verts": 3868,
-   "bytes": 209504,
+   "bytes": 209520,
    "materials": {
     "Hair": "hair"
    },
@@ -1541,6 +2597,7 @@
     "face_marcus": 498
    },
    "redEyeMin": 1,
+   "redEyeNearMin": 1,
    "poke": {
     "pokes": 0,
     "frontPierce": 0,
@@ -1557,7 +2614,7 @@
    "fit": null,
    "tris": 7832,
    "verts": 4040,
-   "bytes": 220788,
+   "bytes": 220808,
    "materials": {
     "Hair": "hair"
    },
@@ -1570,6 +2627,7 @@
     "face_victor": 677
    },
    "redEyeMin": 1,
+   "redEyeNearMin": 1,
    "poke": {
     "pokes": 0,
     "frontPierce": 0,
@@ -1586,7 +2644,7 @@
    "fit": "face_henry",
    "tris": 7832,
    "verts": 4102,
-   "bytes": 222964,
+   "bytes": 222984,
    "materials": {
     "Hair": "hair"
    },
@@ -1599,6 +2657,7 @@
     "face_henry": 640
    },
    "redEyeMin": 1,
+   "redEyeNearMin": 1,
    "poke": {
     "pokes": 0,
     "frontPierce": 0,
@@ -1615,7 +2674,7 @@
    "fit": "face_marcus",
    "tris": 7832,
    "verts": 4043,
-   "bytes": 221272,
+   "bytes": 221292,
    "materials": {
     "Hair": "hair"
    },
@@ -1628,6 +2687,7 @@
     "face_marcus": 710
    },
    "redEyeMin": 1,
+   "redEyeNearMin": 1,
    "poke": {
     "pokes": 0,
     "frontPierce": 0,
@@ -1644,7 +2704,7 @@
    "fit": null,
    "tris": 8544,
    "verts": 4365,
-   "bytes": 239908,
+   "bytes": 239924,
    "materials": {
     "Hair": "hair"
    },
@@ -1657,6 +2717,7 @@
     "face_victor": 863
    },
    "redEyeMin": 0.916,
+   "redEyeNearMin": 1,
    "poke": {
     "pokes": 0,
     "frontPierce": 0,
@@ -1673,7 +2734,7 @@
    "fit": "face_henry",
    "tris": 8544,
    "verts": 4428,
-   "bytes": 242884,
+   "bytes": 242904,
    "materials": {
     "Hair": "hair"
    },
@@ -1686,6 +2747,7 @@
     "face_henry": 909
    },
    "redEyeMin": 1,
+   "redEyeNearMin": 1,
    "poke": {
     "pokes": 0,
     "frontPierce": 0,
@@ -1702,7 +2764,7 @@
    "fit": "face_marcus",
    "tris": 8544,
    "verts": 4396,
-   "bytes": 242484,
+   "bytes": 242504,
    "materials": {
     "Hair": "hair"
    },
@@ -1715,6 +2777,7 @@
     "face_marcus": 997
    },
    "redEyeMin": 1,
+   "redEyeNearMin": 1,
    "poke": {
     "pokes": 0,
     "frontPierce": 0,
@@ -1785,7 +2848,7 @@
    "fit": null,
    "tris": 628,
    "verts": 338,
-   "bytes": 33900,
+   "bytes": 36216,
    "materials": {
     "Tie": "accent"
    },
@@ -1797,14 +2860,16 @@
     "body": 0,
     "top_dinner": 250,
     "top_lounge": 240,
+    "top_smoking": 217,
     "top_tux": 340,
     "top_waistcoat": 245
    },
    "redEyeMin": 1,
+   "redEyeNearMin": 1,
    "poke": {
     "pokes": 0,
     "frontPierce": 0,
-    "pairs": 4,
+    "pairs": 5,
     "poses": 5,
     "passed": true
    }
@@ -1817,7 +2882,7 @@
    "fit": null,
    "tris": 628,
    "verts": 322,
-   "bytes": 35668,
+   "bytes": 38412,
    "materials": {
     "Tie": "accent"
    },
@@ -1829,14 +2894,84 @@
     "body": 4,
     "top_dinner": 272,
     "top_lounge": 318,
+    "top_smoking": 258,
     "top_tux": 423,
     "top_waistcoat": 288
    },
    "redEyeMin": 1,
+   "redEyeNearMin": 1,
    "poke": {
     "pokes": 0,
     "frontPierce": 0,
-    "pairs": 4,
+    "pairs": 5,
+    "poses": 5,
+    "passed": true
+   }
+  },
+  "m/neck_bowFull~face_henry": {
+   "file": "m/neck_bowFull~face_henry.glb",
+   "body": "m",
+   "slot": "neck",
+   "id": "bowFull",
+   "fit": "face_henry",
+   "tris": 628,
+   "verts": 320,
+   "bytes": 34356,
+   "materials": {
+    "Tie": "accent"
+   },
+   "colourSlots": [
+    "accent"
+   ],
+   "hash": "42151a3c4cdc",
+   "patches": {
+    "body": 0,
+    "top_dinner": 221,
+    "top_lounge": 218,
+    "top_smoking": 209,
+    "top_tux": 305,
+    "top_waistcoat": 224
+   },
+   "redEyeMin": 1,
+   "redEyeNearMin": 1,
+   "poke": {
+    "pokes": 0,
+    "frontPierce": 0,
+    "pairs": 5,
+    "poses": 5,
+    "passed": true
+   }
+  },
+  "m/neck_bow~face_henry": {
+   "file": "m/neck_bow~face_henry.glb",
+   "body": "m",
+   "slot": "neck",
+   "id": "bow",
+   "fit": "face_henry",
+   "tris": 628,
+   "verts": 332,
+   "bytes": 33048,
+   "materials": {
+    "Tie": "accent"
+   },
+   "colourSlots": [
+    "accent"
+   ],
+   "hash": "db1a8fe4bdfc",
+   "patches": {
+    "body": 0,
+    "top_dinner": 195,
+    "top_lounge": 168,
+    "top_smoking": 196,
+    "top_tux": 250,
+    "top_waistcoat": 189
+   },
+   "redEyeMin": 1,
+   "redEyeNearMin": 1,
+   "poke": {
+    "pokes": 0,
+    "frontPierce": 0,
+    "pairs": 5,
     "poses": 5,
     "passed": true
    }
@@ -1849,7 +2984,7 @@
    "fit": null,
    "tris": 368,
    "verts": 279,
-   "bytes": 26888,
+   "bytes": 29440,
    "materials": {
     "Tie": "accent"
    },
@@ -1861,13 +2996,15 @@
     "body": 0,
     "top_dinner": 201,
     "top_lounge": 245,
+    "top_smoking": 243,
     "top_tux": 338
    },
    "redEyeMin": 1,
+   "redEyeNearMin": 1,
    "poke": {
     "pokes": 0,
     "frontPierce": 0,
-    "pairs": 3,
+    "pairs": 4,
     "poses": 5,
     "passed": true
    }
@@ -1880,7 +3017,7 @@
    "fit": "top_waistcoat",
    "tris": 292,
    "verts": 264,
-   "bytes": 20708,
+   "bytes": 20724,
    "materials": {
     "Tie": "accent"
    },
@@ -1893,6 +3030,7 @@
     "top_waistcoat": 298
    },
    "redEyeMin": 1,
+   "redEyeNearMin": 1,
    "poke": {
     "pokes": 0,
     "frontPierce": 0,
@@ -1909,7 +3047,7 @@
    "fit": null,
    "tris": 8978,
    "verts": 5938,
-   "bytes": 316364,
+   "bytes": 316384,
    "materials": {
     "Button": "fixed",
     "Horn": "fixed",
@@ -1927,6 +3065,7 @@
     "legs_trousers": 560
    },
    "redEyeMin": 1,
+   "redEyeNearMin": 1,
    "poke": {
     "pokes": 0,
     "frontPierce": 0,
@@ -1943,7 +3082,7 @@
    "fit": null,
    "tris": 8810,
    "verts": 5765,
-   "bytes": 307428,
+   "bytes": 307448,
    "materials": {
     "Button": "fixed",
     "Jacket": "main",
@@ -1960,6 +3099,43 @@
     "legs_trousers": 568
    },
    "redEyeMin": 1,
+   "redEyeNearMin": 1,
+   "poke": {
+    "pokes": 0,
+    "frontPierce": 0,
+    "pairs": 3,
+    "poses": 5,
+    "passed": true
+   }
+  },
+  "m/top_smoking": {
+   "file": "m/top_smoking.glb",
+   "body": "m",
+   "slot": "top",
+   "id": "smoking",
+   "fit": null,
+   "tris": 8980,
+   "verts": 6164,
+   "bytes": 320800,
+   "materials": {
+    "Button": "fixed",
+    "Jacket": "main",
+    "Shade": "shade",
+    "Shirt": "fixed",
+    "Trim": "accent"
+   },
+   "colourSlots": [
+    "main",
+    "accent"
+   ],
+   "hash": "1f55dba757f1",
+   "patches": {
+    "body": 295,
+    "legs_blackTrousers": 376,
+    "legs_trousers": 376
+   },
+   "redEyeMin": 1,
+   "redEyeNearMin": 1,
    "poke": {
     "pokes": 0,
     "frontPierce": 0,
@@ -2010,7 +3186,7 @@
    "fit": null,
    "tris": 8932,
    "verts": 5102,
-   "bytes": 277168,
+   "bytes": 277188,
    "materials": {
     "Button": "fixed",
     "Gold": "metal",
@@ -2030,6 +3206,7 @@
     "legs_trousers": 305
    },
    "redEyeMin": 1,
+   "redEyeNearMin": 1,
    "poke": {
     "pokes": 0,
     "frontPierce": 0,
@@ -2041,8 +3218,8 @@
  },
  "checks": {
   "heaviest": {
-   "f": 32667,
-   "m": 32936
+   "f": 33555,
+   "m": 32938
   },
   "missingPatches": [],
   "stalePatches": [],

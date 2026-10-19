@@ -17,6 +17,13 @@
 //      no longer allowed keeps the id, avatar and first date for the new one (nameLost); a newer version's
 //      profile is read and never written over (readOnly); a saved look called "constructor" or
 //      "__proto__" (any built-in name) and a store that throws when read never crash
+//   4b. the Looks page (src/account/looks.js): a Look's name (tidied, 1-24 letters of any language, numbers, simple
+//      punctuation); a saved slot made safe (junk -> empty, a bare avatar given a name, a v1 avatar migrated, an
+//      unlockable item kept in the saved Look); the six classic Looks as read-only presets; the account's save (over
+//      a Look, with the one before for Undo), rename, delete, restore, wear (saved as the avatar, or only tried);
+//      saved, heard, kept across a new start; a newer version's profile not written; with the testing switch OFF
+//      (a copy of src/): an item not owned is listed as missing and the default worn instead, never reaching the
+//      avatar; an owned one is worn
 //   5. the first avatar: last round's "Your guest" seeds it ('p6' is Clara's look); 'random' rolls one
 //   6. the table: seat ids p1..pN and colours by seat; bots' avatars deterministic, already safe, about one in three
 //      wearing an unlockable item, no two alike nor like yours; bots never take your name (case ignored), with the
@@ -40,7 +47,12 @@ import { USERNAME, checkUsername, sameName, suggestUsername, reservedWords, isFi
 import { PROFILE_VERSION, newProfile, repairProfile, startingAvatar } from '../src/account/profile.js';
 import { createAccount, memoryStore, PROFILE_KEY } from '../src/account/account.js';
 import { SEAT_COLORS, seatTable, botAvatars, STAND_IN } from '../src/table.js';
-import { ITEMS, LOOKS, itemId, normaliseAvatar, lookAlike, genderOf, isFree, lookOf, UNLOCK_ALL_FOR_TESTING } from '../src/data/wardrobe.js';
+import { ITEMS, LOOKS, itemId, normaliseAvatar, lookAlike, genderOf, isFree, lookOf, UNLOCK_ALL_FOR_TESTING, withItem, avatarKey, item } from '../src/data/wardrobe.js';
+import * as L from '../src/account/looks.js';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { randomAvatar, unlockablesWorn } from '../src/data/randomAvatar.js';
 // (a classic Look, as an avatar)
 const originalAvatar = id => normaliseAvatar(LOOKS[id]);
@@ -123,7 +135,8 @@ console.log('\nthe profile');
   const a = broken.profile?.avatar;
   check(broken.repaired && broken.profile?.username === 'nora', 'damaged avatar data: the name is kept, the profile repaired');
   check(a?.face === 'clara' && a.dress === 'column' && a.colours.skin === originalAvatar('clara').colours.skin && a.colours.eyes === 'blue', 'an unknown value goes back to the Look\'s own; good values stay');
-  check(a && a.glasses === 'none', 'an item whose art is not made yet (the Monocle) never comes back from a save, even owned');
+  check(a && a.glasses === (item('glasses', 'monocle').artPending ? 'none' : 'monocle'), item('glasses', 'monocle').artPending
+    ? 'an item whose art is not made yet (the Monocle) never comes back from a save, even owned' : 'an owned item (the Monocle) comes back from a save');
   check(a && (ON ? a.colours.main === 'gatsby' && a.colours.metal === 'roseGold' && a.colours.hair === 'platinum' && a.colours.frame === 'goldFrame'
     : a.colours.main === originalAvatar('clara').colours.main && a.colours.metal === 'gold' && a.colours.hair === originalAvatar('clara').colours.hair && a.colours.frame === 'tortoise'),
     ON ? 'unlockable colours come back from a save while the testing switch is on (Gatsby gold, rose gold, platinum, gold frames)'
@@ -172,7 +185,7 @@ console.log('\nthe account');
   const r3 = await acct.rename('Fire_Exit');
   check(!r3.ok && /belongs to the hotel/.test(r3.error) && acct.profile.username === 'Velvet_Owl2', 'a refused rename changes nothing');
   const r4 = await acct.setAvatar({ v: 1, base: 'henry', skin: 'deep', hair: 'silver', eyes: 'green', glasses: 'monocle', frame: 'goldFrame', main: 'gatsby', accent: 'brass', metal: 'gold' });
-  check(r4.ok && r4.avatar.face === 'henry' && r4.avatar.colours.skin === 'deep' && r4.avatar.glasses === originalAvatar('henry').glasses
+  check(r4.ok && r4.avatar.face === 'henry' && r4.avatar.colours.skin === 'deep' && r4.avatar.glasses === (item('glasses', 'monocle').artPending ? originalAvatar('henry').glasses : ON ? 'monocle' : originalAvatar('henry').glasses)
     && r4.avatar.colours.frame === (ON ? 'goldFrame' : 'tortoise') && r4.avatar.colours.main === (ON ? 'gatsby' : originalAvatar('henry').colours.main),
     `setAvatar keeps free choices, never a pending one (the Monocle), and unlockable ones only ${ON ? 'while the testing switch is on' : 'when owned'} (gold frames, Gatsby gold)`);
   check(JSON.stringify(acct.profile.avatar) === JSON.stringify(r4.avatar), 'the profile wears what setAvatar returned');
@@ -238,6 +251,103 @@ console.log('\nthe account');
   const chosen = createAccount({ store: memoryStore() });
   await chosen.signUp('marigold_', { avatar: originalAvatar('beatrice') });
   check(chosen.profile.avatar.face === 'beatrice', 'sign-up may take a first avatar');
+}
+
+// --- 4b. the Looks page ------------------------------------------------------------------------------
+console.log('\nthe Looks page');
+{
+  const tr = { trusted: true };
+  // a Look's name
+  check(L.checkLookName('  Opening   night ').name === 'Opening night' && L.checkLookName('Riviera').ok && L.checkLookName('Été à Nice').ok && L.checkLookName("Gatsby's #2 (best)").ok,
+    'a name is tidied (spaces collapsed, trimmed); letters of any language, numbers and simple punctuation are fine');
+  check(L.checkLookName('').code === 'empty' && L.checkLookName('   ').code === 'empty' && L.checkLookName(null).code === 'empty' && L.checkLookName(42).code === 'empty'
+    && L.checkLookName('x'.repeat(25)).code === 'long' && L.checkLookName('x'.repeat(24)).ok && L.checkLookName('<b>hi</b>').code === 'chars' && L.checkLookName('tab\u0007bell').code === 'chars',
+    'refused: empty, over 24 characters, markup or control characters; each with words for the player');
+  check(Object.values(L.LOOK_NAME_MESSAGES).every(m => typeof m === 'string' && m.length > 5), 'every refusal has words for the player');
+  // a saved slot made safe
+  const clara = withItem(LOOKS.clara, 'main', 'plum', tr);
+  check(L.repairSavedLook(null) === null && L.repairSavedLook('x') === null && L.repairSavedLook([1]) === null && L.repairSavedLook({ name: 'x', avatar: 7 }) === null,
+    'a damaged slot (nothing, a string, a list, no avatar) is empty');
+  const bare = L.repairSavedLook(clara, 1);
+  check(bare.name === 'Look 2' && JSON.stringify(bare.avatar) === JSON.stringify(clara) && bare.savedAt === null, "a bare avatar in a slot (the contract's first form) is kept, named after its slot");
+  const odd = L.repairSavedLook({ name: '<x>', avatar: { v: 1, base: 'henry', skin: 'deep' }, savedAt: 'nope' }, 2);
+  check(odd.name === 'Look 3' && odd.avatar.face === 'henry' && odd.avatar.colours.skin === 'deep' && odd.savedAt === null, 'a bad name and date are replaced; a v1 avatar is migrated to its Look');
+  const gatsby = withItem(LOOKS.victor, 'main', 'gatsby', tr);
+  check(L.repairSavedLook({ name: 'Gold', avatar: gatsby }).avatar.colours.main === 'gatsby', 'a saved Look keeps an unlockable item whether or not it is owned (ownership is checked when worn)');
+  check(L.repairSavedLooks([clara, null, { name: 'B', avatar: LOOKS.beatrice }, { name: 'extra', avatar: LOOKS.victor }]).length === 3 && L.repairSavedLooks('junk').every(x => x === null), 'always exactly three slots');
+  // the presets
+  const P = L.presetLooks();
+  check(P.map(x => x.id).join() === 'victor,marcus,henry,clara,eleanor,beatrice' && P.every(x => x.preset && x.name && x.label && JSON.stringify(x.avatar) === JSON.stringify(LOOKS[x.id])),
+    'the six classic Looks are the presets (Victor … Beatrice), each its Look as it is');
+  check(L.presetLooks('f').map(x => x.id).join() === 'clara,eleanor,beatrice' && L.lookSummary(LOOKS.victor) === 'Tuxedo · Midnight · Swept', `presets by body; a Look in a few words ("${L.lookSummary(LOOKS.victor)}")`);
+  // the account
+  const store = memoryStore();
+  let t = Date.UTC(2026, 9, 19, 9);
+  const acct = createAccount({ store, now: () => t });
+  check(!(await acct.saveLook(0, clara)).ok && JSON.stringify(acct.looks) === '[null,null,null]', 'no profile yet: nothing saved');
+  await acct.signUp('looksmith');
+  let heard = 0; acct.onChange(() => heard++);
+  const s1 = await acct.saveLook(0, clara, { name: '  Opening night ' });
+  check(s1.ok && s1.previous === null && s1.look.name === 'Opening night' && s1.look.savedAt === new Date(t).toISOString() && JSON.stringify(acct.looks[0].avatar) === JSON.stringify(clara)
+    && JSON.parse(store.load()).looks[0].name === 'Opening night' && heard === 1, 'save: the Look in its slot, named, dated, saved and heard');
+  t += 1000;
+  const s2 = await acct.saveLook(0, LOOKS.henry);
+  check(s2.ok && s2.previous?.name === 'Opening night' && s2.look.name === 'Opening night' && acct.looks[0].avatar.face === 'henry', 'saving over a Look keeps its name and hands back the one before (for Undo)');
+  await acct.restoreLook(0, s2.previous);
+  check(acct.looks[0].avatar.face === 'clara' && acct.looks[0].name === 'Opening night', 'restore (Undo): the Look before is back');
+  const s3 = await acct.saveLook(2, LOOKS.marcus);
+  check(s3.look.name === 'Look 3', 'a new Look with no name is called after its slot ("Look 3")');
+  const bad = await acct.saveLook(1, LOOKS.victor, { name: '' });
+  check(!bad.ok && bad.code === 'empty' && acct.looks[1] === null, 'a refused name saves nothing');
+  const r1 = await acct.renameLook(0, 'Riviera'), r2 = await acct.renameLook(1, 'Nothing here'), r3 = await acct.renameLook(0, 'x'.repeat(30));
+  check(r1.ok && acct.looks[0].name === 'Riviera' && !r2.ok && r2.code === 'empty' && !r3.ok && r3.code === 'long' && acct.looks[0].name === 'Riviera', 'rename: a saved Look only, a good name only');
+  const ro = [await acct.saveLook('victor', LOOKS.clara), await acct.renameLook('clara', 'Mine'), await acct.deleteLook('henry'), await acct.restoreLook('eleanor', null)];
+  check(ro.every(x => !x.ok && x.code === 'readOnly'), 'the six classic Looks are read-only: never saved over, renamed or deleted');
+  check([await acct.saveLook(3, clara), await acct.saveLook(-1, clara), await acct.saveLook('1', clara), await acct.deleteLook(1.5), await acct.saveLook('__proto__', clara)].every(x => !x.ok && x.code === 'slot'), 'only slots 0, 1 and 2 (no other number, string or built-in name)');
+  const w1 = await acct.wearLook(0, { save: false });
+  check(w1.ok && JSON.stringify(w1.avatar) === JSON.stringify(clara) && w1.missing.length === 0 && acct.profile.avatar.face !== 'clara', 'wear without saving (the stage, before Save look): the avatar handed back, the profile unchanged');
+  const w2 = await acct.wearLook(0);
+  check(w2.ok && JSON.stringify(acct.profile.avatar) === JSON.stringify(clara) && JSON.parse(store.load()).avatar.face === 'clara', 'wear: saved as your avatar');
+  const w3 = await acct.wearLook('beatrice');
+  check(w3.ok && JSON.stringify(acct.profile.avatar) === JSON.stringify(LOOKS.beatrice) && JSON.stringify(acct.looks.map(x => x?.name ?? null)) === '["Riviera",null,"Look 3"]', 'wear a classic Look: it becomes your avatar; your saved Looks are untouched');
+  check(!(await acct.wearLook(1)).ok && !(await acct.wearLook('nobody')).ok, 'wearing an empty slot or an unknown Look: nothing happens');
+  const d = await acct.deleteLook(2);
+  check(d.ok && d.previous?.name === 'Look 3' && acct.looks[2] === null && JSON.parse(store.load()).looks[2] === null, 'delete: the slot empties (the Look handed back for Undo)');
+  check(Object.isFrozen(acct.looks) && Object.isFrozen(acct.looks[0].avatar) && Object.isFrozen(acct.presets[0].avatar), 'the Looks handed out are frozen copies');
+  const again = createAccount({ store });
+  check(again.looks[0]?.name === 'Riviera' && JSON.stringify(again.looks[0].avatar) === JSON.stringify(clara), 'kept across a new start');
+  const re = repairProfile(JSON.parse(store.load()));
+  check(!re.repaired, 'a profile with saved Looks reads back with nothing to repair');
+  const withBare = repairProfile({ ...JSON.parse(store.load()), looks: [clara, 'junk'] });
+  check(withBare.repaired && withBare.profile.looks[0].name === 'Look 1' && withBare.profile.looks[1] === null && withBare.profile.looks.length === 3, 'saved Looks in an older form are repaired (and written back once)');
+  const newer = JSON.stringify({ ...JSON.parse(store.load()), version: 3 });
+  const ns = memoryStore(newer), nv = createAccount({ store: ns });
+  await nv.saveLook(1, LOOKS.victor, { name: 'Later' });
+  check(nv.looks[1]?.name === 'Later' && ns.load() === newer, "a newer version's profile: a Look saved for the visit, the saved profile untouched");
+  // the testing switch OFF (a copy of src/ with that one line flipped): ownership decides what a Look can wear
+  const repo = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'looks-check-'));
+  try {
+    fs.cpSync(path.join(repo, 'src'), path.join(dir, 'src'), { recursive: true });
+    const wf = path.join(dir, 'src/data/wardrobe.js');
+    fs.writeFileSync(wf, fs.readFileSync(wf, 'utf8').replace('export const UNLOCK_ALL_FOR_TESTING = true;', 'export const UNLOCK_ALL_FOR_TESTING = false;'));
+    const OA = await import(pathToFileURL(path.join(dir, 'src/account/account.js')).href);
+    const OW = await import(pathToFileURL(path.join(dir, 'src/data/wardrobe.js')).href);
+    const os2 = OA.memoryStore(), off = OA.createAccount({ store: os2 });
+    await off.signUp('lockpicker');
+    const wish = OW.withItem(OW.withItem(OW.LOOKS.victor, 'main', 'gatsby', tr), 'hair', 'platinum', tr);
+    const sv = await off.saveLook(0, wish, { name: 'Wish' });
+    check(OW.UNLOCK_ALL_FOR_TESTING === false && sv.ok && off.looks[0].avatar.colours.main === 'gatsby', 'switch off: a Look with items not owned can still be saved (it is only a Look)');
+    const wo = await off.wearLook(0);
+    check(wo.ok && wo.avatar.colours.main === OW.LOOKS.victor.colours.main && wo.avatar.colours.hair === OW.LOOKS.victor.colours.hair
+      && JSON.stringify(wo.missing.map(m => m.id).sort()) === '["hair.platinum","main.gatsby"]' && wo.missing.every(m => m.label)
+      && off.profile.avatar.colours.main !== 'gatsby' && JSON.parse(os2.load()).avatar.colours.main !== 'gatsby',
+    `...worn, the items not owned are listed as missing (${wo.missing.map(m => m.label).join(', ')}) and the defaults worn instead: never on the avatar`);
+    await off.grant('hair.platinum');
+    const wo2 = await off.wearLook(0);
+    check(wo2.avatar.colours.hair === 'platinum' && JSON.stringify(wo2.missing.map(m => m.id)) === '["main.gatsby"]', '...once an item is owned (earned), the Look wears it');
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+  check(avatarKey(L.wearing(clara).avatar) === avatarKey(clara) && L.wearing(clara).missing.length === 0, 'wearing: a Look of free items is worn as it is, nothing missing (owning nothing)');
 }
 
 // --- 5. the first avatar ------------------------------------------------------------------------------

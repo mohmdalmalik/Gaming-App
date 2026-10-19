@@ -5,8 +5,9 @@
 //   --parts <dir>                  a draft folder (with <body>/ and manifest.json) instead of assets/characters/parts
 //   --no-sheet / --no-redeye       skip one of the two
 //   --mirror victor|marcus|henry   the mirror test: the classic man from pieces next to today's shipped model
-//   --record                       write the red-eye minimum into the piece's scene extras (assets only; then run
-//                                  manifest.py so it reaches the manifest)
+//   --record                       write the red-eye minimums into the piece's scene extras (assets only; then run
+//                                  manifest.py so they reach the manifest): redEyeMin (both eyes) and redEyeNearMin
+//                                  (the eye nearest the camera: the game's gate since the owner's decision of 19 Oct)
 // It starts its own static server (python3 -m http.server <port> --bind 127.0.0.1, the repo root) and ONE headless
 // browser (tests/smoke-lib.mjs), and stops both at the end. The poke-through test is poke.py (it runs without a
 // browser); its result, when present in <out>/<item>.poke.json, goes in the sheet's footer.
@@ -130,9 +131,11 @@ async function main() {
         const r = await page.evaluate(o => window.review.redeye(o), { parts, body, withKeys: withKeys.filter(Boolean), withoutKeys: withoutKeys.filter(Boolean), hideFace, omitWithout, glasses: slot === 'face' ? false : glasses });
         result.redEye = r;
         fs.writeFileSync(path.join(out, `${key}.redeye.json`), JSON.stringify({ key, withKeys, withoutKeys, omitWithout, ...r }, null, 1));
-        console.log(`red-eye ${key}: facing min ${r.min} over ${r.scored} views -> ${r.pass ? 'PASS' : 'FAIL'}; strict min ${r.strict.min} over ${r.strict.scored} -> ${r.strict.pass ? 'PASS' : 'FAIL'}`);
+        console.log(`red-eye ${key}: facing min ${r.min} over ${r.scored} views -> ${r.pass ? 'PASS' : 'FAIL'}; strict min ${r.strict.min} over ${r.strict.scored} -> ${r.strict.pass ? 'PASS' : 'FAIL'}; nearer eye min ${r.near.min} over ${r.near.scored} -> ${r.near.pass ? 'PASS' : 'FAIL'}`);
         if (flag('record') && partsDir === path.join(REPO, 'assets/characters/parts')) {
           execFileSync('python3', [path.join(HERE, 'record.py'), path.join(partsDir, body, `${key}.glb`), 'redEyeMin', String(r.min)]);
+          // (the nearer-eye score: the gate the game uses since the owner's decision of 19 Oct 2026)
+          execFileSync('python3', [path.join(HERE, 'record.py'), path.join(partsDir, body, `${key}.glb`), 'redEyeNearMin', String(r.near.min)]);
         }
       }
       // ---- the sheet
@@ -144,7 +147,7 @@ async function main() {
         const footer = [
           `body ${body} · item ${key} · worn on the ${look} Look · ${ent.tris ?? '-'} tris · ${ent.verts ?? '-'} verts · ${ent.bytes ?? '-'} bytes · materials: ${mats}`,
           `shadow patches cast (verts): ${pt}`,
-          `red-eye minimum: ${result.redEye ? `${result.redEye.min} over ${result.redEye.scored} face-on views (${result.redEye.pass ? 'PASS' : 'FAIL'}), strict ${result.redEye.strict.min} over ${result.redEye.strict.scored} (${result.redEye.strict.pass ? 'PASS' : 'FAIL'})` : 'not tested (legs / feet / belt)'} · poke-through: ${poke ? `${poke.pokes} pokes over ${poke.poses.length} poses, ${poke.pairs.length} pairs (${poke.pass ? 'PASS' : 'FAIL'})` : 'not run'}`,
+          `red-eye minimum: ${result.redEye ? `nearer eye ${result.redEye.near.min} (${result.redEye.near.pass ? 'PASS' : 'FAIL'}); both eyes ${result.redEye.min} over ${result.redEye.scored} face-on views (${result.redEye.pass ? 'pass' : 'below 0.9'}), strict ${result.redEye.strict.min} over ${result.redEye.strict.scored}` : 'not tested (legs / feet / belt)'} · poke-through: ${poke ? `${poke.pokes} pokes over ${poke.poses.length} poses, ${poke.pairs.length} pairs (${poke.pass ? 'PASS' : 'FAIL'})` : 'not run'}`,
         ];
         const area = slot === 'extra' ? (ATTACH_AREA[ent.attach] || 'torso') : (AREA[slot] || 'head');
         const r = await page.evaluate(o => window.review.sheet(o), { parts, body, worn, keys, glasses, area, footer, lookName: look,

@@ -63,7 +63,12 @@ export const TRIANGLE_CAP = 38000;
 // The global id is `${slot}.${id}` ('glasses.monocle', 'hair.platinum'): shape slot names never equal a colour slot
 // name, so today's ids keep their meaning. Ids are permanent: an item that goes away gets `retired: true`.
 const core = { core: true };
-const W1B = { artPending: true, isNew: true };       // one of the ten new items: its art comes in W1-B
+// The ten new items of W1-B (BUILD-BRIEF: A1-A5 earned by an achievement, B1-B5 Boutique). A 3D piece among them is
+// pending until the pipeline puts its file in the parts index for that body, then wearable with no change here. The
+// two drawn by the game's code (the Monocle, Gold frames: src/render/avatarGlasses.js) have no file: they were held
+// back (`artPending`) until their drawing passed review (the W1-B art review, 19 Oct 2026), and are now let in.
+const W1B = { isNew: true };
+const CODE_DRAWN_PENDING = {};      // (put `{ artPending: true }` back to hold the two code-drawn frames again)
 const ENTRIES = [
   // Faces: the head (skin, ears, eyes, brows, nose, mouth or lips). Named after the guests.
   { slot: 'face', id: 'victor', bodies: MALE, label: 'Victor', desc: "Victor's face: a long jaw and dark brows.", colours: ['skin', 'eyes'], ...core },
@@ -83,15 +88,15 @@ const ENTRIES = [
   { slot: 'hairStyle', id: 'chignon', bodies: FEMALE, label: 'Chignon', desc: "Eleanor's: a side-part wave and a twisted bun at the nape.", colours: ['hair'], ...core },
   { slot: 'hairStyle', id: 'wavyBob', bodies: FEMALE, label: 'Wavy bob', desc: "Beatrice's: a full, rounded bob of waves.", colours: ['hair'], ...core },
   { slot: 'hairStyle', id: 'lamplighter', bodies: BOTH, label: { m: 'The Poet', f: 'Braided crown' },
-    desc: { m: 'Tousled romantic waves, kept clear of the eyes.', f: 'A plait worn round the head like a crown.' },
+    desc: { m: 'Tousled romantic waves, worn long and swept back off the brow.', f: 'A plait pinned round the head like a coronet.' },
     colours: ['hair'], unlock: 'achievement', achievement: 'lamplighter', ...W1B },
-  { slot: 'hairStyle', id: 'marcel', bodies: FEMALE, label: 'Marcel waves', desc: 'Sculpted finger waves with a high shine.', colours: ['hair'], unlock: 'boutique', ...W1B },
+  { slot: 'hairStyle', id: 'marcel', bodies: FEMALE, label: 'Marcel waves', desc: 'Finger waves set at the salon, with a mirror shine.', colours: ['hair'], unlock: 'boutique', ...W1B },
 
   // Moustaches (men; the colour is the brows': a little darker than the hair).
   { slot: 'facial', id: 'none', bodies: MALE, label: 'Clean-shaven', desc: 'No moustache.', draw: 'none', ...core },
   { slot: 'facial', id: 'handlebar', bodies: MALE, label: 'Handlebar', desc: "Victor's big curled moustache.", colours: ['hair'], ...core },
   { slot: 'facial', id: 'pencil', bodies: MALE, label: 'Pencil', desc: 'A thin pencil moustache on the upper lip.', colours: ['hair'], isNew: true },
-  { slot: 'facial', id: 'dali', bodies: MALE, label: 'Dalí', desc: 'Thin and waxed, with two tall upturned points.', colours: ['hair'], unlock: 'boutique', ...W1B },
+  { slot: 'facial', id: 'dali', bodies: MALE, label: 'Dalí moustache', desc: 'Thin, waxed and turned up to two improbable points.', colours: ['hair'], unlock: 'boutique', ...W1B },
 
   // Make-up (women): none yet (the lip colour follows the skin tone: colours.lips 'natural').
   { slot: 'makeup', id: 'none', bodies: FEMALE, label: 'None', desc: 'No make-up.', draw: 'none', ...core },
@@ -102,17 +107,18 @@ const ENTRIES = [
   { slot: 'glasses', id: 'oval', bodies: BOTH, label: 'Oval', desc: 'Soft oval frames.', draw: 'code', value: 'oval', tris: 2600, colours: ['frame'], ...core },
   { slot: 'glasses', id: 'deco', bodies: BOTH, label: 'Deco square', desc: 'Rounded-square Art Deco frames.', draw: 'code', value: 'deco', tris: 2600, colours: ['frame'], ...core },
   { slot: 'glasses', id: 'pincenez', bodies: BOTH, label: 'Pince-nez', desc: 'Clip-on lenses with no arms.', draw: 'code', value: 'pincenez', tris: 2600, colours: ['frame'], ...core },
-  { slot: 'glasses', id: 'monocle', bodies: BOTH, label: 'Monocle', desc: 'A gilt rim on a fine chain.', draw: 'code', value: 'monocle', tris: 2600, colours: ['frame'],
-    unlock: 'achievement', achievement: 'seenThrough', ...W1B },
-  { slot: 'glasses', id: 'gilt', bodies: BOTH, label: 'Gold frames', desc: 'Round gilt spectacles.', draw: 'code', value: 'gilt', frameHex: '#d6aa55', tris: 2600,
-    unlock: 'boutique', ...W1B },
+  // (the Monocle and Gold frames: a fixed gilt, so no Frame colour row)
+  { slot: 'glasses', id: 'monocle', bodies: BOTH, label: 'Monocle', desc: 'A gilt rim on a fine chain, worn with a raised eyebrow.', draw: 'code', value: 'monocle', frameHex: '#d6aa55', tris: 2600,
+    unlock: 'achievement', achievement: 'seenThrough', ...W1B, ...CODE_DRAWN_PENDING },
+  { slot: 'glasses', id: 'gilt', bodies: BOTH, label: 'Gold frames', desc: 'Round spectacles in polished gilt.', draw: 'code', value: 'gilt', frameHex: '#d6aa55', tris: 2600,
+    unlock: 'boutique', ...W1B, ...CODE_DRAWN_PENDING },
 
   // Jackets (men): jacket or waistcoat with the shirt front, collar, sleeves and cuffs.
   { slot: 'top', id: 'tux', bodies: MALE, label: 'Tuxedo', desc: "Victor's: peaked satin lapels, one button.", colours: ['main'], ...core },
   { slot: 'top', id: 'lounge', bodies: MALE, label: 'Lounge suit', desc: "Marcus's: single-breasted, notch lapels.", colours: ['main'], ...core },
   { slot: 'top', id: 'dinner', bodies: MALE, label: 'Dinner jacket', desc: "Henry's: a shawl collar, studs and a pocket square.", colours: ['main'], ...core },
   { slot: 'top', id: 'waistcoat', bodies: MALE, label: 'Waistcoat', desc: 'A pointed waistcoat over shirtsleeves, with sleeve garters and a watch chain.', colours: ['main', 'accent', 'metal'], isNew: true },
-  { slot: 'top', id: 'smoking', bodies: MALE, label: 'Smoking jacket', desc: 'Quilted velvet, a satin shawl collar and frogging.', colours: ['main', 'accent'], unlock: 'boutique', ...W1B },
+  { slot: 'top', id: 'smoking', bodies: MALE, label: 'Smoking jacket', desc: 'Quilted velvet with a satin shawl collar and frogged fastenings, for the small hours.', colours: ['main', 'accent'], unlock: 'boutique', ...W1B },
 
   // Neckwear (men). The open collar ships only once it passes review with every jacket.
   { slot: 'neck', id: 'none', bodies: MALE, label: 'Open collar', desc: 'No tie.', draw: 'none', artPending: true },
@@ -128,7 +134,7 @@ const ENTRIES = [
   { slot: 'dress', id: 'column', bodies: ['f', 'f_column'], label: 'Column dress', desc: "Clara's: fitted, crew neck, straight to the ankle.", colours: ['main'], ...core },
   { slot: 'dress', id: 'ballgown', bodies: ['f', 'f_ballgown'], label: 'Ballgown', desc: "Eleanor's: bateau neck, cap sleeves, a full skirt.", colours: ['main'], ...core },
   { slot: 'dress', id: 'aline', bodies: ['f', 'f_aline'], label: 'A-line gown', desc: "Beatrice's: puff sleeves, an A-line skirt.", colours: ['main'], ...core },
-  { slot: 'dress', id: 'decoBeaded', bodies: FEMALE, label: 'Deco beaded gown', desc: 'Art Deco beading and a fringed hem.', colours: ['main', 'metal'], unlock: 'boutique', ...W1B },
+  { slot: 'dress', id: 'decoBeaded', bodies: FEMALE, label: 'Deco beaded gown', desc: 'Art Deco beadwork from shoulder to hem, and a fringe that swings when you walk.', colours: ['main', 'metal'], unlock: 'boutique', ...W1B },
 
   // Belts (women).
   { slot: 'belt', id: 'none', bodies: FEMALE, label: 'No belt', desc: 'No belt.', draw: 'none', ...core },
@@ -144,11 +150,13 @@ const ENTRIES = [
   { slot: 'extra', id: 'pearlStud', bodies: FEMALE, label: 'Pearl studs', desc: "Eleanor's pearl studs.", attach: 'ears', ...core },
   { slot: 'extra', id: 'goldBall', bodies: FEMALE, label: 'Gold balls', desc: "Beatrice's gold ball earrings.", attach: 'ears', colours: ['metal'], ...core },
   { slot: 'extra', id: 'lantern', bodies: BOTH, label: { m: 'Lantern fob', f: 'Lantern charm' },
-    desc: { m: 'A watch chain with a small brass lantern.', f: 'A small brass lantern on a fine chain.' }, attach: { m: 'waist', f: 'neck' },
-    colours: ['metal'], unlock: 'achievement', achievement: 'savedByTheLight', ...W1B },
-  { slot: 'extra', id: 'eveningGloves', bodies: BOTH, label: { m: 'Dress gloves', f: 'Opera gloves' },
-    desc: { m: 'White evening gloves.', f: 'Long white gloves to the elbow.' }, attach: 'hands', unlock: 'achievement', achievement: 'goodCompany', ...W1B },
-  { slot: 'extra', id: 'blackOrchid', bodies: BOTH, label: 'Black orchid', desc: { m: 'A dark orchid buttonhole.', f: 'A dark orchid corsage.' },
+    desc: { m: 'A brass lantern in miniature, hung from the watch chain.', f: 'A brass lantern in miniature, worn at the throat on a fine chain.' },
+    attach: { m: 'waist', f: 'neck' }, colours: ['metal'], unlock: 'achievement', achievement: 'savedByTheLight', ...W1B },
+  { slot: 'extra', id: 'eveningGloves', bodies: BOTH, label: 'Evening gloves',
+    desc: { m: 'White dress gloves, buttoned neatly at the wrist.', f: 'Long white opera gloves, drawn up past the elbow.' }, attach: 'hands',
+    unlock: 'achievement', achievement: 'goodCompany', ...W1B },
+  { slot: 'extra', id: 'blackOrchid', bodies: BOTH, label: 'Black orchid',
+    desc: { m: 'A black orchid in the buttonhole, the rarest bloom in the conservatory.', f: 'A black orchid corsage, pinned at the shoulder.' },
     attach: 'chest', unlock: 'achievement', achievement: 'darkHorse', ...W1B },
 
   // ---- Colours ----
@@ -619,8 +627,7 @@ export function lookAlike(a, b) {
 
 // The eyes always show (red eyes are how possessed players recognise each other): an eye colour that is not red, pink,
 // violet or amber, frames with no lens, only pieces that are in the game, and no piece file below the pipeline's
-// red-eye test (piecesShowEyes). Not every built piece passes that test: three women's hair files do not (the Wavy
-// bob on Clara's and on Eleanor's face, the chignon on Beatrice's), and neither do today's code-drawn glasses.
+// red-eye test, scored on the eye nearest the camera (piecesShowEyes).
 const hsv = hex => {
   const [r, g, b] = [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16) / 255);
   const max = Math.max(r, g, b), d = max - Math.min(r, g, b);
@@ -647,21 +654,29 @@ export function eyesShow(av) {
   const worn = [...SLOTS_BY_GENDER[genderOf(a.body)].map(s => item(s, a[s])), ...(a.extras || []).map(id => item('extra', id))];
   return worn.every(it => it && offered(it, a.body)) && piecesShowEyes(a);
 }
-// The pipeline's red-eye test (contract 9.3: at least 90 % of the possessed red still shows from the game camera; its
-// result per piece file is in src/data/partsIndex.js `redEye`). A file below it is kept off the guests the game dresses
-// itself (bots, a new player's first look), unless it is a classic Look's own piece: that is today's guest unchanged
-// (Beatrice's own bob scores 0.756, as today). So until the lead and the owner decide on the side-view rule, the Wavy
-// bob stays off Clara's and Eleanor's faces and the chignon off Beatrice's. Glasses are code-drawn: not scored here.
+// The pipeline's red-eye test (contract 9.3, as the owner relaxed it on 19 Oct 2026: "Allow if the nearer eye
+// shows"): in every face-on view from the game camera (4 turns, standing and walking), at least 90 % of the possessed
+// red of the eye NEAREST the camera still shows; the far eye may go behind the hair in a side view. Its result per
+// piece file is src/data/partsIndex.js `redEyeNear` (manifest.py, from review.mjs --record). A file measured before
+// that rule has only the both-eye score `redEye`, which is used instead (a stricter test). A file below the gate is
+// kept off the guests the game dresses itself (bots, a new player's first look), unless it is a classic Look's own
+// piece (today's guest unchanged). Every built piece passes today, the Wavy bob on Clara's and Eleanor's faces and the
+// chignon on Beatrice's included (their far eye goes behind the hair in profile; the near one shows in full).
+// Glasses are drawn by the game's code and never gated (the owner, 19 Oct 2026: the red eyes also show on the
+// portraits, the strip and the possessed tag); their scores are measured and reported (tests/avatar-check.mjs, 5).
 export const RED_EYE_GATE = 0.9;
+// A piece file's red-eye score (nearer eye; else both eyes; undefined: not measured, e.g. legs, feet and belts).
+export function redEyeScore(key) {
+  const near = INDEX?.redEyeNear?.[key];
+  return typeof near === 'number' ? near : INDEX?.redEye?.[key];
+}
 let lookKeysMemo = null;
 function lookPartKeys() {
   if (lookKeysMemo?.gen !== indexGen) lookKeysMemo = { gen: indexGen, keys: new Set(LOOK_ORDER.flatMap(id => partKeysFor(LOOKS[id]).parts)) };
   return lookKeysMemo.keys;
 }
 export function piecesShowEyes(av) {
-  const scores = INDEX?.redEye;
-  if (!isObj(scores)) return true;
-  return partKeysFor(av).parts.every(k => !(scores[k] < RED_EYE_GATE) || lookPartKeys().has(k));
+  return partKeysFor(av).parts.every(k => !(redEyeScore(k) < RED_EYE_GATE) || lookPartKeys().has(k));
 }
 
 // The legacy outfit id, for views still keyed by outfit (src/data/characters.js).

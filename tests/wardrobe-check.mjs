@@ -6,7 +6,9 @@
 //
 //   1. catalogue  every item: its id, slot, bodies, words, kind and colour rows; colours are hex; no eye colour is red,
 //                 pink, violet or amber (red eyes mean possessed), brown and hazel marked nearRed; frames only (no lens);
-//                 the ten new items with the contract's ids, kinds and achievements, all held back (artPending); the
+//                 the ten new items with their final ids, words (per body where they differ), kinds, achievements and
+//                 rarity: a 3D one pending until its file is in the parts index, then wearable with no other change
+//                 (the two drawn in code held back until their drawing passes review); the
 //                 achievement and Boutique sets never overlap, and the five achievements give exactly the five
 //                 achievement items; today's locked colours keep a lock; the classic pieces core and free, the new free
 //                 pieces free; the testing switch is ONE line and nothing else in src/ reads it; the parts index (and
@@ -24,8 +26,10 @@
 //                 "unlocked for testing"; bug A (an owned item worn is kept at load, also from another tab) and
 //                 bug B (it stays on at the table); turning the switch off changes nothing else
 //   7. bots       the same name gives the same look; 2000 tables: never two guests alike (nor like you), the eyes
-//                 always show, about one bot in three wears an unlockable item, both bodies and every Look's pieces
-//                 worn, never a pending piece; a new player's first look is free items only
+//                 always show (the red-eye gate on the eye NEAREST the camera, the owner's rule of 19 Oct 2026: the
+//                 Wavy bob on Clara's and Eleanor's faces and the chignon on Beatrice's are back), about one bot in
+//                 three wears an unlockable item, both bodies and every Look's pieces worn, never a pending piece; a new
+//                 player's first look is free items only
 //   8. game       paletteHex, displayAvatar (Clearer possessed eyes), lookAlike (as colour-blind players see it),
 //                 outfitOf, shippedPortraitFor, withItem / withBody / applyLook / lookOf / slotsFor (the wardrobe)
 import fs from 'node:fs';
@@ -52,6 +56,9 @@ const { ITEMS, LOOKS, item, itemId, normaliseAvatar } = W;
 const ids = slot => ITEMS.filter(i => i.slot === slot).map(i => i.id);
 const BASE_IDS = ['victor', 'marcus', 'henry', 'clara', 'eleanor', 'beatrice'];
 const EMPTY_INDEX = { v: 1, bodies: [], parts: {}, tris: {}, builtInGlasses: {} };
+// (the Monocle and Gold frames are drawn in code and held back until their drawing passes review: the checks follow
+// that one flag, so letting them in needs no change here)
+const MONOCLE_HELD = !!item('glasses', 'monocle')?.artPending;
 
 // ---------------------------------------------------------------------------------------------------------------------
 if (want('catalogue')) {
@@ -95,14 +102,31 @@ if (want('catalogue')) {
   ];
   const tenBad = TEN.filter(([gid, draw, unlock, ach, genders]) => {
     const it = W.itemById(gid);
-    return !it || it.draw !== draw || it.unlock !== unlock || it.achievement !== ach || !it.artPending || !it.isNew
+    return !it || it.draw !== draw || it.unlock !== unlock || it.achievement !== ach || !it.isNew
+      || it.rarity !== (unlock === 'achievement' ? 'rare' : 'showpiece') || (draw === 'part' && it.artPending)
       || !same([...new Set(it.bodies.map(W.genderOf))].sort(), [...genders].sort());
   });
-  check(!tenBad.length, `the ten new items: ids, bodies, drawing, kind and achievement as the contract says, all held back until their art (artPending)${tenBad.length ? ` (not: ${tenBad.map(t => t[0])})` : ''}`);
-  check(same(W.labelOf(item('extra', 'lantern'), 'm'), 'Lantern fob') && same(W.labelOf(item('extra', 'lantern'), 'f'), 'Lantern charm')
-    && W.attachOf(item('extra', 'lantern'), 'm') === 'waist' && W.attachOf(item('extra', 'lantern'), 'f') === 'neck'
-    && W.labelOf(item('hairStyle', 'lamplighter'), 'm') === 'The Poet' && W.labelOf(item('hairStyle', 'lamplighter'), 'f') === 'Braided crown',
-  'one id, per-body words: Lantern fob (waist) / Lantern charm (neck), The Poet / Braided crown');
+  check(!tenBad.length, `the ten new items: ids, bodies, drawing, kind, achievement and rarity (rare: earned; showpiece: Boutique); the 3D ones wait for the parts index (never held back by a flag)${tenBad.length ? ` (not: ${tenBad.map(t => t[0])})` : ''}`);
+  // their final words (BUILD-BRIEF A1-A5, B1-B5): one id, the name per body where it differs, a one-line description
+  const WORDS = {
+    'glasses.monocle': ['Monocle'], 'extra.lantern': ['Lantern fob', 'Lantern charm'], 'hairStyle.lamplighter': ['The Poet', 'Braided crown'],
+    'extra.eveningGloves': ['Evening gloves'], 'extra.blackOrchid': ['Black orchid'], 'top.smoking': ['Smoking jacket'],
+    'dress.decoBeaded': ['Deco beaded gown'], 'facial.dali': ['Dalí moustache'], 'hairStyle.marcel': ['Marcel waves'], 'glasses.gilt': ['Gold frames'],
+  };
+  const wordsBad = Object.entries(WORDS).filter(([gid, [m, f = m]]) => {
+    const it = W.itemById(gid), g = new Set(it.bodies.map(W.genderOf));
+    const lines = [...g].map(x => W.descOf(it, x));
+    return (g.has('m') && W.labelOf(it, 'm') !== m) || (g.has('f') && W.labelOf(it, 'f') !== f)
+      || !lines.every(d => d.length >= 20 && d.length <= 90 && /^[A-Z]/.test(d) && /\.$/.test(d) && !/\n/.test(d));
+  });
+  check(!wordsBad.length, `their final names (per body where they differ: Lantern fob / charm, The Poet / Braided crown) and a one-line description for each body${wordsBad.length ? ` (not: ${wordsBad.map(w => w[0])})` : ''}`);
+  // nothing in their words names a role, a side or what earned them (cosmetics never reveal a role)
+  const tells = /\b(possess\w*|clean|innocent|guilty|lies?|liar|traitor|demon|souls?|red eyes?|villain|wins?|won|winner)\b/i;
+  check(Object.keys(WORDS).every(gid => { const it = W.itemById(gid); return ['m', 'f'].every(x => !tells.test(W.labelOf(it, x)) && !tells.test(W.descOf(it, x))); }),
+    'no word of theirs names a role, a side or a win (a cosmetic never tells what its wearer is or did)');
+  check(W.attachOf(item('extra', 'lantern'), 'm') === 'waist' && W.attachOf(item('extra', 'lantern'), 'f') === 'neck' && W.attachOf(item('extra', 'eveningGloves'), 'f') === 'hands'
+    && W.attachOf(item('extra', 'blackOrchid'), 'm') === 'chest', 'where the new extras sit: the fob at the waist, the charm at the neck, gloves on the hands, the orchid on the chest');
+  check(['glasses.monocle', 'glasses.gilt'].every(g => W.itemById(g).frameHex && !W.itemById(g).colours.includes('frame')), 'the Monocle and Gold frames are gilt (a fixed gold, no Frame colour row)');
   const ach = ITEMS.filter(it => it.unlock === 'achievement'), shop = ITEMS.filter(it => it.unlock === 'boutique');
   check(!ach.some(it => shop.includes(it)) && shop.every(it => !('achievement' in it)), 'the achievement and Boutique sets never overlap (an earned item is never sold)');
   check(ACHIEVEMENTS.length === 5 && same(ACHIEVEMENTS.map(a => a.item).sort(), ach.filter(it => it.achievement).map(itemId).sort())
@@ -197,7 +221,7 @@ if (want('v1')) {
     "today's v1 values are all in the catalogue under the same ids (8 skins, 8 hairs, 6 eyes, 4 frames, 10 outfits, 6 accents, 3 metals)");
   const expected = (v1) => {
     const L = LOOKS[v1.base];
-    const glasses = v1.glasses === 'monocle' ? L.glasses : v1.glasses;     // (the Monocle is held back until its new art)
+    const glasses = v1.glasses === 'monocle' && MONOCLE_HELD ? L.glasses : v1.glasses;     // (while the Monocle is held back)
     return { ...L, glasses, extras: [...L.extras], colours: { skin: v1.skin, hair: v1.hair, eyes: v1.eyes, main: v1.main, accent: v1.accent, metal: v1.metal, frame: v1.frame, lips: 'natural' } };
   };
   let n = 0, wrong = 0, unstable = 0, firstWrong = null;
@@ -235,7 +259,7 @@ if (want('v1')) {
   check(migrated.size === keys.size, `lossless: ${keys.size} different v1 avatars give ${migrated.size} different v2 avatars (an accent or metal a look does not draw is kept too)`);
   // damaged v1 data: back to the look's own, as v1 did
   const dmg = normaliseAvatar({ v: 1, base: 'marcus', skin: 'green', hair: 42, eyes: 'red', glasses: 'monocle', frame: null, main: { x: 1 }, accent: 'navy', metal: 'tin' });
-  check(dmg.face === 'marcus' && dmg.colours.skin === 'tan' && dmg.colours.hair === 'black' && dmg.colours.eyes === 'classic' && dmg.glasses === 'none' && dmg.colours.frame === 'tortoise'
+  check(dmg.face === 'marcus' && dmg.colours.skin === 'tan' && dmg.colours.hair === 'black' && dmg.colours.eyes === 'classic' && dmg.glasses === (MONOCLE_HELD ? 'none' : 'monocle') && dmg.colours.frame === 'tortoise'
     && dmg.colours.main === 'midnight' && dmg.colours.accent === 'navy' && dmg.colours.metal === 'gold', 'damaged v1 values go back to the look\'s own (never another look\'s), good ones stay');
   let crash = 0;
   for (const base of ['constructor', '__proto__', 'toString', 'hasOwnProperty', 'valueOf', 7, null]) { try { if (normaliseAvatar({ v: 1, base }).face !== 'victor') crash++; } catch { crash++; } }
@@ -264,7 +288,7 @@ if (want('safe')) {
   const m = normaliseAvatar({ v: 2, body: 'm', face: 'clara', hairStyle: 'waves', facial: 'pencil', top: 'smoking', neck: 'tie', dress: 'column', makeup: 'none', glasses: 'monocle', extras: ['goldDrop'], colours: { main: 'plum' } });
   check(m.face === 'victor' && m.hairStyle === 'swept' && m.neck === 'tie' && m.colours.main === 'plum' && !('dress' in m) && !('makeup' in m) && m.extras.length === 0,
     "on a man: a woman's face, hair and earrings go back to the man's defaults (Victor's), the dress and make-up fields go, good values stay");
-  check(m.facial === 'handlebar' && m.top === 'tux' && m.glasses === 'none', 'pieces not built yet (Pencil before the pipeline) and held back ones (the smoking jacket, the Monocle) go back to the default');
+  check(m.facial === 'handlebar' && m.top === 'tux' && m.glasses === (MONOCLE_HELD ? 'none' : 'monocle'), 'pieces not built yet (Pencil before the pipeline) and held back ones (the smoking jacket, the Monocle) go back to the default');
   const f = normaliseAvatar({ v: 2, body: 'f', face: 'beatrice', hairStyle: 'lamplighter', dress: 'aline', belt: 'nope', extras: ['pearlStud', 'goldBall', 'goldBall', 'lantern'], colours: { lips: 'red', eyes: 'blue', hair: 'copper' } });
   check(f.face === 'beatrice' && f.dress === 'aline' && f.hairStyle === 'waves' && f.belt === 'sash' && same(f.extras, ['pearlStud']) && f.colours.lips === 'natural' && f.colours.eyes === 'blue',
     "a woman: the defaults are Clara's pieces; one pair of earrings only (the later one goes, a duplicate too), a held-back extra goes; lips 'natural'");
@@ -294,7 +318,7 @@ if (want('index')) {
   const pend = (slot, id, body) => W.isPending(item(slot, id), body);
   check(!pend('face', 'marcus', 'm') && !pend('dress', 'ballgown', 'f') && pend('hairStyle', 'sidePart', 'm') && pend('top', 'waistcoat', 'm') && pend('facial', 'pencil', 'm'),
     'nothing built yet: the classic pieces stand in (core), the new pieces wait for the pipeline');
-  check(ITEMS.filter(it => it.artPending).every(it => it.bodies.every(b => W.isPending(it, b))) && !W.itemsFor('glasses', 'm').some(it => it.id === 'monocle'), 'held-back items are pending on every body and never offered');
+  check(ITEMS.filter(it => it.artPending).every(it => it.bodies.every(b => W.isPending(it, b) && !W.itemsFor(it.slot, b).includes(it))), 'held-back items are pending on every body and never offered');
   check(same(W.availableBodies(), ['m', 'f']), "no body built: 'm' and 'f' (a gender is never left without one)");
   W.usePartIndex({ v: 1, bodies: ['m'], parts: { m: ['body', 'face_victor', 'face_marcus', 'face_henry', 'hairStyle_swept', 'hairStyle_sidePart~face_victor'] }, tris: {}, builtInGlasses: {} });
   check(!pend('hairStyle', 'sidePart', 'm') && pend('hairStyle', 'curlyCrop', 'm') && pend('top', 'tux', 'm'), 'men built: a piece is offered when its file (or a variant of it) is built; a classic piece not built yet is pending on that body');
@@ -316,6 +340,28 @@ if (want('index')) {
   W.usePartIndex({ v: 1, bodies: ['m', 'f'], parts: { m: [], f: ['body', 'face_eleanor', 'dress_ballgown'] }, tris: {}, builtInGlasses: {} });
   check(normaliseAvatar({ ...LOOKS.eleanor, body: 'f_ballgown' }).body === 'f' && normaliseAvatar({ ...LOOKS.eleanor, body: 'f_mermaid' }).body === 'f' && normaliseAvatar({ ...LOOKS.eleanor, body: 'q' }).body === 'm',
     "the shared body built: a saved gown body maps to 'f' (same gender), an unknown body name of the grammar too; anything else is 'm'");
+  // the ten new items: a 3D one is pending until the pipeline puts its file in the index, then wearable with no change
+  W.usePartIndex();
+  const NEW3D = [['top', 'smoking'], ['dress', 'decoBeaded'], ['facial', 'dali'], ['hairStyle', 'marcel'], ['hairStyle', 'lamplighter'], ['extra', 'lantern'], ['extra', 'eveningGloves'], ['extra', 'blackOrchid']];
+  const built = (slot, id, b) => (PART_INDEX.parts?.[b] || []).some(k => k === `${slot}_${id}` || k.startsWith(`${slot}_${id}~`));
+  const waiting = NEW3D.flatMap(([slot, id]) => item(slot, id).bodies.filter(b => PART_INDEX.bodies.includes(b) && !built(slot, id, b)).map(b => [slot, id, b]));
+  check(waiting.every(([slot, id, b]) => W.isPending(item(slot, id), b) && !W.itemsFor(slot, b).includes(item(slot, id)) && !W.canWear(item(slot, id), b)),
+    `the new 3D items not built yet are pending: never offered, never worn (${waiting.length ? waiting.map(([s, i, b]) => `${b}/${s}_${i}`).join(', ') : 'none: all built'})`);
+  W.usePartIndex({ ...PART_INDEX, parts: { m: [...(PART_INDEX.parts.m || []), 'top_smoking', 'facial_dali', 'hairStyle_lamplighter', 'extra_lantern', 'extra_eveningGloves', 'extra_blackOrchid~top_tux', 'extra_blackOrchid~top_lounge'],
+    f: [...(PART_INDEX.parts.f || []), 'dress_decoBeaded', 'hairStyle_marcel', 'hairStyle_lamplighter', 'extra_lantern', 'extra_eveningGloves', 'extra_blackOrchid'] } });
+  const landed = NEW3D.flatMap(([slot, id]) => item(slot, id).bodies.filter(b => ['m', 'f'].includes(b)).map(b => [slot, id, b]));
+  check(landed.every(([slot, id, b]) => !W.isPending(item(slot, id), b) && W.itemsFor(slot, b).includes(item(slot, id)) && W.canWear(item(slot, id), b)),
+    `...and once their files are in the index, all ${landed.length} (item, body) pairs are offered and wearable (unlocked for testing) with no other change`);
+  const tr = { trusted: true };
+  const dressed = W.withItem(W.withItem(W.withItem(LOOKS.victor, 'top', 'smoking', tr), 'facial', 'dali', tr), 'extra', 'lantern', tr);
+  const gowned = W.withItem(W.withItem(LOOKS.clara, 'dress', 'decoBeaded', tr), 'hairStyle', 'marcel', tr);
+  check(dressed.top === 'smoking' && dressed.facial === 'dali' && same(dressed.extras, ['lantern']) && gowned.dress === 'decoBeaded' && gowned.hairStyle === 'marcel'
+    && W.partKeysFor(dressed).parts.includes('m/top_smoking') && W.partKeysFor(gowned).parts.includes('f/dress_decoBeaded'), 'they are worn and drawn from their own files (Smoking jacket, Dalí moustache, Lantern fob; Deco beaded gown, Marcel waves)');
+  check(['monocle', 'gilt'].every(id => W.itemsFor('glasses', 'm').includes(item('glasses', id)) === !item('glasses', id).artPending),
+    `...the two drawn in code (Monocle, Gold frames) are offered exactly when their one flag is lifted (held back now: ${['monocle', 'gilt'].filter(id => item('glasses', id).artPending).join(', ') || 'none'})`);
+  const rolled = Array.from({ length: 1500 }, (_, k) => randomAvatar(`newitems${k}`));
+  const rolledNew = rolled.filter(a => NEW3D.some(([slot, id]) => (slot === 'extra' ? a.extras.includes(id) : a[slot] === id))).length;
+  check(rolledNew > 0 && rolled.every(a => W.eyesShow(a)), `bots roll them too, at the unlockable rate (${rolledNew} of 1500 bots wear one), their eyes always showing`);
   W.usePartIndex();
 }
 
@@ -337,7 +383,7 @@ if (want('switch')) {
   if (!otherRoot) {
     const it = item('hair', 'platinum');
     check(W.canWear(it, 'm') && W.unlockedForTesting(it) && !W.ownsFrom([])('hair.platinum'), 'switch on (today): an unlockable item is wearable without owning it, marked "unlocked for testing"; owning it is still real ownership');
-    check(!W.canWear(item('glasses', 'monocle'), 'm') && !W.canWear(item('face', 'clara'), 'm'), '...but never a held-back item or one meant for another body');
+    check(!W.canWear(item('neck', 'none'), 'm') && !W.canWear(item('face', 'clara'), 'm'), '...but never a held-back item (the open collar) or one meant for another body');
   }
   const off = await srcWith({ root: otherRoot || repo, unlockAll: false });
   try {
@@ -383,10 +429,12 @@ if (want('bots')) {
   W.usePartIndex();
   const names = ['nightowl', 'fennel', 'velvet_owl', 'brass_lark', 'Mabel', 'cardboardknight', 'grumpy_otter', 'pocketfox', 'echo_echo', 'bramble', 'hollow_reed', 'plum'];
   check(names.every(nm => same(randomAvatar(nm), randomAvatar(nm))), 'the same name always gives the same look');
-  let alike = 0, mine = 0, hidden = 0, unsafe = 0, pending = 0, worn = 0, n = 0, women = 0, lowEye = 0;
-  const RE = PART_INDEX.redEye || {};
+  let alike = 0, mine = 0, hidden = 0, unsafe = 0, pending = 0, worn = 0, n = 0, women = 0, lowEye = 0, backAgain = 0;
   const lookKeys = new Set(BASE_IDS.flatMap(id => W.partKeysFor(LOOKS[id]).parts));
-  const belowGate = a => W.partKeysFor(a).parts.some(k => RE[k] < W.RED_EYE_GATE && !lookKeys.has(k));
+  const belowGate = a => W.partKeysFor(a).parts.some(k => W.redEyeScore(k) < W.RED_EYE_GATE && !lookKeys.has(k));
+  // (the pieces the both-eye test kept off bots before the owner's nearer-eye rule: the Wavy bob on Clara's and on
+  // Eleanor's face, the chignon on Beatrice's)
+  const RETURNED = ['f/hairStyle_wavyBob', 'f/hairStyle_wavyBob~face_eleanor', 'f/hairStyle_chignon~face_beatrice'];
   const faces = new Set(), mixes = [0, 0];
   const pool = Array.from({ length: 84 }, (_, i) => `guest${i}_${(i * 7919) % 97}`);
   for (let t = 0; t < 2000; t++) {
@@ -400,6 +448,7 @@ if (want('bots')) {
       if (W.lookAlike(a, me)) mine++;
       if (!W.eyesShow(a)) hidden++;
       if (belowGate(a)) lowEye++;
+      if (W.partKeysFor(a).parts.some(k => RETURNED.includes(k))) backAgain++;
       if (!same(normaliseAvatar(a, { trusted: true }), a)) unsafe++;
       if ([...W.SLOTS_BY_GENDER[W.genderOf(a.body)].map(s => item(s, a[s])), ...a.extras.map(x => item('extra', x))].some(it => W.isPending(it, a.body))) pending++;
       worn += unlockablesWorn(a);
@@ -411,18 +460,32 @@ if (want('bots')) {
   check(alike === 0, `2000 tables: never two guests alike (same body, hairstyle and jacket or dress, a main colour a colour-blind player could confuse) (${alike})`);
   check(mine === 0, `never a bot like you (${mine})`);
   check(hidden === 0 && pending === 0, `the eyes always show: no red-like eye colour, no lens, never a pending piece (${hidden} / ${pending})`);
-  // the red-eye test's results (partsIndex.js redEye, written by manifest.py): a piece file below the gate is never on
-  // a bot, unless it is a classic Look's own (today's guest unchanged: Beatrice's own bob)
-  const low = Object.keys(RE).filter(k => RE[k] < W.RED_EYE_GATE).sort();
+  // the red-eye test's results (partsIndex.js, written by manifest.py from review.mjs --record): scored on the eye
+  // NEAREST the camera (redEyeNear, the owner's rule of 19 Oct 2026; a piece measured before it: the both-eye redEye).
+  // A piece file below the gate is never on a bot, unless it is a classic Look's own (today's guest unchanged).
+  const RE = PART_INDEX.redEye || {}, NEAR = PART_INDEX.redEyeNear || {};
+  const scored = Object.keys(RE), low = scored.filter(k => W.redEyeScore(k) < W.RED_EYE_GATE).sort();
   const tr = { trusted: true };
   const bobOn = look => W.withItem(LOOKS[look], 'hairStyle', 'wavyBob', tr);
   check(lowEye === 0 && BASE_IDS.every(id => W.eyesShow(LOOKS[id])),
-    `no bot wears a piece below the red-eye gate ${W.RED_EYE_GATE} (${lowEye}); every classic Look passes (below: ${low.join(', ') || 'none'})`);
-  if (RE['f/hairStyle_wavyBob'] < W.RED_EYE_GATE) {
-    check(!W.eyesShow(bobOn('clara')) && W.eyesShow(LOOKS.beatrice) && W.partKeysFor(LOOKS.beatrice).parts.includes('f/hairStyle_wavyBob~face_beatrice'),
-      "the Wavy bob on Clara's face is kept off (below the gate), Beatrice's own bob is not (a classic Look's own piece)");
-  }
-  W.usePartIndex({ ...PART_INDEX, redEye: {} });
+    `no bot wears a piece below the red-eye gate ${W.RED_EYE_GATE} on the nearer eye (${lowEye}); every classic Look passes (below: ${low.join(', ') || 'none'})`);
+  // every built piece the test applies to (contract 9.3: all but legs, feet, belts and the body) carries a result:
+  // the gate lets an unmeasured piece through, so a piece shipped without its review.mjs --record run shows here
+  const tested = Object.entries(PART_INDEX.parts || {}).flatMap(([b, keys]) => keys.map(k => `${b}/${k}`)).filter(k => !/\/(legs|feet|belt)_/.test(k) && !/\/body$/.test(k));
+  const unmeasured = tested.filter(k => W.redEyeScore(k) === undefined);
+  check(!unmeasured.length, `every built piece the red-eye test applies to has its result recorded (${tested.length - unmeasured.length} of ${tested.length})${unmeasured.length ? ` (not yet: ${unmeasured.join(', ')})` : ''}`);
+  const unscored = scored.filter(k => typeof NEAR[k] !== 'number');
+  check(Object.keys(NEAR).length > 0 && unscored.every(k => RE[k] >= W.RED_EYE_GATE),
+    `the nearer-eye score is recorded for ${Object.keys(NEAR).length} of ${scored.length} measured piece files; any without it pass on the stricter both-eye score${unscored.length ? ` (${unscored.join(', ')})` : ''}`);
+  check(RETURNED.every(k => NEAR[k] >= W.RED_EYE_GATE) && W.eyesShow(bobOn('clara')) && W.eyesShow(bobOn('eleanor')) && W.eyesShow(W.withItem(LOOKS.beatrice, 'hairStyle', 'chignon', tr)),
+    `the nearer-eye rule lets the Wavy bob on Clara's and Eleanor's faces and the chignon on Beatrice's back (nearer eye ${RETURNED.map(k => NEAR[k]).join(' / ')}; both eyes ${RETURNED.map(k => RE[k]).join(' / ')}, reported)`);
+  check(backAgain > 0, `...and bots wear them again (${backAgain} of ${n} bots over 2000 tables)`);
+  W.usePartIndex({ ...PART_INDEX, redEyeNear: { ...NEAR, 'f/hairStyle_wavyBob': 0.5 } });
+  check(!W.eyesShow(bobOn('clara')) && W.eyesShow(LOOKS.beatrice), '(the control: a piece whose NEARER eye is hidden is kept off; a classic Look\'s own piece never is)');
+  const noNear = { ...NEAR }; delete noNear['f/hairStyle_wavyBob'];
+  W.usePartIndex({ ...PART_INDEX, redEyeNear: noNear });
+  check(!W.eyesShow(bobOn('clara')) === (RE['f/hairStyle_wavyBob'] < W.RED_EYE_GATE), '(a piece measured before the nearer-eye rule falls back to its both-eye score)');
+  W.usePartIndex({ ...PART_INDEX, redEye: {}, redEyeNear: {} });
   check(W.eyesShow(bobOn('clara')), '...and with no red-eye results recorded, nothing is kept off by them');
   W.usePartIndex();
   check(unsafe === 0, "every bot's avatar is already safe (seated trusted, nothing to repair)");
@@ -483,7 +546,8 @@ if (want('game')) {
   const toggled = W.withItem(W.withItem(LOOKS.clara, 'extra', 'goldBall'), 'extra', 'goldBall');
   check(same(W.withItem(LOOKS.clara, 'extra', 'goldBall').extras, ['goldBall']) && same(toggled.extras, []), 'an extra toggles, replacing the one at its attach point');
   check(W.lookOf(W.withItem(v, 'hairStyle', 'quiff')) === null && W.lookOf(W.withItem(v, 'glasses', 'round')) === 'victor', 'lookOf: a mix of pieces is no classic Look; glasses and colours do not count');
-  check(W.itemsFor('glasses', 'm').map(it => it.id).join() === 'none,round,oval,deco,pincenez' && W.itemsFor('hair', 'f').length === 8, 'itemsFor: what is offered on a body, in order (no held-back item)');
+  const offeredGlasses = ['none', 'round', 'oval', 'deco', 'pincenez', 'monocle', 'gilt'].filter(id => !item('glasses', id).artPending).join();
+  check(W.itemsFor('glasses', 'm').map(it => it.id).join() === offeredGlasses && W.itemsFor('hair', 'f').length === 8, `itemsFor: what is offered on a body, in order, no held-back item (${offeredGlasses})`);
   W.usePartIndex();
 }
 

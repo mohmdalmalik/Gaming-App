@@ -2788,3 +2788,161 @@ The owner approved five changes on 15 Oct 2026, after a plain-language before/af
   wardrobe screen can show other pieces; every bot's pieces download together when the table is planned
   (`preloadAvatars`); in the lobby a new look is built before the old one is disposed, so the guests' shared shader is
   not thrown away and built again on every tap (a stall of about a second); the Settings note names its setting.
+
+## Wardrobe W1-B, data: the nearer-eye rule, the ten items, saved Looks, letting go of parsed pieces, the stock pictures (19 Oct 2026 — data, tools, tests and docs; no rule or rule number changed)
+- **Red eyes, the owner's decisions of 19 Oct 2026.** Hair (and every other piece): "Allow if the nearer eye shows". The
+  red-eye test now also scores each eye in its own ID colour and keeps, per view, only the eye nearest the camera (both
+  when they are about as near, face-on): `review.mjs --record` writes `redEyeNearMin`, `manifest.py` copies it into
+  `partsIndex.js` as `redEyeNear` (an addition next to `redEye`, which stays and is reported), and `eyesShow` gates on it
+  (`redEyeScore`: the nearer-eye score, else the both-eye one for a piece measured before the rule). Every built piece
+  scores 1.0 on the nearer eye, so the Wavy bob on Clara's and Eleanor's faces and the chignon on Beatrice's are worn by
+  bots again (their both-eye scores, 0.746 / 0.802 / 0.888, stay in the index). Eyewear: **no gate**; today's frames
+  stay as they are and every style the game draws (the held-back Monocle and Gold frames too) is measured and reported,
+  both eyes and the nearer eye, in `tests/avatar-check.mjs` section 5.
+- **The ten new items** (A1-A5 earned, B1-B5 Boutique) have their final names, one-line descriptions per body, kinds,
+  achievements and rarity in `src/data/wardrobe.js`. The eight 3D ones are no longer `artPending`: each is pending only
+  until the pipeline puts its file in the parts index for that body, then offered, wearable (the testing switch is
+  still on) and worn by bots with no other change. The Monocle and Gold frames are drawn by the game's code, have no
+  file, and stay `artPending` until their drawing passes review (one flag each to delete). Both are gilt: a fixed gold,
+  no Frame colour row (so the Monocle never needs the Boutique gold frame colour).
+- **Saved Looks** (`src/account/looks.js`, `account.js`): `looks` in the profile is three slots of `{ name, avatar,
+  savedAt }` (still version 2: the W1-A slots were never filled; a bare avatar there is read as a Look named after its
+  slot). Save (over a Look: its name kept, the one before handed back for Undo), rename (1-24 characters of letters,
+  numbers and simple punctuation; shown only to its owner, so no word filter), delete, restore (Undo), wear (saved as
+  the avatar, or only tried on: `{ save: false }`). The six classic Looks are read-only presets. A saved Look keeps what
+  it was saved with, owned or not; it is checked when WORN: an item not owned is listed as missing and the body's default
+  worn instead, so nothing unowned reaches the avatar or a match.
+- **Parsed pieces let go** (`src/render/avatarParts.js`, perf-1): a parsed piece is kept while a cached assembly uses it,
+  then kept among the 24 most recently used unused ones (`PART_KEEP`), then let go (fetched again if worn again); the six
+  Looks' pieces are never let go. 100 look swaps (new bots' looks) through the game's code: with the 68 files of W1-A,
+  59 pieces held instead of 64 (JS heap 39.9 MB instead of 40.8 MB); with the men's W1-B pieces in (86 files), 59
+  instead of 75 (39.6 MB instead of 42.3 MB, 25 let go and fetched again when needed, no errors). What matters is the
+  bound (the 34 pinned + those in use + 24), however large the catalogue grows.
+- **The stock pictures** (`assets/portraits/<look>{,-possessed}.jpg`, shown until a runtime portrait is drawn, and the
+  soul cards' fallback) are now drawn by the game's own portrait code from the current pieces
+  (`tools/char-pipeline/stock-portraits.mjs --write`), so they match the runtime portraits exactly (0.0 of 255). All six
+  pairs changed: Henry most (his shared build, and the bow tie now lowered on his face), Marcus and Eleanor (build,
+  neckline), and Victor too: his old picture had black satin lapels, which the game has never drawn (his lapels are
+  his jacket colour, darker). Run the tool again after any change to a classic Look's pieces.
+
+## Wardrobe W1-B, the men's new pieces: the Poet, the Dalí moustache, the smoking jacket, the orchid, the lantern fob, evening gloves, the Monocle and Gold frames, Henry's bow tie (19 Oct 2026 — art, tools and the glasses' drawing; no rule or rule number changed)
+- **Built through the parts pipeline** (`tools/char-pipeline/parts/male/spec.py`; README "Parts pipeline"), at today's
+  triangle and byte caps, every file with its poke-through and red-eye results recorded: the Poet (x 3 faces, 7,799
+  triangles), Dalí (x 3 faces, 972), the smoking jacket (8,980), the black orchid (one per top, 596), the lantern fob
+  (one per top, 578; 332 on the waistcoat, whose own chain carries it), evening gloves (1,468). Everything mixes:
+  every hair and moustache on every face, every tie and bow tie on every top (the smoking jacket keeps the shared collar
+  zone), every extra on every top, all three extras at once. The heaviest everyday man is still 32,938 triangles (target
+  33,000); with all three extras and glasses a few reach 38,272, so the game's cap drops an extra, as designed.
+- **Red eyes.** Every new piece shows the nearer eye fully (1.0). Only the Poet hides the far eye in profile (both eyes
+  0.65-0.77): allowed under the owner's nearer-eye rule. The Monocle and Gold frames (drawn by
+  `src/render/avatarGlasses.js`: flat gilt-band rims; the Monocle with a beaded edge, an eyelet and a fine beaded chain to
+  behind the ear; Gold frames with a keyhole bridge and riding-bow temples) keep 0.81-0.95 of both eyes, more than
+  today's frames (0.67-0.79); measured and reported only, as the owner decided. They stay held back
+  (`CODE_DRAWN_PENDING` in `src/data/wardrobe.js`) until the lead lets them in.
+- **Henry's bow tie** (W1-A review ART-5): on his face both bows sit 1.2 cm lower and 6 mm forward
+  (`neck_bow~face_henry`, `neck_bowFull~face_henry`): his head sits ~5 cm further forward on the shared neck, and from
+  the game camera his chin hid the top of the bow. Every other face keeps today's bows.
+
+## Wardrobe W1-B, the women's new pieces: the Braided crown, Marcel waves, the Deco beaded gown, the lantern charm, the orchid corsage, evening gloves (19 Oct 2026 — art and tools; no rule or rule number changed)
+- **Built through the parts pipeline** on the shared women's body (`tools/char-pipeline/parts/female/w1b.py`; README
+  "Parts pipeline"), every file with its poke-through and red-eye results recorded: Braided crown (x 3 faces, 11,900
+  triangles), Marcel waves (x 3 faces, 11,600), the Deco beaded gown (8,188) with a fit of both belts, the lantern charm
+  and the orchid corsage (one fit per gown: 836 / 1,428), evening gloves (1,492). Everything mixes: every hairstyle on
+  every face, every extra on every gown, all three at once. The heaviest everyday woman is now 33,555 triangles (was
+  32,787: the gown's beads and fringe); with every extra and glasses some reach 40,359, and the game's 38,000 cap drops
+  extras as designed (2,160 combinations checked: none stays over).
+- **Red eyes.** Every new piece keeps the nearer eye fully (1.0). Marcel waves hides part of the far eye in profile on
+  Eleanor's and Beatrice's faces (both eyes 0.83 / 0.76, like today's wavy bob): allowed by the owner's nearer-eye rule.
+- **Two choices.** The classic hairstyles cast no shadow on the new gown (one more patch would put the waves and the
+  wavy bob over their byte cap; the cost is slightly lighter shoulders under long hair on that gown only). The gloves
+  are checked beyond the contract's poke test, which only follows points hidden at rest: every arm and hand skin point
+  in the glove's zone must lie inside it at rest and at the walk poses (11 of 1,778 touch the finger and thumb ends).
+
+## Wardrobe W1-B, the screen: the Wardrobe and the Hotel Honours page (19 Oct 2026 — interface, the lobby camera, tile pictures, three sounds, tests and docs; no rule or rule number changed)
+Built as the design mock-ups (`scratchpad shop-design/final/mock-*`, `screen/spec.md`), with the owner's changes: no
+token purse, no prices, no Concierge; the locked kinds are only Achievement and Boutique.
+- **One screen family, data-led.** `src/ui/avatarEditor.js` is gone; `src/ui/wardrobe/wardrobe.js` is the screen,
+  `areas.js` its areas, tabs (at most four), sections, colour rows and sounds as data, `surprise.js` the dice (pure),
+  `icons.js` the line icons (one SVG sprite). The page's markup is a sibling of the menu's panel in `index.html`
+  (`#menu-avatar`), the look is its own stylesheet, `wardrobe.css` (three sizes by media query: 1024-wide or
+  720-tall and less; the default; 1300 x 950 and more). The menu's 'avatar' screen and the profile card are unchanged
+  in how they work; the card now says "Wardrobe ›".
+- **Try-on and keeping.** The stage may wear anything the catalogue offers (`normaliseAvatar` with every item "owned")
+  so a locked item can be seen before it is had; Save look keeps only what `canWear` allows (real ownership, or the
+  testing switch). With `UNLOCK_ALL_FOR_TESTING` on, everything is wearable and kept, and each Achievement or
+  Boutique tile still shows its kind plus "unlocked for testing". With it off, an item not yours shows "Trying on" (the
+  tile and the stage) and Save look asks "Take it off and save" / "Keep looking": nothing unowned reaches the profile.
+  Cancel puts back the look you came in with (it asks when more than one thing changed). Change name keeps the look
+  being chosen for when the screen comes back.
+- **The camera follows the area** (`src/menu/lobbyLayout.js` `wardrobeCamera.close` / `.half`, eased in 0.6 s by
+  `lobbyScene.setWardrobe(on, { shot })`): close (head and shoulders) for Face, Hair, Moustache, Make-up, Eyewear;
+  half (to the knees) for Extras; full length otherwise. The close and half shots aim from the guest's own eye height,
+  so a woman is framed like a man. A double tap on the stage swaps close and full. **Drag to turn** adds a yaw on top
+  of the avatar's heading (`lobbyScene.turnWardrobe`), up to half a turn either way; three seconds after letting go it
+  glides back. A still lobby (the 'Still' background, Reduce Motion) steps with no time, so the camera cuts.
+- **Tile pictures are made offline by the game's own code** (`tools/char-pipeline/parts/thumbs.mjs` + `thumbs.html`):
+  one 240 x 200 WebP per piece and body (3-6 kB; 62 pictures, 0.27 MB), in neutral colours (midnight cloth, mid-brown
+  hair, an ivory display head), three-quarters, the portraits' lights and the lobby's rim. Hair, moustaches, glasses
+  and earrings sit on a display head (the face piece alone, its features and the body's skin left out, on a plain
+  neck column the tool draws); faces keep their own Look's hair; clothes and the other extras are shown on an
+  invisible body ("ghost mannequin": the skin, head and hair left out by material, from the assembly's ranges).
+  `src/data/thumbsIndex.js` (GENERATED) lists the pictures on disk with a hash of each (the page asks `?v=<hash>`), so a
+  piece with no picture yet shows a brass placeholder and never a 404; `tests/browser-wardrobe.mjs` fails, naming
+  them, until the tool is run again.
+- **Looks** use `account.saveLook / renameLook / wearLook / deleteLook` (the data builder's `src/account/looks.js`):
+  the six classic guests as tiles (one tap wears one), three of your own as cards (save, name, wear, save over, delete:
+  each destructive step asks first). A saved look with an item no longer yours wears your own in its place and says so.
+- **Hotel Honours** (`src/ui/honours.js`, `#honours-overlay`, z-index 64: above the menu and the end screen): the five
+  achievements, the piece each earns (its picture), progress ("2 of 3") or "Earned 19 Oct", All / In progress /
+  Earned, and how they work in plain words. From the wardrobe's pill and a card's "See achievement" (opened at that
+  achievement; "Try it on" closes onto the stage) and from the end screen's achievement line (`#end-honours` is now a
+  button; there it shows progress only). It never changes progress: achievements are still checked on the end screen
+  only (`src/main.js`).
+- **Sounds.** Three new effects synthesised like the rest (`tools/audio/sfx.py`: `snip` scissors for hair and
+  moustaches, `rustle` cloth for clothes, `clink` glass and wire for glasses and jewellery; 2.5-6 kB each); a colour
+  ticks, a try-on of an item not yours plays the mirror's chime, Save look the lift bell, a Look the trade's swish.
+  The tiles say their own cue (`data-sfx`), so the click is not added on top; `tests/audio-buttons-check.mjs` checks the
+  map (`WARDROBE_CUES`).
+- **Accessibility.** Every target is at least 44 px (checked at the four sizes), the smallest words 11 px; the rail
+  and the tabs move with the arrow keys, a re-drawn part keeps the keyboard's place, the details card and the Honours
+  page keep the focus while open (`src/ui/focus.js`; Escape closes), the stage is focusable and the arrow keys turn the
+  guest. Reduce Motion: no slides, no sweep, the camera cuts.
+- **NEW tags** (items marked `isNew`) clear once their area or tab is left (remembered on the device:
+  `hotelEscape.wardrobeSeen.v1`), and a dot on a fob says where new ones wait. The "Drag to turn" hint goes after the
+  first turn (`hotelEscape.wardrobeTurned.v1`).
+
+## Wardrobe W1-B: fixes after the review (19 Oct 2026 — art, rendering, interface, tools, tests and docs; no rule or rule number changed)
+- **Evening gloves: no skin through them.** The hands poked through the glove shells at rest (dots along the outlines
+  and seams, worst with deep skin tones), which the poke test cannot see (it follows only points that move out while
+  walking). A piece may now say which of the body's skin it covers (`hidesSkin` in its scene extras: a bone name, or
+  `{ bone, below }` for that bone's skin under a height in the bind pose), and `src/render/avatarParts.js` leaves those
+  Skin triangles (all three corners at least half on the bones) out of the merged guest: only the body's index changes,
+  so nothing else moves and a guest without such a piece is drawn exactly as before. The men's gloves hide the hands;
+  the opera gloves the hands, the forearms and the upper arm under their top. The specs carry it (a rebuild keeps it);
+  the shipped files were given it with `record.py` (geometry hash unchanged). A two-skin-tone test (the same guest in
+  porcelain and deep skin: any glove pixel that changes fails) went from 20,396 pixels to 0 on the men and to the top
+  edge's own antialiasing on the women.
+- **The Black orchid reads as an orchid, and as black.** Reshaped on both bodies (`male/spec.py` `orchid_parts`, copied
+  into `female/w1b.py`): three narrow pointed sepals, two broad round petals, a broad frilled lip with a pale lavender
+  throat and a small pale column; no stem. Its colour is a near-black plum painted after the bake over a lavender base
+  (the old one read navy in studio light). Never crimson. 580 triangles a buttonhole (no heavier than before, so the
+  triangle cap takes nothing more off a full set of extras), 1,340 a corsage (two blooms, three buds); poke and red-eye
+  recorded, nothing sinks into the cloth at rest or walking.
+- **Henry's lowered bow ties**: on his face the wings are 10 % shorter and sweep back 8 mm less, so the tips end in
+  front of the lapel and shirt-front edges instead of through them; his stock pictures redrawn (they match the game's
+  portrait exactly).
+- **The Deco gown's hem bands and fringe** take the exact skin weights of the cloth under them (the three corners of
+  the nearest skirt triangle, `copy_weights_surface`), not a blend of nearby vertices, so walking no longer bends the
+  bead line through the zigzag or shows the fringe's hidden tops as dashes. Positions are unchanged (same geometry hash:
+  no shadow patch went stale).
+- **Wardrobe screen.** The testing note is a one-line "Test" chip in the picture's corner (an open padlock where there
+  is room), not a two-line caption over it; the Boutique ribbon hangs from the frame with the picture under it; names
+  and progress lines take two lines instead of being cut; the small layout's pictures are a little taller. When the
+  guest's triangle cap leaves an extra or the glasses off, the stage says so in plain words (and a tap that cannot add
+  an item plays the deny cue) instead of a tile seeming broken. Saving over or deleting a Look offers Undo for 8 s
+  (`account.restoreLook`). A Look saved with try-ons says so, and wearing it says "Not yours: …" (not "any more").
+  The Trying-on box names two things at most; the half shot shows the words "Drag to turn", not the ring. The Honours
+  page's gold tokens are defined for it too (the earned tick was invisible). The end screen says "(coming soon)" for
+  an earned item still held back, as the Honours page does.
+- **Tile pictures**: a woman's necklace (the Lantern charm) is drawn on her gown with the body's ivory neck and
+  shoulders, so the chain lies on a neck instead of floating.

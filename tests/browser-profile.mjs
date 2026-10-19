@@ -93,7 +93,7 @@ for (const [W, H] of SIZES) {
   check(await game(() => window.__game.storageKept()), 'this device keeps it (storage works here)');
   await waitFor(() => !document.getElementById('btn-menu-bots').disabled, null, 90000);
   await page.waitForTimeout(900);
-  check(await page.textContent('#pc-name') === name && await page.isVisible('#btn-profile') && /Playing as/i.test(await page.textContent('#btn-profile')) && /Adjust avatar/.test(await page.textContent('#btn-profile')), 'the main menu\'s card: "Playing as <name> · Adjust avatar ›"');
+  check(await page.textContent('#pc-name') === name && await page.isVisible('#btn-profile') && /Playing as/i.test(await page.textContent('#btn-profile')) && /Wardrobe/.test(await page.textContent('#btn-profile')), 'the main menu\'s card: "Playing as <name> · Wardrobe ›"');
   const set = await box('#btn-menu-settings'), rec = await box('#btn-menu-record'), main = await box('#menu .menu-panel');
   check(Math.abs(set.t - rec.t) < 1 && set.h >= 44 && rec.h >= 44 && rec.l > set.r, 'Settings and Your record side by side');
   check(main.t >= 8 && main.b <= H - 8 && await noScroll(page), `the main menu fits the screen (${Math.round(main.t)}-${Math.round(main.b)} of ${H})`);

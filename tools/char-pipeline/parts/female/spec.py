@@ -444,8 +444,9 @@ def items():
         # (the gold belt shades every gown the same: Clara's and Beatrice's own bakes skipped gold as an occluder, for
         # their earrings, so their belts cast no shadow; Eleanor's did)
         bake = _cfg(D['look']); bake['ao_skip'] = tuple(m for m in bake['ao_skip'] if m != 'Gold')
-        add(key=f'dress_{d}', slot='dress', id=d, build=dress_builder(d), ctx=['body', 'feet_pumps'],
-            casts=[('body', []), ('feet_pumps', ['body'])], bake=bake, colours=dict(Dress=D['mod'].COLOURS['dress']),
+        if D.get('sheen'): bake['sheen'] = dict(bake.get('sheen', {}), **D['sheen'])      # (W1-B: the deco gown's beads)
+        add(key=f'dress_{d}', slot='dress', id=d, build=D.get('build') or dress_builder(d), ctx=['body', 'feet_pumps'],
+            casts=[('body', []), ('feet_pumps', ['body'])], bake=bake, colours=D.get('colours') or dict(Dress=D['mod'].COLOURS['dress']),
             lift={'Dress': D['mod'].CFG['ao_scale']['Dress']})
     for b in ('sash', 'thin'):
         B = BELTS[b]
@@ -462,7 +463,8 @@ def items():
         for hid in HAIR_ORDER:
             src = HAIR_SRC[hid]
             add(key=f'hairStyle_{hid}{suffix}', slot='hairStyle', id=hid, fit=(f'face_{F}' if suffix else None), face=F, build=hair_builder(hid),
-                ctx=['body', f'face_{F}', own_dress], casts=[(f'face_{F}', ['body']), ('body', [f'face_{F}'])] + [(dd, ['body', 'feet_pumps']) for dd in dresses],
+                # (not on W1-B's deco gown: one more patch takes the long styles over their byte cap)
+                ctx=['body', f'face_{F}', own_dress], casts=[(f'face_{F}', ['body']), ('body', [f'face_{F}'])] + [(dd, ['body', 'feet_pumps']) for dd in dresses if dd != 'dress_decoBeaded'],
                 bake=hair_bake(src), colours=dict(Hair=FACES[src]['mod'].COLOURS['hair']), post=[hair_post],
                 # the hair's shadow on the gowns (shoulders, the back of the bodice) is an extra the contract does not
                 # ask for: 3 % lighter everywhere, so its faint tail drops out with no edge and the long styles stay
@@ -477,9 +479,15 @@ def items():
             add(key=f'extra_{eid}{suffix}', slot='extra', id=eid, fit=(f'face_{F}' if suffix else None), face=F, build=earring_builder(eid),
                 ctx=[f'face_{F}', own_hair], bake=dict(ao_skip=AO_SKIP, sheen=sheen), colours={E['mat']: E['colour']},
                 extras={'attach': 'ears'})
+    _W1B.items(add)              # W1-B: the new pieces (parts/female/w1b.py)
     return out
 
 COLOURS = dict(skin=CL.COLOURS['skin'], hair=CL.COLOURS['hair'], brow=CL.COLOURS['brow'], eye=CL.COLOURS['eye'], lips=CL.COLOURS['lips'],
                dress=CL.COLOURS['dress'], sash=CL.COLOURS['sash'], gold=CL.COLOURS['gold'], pearl=EL.COLOURS['pearl'], shoe=CL.COLOURS['shoe'],
                shine=EL.COLOURS['shine'])
 BASE_CFG = _cfg(DEFAULT_FACE)
+
+# Wardrobe W1-B (parts/female/w1b.py): the deco gown joins the gowns (every hair shades it, both belts fit it), the two
+# new styles join the hair sources, the new fixed colours become materials; its items() adds the rest at the end.
+import w1b as _W1B
+_W1B.register(globals())

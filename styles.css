@@ -2032,7 +2032,7 @@ html, body {
 #end-overlay.lost .end-verdict { color: #eaa898; }
 #end-overlay .card p.end-recap { margin: -10px auto 18px; max-width: min(540px, 80vw); font-family: var(--serif); font-size: 15.5px; line-height: 1.4; color: var(--ivory); }
 #end-overlay .card p.end-recap[hidden] { display: none; }
-@media (max-height: 720px) {      /* (1024 x 694 with Safari's bars: six guests, the recap and the chat row still fit with room to spare) */
+@media (max-height: 720px) {      /* (1024 x 694 with Safari's bars: six guests, the recap and the chat row fit; with an achievement and two lines of chat as well the card scrolls: the block "Graphics round 1, interface" at the end) */
   #end-overlay .card { padding-top: 20px; padding-bottom: 20px; }
   .end-verdict { font-size: 19px; }
   #end-overlay .card h1 { font-size: 34px; }
@@ -2365,3 +2365,124 @@ html, body {
 .search-spot .ss-tick svg { width: 15px; height: 15px; }
 .search-spot.spent .ss-tick { display: flex; }
 /* ==== end of Round 4, rooms ==== */
+
+/* ==== Graphics round 1, interface (docs/DECISIONS.md "Graphics round 1, the interface"): the Wardrobe's gold titles on
+   the older screens, the forced meeting as a face-off, and the end screen as a cast list with faces that always fits ==== */
+
+/* 1. Gold titles (the graphics review's UI-1, the judge's "lean" version): only what the Wardrobe's own panels and
+   buttons use (wardrobe.css .wd-panel, .wd-title, .wd-deco, .wd-btn.primary, .wd-kicker, .wd-tab.on), carried to the
+   role screen, How to play, Cards, the in-match Menu, the notices and the end screen. Left out on purpose: the
+   Boutique's corner fans, an extra inner outline, the HUD, blur and motion. Nothing on a possessed screen changes
+   (every rule is fenced with :not(.possessed)), and no rule here touches an outline, so the focus rings stay. */
+:root {
+  --w-lacquer: linear-gradient(180deg, #171a25 0%, #12141d 55%, #0e1017 100%);   /* .wd-panel's gradient, opaque */
+  --w-lamp: radial-gradient(90% 46% at 50% 0%, rgba(232, 202, 128, 0.065), rgba(232, 202, 128, 0) 72%);   /* .hn-side's top glow */
+  --w-gilt: linear-gradient(180deg, #f6e2a8 0%, #e2bd67 55%, #a8812f 100%);   /* .wd-title */
+  --w-gold: linear-gradient(180deg, #e9cb7c, #c69c47);   /* .wd-btn.primary (wardrobe.css --gold-grad) */
+  /* .wd-deco as one picture: two hairlines and a diamond, 220 x 9 */
+  --w-rule: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 220 9'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' x2='1'%3E%3Cstop offset='0' stop-color='%23c9a24e' stop-opacity='0'/%3E%3Cstop offset='.18' stop-color='%23c9a24e' stop-opacity='.42'/%3E%3Cstop offset='.82' stop-color='%23c9a24e' stop-opacity='.42'/%3E%3Cstop offset='1' stop-color='%23c9a24e' stop-opacity='0'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect y='2' width='220' height='1' fill='url(%23g)'/%3E%3Crect y='6' width='220' height='1' fill='url(%23g)' opacity='.5'/%3E%3Cpath d='M110 .7l3.8 3.8-3.8 3.8-3.8-3.8z' fill='%23171a24' stroke='%23c9a24e'/%3E%3C/svg%3E");
+}
+/* the panel: the Wardrobe's lacquer and its lit top edge (the faint inner brass line stays) */
+:is(.card, .modal, .map-panel):not(.possessed),
+.card-view:not(.possessed) .cv-panel {
+  background: var(--w-lamp), var(--w-lacquer);
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 236, 200, 0.08), inset 0 0 0 2px var(--line-soft), 0 22px 60px rgba(0, 0, 0, 0.6);
+}
+/* the hand-over card's sticky button row keeps its band (it hides words scrolling under the buttons), painted in the
+   lacquer's own bottom colour so it never shows as a box */
+.handoff-card:not(.possessed) .modal-actions { background: linear-gradient(to bottom, rgba(14, 16, 23, 0), #0e1017 35%); }
+/* gilt titles; never on a possessed card, and the Defeat screen keeps its own salmon title */
+.handoff-card:not(.possessed) > h1,
+:is(.howto-card, .cardsguide-card, .gamemenu-card, .card.notice) > h1,
+#end-overlay:not(.lost) #end-title,
+.card-view:not(.possessed) .cv-panel .panel-title, .map-panel .panel-title {
+  background: var(--w-gilt); -webkit-background-clip: text; background-clip: text; color: transparent; -webkit-text-fill-color: transparent;
+}
+/* the Deco double rule under the big titles, centred */
+:is(.handoff-card:not(.possessed), .howto-card, .cardsguide-card, .gamemenu-card) > h1::after,
+#end-overlay .card > h1::after {
+  content: ""; display: block; width: 220px; height: 9px; margin: 10px auto 2px; background: var(--w-rule) center / 100% 100% no-repeat;
+}
+/* (closer under the title on short screens: How to play's longest page at 1024x694 still fits with nothing to scroll) */
+@media (max-height: 720px) {
+  :is(.handoff-card:not(.possessed), .howto-card, .cardsguide-card, .gamemenu-card) > h1::after,
+  #end-overlay .card > h1::after { margin: 6px auto 0; }
+}
+/* one kicker, the Wardrobe's (12 px: the game's text floor). Not in the trade scene: a trade that possesses you turns
+   its card .possessed half-way through, and its line must not change letters there. */
+.handoff-card:not(.possessed, .trade-reveal) .handoff-kicker, .howto-kicker, .menu-kicker, .lock-kicker, .discard-kicker {
+  font: 700 12px/1.2 var(--sans); letter-spacing: 0.22em; text-transform: uppercase; color: var(--brass);
+}
+/* the gold button: the Wardrobe's Save (a lit top edge, no dark inner rim); not in the HUD, not on a possessed screen */
+.btn.primary:not(:where(#hud *, .possessed *)), .menu-btn.primary {
+  background: var(--w-gold); border-color: var(--brass-bright);
+  box-shadow: inset 0 1px 0 rgba(255, 246, 220, 0.5), 0 8px 22px rgba(0, 0, 0, 0.35);
+}
+.seg-btn.on { background: linear-gradient(180deg, rgba(233, 203, 124, 0.24), rgba(198, 156, 71, 0.16)); color: var(--brass-bright); box-shadow: inset 0 0 0 1px rgba(232, 202, 128, 0.55); }
+
+/* 2. The forced meeting as a face-off (UI-3, the judge's version V; src/ui/meeting.js chooseAction): the attack result's
+   own seats (.atk-seat, .atk-port, .atk-name), so after Attack the weapon card lands where the sunburst was. Between
+   them a slot the size of the weapon card with the trade scene's brass sunburst and diamond. The other guest wears the
+   strip's crimson ring only when the player certainly knows they are possessed (.known). About 160 px taller than
+   the old one-line panel: it still clears the guest strip and your own POSSESSED badge at 1024x694. On the 1024-wide
+   iPads it is 444 px wide instead of 600, so the first-meeting tip (src/ui/tips.js, 262 px, beside the panel) still
+   has room at its side: the taller panel left it no room above or below, and it never showed. */
+#encounter-overlay .modal:has(.fs-stage) { width: clamp(440px, calc(100vw - 580px), 600px); }
+.fs-stage { margin: 10px 0 2px; align-items: center; }
+.fs-stage .atk-seat { animation: tr-seat-in 0.45s ease-out both; }
+.fs-stage .atk-seat:last-child { animation-delay: 0.06s; }
+.fs-mid { position: relative; width: clamp(74px, 11vh, 96px); aspect-ratio: 2 / 3; flex: none; margin-top: -26px; }
+.fs-mid::before {
+  content: ''; position: absolute; left: 50%; top: 50%; width: 170%; aspect-ratio: 1; transform: translate(-50%, -50%); border-radius: 50%;
+  background: repeating-conic-gradient(from -2deg, rgba(201, 162, 78, 0.16) 0deg 4deg, rgba(201, 162, 78, 0) 4deg 15deg);
+  -webkit-mask: radial-gradient(closest-side, #000 18%, rgba(0, 0, 0, 0.5) 55%, transparent 100%); mask: radial-gradient(closest-side, #000 18%, rgba(0, 0, 0, 0.5) 55%, transparent 100%);
+}
+.fs-mid::after {
+  content: ''; position: absolute; left: 50%; top: 50%; width: 10px; height: 10px; transform: translate(-50%, -50%) rotate(45deg);
+  background: var(--brass); box-shadow: 0 0 0 3px rgba(201, 162, 78, 0.2);
+}
+.fs-seat.known .atk-port {
+  border-color: rgba(201, 162, 78, 0.9);
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.5), 0 0 0 2px var(--poss-line), 0 0 22px rgba(163, 38, 58, 0.55), 0 6px 18px rgba(0, 0, 0, 0.5);
+}
+@media (prefers-reduced-motion: reduce) { .fs-stage .atk-seat { animation: none; } }
+/* (the shortest iPad window, 1024x694 with Safari's bars: 22 px tighter round the same seats, so the panel keeps a clear
+   gap to the guest strip above it and to your own POSSESSED badge below its left corner) */
+@media (max-height: 720px) {
+  #encounter-overlay .modal:has(.fs-stage) { padding-top: 16px; padding-bottom: 16px; }
+  #encounter-body:has(.fs-stage) { margin: 4px 0 10px; }
+  .fs-stage { margin-top: 4px; }
+  .fs-stage + .modal-sub { margin-bottom: 10px; }
+}
+
+/* 3. The end screen as a cast list (UI-8, the judge's "flush" version; src/overlays.js showEnd): each guest's normal face,
+   a square head crop of the strip's portrait, where the colour dot was (the colour is a short bar on its lower edge, as
+   on the strip). 30 px (26 px on short screens) with the row's padding trimmed, so every row is exactly as tall as
+   before. A dead guest's face is greyed. Never red eyes here: that needs the owner's yes on the rule's wording. */
+.er-row.face { grid-template-columns: 30px minmax(0, 1fr) auto 92px 64px; padding: 2px 12px 2px 3px; }
+.er-face {
+  position: relative; display: block; width: 30px; height: 30px; border-radius: 8px; overflow: hidden;
+  background: var(--panel-solid); border: 1px solid var(--line-soft); box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.5);
+}
+.er-face > :is(img, svg) { position: absolute; inset: -9% -14% auto; width: 128%; height: auto; aspect-ratio: 3 / 4; object-fit: cover; display: block; }
+.er-face::after { content: ''; position: absolute; left: 4px; right: 4px; bottom: 0; height: 2px; border-radius: 1px; background: var(--player-color); }
+.er-row.dead .er-face > :is(img, svg) { filter: grayscale(0.6); opacity: 0.75; }
+@media (max-height: 720px) {
+  .er-row.face { grid-template-columns: 26px minmax(0, 1fr) auto 92px 64px; padding: 2px 10px 2px 3px; }
+  .er-face { width: 26px; height: 26px; border-radius: 7px; }
+}
+/* The end card always fits: with six guests, an achievement and two lines of chat it is taller than the short iPad
+   windows (1024x694, 1024x768), so it scrolls by touch inside the screen (index.html data-scrolls; src/input.js lets a
+   finger move in it), starting at the top (VICTORY or DEFEAT), and its buttons stay in view at its foot: the same
+   sticky row as the hand-over card, its band in the lacquer's bottom colour (invisible while everything fits). The
+   band's top 18 px (the gap above the buttons, so the buttons sit exactly where they did) is a fade, solid before the
+   buttons begin: while the card is scrolled up, the line under it fades away instead of being cut in half by the
+   buttons. Its first 4 px stay clear, so it never dims the guest list when that comes right above (a 14 px gap). */
+#end-overlay.overlay.center { padding-top: 12px; padding-bottom: 12px; }
+#end-overlay .card { max-height: 100%; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; touch-action: pan-y; }
+#end-overlay .card > .end-actions {
+  position: sticky; bottom: -30px; z-index: 1; padding: 18px 0 12px; margin: -18px 0 -12px;   /* (the same height in the card as before) */
+  background: linear-gradient(to bottom, rgba(14, 16, 23, 0) 4px, rgba(14, 16, 23, 0.6) 9px, rgba(14, 16, 23, 0.9) 14px, #0e1017 18px);
+}
+@media (max-height: 720px) { #end-overlay .card > .end-actions { bottom: -20px; } }
+/* ==== end of Graphics round 1, interface ==== */

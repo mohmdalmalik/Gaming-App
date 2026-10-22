@@ -69,6 +69,15 @@ export function addRoomView(views, room, cfg, scene, { animate = true } = {}) {
     lights,
     revealed: false,
     revealT: 0,
+    // A room just opened whose model is still on its way waits, hidden under its mist (fog.js), until the model is
+    // in, then rises (no beige stand-in walls rising first and popping into the real room). `hold(ms)` starts the
+    // wait, for at most `ms` (then today's stand-in rises anyway); `release()` ends it. `held` stays true until the
+    // update that starts the rise, so the mist and the Go tag (main.js) change in the same frame as the room.
+    // Only the picture waits: the rules have already opened the room, and the turn and its clock go on.
+    held: false,
+    holdUntil: 0,
+    hold(ms) { this.held = true; this.holdUntil = performance.now() + ms; },
+    release() { this.holdUntil = 0; },
     seed: seedCounter++ * 7.31,
     setRevealed(revealed, anim = true) {
       this.revealed = revealed;
@@ -95,6 +104,10 @@ export function addRoomView(views, room, cfg, scene, { animate = true } = {}) {
     },
     update(dt) {
       if (this.revealed && this.revealT < 1) {
+        if (this.held) {
+          if (this.holdUntil && performance.now() < this.holdUntil) return;
+          this.held = false;
+        }
         this.revealT = Math.min(1, this.revealT + dt / cfg.render.revealDuration);
         this.apply();
       }
@@ -474,10 +487,11 @@ export function createDoorwayViews(floor, cfg, scene, { isLocked = () => false, 
     const warn = new THREE.Mesh(unitPlane, lockGlowMat);
     warn.renderOrder = 2;
     scene.add(warn);
-    // and a padlock sign in front of the locked door, seen from anywhere (it faces the camera)
+    // and a padlock sign in front of the locked door, seen from anywhere (it faces the camera; drawn after the active
+    // guest, 13 > its 12: src/render/characterView.js drawFront)
     const mark = new THREE.Sprite(padlockMat);
     mark.scale.set(PADLOCK_SIZE, PADLOCK_SIZE, 1);
-    mark.renderOrder = 7;
+    mark.renderOrder = 13;
     mark.visible = false;
     scene.add(mark);
     // where the sign rests (a shake or a pop moves it from here and back), on the side of the door in front of it
@@ -552,7 +566,7 @@ export function createDoorwayViews(floor, cfg, scene, { isLocked = () => false, 
     const sign = new THREE.Sprite(barSignMat);
     sign.scale.set(0.5, 0.5, 1);
     sign.position.set(d.center[0], BAR_SIGN_Y, d.center[1]);
-    sign.renderOrder = 7;
+    sign.renderOrder = 13;                                     // (after the active guest, like the padlock)
     scene.add(planks, glow, sign);
     return {
       planks, glow, sign, on: false,

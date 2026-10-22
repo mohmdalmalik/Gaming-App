@@ -118,7 +118,7 @@ class Fr:
                 gx, gz, gy = p.x, -p.y, p.z
                 uu = (gx - self.back[0]) * self.Rv[0] + (gz - self.back[1]) * self.Rv[1]
                 fu = (uu - a0) / (a1 - a0)
-                fu = 1 - fu if self.facing in ('n', 'e') else fu
+                fu = 1 - fu                 # u runs right to left as seen from the front (Rv), whatever the facing
                 fv = (gy - y0) / ((y1 - y0) if rep_v is None else rep_v)
                 return cell_uv(idx, fu, fv, quad)
             def fm(f):
@@ -142,6 +142,7 @@ def lamp_on(x, z, y, h=0.55, shade_r=0.15, watts=60.0):
     cyl(ST, x, z, y + h * 0.45, y + h * 0.52, 0.045, 0.045, color=C['brass'], segs=10)
     cyl(ST, x, z, y + h * 0.52, y + h, shade_r, shade_r * 0.62, '#fff0cc', segs=18, mat='glow')
     LIGHTS.append((x, y + h * 0.62, z, watts, 0.1, (1.0, 0.9, 0.78)))
+    lamp_record('lamp', ST, (x, y + h * 0.76, z), max(2 * shade_r, h * 0.48), watts, (1.0, 0.9, 0.78))
 
 def vase(x, z, y, col='#e8e0cc', flowers='#f4eee0', h=0.2):
     cyl(ST, x, z, y, y + h * 0.7, 0.05, 0.07, col, segs=12)
@@ -1630,6 +1631,7 @@ def swan_lamp(side, s, y=1.85):
     rod(sg.up, (p[0], y, p[2]), (q[0], y + 0.1, q[2]), 0.015, C['brass'], 6)
     cyl(sg.up, q[0], q[2], y - 0.08, y + 0.08, 0.11, 0.05, '#fff0cc', segs=14, mat='glow')
     LIGHTS.append((q[0], y - 0.05, q[2], 40.0, 0.08, (1.0, 0.76, 0.48)))
+    lamp_record('sconce', sg.up, (q[0], y, q[2]), 0.22, 40.0, (1.0, 0.76, 0.48))
 
 def dec_service():
     door_sconces()
@@ -1838,6 +1840,14 @@ build_floor(R, spec['floor'], cuts, repeat=2.0)
 for f in R['furniture']:
     build_furniture(f, ROOM)
 spec['decor']()
+
+# --lamps FILE: only write this room's lamp records (export_lamps.py collects them for the game) and stop:
+# nothing is baked or exported, so the shipped model and light maps are untouched.
+if '--lamps' in argv:
+    with open(arg('--lamps', ''), 'w') as fh:
+        json.dump({'room': ROOM, 'lamps': K.LAMPS}, fh)
+    print('lamps', ROOM, len(K.LAMPS))
+    sys.exit(0)
 
 bpy.ops.wm.read_factory_settings(use_empty=True)
 scene = bpy.context.scene

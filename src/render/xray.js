@@ -71,9 +71,11 @@ export function xraySpot(f) {
 const v = new THREE.Vector3(), fwd = new THREE.Vector3(), rel = new THREE.Vector3();
 const depthOf = (camera, x, y, z) => rel.set(x, y, z).sub(camera.position).dot(fwd);
 function ndc(camera, x, y, z) { return v.set(x, y, z).project(camera); }
+let cam = null;                 // this frame's camera (updateXray)
 
 // Once a frame, after the camera has moved and before the frame is drawn.
 export function updateXray(camera) {
+  cam = camera;
   camera.getWorldDirection(fwd);
   const A = uniforms.uXrA.value, B = uniforms.uXrB.value;
   if (guest.set) {
@@ -96,4 +98,18 @@ export function updateXray(camera) {
     B.set((x0 + x1) / 2, (y0 + y1) / 2, near - 0.2, 1);
     uniforms.uXrBR.value.set(Math.max(0.03, (x1 - x0) * 0.62), Math.max(0.03, (y1 - y0) * 0.62));
   } else B.w = 0;
+}
+
+// How much of a point (world) this frame's windows leave standing, worked out as the shader does for a fragment
+// there (1: all of it, 0: none; the dither aside). For the lamp halos (lampHalos.js): a lamp faded out in front of
+// the guest takes its glow with it. (After updateXray, the camera not moved since.)
+function keepIn(c, r, q, depth) {
+  if (c.w < 0.5 || depth > c.z) return 1;
+  const t = THREE.MathUtils.clamp((Math.hypot((q.x - c.x) / r.x, (q.y - c.y) / r.y) - 0.62) / 0.38, 0, 1);
+  return t * t * (3 - 2 * t);
+}
+export function xrayKeep(p) {
+  if (!cam || p.y <= 0.06) return 1;
+  const depth = depthOf(cam, p.x, p.y, p.z), q = ndc(cam, p.x, p.y, p.z);
+  return Math.min(keepIn(uniforms.uXrA.value, uniforms.uXrAR.value, q, depth), keepIn(uniforms.uXrB.value, uniforms.uXrBR.value, q, depth));
 }

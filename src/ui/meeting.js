@@ -5,7 +5,10 @@
 // The player (the viewer) is called "you". An attack is public, so its result is SHOWN here: the
 // two guests (their normal portraits — except, on a possessed player's own screen, red eyes on a guest
 // they KNOW is possessed: `redEyes`, src/ui/allies.js), the weapon card striking, and the hearts the
-// target lost dropping away.
+// target lost dropping away. Before anything happens, the forced meeting's "Trade or Attack" shows the same two seats
+// as a face-off (both faces under a small brass sunburst where the weapon will land): the same portraits, plus the
+// strip's crimson ring on the other guest only when the player CERTAINLY knows they are possessed (`known`: the same
+// knowledge the strip's "Possessed" marker uses, src/ui/allies.js knownPossessedIds).
 import { CARDS, weaponsIn } from '../game/cards.js';
 import { cardTile, CARD_FACE } from './cards.js';
 import { makePortrait } from './portrait.js';
@@ -15,7 +18,7 @@ import { tooSoon } from './tapGuard.js';
 
 const HEART = '<svg viewBox="0 0 24 22" aria-hidden="true"><path d="M12 20.5 3.6 12.4A5.2 5.2 0 0 1 11.3 5.4L12 6.2l.7-.8a5.2 5.2 0 0 1 7.7 7z"/></svg>';
 
-export function createMeeting(doc, cfg, { isViewer = () => false, redEyes = () => false } = {}) {
+export function createMeeting(doc, cfg, { isViewer = () => false, redEyes = () => false, known = () => false } = {}) {
   const overlay = doc.getElementById('encounter-overlay');
   const title = doc.getElementById('encounter-title');
   const body = doc.getElementById('encounter-body');
@@ -42,6 +45,16 @@ export function createMeeting(doc, cfg, { isViewer = () => false, redEyes = () =
   let cues = [];     // the attack's sound cues still to come (dropped if the panel closes first)
   const hide = () => { overlay.hidden = true; for (const t of cues) clearTimeout(t); cues = []; };
   const el = (tag, cls, parent) => { const e = doc.createElement(tag); if (cls) e.className = cls; if (parent) parent.appendChild(e); return e; };
+  // A guest's seat on a stage (the attack result's, and the face-off's before it): their portrait in a brass frame and
+  // their name. (a possessed face only for an ally the player knows, on their own screen; never their own here)
+  const seatOf = (stage, p, cls) => {
+    const s = el('div', `atk-seat ${cls}`, stage);
+    const port = el('div', 'atk-port', s);
+    port.appendChild(makePortrait(doc, p, { possessed: !isViewer(p) && !!redEyes(p) }));
+    if (cls === 'atk-target') el('div', 'atk-slash', port);
+    el('div', 'atk-name', s).innerHTML = who(p);
+    return s;
+  };
 
   return {
     get isOpen() { return !overlay.hidden; },
@@ -60,7 +73,15 @@ export function createMeeting(doc, cfg, { isViewer = () => false, redEyes = () =
     chooseAction(P, Q, { canAttack, onTrade, onAttack }) {
       show();
       title.innerHTML = `${who(P)} ${isViewer(P) ? 'meet' : 'meets'} ${who(Q, false)}`;
-      body.innerHTML = `<div class="modal-sub">A meeting is forced. ${isViewer(P) ? 'Choose' : `${esc(P.name)} chooses`}:</div>`;
+      body.innerHTML = '';
+      // The face-off: the attack result's own seats, so an Attack's weapon lands where the sunburst is. The words are
+      // the title's (aria-hidden: read once). The crimson ring: only a guest the player certainly knows is possessed.
+      const stage = el('div', 'atk-stage fs-stage', body);
+      stage.setAttribute('aria-hidden', 'true');
+      seatOf(stage, P, 'fs-seat' + (!isViewer(P) && known(P) ? ' known' : ''));
+      el('div', 'fs-mid', stage);
+      seatOf(stage, Q, 'fs-seat' + (!isViewer(Q) && known(Q) ? ' known' : ''));
+      el('div', 'modal-sub', body).textContent = `A meeting is forced. ${isViewer(P) ? 'Choose' : `${P.name} chooses`}:`;
       actions.innerHTML = '';
       actions.appendChild(button('Trade', () => { hide(); onTrade(); }, { primary: true }));
       actions.appendChild(button(canAttack ? 'Attack' : 'Attack (need a weapon)', () => { hide(); onAttack(); }, { disabled: !canAttack }));
@@ -95,15 +116,7 @@ export function createMeeting(doc, cfg, { isViewer = () => false, redEyes = () =
         const was = Math.min(rules.maxHealth, Math.max(after, before ?? after + (events.damage || 0)));
         const stage = el('div', `atk-stage atk-${events.weapon}${events.killed ? ' killed' : ''}`, body);
         stage.setAttribute('role', 'img');
-        const seat = (p, cls) => {
-          const s = el('div', `atk-seat ${cls}`, stage);
-          const port = el('div', 'atk-port', s);
-          // (a possessed face only for an ally the player knows, on their own screen; never their own here)
-          port.appendChild(makePortrait(doc, p, { possessed: !isViewer(p) && !!redEyes(p) }));
-          if (cls === 'atk-target') el('div', 'atk-slash', port);
-          el('div', 'atk-name', s).innerHTML = who(p);
-          return s;
-        };
+        const seat = (p, cls) => seatOf(stage, p, cls);
         seat(P, 'atk-by');
         const weapon = el('div', `atk-weapon${events.discarded ? ' gone' : ''}`, stage);
         const img = el('img', '', weapon); img.src = CARD_FACE[events.weapon] || ''; img.alt = CARDS[events.weapon]?.name ?? ''; img.draggable = false;

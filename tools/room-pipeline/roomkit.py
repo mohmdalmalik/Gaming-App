@@ -603,6 +603,16 @@ def wall_run(sg, walls, st):
 
 LIGHTS = []   # (x, y, z, watts, radius, rgb)
 
+# The lights a player sees glow (lamp shades, sconce glass, lanterns, strip lights): one record per real light,
+# written out by export_lamps.py for the game's lamp halos (src/data/roomLamps.js, src/render/lampHalos.js).
+# `node`: the model object the lamp is part of (a wall's upper part folds down in the cutaway, and its halo
+# goes with it); `at`: the middle of its glowing part, in game space; `ext`: that part's largest size (m).
+# The bake does not use these (it uses LIGHTS).
+LAMPS = []
+def lamp_record(kind, where, at, ext, watts, color):
+    LAMPS.append({'kind': kind, 'node': where.name, 'at': [round(a, 3) for a in at], 'ext': round(ext, 3),
+                  'watts': watts, 'color': [round(c, 3) for c in color]})
+
 def door_frame(sg, st, covered=False, spill=True):
     """The doorway: a dark lining in the opening, an architrave over it, the lintel wall, the cap; a
     threshold (unless a rug runs through); and a warm glow from the next room (the references' light
@@ -643,6 +653,8 @@ def sconce(sg, s, y=1.55, light=True, watts=24.0, color=(1.0, 0.9, 0.78), d0=0.0
     if light:
         x0, x1, z0, z1 = sg.rect(s, s, d0 + 0.25, d0 + 0.25)
         LIGHTS.append((x0, y, z0, watts, 0.08, color))
+        x0, x1, z0, z1 = sg.rect(s, s, d0 + 0.09, d0 + 0.09)
+        lamp_record('sconce', sg.up, (x0, y + 0.03, z0), 0.38, watts, color)
 
 def lantern(sg, s, y=1.7, watts=24.0, color=(1.0, 0.8, 0.55), glass='#fff3d0'):
     """A caged brass lantern on a bracket (the storage room and the stairs)."""
@@ -656,6 +668,7 @@ def lantern(sg, s, y=1.7, watts=24.0, color=(1.0, 0.8, 0.55), glass='#fff3d0'):
         rod(sg.up, (x0 + 0.088 * math.cos(ang), y - 0.12, z0 + 0.088 * math.sin(ang)),
             (x0 + 0.088 * math.cos(ang), y + 0.12, z0 + 0.088 * math.sin(ang)), 0.008, C['brassDark'], 4)
     LIGHTS.append((x0, y, z0 + 0.0, watts, 0.06, color))
+    lamp_record('lantern', sg.up, (x0, y - 0.005, z0), 0.25, watts, color)
 
 def strip_light(sg, s, y=2.0, w=0.62, watts=40.0, color=(0.9, 0.95, 1.0)):
     """A flat fluorescent box light (the service corridor)."""
@@ -663,6 +676,8 @@ def strip_light(sg, s, y=2.0, w=0.62, watts=40.0, color=(0.9, 0.95, 1.0)):
     sg.put(s - w / 2 + 0.04, s + w / 2 - 0.04, y - 0.06, y + 0.06, 0.06, 0.08, '#f4f6f2', 0.006, where=sg.up, mat='glow')
     x0, x1, z0, z1 = sg.rect(s, s, 0.3, 0.3)
     LIGHTS.append((x0, y - 0.1, z0, watts, 0.2, color))
+    x0, x1, z0, z1 = sg.rect(s, s, 0.07, 0.07)
+    lamp_record('strip', sg.up, (x0, y, z0), w - 0.08, watts, color)
 
 def painting(sg, s, y, w, h, quad, cell=CELL['art'], frame=None, light=False):
     frame = frame or C['gold']

@@ -142,8 +142,9 @@ export function createFog(scene, camera, cfg) {
   return {
     mesh,
     // Every frame, before the render. `player`: the active guest (their room's doors are the ones they
-    // can open now).
-    update(floor, player, { time = 0, dt = 0 } = {}) {
+    // can open now). `held(x, z)`: whether a room just opened is still waiting there for its model (roomView.js
+    // hold): its mist stays, dimmed, with no gold edge and no tag, and clears as the room rises.
+    update(floor, player, { time = 0, dt = 0, held = null } = {}) {
       if (floor.version !== version) { version = floor.version; cells = fogCells(floor); }
       here = player?.alive ? player.currentRoom : null;
       for (const c of cells.values()) {
@@ -160,7 +161,7 @@ export function createFog(scene, camera, cfg) {
       instant = false;
       const step = dt / Math.max(0.05, F.fade);
       for (const [k, e] of entries) {
-        if (!cells.has(k)) { e.target = 0; e.hlTarget = 0; }
+        if (!cells.has(k)) { e.target = held?.(e.center[0], e.center[1]) ? 1 : 0; e.hlTarget = 0; }
         e.shown += Math.sign(e.target - e.shown) * Math.min(Math.abs(e.target - e.shown), step);
         e.hl += Math.sign(e.hlTarget - e.hl) * Math.min(Math.abs(e.hlTarget - e.hl), dt / 0.3);
         if (e.target === 0 && e.shown <= 0) entries.delete(k);

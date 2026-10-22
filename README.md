@@ -407,7 +407,8 @@ src/
                       camera, setWardrobe: full length, to the knees or close up; turnWardrobe: drag to turn),
                       lobbyLayout.js (every position, the cast, your spot, paths and
                       cameras as data), lobbySet.js (the room), lobbyCast.js (guests, staff, seated poses),
-                      lobbyTextures.js (canvas textures, no image files). Preview: tools/menu-preview.html
+                      lobbyTextures.js (canvas textures, no image files), wardrobeLight.js (the Wardrobe's key
+                      light on your avatar, Wardrobe only). Preview: tools/menu-preview.html
                       (?menu=1 ?blur=1 ?enter=1&guests=3); check: node tests/menu-scene-shots.mjs
   data/
     rules.js          THE RULE NUMBERS — implements docs/GAME_RULES.md (owner-approved changes only)
@@ -432,6 +433,7 @@ src/
     lostMatch.js      the card shown once when the browser cut a match short ("The game was restarted by your browser…")
     endScreen.js      the end screen's Victory / Defeat, who won, and the recap line
     dressing.js       which baked model, light maps and exposure each room has (src/render/roomDressing.js and bakedRoom.js read it)
+    roomLamps.js      GENERATED (tools/room-pipeline/export_lamps.py): every real lamp, sconce and lantern of each room, for the lamp halos
   game/               pure rules, no rendering (a server could reuse these)
     hotel.js  grid.js   the random hotel (tiles placed as doors open), walkable grid + A* pathfinding
     cards.js            deck build, seeded shuffle, deal, hand helpers
@@ -462,6 +464,7 @@ src/
                       flicker.js the two spooky corridors' flicker as pure functions, steady under Reduce Motion;
                       searchMarks.js the brass tick on the furniture of a searched room;
                       fog.js the fogged rooms beyond closed doors (+ "Explore · 1 action" tags);
+                      lampHalos.js the soft glow round every lamp, sconce and lantern of the rooms on the board (one draw call), placed from src/data/roomLamps.js;
                       pathPreview.js the dotted path, outline + cost tag of a move to confirm;
                       characterView.js one guest's figure behind one surface (an avatar, a glTF guest or the box stand-in): walking, dying, the possessed look;
                       possessedLook.js the possessed player's own red eyes (shared with the portrait tool);
@@ -593,6 +596,8 @@ the owner's reference image for it (`tools/room-pipeline/ref/`; see `tools/room-
 (`tools/room-pipeline/shots/<room>-vs-ref.png`, contact sheet `shots/rooms-vs-refs.png`),
 `node tools/room-pipeline/walkcheck.mjs` walks a guest through every doorway of every room, and
 `node tools/room-pipeline/perf.mjs --rooms 12` measures draw calls. Output: `assets/models/rooms/`.
+`python3 tools/room-pipeline/export_lamps.py` writes `src/data/roomLamps.js`, the lamps the game's halos glow round
+(rooms and lobby; seconds a room, no re-bake; `build_all.sh` runs it at the end).
 `vsref`, `walkcheck`, `perf` and `shoot` play the game in headless Chromium: serve the repo first
 (`python3 -m http.server 8123 --bind 127.0.0.1`; `--url` names another address). They open the practice direct link
 (`?mode=practice`: the plain address opens the main menu), and each says "last verified" with a date in its first lines.

@@ -18,9 +18,42 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { easeOutCubic } from './materials.js';
 import { applyXray } from './xray.js';
+import { ROOM_LAMPS } from '../data/roomLamps.js';
 
 const BASE = 'assets/models/';
 const LM_SCALE = 4.0;   // the light texture stores light / LM_SCALE (tools/lobby-pipeline/make_lobby.py)
+// The lamp shades and sconce glass ('glow') are drawn a touch brighter and untouched by tone mapping, so a shade
+// reads as switched on next to its halo (src/render/lampHalos.js).
+const SHADE_GAIN = 1.08;
+
+// The room's real lights (src/data/roomLamps.js, exported by the room and lobby pipelines), each tied to the model
+// object it is part of and placed in that object's own space, for the lamp halos (lampHalos.js re-places them from
+// it every frame, so a sconce's halo folds down with its wall). `root`: the room's model, still at rest (no wall
+// lowered, not yet risen). `lampRoot`: the part of the scene the halos bring up to date each frame.
+const _rest = new THREE.Matrix4(), _rootInv = new THREE.Matrix4();
+function attachLamps(view, id, root, nodes, lampRoot) {
+  const list = ROOM_LAMPS[id];
+  if (!list?.length) return;
+  root.updateMatrixWorld(true);
+  _rootInv.copy(root.matrixWorld).invert();
+  const lamps = [];
+  for (const rec of list) {
+    const node = nodes.get(rec.node);
+    if (!node) { console.warn(`baked room ${id}: no model part ${rec.node} for a lamp`); continue; }
+    _rest.multiplyMatrices(_rootInv, node.matrixWorld).invert();
+    lamps.push({ rec, node, local: new THREE.Vector3(...rec.at).applyMatrix4(_rest) });
+  }
+  view.lampRoot = lampRoot;
+  view.lamps = lamps;
+}
+// Once the walls are hooked up to their parts: each light on a wall gets that wall's outward direction (`out`, world,
+// on the ground: src/game/hotel.js), so its halo can fade while the camera is on the wall's outer side.
+function lampWalls(view) {
+  if (!view.lamps) return;
+  const out = new Map();
+  for (const w of view.walls) for (const part of w.baked || []) out.set(part.up, w.wall.normal);
+  for (const l of view.lamps) l.out = out.get(l.node) || null;
+}
 
 function loadTexture(url) {
   return new Promise((resolve, reject) => new THREE.TextureLoader().load(url, resolve, undefined, reject));
@@ -63,7 +96,7 @@ export async function dressBaked(view, spec, cfg) {
     if (m) return m;
     if (src.name === 'glow') {
       // lamp shades and sconce glass: unlit and bright, they read as the light source
-      m = new THREE.MeshBasicMaterial({ color: new THREE.Color(spec.glow || '#ffe2ac'), side: THREE.DoubleSide });
+      m = new THREE.MeshBasicMaterial({ color: new THREE.Color(spec.glow || '#ffe2ac').multiplyScalar(SHADE_GAIN), side: THREE.DoubleSide, toneMapped: false });
     } else {
       const lm = src.name === 'floor' || src.name === 'rug' ? floorLight : light;
       m = new THREE.MeshBasicMaterial({ map: src.map || null, vertexColors: !src.map, lightMap: lm, lightMapIntensity: intensity });
@@ -83,6 +116,7 @@ export async function dressBaked(view, spec, cfg) {
     }
     if (o.name) nodes.set(o.name, o);
   });
+  attachLamps(view, view.room.id, root, nodes, root);
 
   // Hide the greybox floor, walls, furniture boxes and their contact shadows: the baked model
   // carries its own (softer) shadows. Characters keep theirs.
@@ -110,6 +144,7 @@ export async function dressBaked(view, spec, cfg) {
     }
     if (!w.baked.length) { w.baked = null; console.warn(`baked room: no model part for wall ${w.wall.id}`); }
   }
+  lampWalls(view);
   const plain = view.setWallHeight.bind(view);
   view.setWallHeight = (w, height) => {
     if (!w.baked) { plain(w, height); return; }
@@ -166,7 +201,7 @@ function tileConverter(spec, { light, floorLight }, map, view = null) {
     let m = mats.get(key);
     if (m) return m;
     const lm = isFloor ? floorLight : light;
-    if (src.name === 'glow') m = new THREE.MeshBasicMaterial({ vertexColors: true });
+    if (src.name === 'glow') m = new THREE.MeshBasicMaterial({ vertexColors: true, color: new THREE.Color(SHADE_GAIN, SHADE_GAIN, SHADE_GAIN), toneMapped: false });
     else if (src.name === 'tex') m = new THREE.MeshBasicMaterial({ map, lightMap: lm, lightMapIntensity: intensity });
     else m = new THREE.MeshBasicMaterial({ vertexColors: true, lightMap: lm, lightMapIntensity: intensity });
     m.name = src.name;
@@ -209,6 +244,7 @@ export async function dressBakedTile(view, spec, cfg) {
   // `room.rotation`, exactly as src/game/hotel.js turns the tile's doorways and furniture.
   const room = view.room, rot = room.rotation || 0, [cx, cz] = room.center;
   const wrapper = new THREE.Group();
+  attachLamps(view, room.tile || room.id, root, nodes, wrapper);
   wrapper.name = `tile:${room.tile || room.id}`;
   wrapper.position.set(cx, 0, cz);
   wrapper.rotation.y = -rot * Math.PI / 2;
@@ -227,6 +263,7 @@ export async function dressBakedTile(view, spec, cfg) {
     w.baked = up ? [{ up }] : null;
     if (!up) console.warn(`baked tile ${room.id}: no model part for wall ${w.wall.id}`);
   }
+  lampWalls(view);
   const H = cfg.walls.height, stub = cfg.cutaway.stubHeight;
   const plain = view.setWallHeight.bind(view);
   view.setWallHeight = (w, height) => {

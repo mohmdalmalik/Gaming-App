@@ -1,5 +1,21 @@
 # PROGRESS
 
+## Graphics round 1 (2026-10-21): the owner's picks from the graphics review
+
+The owner asked for an agent to check the graphics quality and suggest improvements. The review (four lenses, A/B pictures, judges)
+gave a ranked plan; the owner chose seven items and the lead added three fixes the review found. Published as **v0.10**:
+- **Rooms:** lamps, wall lights and lanterns glow (one draw call for the whole hotel); the five dark rooms are darker (x0.72);
+  a newly opened room waits under its mist until its model has arrived, so the beige stand-in walls no longer flash (3 s cap);
+  the Fire Exit sign reads EXIT instead of mirrored.
+- **Interface:** a face-off panel when guests meet; gold titles and lacquer panels on the older screens; the end screen shows
+  each guest's face and always fits on the small iPad windows (it scrolls, the buttons stay reachable).
+- **Characters:** the guest whose turn it is stands inside its gold ring instead of on top of it; a truer light in the Wardrobe.
+- Two independent reviews (the look at iPad sizes against the judges' pictures; code, suites and performance) found no blocker
+  or major issue; the fixer fixed the five minor items (soft round wall-light glows, the glow over the active guest, the end-card
+  fade, a lighter halo update, a docs wording fix). A last code review found four more small ones, fixed too: a wall light's glow
+  no longer shows on the outside of its wall during a camera turn, a lamp hidden by the see-through window no longer leaves its
+  glow over the guest, and two docs corrections. No rule or rule number changed. Details: docs/DECISIONS.md (Graphics round 1 sections).
+
 ## Wardrobe W1 (2026-10-18 to 2026-10-19): the guests built from pieces, then the new Wardrobe and ten items
 
 The owner asked for a deeper wardrobe (face, hair, moustache, dress...: pick an area, options on the right, hidden items opened by

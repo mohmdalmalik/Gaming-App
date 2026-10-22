@@ -1,5 +1,5 @@
 // Character view. Three kinds, behind ONE surface { group, def, outfit, update(mover, dt),
-// setActive, setDead, setPossessed, setAvatar, setDef, dispose }:
+// setActive, setDead, setPossessed, setAvatar, setDef, setMisted, warmFront, dispose }:
 //   • a player's avatar (when the seat has an `avatar`: every seat at the table) — its pieces on a shared
 //     body, merged once per set of pieces and cloned with its own colours and eye colour: two draw calls
 //     (src/render/avatar.js, avatarParts.js), with Idle/Walk clips cross-faded by movement, the stride matched to speed;
@@ -159,6 +159,8 @@ export function createCharacterView(playerDef, cfg, scene) {
       headY = base.height > 0.8 && base.height < 2.4 ? base.height : headY;
       marker.position.y = headY + c.markerHeight;
       startClips(model.root, base.clips.idle, base.clips.walk);
+      model.mesh.material.forceSinglePass = true;   // (drawFront: one pass when drawn after the ring, as when opaque)
+      drawFront();
     }).catch(e => {
       console.warn('character model load failed:', geometryKey(av), e && e.message);
       if (token !== loadToken || disposed) return;
@@ -346,6 +348,24 @@ export function createCharacterView(playerDef, cfg, scene) {
   let dead = false;
   let disposed = false;
 
+  // The active guest stands INSIDE its floor ring (the graphics review of 21 Oct 2026, C4, the judge's variant C): the
+  // ring is drawn over everything (above: it shows through anyone standing in front), so the guest's own body is drawn
+  // AFTER it, in the see-through pass (renderOrder 12, after the ring's 11), still fully solid (opacity 1, one pass,
+  // writing depth like any solid guest); its eyes stay solid, so the red eyes are untouched. The padlock and barricade
+  // signs and the search ticks come after it (13: src/render/roomView.js, searchMarks.js). Same draw calls; one more
+  // shader variant, built behind the black screen at the start of a game (warmFront, main.js warmUp). While the guest
+  // stands where a room's mist still shows (a room just opened, waiting for its model or rising: setMisted), it is
+  // drawn the plain way, under the mist, as before. (Avatar guests only: the old glTF guests and the box figure
+  // that stands in when a model cannot be loaded keep the plain draw.)
+  let misted = false, warming = false;
+  function drawFront() {
+    const mesh = model?.mesh;
+    if (!mesh) return;
+    const on = (active && !dead && !misted) || warming;
+    if (mesh.material.transparent !== on) { mesh.material.transparent = on; mesh.material.needsUpdate = true; }
+    mesh.renderOrder = on ? 12 : 0;
+  }
+
   const api = {
     group,
     def: playerDef,
@@ -383,6 +403,7 @@ export function createCharacterView(playerDef, cfg, scene) {
     debug() {
       return { model: useModel, loaded: !!mixer, strideLength, walkDuration, walkW, walkPhase: walkAction ? walkAction.time / walkDuration : 0, possessedEyes: !!eyes?.on,
         avatar: avatar ? { ...avatar } : null, glasses: !!model?.glasses, standIn: !!placeholderParts,
+        front: !!model && model.mesh.renderOrder === 12 && model.mesh.material.transparent,
         ring: { color: `#${ringMat.color.getHexString()}`, opacity: ringMat.opacity, edgeOpacity: edgeMat.opacity, lightOpacity: lightMat.opacity, visible: ring.visible } };
     },
     // The possessed look on this figure (red eyes). Cheap: does nothing unless it changes. Whose screen
@@ -406,9 +427,23 @@ export function createCharacterView(playerDef, cfg, scene) {
       lightMat.depthTest = !active;
       ringLight.renderOrder = active ? 10.5 : 0.5;
       ring.scale.set(c.ringRadius * (active ? 1.15 : 1), 1, c.ringRadius * (active ? 1.15 : 1));
+      drawFront();
+    },
+    // Whether the guest stands where a room's mist still shows (main.js, every frame): then drawn under it (drawFront).
+    setMisted(v) {
+      if (misted === !!v) return;
+      misted = !!v;
+      drawFront();
+    },
+    // The start of a game (main.js warmUp, behind the black screen): wear the active guest's draw for a frame or two,
+    // so its shader is built before the first turn changes hands. Off again with warmFront(false).
+    warmFront(on) {
+      warming = !!on;
+      drawFront();
     },
     setDead(v) {
       dead = v;
+      drawFront();
       blood.visible = v;
       ring.visible = !v;
       marker.visible = false;

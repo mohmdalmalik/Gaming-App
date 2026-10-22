@@ -17,6 +17,7 @@ node    tools/room-pipeline/vsref.mjs [--rooms library,kitchen]       # side by 
 node    tools/room-pipeline/walkcheck.mjs [--rooms library]           # walk through every doorway in the game
 node    tools/room-pipeline/shoot.mjs --rooms library,kitchen         # four camera angles in the game
 node    tools/room-pipeline/perf.mjs --rooms 12                       # draw calls with many rooms
+python3 tools/room-pipeline/export_lamps.py [room ...]                # the lamps for the game's halos (seconds a room)
 ```
 Re-run `dump_rooms.mjs` and the builds whenever a tile's doorways or furniture change in
 `src/data/hotel.js`: the models are built on those footprints (they are the game's collision).
@@ -67,6 +68,13 @@ stay dim in the game.
   `--out` writes somewhere else.
 - `pack_glb.py` — packs the exported .glb (8-bit colours, 16-bit UVs) without changing the look.
 - `build_all.sh` — build, bake and pack all rooms (or the ones named), then `shrink_maps.py`.
+- `export_lamps.py` — writes `src/data/roomLamps.js`: every real light a player sees glow (lamp shades, sconces,
+  lanterns, the service corridor's strip light; `LAMPS` in `roomkit.py`, `make_room.py` and the lobby's
+  `make_lobby.py`), with the model object it belongs to, the middle of its glowing part, its size, watts and colour.
+  The game's lamp halos (`src/render/lampHalos.js`) are placed from these, never guessed from the meshes. It runs
+  `make_room.py --room <r> --lamps <file>` (and `make_lobby.py --lamps <file>`), which stop before the bake and the
+  export, so nothing shipped changes. `build_all.sh` runs it at the end; run it by hand after changing a room's
+  lamps or sconces without a re-bake. (The door spill lights and the EXIT sign's green light are bake-only: no halo.)
 - `shrink_maps.py` — saves the shipped light maps at the size the game uses: each room's two maps at 512
   (baked at 1024, then shrunk: the same look on the iPad at a quarter of the graphics memory), and the
   lobby's atlas at 1024. Run it after any re-bake (rooms or lobby).
@@ -76,6 +84,12 @@ stay dim in the game.
 - `walkcheck.mjs` — reveals each tile next to the lobby and walks a guest in, then opens each of its
   other doorways and walks through and back.
 - `shoot.mjs`, `perf.mjs` — screenshots from four angles and performance, in the real game.
+
+Lettering on a texture (`Fr.front_tex`, the EXIT sign): the atlas U runs right to left as seen from the front for
+every facing, so it is flipped for every facing (until 21 Oct 2026 only for 'n' and 'e', which mirrored the EXIT
+sign over the Fire Exit door). The shipped `exit.glb` was corrected without a re-bake by mirroring the U of the
+sign's four front-face vertices (8 bytes); the bookshelves' spines and the Switchboard's jack panel, which have no
+lettering, pick the change up at their next re-bake.
 
 Light maps store `light / 4` in sRGB JPEG (must match `LM_SCALE` in `src/render/bakedRoom.js`);
 `exposure` per room is in `src/data/dressing.js` (no re-bake needed to brighten or darken a room).

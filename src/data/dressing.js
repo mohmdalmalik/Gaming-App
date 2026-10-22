@@ -27,13 +27,16 @@ export const roomDressings = {
 
 // Every other room: a tile baked by tools/room-pipeline/make_room.py, loaded when the room is revealed
 // (src/render/bakedRoom.js, dressBakedTile). All tiles share one albedo texture; each has its own two
-// light maps. `exposure` scales the baked light, set so each room reads like its reference in the game; the
-// dark rooms (service corridor, storage, stairs, back corridor, housekeeping) sit at about 60% of that.
+// light maps. `exposure` scales the baked light, set so each room reads like its reference in the game. The five
+// dark rooms (`dark` in src/data/hotel.js: service corridor, storage, stairs, back corridor, housekeeping) were
+// lowered to 72% of their old exposure on 21 Oct 2026 (the owner chose darker dark rooms, the graphics review's
+// option b; 0.42, 0.52, 0.44, 0.82, 0.43 before): clearly darker than a lit room, the guests (lit apart from the
+// rooms), the furniture and the red eyes still read. At 60% the shelves and carts at the edges went nearly black.
 export const BAKED_TILES = {
   lounge: 0.77, ballroom: 0.64, grandCorridor: 0.66, switchboard: 0.62, dining: 0.52, library: 0.72,
-  kitchen: 0.5, serviceCorridor: 0.42, storage: 0.52, corridorE: 0.58, corridorW: 0.58, corridorN: 0.55,
-  corridorS: 0.55, stairs: 0.44, backCorridor: 0.82, cloakroom: 0.61, cornerCorridor: 0.55, infirmary1: 0.51,
-  infirmary2: 0.49, linenStore1: 0.52, linenStore2: 0.52, suite416: 0.7, housekeeping: 0.43, exit: 0.5,
+  kitchen: 0.5, serviceCorridor: 0.3, storage: 0.37, corridorE: 0.58, corridorW: 0.58, corridorN: 0.55,
+  corridorS: 0.55, stairs: 0.32, backCorridor: 0.59, cloakroom: 0.61, cornerCorridor: 0.55, infirmary1: 0.51,
+  infirmary2: 0.49, linenStore1: 0.52, linenStore2: 0.52, suite416: 0.7, housekeeping: 0.31, exit: 0.5,
 };
 for (const [id, exposure] of Object.entries(BAKED_TILES)) {
   roomDressings[id] = {

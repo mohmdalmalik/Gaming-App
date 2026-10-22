@@ -1,6 +1,7 @@
 // Full-screen overlays: "Tap to begin", a one-off notice (the exit opening), a yes/no question,
 // the end screen and the problem card (a load error, or "Something went wrong": src/ui/crash.js).
 import { GUARD_MS } from './ui/tapGuard.js';
+import { makePortrait } from './ui/portrait.js';
 
 export function createOverlays(doc) {
   const start = doc.getElementById('start-overlay');
@@ -45,7 +46,9 @@ export function createOverlays(doc) {
     hideStart() { start.hidden = true; },
     // `opts.keepExploring` offers a way back into the hotel instead of only restarting —
     // practice has no losing side, so finishing should never force a new game. `opts.reveal` (a match):
-    // every guest with their role, now that it is over — { name, who, color, possessed, status, you }.
+    // every guest with their role, now that it is over — { name, who, color, possessed, status, you, player }: a row
+    // with `player` shows that guest's face (their NORMAL portrait, the strip's: never red eyes — docs/GAME_RULES.md
+    // calls those a possessed guest's private reminder) where the colour dot was, in a row exactly as tall.
     // `opts.won`: whether the player's side won (colours the title). `opts.verdict`: the plain word for the
     // player's side, "Victory" or "Defeat" (src/data/endScreen.js), above the title; `opts.recap`: one line on how
     // the possession spread. Practice has no sides and passes neither.
@@ -64,15 +67,17 @@ export function createOverlays(doc) {
         const row = doc.createElement('div');
         row.className = 'er-row' + (r.you ? ' you' : '') + (r.status ? ` ${r.status.toLowerCase()}` : '');
         row.style.setProperty('--player-color', r.color);
-        const dot = doc.createElement('span'); dot.className = 'er-dot';
+        const mark = doc.createElement('span'); mark.className = r.player ? 'er-face' : 'er-dot';
+        if (r.player) { row.classList.add('face'); mark.setAttribute('aria-hidden', 'true'); mark.appendChild(makePortrait(doc, r.player, { possessed: false })); }
         const name = doc.createElement('span'); name.className = 'er-name'; name.textContent = r.name;
         const who = doc.createElement('span'); who.className = 'er-who'; who.textContent = r.who || '';
         const role = doc.createElement('span'); role.className = `er-role ${r.possessed ? 'evil' : 'good'}`; role.textContent = r.possessed ? 'Possessed' : 'Clean';
         const status = doc.createElement('span'); status.className = 'er-status'; status.textContent = r.status || '';
-        row.append(dot, name, who, role, status);
+        row.append(mark, name, who, role, status);
         reveal.appendChild(row);
       }
       end.hidden = false;
+      const card = end.querySelector('.card'); if (card) card.scrollTop = 0;   // (a crowded card that scrolls starts at its top)
     },
     hideEnd() { end.hidden = true; },
     get endOpen() { return !end.hidden; },

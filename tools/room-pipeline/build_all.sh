@@ -19,3 +19,5 @@ for r in $ROOMS; do
 done
 # The shipped light maps are smaller than the bake (src/render/bakedRoom.js; see shrink_maps.py).
 python3 tools/room-pipeline/shrink_maps.py
+# The rooms' lamps, sconces and lanterns for the game's lamp halos (src/data/roomLamps.js; see export_lamps.py).
+python3 tools/room-pipeline/export_lamps.py $ROOMS

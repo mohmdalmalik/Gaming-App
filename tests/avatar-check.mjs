@@ -151,8 +151,13 @@ if (!skip.has('render') || !skip.has('portraits') || !skip.has('eyes')) {
         const asm = await P.assemble(av);
         const m = A.createAvatarModel(asm, av);
         const c = calls(m), tris = asm.stats.tris;
+        // (every vertex fully opaque: the active guest is drawn in the see-through pass, after its floor ring,
+        // src/render/characterView.js drawFront, so a vertex alpha under 1 would show through it there)
+        const col = m.mesh.geometry.attributes.color;
+        let seeThrough = 0;
+        if (col && col.itemSize === 4) { const one = col.normalized && !(col.array instanceof Float32Array) ? (col.array instanceof Uint8Array ? 255 : 65535) : 1; for (let q = 3; q < col.array.length; q += 4) if (col.array[q] !== one) seeThrough++; }
         out.mixes.n++;
-        if (c < 2 || c > 3 || tris > W.TRIANGLE_CAP || asm.warnings.length) out.mixes.bad.push(`${k}: ${c} calls, ${tris} tris ${asm.warnings.join(' ')}`);
+        if (c < 2 || c > 3 || tris > W.TRIANGLE_CAP || asm.warnings.length || seeThrough) out.mixes.bad.push(`${k}: ${c} calls, ${tris} tris${seeThrough ? `, ${seeThrough} see-through vertices` : ''} ${asm.warnings.join(' ')}`);
         m.dispose(); asm.release();
       }
       return out;
@@ -162,7 +167,7 @@ if (!skip.has('render') || !skip.has('portraits') || !skip.has('eyes')) {
     check(gBad.length === 0, `every glasses style on every Look merged into the guest (${r.glasses.length}: ${Math.min(...r.glasses.map(g => g.calls))}-${Math.max(...r.glasses.map(g => g.calls))} draw calls), Henry's own frames for Round${gBad.length ? ` (odd: ${JSON.stringify(gBad)})` : ''}`);
     const fBad = r.fits.filter(g => !(g.tris > 300 && g.tris < 6000 && g.ok));
     check(fBad.length === 0, `glasses fitted to every face and style: built, ${Math.min(...r.fits.map(g => g.tris))}-${Math.max(...r.fits.map(g => g.tris))} triangles, in front of the eyes, temples back to the ears${fBad.length ? ` (odd: ${JSON.stringify(fBad)})` : ''}`);
-    check(r.mixes.n > 40 && r.mixes.bad.length === 0, `${r.mixes.n} mixes of pieces (every hairstyle and moustache on every face, every jacket with every tie, every gown with every belt and earrings) assembled: 2-3 draw calls, within the triangle cap, no stale shadow${r.mixes.bad.length ? ` (odd: ${r.mixes.bad.slice(0, 4).join(' | ')})` : ''}`);
+    check(r.mixes.n > 40 && r.mixes.bad.length === 0, `${r.mixes.n} mixes of pieces (every hairstyle and moustache on every face, every jacket with every tie, every gown with every belt and earrings) assembled: 2-3 draw calls, within the triangle cap, no stale shadow, every vertex opaque${r.mixes.bad.length ? ` (odd: ${r.mixes.bad.slice(0, 4).join(' | ')})` : ''}`);
   }
 
   if (!skip.has('portraits')) {

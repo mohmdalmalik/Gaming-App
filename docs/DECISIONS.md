@@ -2946,3 +2946,206 @@ token purse, no prices, no Concierge; the locked kinds are only Achievement and 
   an earned item still held back, as the Honours page does.
 - **Tile pictures**: a woman's necklace (the Lantern charm) is drawn on her gown with the body's ivory neck and
   shoulders, so the chain lies on a neck instead of floating.
+
+## Graphics round 1, rooms and lighting: lamps that glow, darker dark rooms, no grey box when a door opens, the EXIT sign (21 Oct 2026 — rendering, room data, art and tools; owner-approved items of the graphics review; no rule or rule number changed)
+- **Lamps that glow** (the review's recipe "D3"). `src/render/lampHalos.js`: a soft warm glow round every real lamp,
+  sconce and lantern of the rooms on the board, ONE draw call for the whole hotel (instanced camera-facing squares,
+  added onto the picture; no full-screen pass). Where the lights are is never guessed from the meshes: the room and
+  lobby pipelines record each light they bake (`LAMPS` in `roomkit.py`, `make_room.py`, `make_lobby.py`: its kind,
+  the model object it is part of, the middle of its glowing part, its size, watts and colour) and
+  `tools/room-pipeline/export_lamps.py` writes them to `src/data/roomLamps.js` (206 lights in 25 rooms; it stops
+  before the bake, so nothing shipped changes; the door spill lights and the EXIT sign's green light are bake-only).
+  `bakedRoom.js` ties each record to its model object (`view.lamps`), and every frame each halo is re-placed from
+  that object, so a sconce's halo folds down with its wall in the cutaway and rises with a newly revealed room,
+  fading in as the wall or room stands (30% to 90% of its height: no pop), and out as the camera comes round to the
+  line of a light's wall or the see-through window hides its lamp (since the second review, below). The D3 settings: pushed toward the camera
+  along the line of sight (0.3 m for a lamp; 0.6 m for a light on a wall since the review, below), never more than
+  about a sixth of the screen's height (0.35 in clip units, where the screen is 2 tall; zoomed right in, it would flare),
+  `exp(-4.2 r²)(1 - r²)` plus a small core, sRGB out, colour #ffb860 at gain 0.36; a stronger or weaker bulb is a
+  little bigger and brighter or smaller and dimmer (within ×0.8 to ×1.25); the Service Corridor's fluorescent strip
+  is cool white, never amber. In a flickering room the halos follow the bulb (the light level `mood.js` puts in the
+  light map; steady under Reduce Motion). In a dark room they are at 70%. A fogged room has no view, so no halo. The
+  lamp shades and sconce glass are drawn 8% brighter and untouched by tone mapping, so a shade reads as switched on.
+  The shader is built behind the black screen (`warmObjects`, `main.js` warmUp). Cost, measured at 1180x820: +1 draw
+  call everywhere (match start 87→88, Lounge 79→80, eight rooms zoomed out 231→232), +2 triangles a halo, +1 shader
+  program for the halos and +1 for the untouched shades (21→23 at the start, 22 after; budget 28), 0 bytes of
+  download. Red-eye pixels next to a lamp are unchanged. A guest who walks right behind a lamp gets its glow over
+  them, as a real lamp would glare. Not done (owner's taste, open): fading the halos when zoomed far out.
+- **Darker dark rooms** (option b of the review: the owner chose darker; no shader). The five dark rooms' `exposure` in
+  `src/data/dressing.js` is 72% of before (Service Corridor 0.42→0.30, Storage 0.52→0.37, Service Stairs 0.44→0.32,
+  Back Stairs 0.82→0.59, Housekeeping 0.43→0.31), picked from ×1, ×0.85, ×0.72 and ×0.6 photographed in the same
+  frame: at 72% each reads clearly darker than a lit room (its floor 25 to 34% less light) while the crates, shelves,
+  stair flight and cart still read; at 60% the shelves and carts at the room's edges went nearly black. Guests are lit
+  apart from the rooms, so they read as before, and the possessed red eyes still stand out. One number a room: an
+  even darker look (60%) is a one-line change there.
+- **No grey box when a door opens** (the review's R2, variant C; Round 3's "grey-box flash"). A room just opened waits,
+  hidden under its mist, until its model and light maps have arrived, then rises (`roomView.js` `hold` / `release`,
+  `main.js` `syncViews`): the beige stand-in walls no longer rise and pop into the real room, which they did on every
+  first opening even on ordinary Wi-Fi. While it waits, its mist stays (dimmed, no gold edge, no Explore tag: `fog.js`
+  `held`) and it gets no Go tag (`goTags.js` `held`); `held` ends in the very update that starts the rise, so mist,
+  tag and room change in the same frame. At most 3 s: on a very slow network today's stand-in rises after that. A room
+  type already loaded this visit is in at once. Only the picture waits: the rules have opened the room, the action is
+  spent at once, a move into the waiting room is accepted at once and the turn clock runs as before (measured on the
+  judge's iPad-true timeline with the files held back 0.3 s, 2.5 s and 5 s). No background prefetch (up to 16 MB of
+  download and 31 MB of memory a visit). The browser suites' `revealTile` passes no animation, so it never waits.
+- **The EXIT sign reads EXIT.** It was mirrored: `Fr.front_tex` in `make_room.py` flipped the atlas U only for pieces
+  facing north or east, but U runs right to left as seen from the front for every facing; it now flips for every
+  facing (the bookshelves' spines and the Switchboard's jack panel, no lettering, change at their next bake). The
+  shipped `assets/models/rooms/exit.glb` was corrected without a re-bake by mirroring the U of the sign's four
+  front-face vertices (8 bytes). Checked from the game camera at the two camera turns that face the sign, on all
+  four orientations of the Fire Exit tile.
+
+## Graphics round 1, the interface: the face-off meeting, gold titles on the older screens, the end screen with faces that always fits (21 Oct 2026 — interface and docs; owner-approved items Q3, Q4 and Q5 of the graphics review; no rule or rule number changed)
+Built as the review's judges corrected them (UI-3 "V", UI-1 "lean", UI-8 "flush"). Page styling only: no draw call,
+shader, texture or download is added (the match start stays at 87 draw calls). The look is one marked block at the end
+of `styles.css` ("Graphics round 1, interface"), its colours as tokens in that block's `:root`.
+- **The forced meeting is a face-off** (`src/ui/meeting.js chooseAction`). Under "You meet oakhart" both guests sit in
+  the attack result's own seats (the same portrait frame and name line), with the trade scene's brass sunburst and
+  diamond between them in a slot the size of the weapon card, so after Attack the weapon lands where the sunburst was.
+  The faces follow the attack result's rule: red eyes only on an ally a possessed player knows, on their own screen,
+  never on your own face. **The crimson ring** goes on the other guest only when the player CERTAINLY knows they are
+  possessed: `known`, which `main.js` answers with `knownPossessedIds`, the same knowledge (held back the same way while
+  a trade scene plays) as the strip's "Possessed" marker. So a clean player who learned it (a Hand Mirror, a block)
+  sees the ring without red eyes, and a guest who is possessed but not known gets nothing: the panel never says more
+  than the strip. It follows "You are not alone" (choose whom) the same way; a computer guest who walks in on you
+  still goes straight to its trade or its attack result. The seats rise in over 0.45 s (not with Reduce Motion).
+  About 160 px taller than the old panel (164 to 324 px at 1180x820). Two changes from the judge's version, both
+  measured: at heights of 720 px or less it is 22 px tighter round the same seats (282 px at 1024x694, at 206-488:
+  15 px under the strip's round line, 8 px over your own POSSESSED badge, which the judge's version touched); and on
+  the 1024-wide iPads it is 444 px wide instead of 600 (`clamp(440px, 100vw - 580px, 600px)`), because the first-meeting
+  tip (`src/ui/tips.js`, 262 x 218 px, kept beside the meeting panel) had no room left above, below or beside the
+  taller panel and never showed there. It now sits at the panel's right; at 1180 and 1366 wide the panel stays 600 px.
+- **Gold titles on the older screens** (the "lean" version: only what the Wardrobe's own panels and buttons use). The
+  Wardrobe's dark lacquer and lit top edge on every card, pop-up and the map; its gilt title on the clean role screen
+  and the other hand-over screens, How to play, Cards, the in-match Menu, the notices and the end screen (not on
+  Defeat, which keeps its salmon title); its Deco double rule with the diamond under the big titles; one kicker style
+  (not in the trade scene, whose card turns possessed half-way through a trade that possesses you); its gold button
+  and selected segment. **A possessed player's screens do not change**: every rule is fenced with `:not(.possessed)`
+  (the possessed role screen was checked pixel for pixel), the HUD's own gold buttons (End turn, Move) do not change,
+  and no rule touches an outline, so keyboard focus rings stay. The Boutique's corner fans were left out (they
+  collided with buttons). The titles are a gradient clipped to the letters (`background-clip: text`), drawn in Iowan
+  on the iPad. The cards are about 15-21 px taller; at heights of 720 px or less the rule sits 6 px closer under its
+  title, so How to play's longest page ("Staying alive") still fits at 1024x694 with nothing to scroll (it overflowed
+  by 3 px without that), and the role screen, Cards and the usual end screen still fit there too.
+- **The end screen is a cast list with faces** (`src/overlays.js showEnd`; `main.js` hands each row its guest). Each
+  row shows that guest's NORMAL face (the strip's portrait, a square head crop: 30 px, 26 px at heights of 720 px or
+  less) where the colour dot was, the seat colour a short bar on its lower edge as on the strip; a dead guest's face is
+  greyed. The row padding is trimmed so every row is exactly as tall as before (36 px; 32 px at 1024x694). **No red
+  eyes here**: docs/GAME_RULES.md calls them a possessed guest's private reminder, so showing them after the match
+  needs the owner's yes on that wording first (it would be `possessed: r.possessed` in `showEnd`).
+- **The end card always fits.** With six guests, an achievement and two lines of chat it was taller than the short
+  iPad windows and its top and bottom were cut off (696 px in 694, 775 px in 768). Now it is at most the window less
+  24 px and scrolls by touch inside it (`data-scrolls`, like the other tall pop-ups), opens at its top (VICTORY or
+  DEFEAT), and its buttons stay at its foot: the hand-over card's sticky row, its band painted in the lacquer's bottom
+  colour so it does not show while everything fits. A card that fits sits exactly where it did. (Since the review the
+  band's top 18 px are a fade, so a line under the buttons fades away instead of being cut in half: "fixes after the
+  review" below.)
+- **Tests**: no suite needed a change. `tests/browser-learn.mjs` caught How to play's 3 px overflow at 1024x694 (the
+  fix above); `browser-polish`, `browser-bots` and `trade-reveal-check` passed as they were. The before/after pictures
+  and their scripts are in the graphics audit's scratch folder (`round1/interface`), not in the repo.
+
+## Graphics round 1, characters: your guest stands inside its gold ring, a truer light in the Wardrobe (21 Oct 2026 — rendering, a test and docs; owner-approved items Q2 and Q6 of the graphics review; no rule or rule number changed)
+Built as the review's judges corrected them (C4 variant "C", C1 trimmed variant "D").
+- **Your guest stands inside its ring** (`src/render/characterView.js` `drawFront`). The active guest's floor ring is
+  drawn with no depth test after everything solid (so it shows through anyone standing in front), and so it was drawn
+  over its own guest's shins and gown hem. Now the active guest's body is drawn after it: its material goes to the
+  see-through pass (renderOrder 12, after the ring's 11) while staying fully solid (opacity 1, one pass with
+  `forceSinglePass`, still writing depth); it switches at every turn change, bots' turns included, and back when the
+  turn passes or the guest dies. Its eyes stay in the solid pass, so the red eyes are untouched (the eye pixels of a
+  possessed close-up were compared: the same). The padlock and barricade signs (`roomView.js`) and the search ticks and
+  used-Infirmary crosses (`searchMarks.js`) go from renderOrder 7 and 6 to 13, after the guest, so they still show
+  over it; the tick and cross write no depth (`depthWrite: false`), or their whole square would cut a hole through the
+  guest. Avatar guests only (every seat at a table): the old glTF guests and the box figure that stands in when a
+  model cannot load keep the plain draw. Every assembled guest's vertices are fully opaque (`avatarParts.js` writes
+  alpha 1), and `tests/avatar-check.mjs` now checks it, since a see-through vertex would show through the active guest.
+- **Cost**: 0 draw calls (match start 88 before and after, with this round's lamp halos), 0 triangles, +1 shader
+  program (the see-through variant of the guests' one program: 23→24 at the start with this round's other changes,
+  budget 28). It is built behind the black screen at the start of every game (`main.js` warmUp: the player's own guest
+  wears it for two frames, `warmFront`); measured: no program is built when the first turn passes to a bot.
+- **The mist** (the review's open risk). Drawn after the mist, the active guest would stand on top of it instead of
+  in it. Beside a fogged room this never shows (the camera's 44° pitch: a fogged room's mist planes never lie between
+  the camera and a guest standing anywhere in its own room; photographed at the walls and corners on the camera's
+  side: the same). It does show when the guest walks into a room that was just opened and is still waiting for its
+  model under its mist (the round's "no grey box" hold, a slow network): there the legs were crisp on top of the mist
+  instead of veiled by it. So while the active guest stands in a room whose mist still shows (held, or still rising),
+  it is drawn the plain way (`main.js` `mistAt` → `characterView.setMisted`): exactly as before, ring over the shins.
+- **The lamp halos** (`src/render/lampHalos.js`) are drawn after the active guest (renderOrder 12.5: after the
+  guest's 12, before the signs' 13), so the guest whose turn it is gets the glow of a lamp it stands behind, like every
+  other guest. (Built with the halos at 2, the active guest alone stood crisp in front of a nearer lamp's glow; changed
+  after the review, below. Feet still inside the ring.)
+- **A truer light in the Wardrobe** (`src/menu/wardrobeLight.js`, owner's yes of 21 Oct 2026). In the Wardrobe your
+  avatar gets a warm-white studio key from the upper left in front (`#fff1de`, strength 0.62, wrapping 0.35 round the
+  forms), fixed to the camera so it stays put while you drag the guest round, and the lobby's own light on it × 0.78
+  (its warm rim is added on top, as before). Nothing else of the judge's full version: no skin edge tint (`#b8322a` is in the crimson
+  family), no hair band, no glints. It is part of the avatar's own shader (its material's `onBeforeCompile` wrapped,
+  the key put in before the guest's rim, a program of its own `guestPaletteKey1`: no scene light, no draw call), and it
+  follows the Wardrobe's camera (`lobbyScene.js` updateCamera: 0 in the lobby, full once the camera has come in, at once
+  when the background is Still), so the lobby's look of your avatar is exactly as before, and the lobby's other people
+  (`lobbyCast.js`, their own material), the portraits and every guest in a match never get it. Measured on the avatar's
+  pixels (1180x820, the same frame with the key off and on): the Tuxedo man +11.0% (the navy suit +40%, from RGB
+  17,13,24 to 17,19,40; the skin +7.5%), Clara's Look +6.5% (skin +8.5%); the judge's variant D measured +11.7% and
+  +6.3%, and the man's lit cheek comes out at the judge's very RGB. Same draw calls; one more shader program in the
+  menu (30→31: your avatar's own), none in a match.
+- **Tests**: no assertion needed a change; `tests/avatar-check.mjs` now also checks that every assembled guest's
+  vertices are fully opaque (section 3). Passed: avatar-check, browser-lobby, browser-wardrobe, browser-rooms,
+  browser-avatar-parts, browser-build-fixes, browser-turnflow, browser-reliability. The before and after pictures (both iPad sizes, every guest, both zooms) and
+  their scripts are in the graphics audit's scratch folder (`round1/characters`), not in the repo.
+
+## Graphics round 1: fixes after the review (21 Oct 2026 — rendering, interface and docs; no rule or rule number changed)
+- **Wall-light glows were cut by a hard straight line** (review V1). A halo is a flat square facing the camera; pushed
+  only 0.3 m toward the camera, a sconce's glow (up to about 1.45 m across: Suite 416's 30 W sconces) crossed its own wall wherever the wall was seen at
+  an angle, and the depth test cut it there (the judge's D3 picture had the same line). Lights on a wall (sconces,
+  lanterns, the strip light) are now pushed 0.6 m; table lamps stay at 0.3 m (`HALO.push` by kind, a per-halo value in
+  `src/render/lampHalos.js`). Photographed before and after from the same cameras (1180x820: 20 views, every dark
+  room, the Service Corridor and the Lounge at all four camera turns, zoomed in and out; 1024x694: 9 views): the glows
+  are round, nothing new shows through a nearer or cut-down wall, and draw calls and shader programs are the same in
+  every view. One place changed character: the Lounge's south-wall sconce stands behind its bookcase, and at one
+  camera turn its glow, a hard-edged band on the wall beside the bookcase before, is now a soft light over the
+  bookcase's top.
+- **The active guest gets a lamp's glow like the others** (V2): the halos are drawn after it (renderOrder 2 → 12.5,
+  the characters builder's tested line; the rooms and characters sections above now say the same). A guest right
+  behind a lamp is lit up by its glare whether or not it is its turn, as in the approved D3 look. The red eyes are
+  untouched by this: they are drawn in the solid pass, so the glow already lay over them; their pixels are the same
+  as before this fix.
+- **Less work each frame** (CSP-2): the halos bring up to date only the parts their lamps are on and those above them
+  (worked out once per room, `lampChain`), not every part of every lit room. Measured at 1180x820, zoomed out over
+  eight rooms: 0.19–0.26 → 0.09–0.11 ms a frame for the halos' step on the test computer; halo positions checked frame
+  by frame during camera turns (walls folding): the same as before.
+- **Wording** (CSP-3): the size cap is about a sixth of the screen's height (0.35 in clip units, where the screen is 2
+  tall), not "0.35 of the screen"; the code comment and the rooms section say so now. The look is unchanged.
+- **The end card's foot** (V3): on the short iPads the crowded end card opens scrolled to its top, and its last chat
+  line sat sharp and cut in half above the sticky buttons. The sticky band's top 18 px (the gap above the buttons, so
+  the buttons sit exactly where they did) is now a fade that is solid before the buttons begin, so that line fades
+  away under them; scrolled down, it shows whole. Its first 4 px stay clear, so it never dims a guest row right above.
+  Checked with four and six guests at all four sizes: every button exactly where it was, Play again still answers a
+  tap.
+
+## Graphics round 1: fixes after the second code review (21 Oct 2026 — rendering and docs; no rule or rule number changed)
+- **A wall light's glow showed on the outside of its own wall during a camera turn** (A). A light on a wall sits a
+  few cm in front of the wall's inner face and its halo is pushed 0.6 m toward the camera, so once the camera had
+  turned past the wall's line (a wall that was a backdrop becoming a near wall, still standing for the first frames
+  of being lowered) the glow lay on the wall's outer face: an outside wall, or one next to an unopened room, for
+  about a tenth of a second of every quarter turn (and in the frame the camera was in line with the wall, part of the
+  glow showed round the wall's edge). Now a light on a wall fades out as the camera comes round to its wall's line and
+  passes it (`HALO.outside`: the wall's outward direction · the unit line from the light to the camera, from −0.08,
+  just inside, to 0.02, just outside; `bakedRoom.js` `lampWalls` gives each light on a wall that wall's outward
+  direction, from the game's walls). At rest the standard views are unchanged: at the match start, in the Lounge and
+  over eight rooms zoomed out, every standing wall's lights are seen well from inside (about −0.28 or lower). The
+  independent check found one exception: a wall light right at the left or right edge of the screen, at or a little
+  below the middle, can come near −0.05 at rest and its glow is then a little dimmer than before (for example 0.30
+  instead of 0.58 for a Kitchen sconce at the edge, zoomed out). That only takes away glow spilling over the wall's top
+  and edge, so it is left as it is.
+- **A lamp hidden by the see-through window kept its glow** (B). The window (`src/render/xray.js`) fades out a lamp
+  standing between the camera and the active guest, but its halo (drawn after the guest since V2) stayed, a glow
+  with no lamp over the guest whose turn it is. Each halo now fades by what the window leaves of its lamp: `xrayKeep`
+  makes the shader's own test once a frame at the lamp's centre (inside the window and nearer than the guest; the
+  search spot's window the same way). Halos of lamps that stay visible, and over the other guests, are unchanged.
+- **Wording**: a sconce's glow is up to about 1.45 m across (Suite 416's 30 W sconces), not 1.3 m; and PROGRESS now
+  counts the first fixes as this file does (five).
+- **Checked**: the four camera rest turns at the match start and in the Lounge (1180x820 and 1024x694, on a held
+  clock, the guests hidden) are pixel for pixel the same as before; quarter turns both ways at the match start and in
+  the Lounge, photographed frame by frame (1/60 s of game time each, both sizes), show no glow on a wall's outer face
+  or round its edge any more; a guest standing or walking right behind a lamp no longer has its glow over them, and
+  the glow comes back as the lamp comes back into view. Same draw calls (88 at the start, 195 over eight rooms zoomed
+  out) and shader programs (23; none new when the first turn passes to a bot): no new material or shader, a few sums
+  per halo on the processor (the halos' step 0.03–0.09 ms a frame on the test computer, as before).

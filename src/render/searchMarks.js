@@ -5,7 +5,9 @@
 //     hanging over the piece its heal icon stands on. The icon itself also shows "already used" to the guest standing there.
 // One small sprite per marked room (at most 16 searched and 2 used Infirmaries in a match), built the first time it is
 // needed and then just shown or hidden — no per-frame allocation and no extra draw calls for rooms nobody has marked.
-// They are part of the scene (furniture in front can hide them).
+// They are part of the scene (furniture in front can hide them). They are drawn after the active guest (renderOrder 13,
+// after its 12: src/render/characterView.js drawFront) and write no depth, so a tick in front of that guest shows over it
+// and its square never cuts a hole through the guest.
 import * as THREE from 'three';
 import { searchSpotOf } from '../game/hotel.js';
 
@@ -58,8 +60,8 @@ function spentTexture() {
 }
 
 export function createSearchMarks(floor, scene) {
-  const material = new THREE.SpriteMaterial({ map: tickTexture(), transparent: true, opacity: 0.92 });
-  const spentMaterial = new THREE.SpriteMaterial({ map: spentTexture(), transparent: true, opacity: 0.95 });
+  const material = new THREE.SpriteMaterial({ map: tickTexture(), transparent: true, opacity: 0.92, depthWrite: false });
+  const spentMaterial = new THREE.SpriteMaterial({ map: spentTexture(), transparent: true, opacity: 0.95, depthWrite: false });
   // On the searched furniture, at its edge facing the middle of the room (like the search icon),
   // or in the middle of a room that has none.
   const at = (sprite, room) => {
@@ -87,7 +89,7 @@ export function createSearchMarks(floor, scene) {
     sprite = new THREE.Sprite(mat);
     sprite.scale.set(size, size, 1);
     put(sprite, room);
-    sprite.renderOrder = 6;
+    sprite.renderOrder = 13;
     sprite.visible = false;
     scene.add(sprite);
     pool.set(roomId, sprite);

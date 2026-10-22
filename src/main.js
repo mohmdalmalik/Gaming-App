@@ -36,6 +36,7 @@ import { createCharacterView } from './render/characterView.js';
 import { createSearchMarks } from './render/searchMarks.js';
 import { createPathPreview } from './render/pathPreview.js';
 import { createFog } from './render/fog.js';
+import { createLampHalos } from './render/lampHalos.js';
 import { easeOutCubic } from './render/materials.js';
 import { createCameraRig } from './camera.js';
 import { createInput } from './input.js';
@@ -257,6 +258,7 @@ const guestTags = createGuestTags(cfg);                     // names, zoomed far
 const goTags = createGoTags();                              // "Go · 1 AP" over the rooms next door
 const perfStats = createPerfStats(document, view.renderer, params.get('stats') === '1');
 const mood = createMood(roomViews, view.hemi, cfg, view.scene);
+const halos = createLampHalos(view.scene);                  // the glow round every lamp and sconce (one draw call)
 const rig = createCameraRig(view.camera, cfg);
 // What the camera follows (focusIndex): the active guest — on another guest's turn too, unless the
 // player chose "Stay on me" in Settings — while they walk; once they stand still, at most FOLLOW_SLACK m
@@ -369,7 +371,9 @@ chatChannel.onMessage(msg => {
 });
 const topLeftEl = document.querySelector('.hud-top-left');
 const handoff = createHandoff(document);
-const meeting = createMeeting(document, cfg, { isViewer: p => !PRACTICE && p.index === humanSeat, redEyes: p => redEyedAllies(state, me()).has(p.id) });
+// (`known`: the face-off's crimson ring, only on a guest the player certainly knows is possessed: the strip's own marker)
+const meeting = createMeeting(document, cfg, { isViewer: p => !PRACTICE && p.index === humanSeat, redEyes: p => redEyedAllies(state, me()).has(p.id),
+  known: p => knownPossessedIds(state, me()).has(p.id) });
 const tradeReveal = createTradeReveal(document, { handoff });   // the player's own trade, as cards
 // First-match tips (src/ui/tips.js; the words: src/data/tips.js): a small card near the thing it explains,
 // the first time it comes up. What they may go by is only the player's own situation and what the whole
@@ -460,12 +464,35 @@ function chatPoint(i) {
 }
 
 // --- Render sync -------------------------------------------------------------------------
+// A room just opened and still waiting for its model (src/render/roomView.js hold): by id (no Go tag over it yet),
+// and by a point in it (its mist stays: src/render/fog.js).
+const heldRoom = id => !!roomViews.get(id)?.held;
+function heldAt(x, z) {
+  for (const v of roomViews.values()) {
+    if (v.held && x >= v.room.min[0] && x <= v.room.max[0] && z >= v.room.min[1] && z <= v.room.max[1]) return true;
+  }
+  return false;
+}
+// ...and a point where a room's mist still shows: held, or still rising (its mist fades as it rises). The active
+// guest standing there is drawn the plain way, under the mist (src/render/characterView.js setMisted).
+function mistAt(x, z) {
+  for (const v of roomViews.values()) {
+    if ((v.held || v.revealT < 1) && x >= v.room.min[0] && x <= v.room.max[0] && z >= v.room.min[1] && z <= v.room.max[1]) return true;
+  }
+  return false;
+}
 function syncViews(animate) {
   // A view for every room the hotel has grown (dressed if it has dressing), and for every door.
   for (const room of floor.roomList) {
     if (roomViews.has(room.id)) continue;
     const v = addRoomView(roomViews, room, cfg, view.scene, { animate });
-    if (!holdHotel) trackDressing(dressRoom(v, floor, cfg).then(done => { if (done) view.compile(); }));
+    if (holdHotel) continue;
+    const dressed = dressRoom(v, floor, cfg).then(done => { if (done) view.compile(); });
+    // A room just opened waits under its mist until its model is in (at most 3 s: on a very slow network the
+    // stand-in rises after that), so no beige stand-in walls rise and pop into the real room (src/render/roomView.js
+    // hold). A model already loaded this visit is in at once: no wait. Only the picture waits, never the turn.
+    if (animate) { v.hold(3000); dressed.then(() => v.release(), () => v.release()); }
+    trackDressing(dressed);
   }
   doorways.sync();
   // The camera may zoom out until every revealed room is in view, and pan over all of them.
@@ -1492,6 +1519,7 @@ function showEnd() {
     possessed: p.possessed,
     status: state.escaped.has(p.id) ? 'Escaped' : !p.alive ? 'Dead' : '',
     you: p.index === humanSeat,
+    player: p,                                      // (their face in the row: the normal portrait, never the red-eyed one)
   }));
   overlays.showEnd(title, `${line}\n${winners} · ${roundLabel(state)}`, {
     restartLabel: 'Play again', reveal, won: yourSideWon,
@@ -1710,7 +1738,7 @@ function prepareWarmUp() {
   warmPrep ||= warmTile(roomDressings.exit).then(tile => {
     const g = new THREE.Group();
     g.name = 'warm-up';
-    g.add(tile, ...searchMarks.warmObjects(), ...doorways.warmObjects());
+    g.add(tile, ...searchMarks.warmObjects(), ...doorways.warmObjects(), ...halos.warmObjects());
     g.position.set(0, -500, 0);                 // far below the floor: out of sight, but still drawn
     g.traverse(o => { o.frustumCulled = false; });
     warmGroup = g;
@@ -1732,6 +1760,13 @@ async function warmUp(maxWaitMs = 1500, { eyes = false } = {}) {
       eyesWarm = true;
     }
   }
+  // The active guest is drawn after its own floor ring (src/render/characterView.js drawFront), with its own shader
+  // variant: worn for two frames by the player's own guest, every game (a new table may have let go of the guests
+  // that had it built), so the first turn that changes hands never stalls.
+  const own = characters[humanSeat];
+  const until = performance.now() + maxWaitMs;
+  while (own && !own.debug().loaded && performance.now() < until) await wait(100);
+  if (own?.debug().loaded) { own.warmFront(true); await frame(); await frame(); own.warmFront(false); }
 }
 async function warmScene(maxWaitMs) {
   await Promise.race([prepareWarmUp(), wait(maxWaitMs)]);
@@ -2432,7 +2467,7 @@ function frameLoop(now) {
   step('rooms', () => { for (const rv of roomViews.values()) rv.update(dt); });
   step('doorways', () => doorways.update(time, dt, roomViews));
   step('path', () => pathPreview.update(selectedMove && hud.confirmOpen && !activeMover().walking ? selectedMove : null, time));
-  step('fog', () => fog.update(floor, me(), { time, dt }));
+  step('fog', () => fog.update(floor, me(), { time, dt, held: heldAt }));
   step('mood', () => { const fi = focusIndex(); mood.update(state.players[fi].currentRoom, dt, time, movers[fi]); });
   step('cutaway', () => updateCutaway(roomViews, rig, state, cfg, dt));
   // Red eyes on the player's own guest, on their own screen, while possessed — and then also on every
@@ -2441,8 +2476,9 @@ function frameLoop(now) {
   // (warmEyes: three frames behind the black screen at the start of a game, see warmUp)
   step('guests', () => {
     const allies = redEyedAllies(state, me());
-    characters.forEach((cv, i) => { cv.setPossessed(i === warmEyes || (phase === 'game' && !PRACTICE && (i === humanSeat ? !!state.players[i]?.possessed : allies.has(state.players[i]?.id)))); cv.update(movers[i], dt); });
+    characters.forEach((cv, i) => { cv.setPossessed(i === warmEyes || (phase === 'game' && !PRACTICE && (i === humanSeat ? !!state.players[i]?.possessed : allies.has(state.players[i]?.id)))); cv.setMisted(mistAt(movers[i].x, movers[i].z)); cv.update(movers[i], dt); });
   });
+  step('lamps', () => halos.update(roomViews, rig.camera));   // (after the camera, the rooms, the mood and the cutaway: this frame's walls and bulbs)
   step('render', () => view.render());
   step('hand', syncHandFan);
   step('search icon', syncSearchSpot);     // after the render, so it reads this frame's camera
@@ -2467,7 +2503,7 @@ function placeTags() {
   try {
     step('tags: names', () => guestTags.update(screenTags, state, movers, rig.distance, namesOk, 'active'));
     if (tagsOk) step('tags: explore', () => fog.tags(screenTags, me().actionPoints));
-    step('tags: go', () => goTags.update(screenTags, state, floor, me(), tagsOk && !hud.confirmOpen && rig.distance <= cfg.camera.tagsFrom));
+    step('tags: go', () => goTags.update(screenTags, state, floor, me(), tagsOk && !hud.confirmOpen && rig.distance <= cfg.camera.tagsFrom, heldRoom));
     step('tags: others', () => guestTags.update(screenTags, state, movers, rig.distance, namesOk, 'others'));
     step('tags: chat', () => chat.tags(screenTags, chatPoint, namesOk));      // speech bubbles over whoever just spoke (they give way to every other tag)
   } finally { screenTags.end(); }
@@ -2621,6 +2657,7 @@ window.__game = {
   // screen point of a room's or fog room's middle.
   tapTargetAt: (x, y) => { const t = tapTargetAt(x, y); return t && { kind: t.kind, id: t.id ?? null, key: t.key ?? null, doors: t.doors?.map(d => d.id) ?? null }; },
   fogCells: () => fog.cells(),
+  lampHalos: () => halos.info(),       // (tests: the lamp halos, src/render/lampHalos.js)
   // a screen point where a tap means room `id` (or fog room `fog`: its 'i,j' key) and lands on the
   // canvas, clear of the interface and its dead zone — the point nearest the middle of it — or null
   tapPointFor: ({ room = null, fog: fogKey = null } = {}) => {

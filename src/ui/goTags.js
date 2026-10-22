@@ -11,14 +11,15 @@ import { actionsWord } from './actionsWord.js';
 
 export function createGoTags() {
   return {
-    update(tags, state, floor, player, show) {
+    // `held(roomId)`: that room was just opened and is still waiting, under its mist, for its model (no tag yet).
+    update(tags, state, floor, player, show, held = null) {
       if (!show || !player?.alive) return;
       const room = floor.rooms.get(player.currentRoom);
       if (!room) return;
       for (const d of room.doorways) {
         const to = d.otherRoom(room.id);
         const cost = moveCostInto(state, to);
-        if (!doorwayPassable(state, d, room.id) || player.actionPoints < cost) continue;
+        if (!doorwayPassable(state, d, room.id) || player.actionPoints < cost || held?.(to)) continue;
         const r = floor.rooms.get(to);
         // a little in from the room's middle toward the door: near the guest, on screen more often
         const p = [r.center[0] + (d.center[0] - r.center[0]) * 0.35, 0.9, r.center[1] + (d.center[1] - r.center[1]) * 0.35];

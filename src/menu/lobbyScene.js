@@ -41,6 +41,7 @@ import { createActor, createAvatarActor, preloadCast, disposeCast } from './lobb
 import { disposeTextures } from './lobbyTextures.js';
 import { loadBase, createAvatarModel } from '../render/avatar.js';
 import { LOOKS, geometryKey, lookAlike, lookOf } from '../data/wardrobe.js';
+import { wardrobeKeyLight } from './wardrobeLight.js';
 
 // The lobby's own rim light on the guests (src/menu/lobbyCast.js): the player's avatar gets the same.
 const LOBBY_RIM = { color: '#ffd9a8', rim: 0.55, fill: 0.08 };
@@ -195,7 +196,7 @@ export function createLobbyScene({ renderer, cfg, layout = lobbyLayout } = {}) {
   // Built from their profile (src/render/avatar.js: the game's own model, its pieces, eye colour and glasses),
   // standing by the lift (layout `player`). New colours on the same pieces are a repaint (instant); other
   // pieces are assembled and rebuilt in the same spot.
-  let player = null;            // { actor, model, base }
+  let player = null;            // { actor, model, base, key }
   let wantAvatar = null, playerToken = 0;
   function dropPlayer(p) {
     if (!p) return;
@@ -214,9 +215,12 @@ export function createLobbyScene({ renderer, cfg, layout = lobbyLayout } = {}) {
       await ready;
       if (token !== playerToken || disposed || !wantAvatar) return null;
       const model = createAvatarModel(base, wantAvatar, { rim: LOBBY_RIM });
+      // (the Wardrobe's key light on your avatar: off in the lobby, on as the Wardrobe's camera comes in, updateCamera)
+      const key = wardrobeKeyLight(model);
+      key.set(ease(wardrobe.k));
       const actor = createAvatarActor(model, base, L.player, scene);
       const old = player;
-      player = { actor, model, base };
+      player = { actor, model, base, key };
       actors.set('you', actor);
       placeActor(actor);
       if (old) {
@@ -482,6 +486,7 @@ export function createLobbyScene({ renderer, cfg, layout = lobbyLayout } = {}) {
     let fov = THREE.MathUtils.lerp(baseFov, Math.min(baseFov, C.enterFov * baseFov / C.fov), push);
     // the wardrobe: toward a camera in front of the player's avatar, the avatar moved to centreX
     const k = ease(wardrobe.k);
+    player?.key.set(k);      // (and its key light with it: src/menu/wardrobeLight.js)
     const you = actors.get('you');
     let shift = 0;
     if (k > 0 && W && you) {
@@ -629,7 +634,7 @@ export function createLobbyScene({ renderer, cfg, layout = lobbyLayout } = {}) {
     scene, camera, ready, setSize, update, enter, reset, dispose, setPlayerAvatar, setWardrobe, turnWardrobe,
     // for the preview page and tests
     debug: { actors, set, get seq() { return seq; }, layout: L, setCamera(c) { cameraOverride = c; updateCamera(clock); },
-      get player() { return player ? { avatar: player.model.avatar, base: player.base.id, look: lookOf(player.model.avatar), x: player.actor.x, z: player.actor.z, glasses: !!player.model.glasses, screen: screenOf('you') } : null; },
+      get player() { return player ? { avatar: player.model.avatar, base: player.base.id, look: lookOf(player.model.avatar), x: player.actor.x, z: player.actor.z, glasses: !!player.model.glasses, screen: screenOf('you'), key: +player.key.k.toFixed(3) } : null; },
       get wardrobe() { return { ...wardrobe, pose: { look: pose.look, from: [...pose.from], fov: pose.fov } }; },
       get boarders() { return seq ? seq.boarders.map(a => a.spec.name) : null; },
       // (tests) every person in the room: the draw calls and triangles of their figure

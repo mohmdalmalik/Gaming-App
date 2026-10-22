@@ -474,7 +474,8 @@
     </div>
 
     <div id="end-overlay" class="overlay center" hidden>
-      <div class="card">
+      <!-- (data-scrolls: a crowded end card scrolls by touch on a short screen; its buttons stay at its foot) -->
+      <div class="card" data-scrolls>
         <!-- A match: "Victory" or "Defeat" for the player's side (src/overlays.js showEnd; practice has none). -->
         <div id="end-verdict" class="end-verdict" hidden></div>
         <h1 id="end-title">Game over</h1>

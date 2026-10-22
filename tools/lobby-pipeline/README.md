@@ -12,7 +12,9 @@ python3 tools/lobby-pipeline/textures.py
 python3 tools/lobby-pipeline/make_lobby.py --size 2048 --samples 64       # ~15 min on 4 CPUs
 python3 tools/room-pipeline/shrink_maps.py                                # ships lobby-light.jpg at 1024
 ```
-`--size 1024 --samples 32` is a quick look (~1–2 min). `--nobake` rebuilds geometry only (the light
+`--size 1024 --samples 32` is a quick look (~1–2 min). `--lamps <file>` only writes the lobby's lamp and sconce
+records for the game's lamp halos and stops (nothing baked or exported): `tools/room-pipeline/export_lamps.py`
+runs it and writes `src/data/roomLamps.js`. `--nobake` rebuilds geometry only (the light
 maps then no longer match; do not commit that).
 
 ## What each file does

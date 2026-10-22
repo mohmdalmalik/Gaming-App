@@ -301,6 +301,16 @@ lift_seg.gaps.append((LIFT_X - LIFT_W / 2 - 0.02, LIFT_X + LIFT_W / 2 + 0.02))
 
 LIGHTS = []   # (x, y, z, watts, radius, colour) point lights for the bake
 
+# The lights a player sees glow (lamp shades, sconce glass): one record per real light, for the game's lamp halos
+# (src/data/roomLamps.js, written by tools/room-pipeline/export_lamps.py). `node`: the model object it is part of
+# (a wall's upper part folds down in the cutaway, and its halo goes with it); `at`: the middle of its glowing part,
+# game space; `ext`: that part's largest size (m). A filler wall's sconce (light=False: its light is the doorway
+# sconce's, at the same spot) gets a record too: only one of the two parts is shown in a match.
+LAMPS = []
+def lamp_record(kind, where, at, ext, watts, color):
+    LAMPS.append({'kind': kind, 'node': where.name, 'at': [round(a, 3) for a in at], 'ext': round(ext, 3),
+                  'watts': watts, 'color': [round(c, 3) for c in color]})
+
 def wall_run(sg):
     # 1. the solid slab, lower and upper, through the whole thickness
     th = abs(sg.outer - sg.face)
@@ -401,6 +411,8 @@ def sconce(sg, s, y, light=True):
     sg.put(s - 0.05, s + 0.05, y - 0.12, y + 0.12, 0.05, 0.15, C['shade'], 0.02, where=sg.up, mat='glow')
     sg.put(s - 0.055, s + 0.055, y + 0.12, y + 0.15, 0.045, 0.155, C['brass'], 0.008, where=sg.up)
     sg.put(s - 0.055, s + 0.055, y - 0.15, y - 0.12, 0.045, 0.155, C['brass'], 0.008, where=sg.up)
+    x0, x1, z0, z1 = sg.rect(s, s, 0.10, 0.10)
+    lamp_record('sconce', sg.up, (x0, y, z0), 0.24, 22.0, (1.0, 0.72, 0.42))
     if not light:
         return
     x0, x1, z0, z1 = sg.rect(s, s, 0.22, 0.22)
@@ -569,6 +581,7 @@ def table_lamp(x, z, y, h=0.6, shade_r=0.15):
     # the bulb: a pool of warm light below the shade, and a softer glow above it
     LIGHTS.append((x, y + h * 0.5, z, 70.0, 0.1, (1.0, 0.72, 0.44)))
     LIGHTS.append((x, y + h + 0.08, z, 12.0, 0.1, (1.0, 0.76, 0.5)))
+    lamp_record('lamp', ST, (x, y + h * 0.79, z), max(2 * shade_r, h * 0.42), 70.0, (1.0, 0.72, 0.44))
 
 # side table + lamp at the sofa's west end (inside the sofa's footprint and the wall margin)
 sx, sz = -3.47, 3.4
@@ -619,6 +632,14 @@ for i, p in enumerate(F('plant')):
     plant(p['center'][0], p['center'][1], i + 3)
 
 # ---- build Blender objects -------------------------------------------------------------------
+# --lamps FILE: only write the lamp records (tools/room-pipeline/export_lamps.py collects them for the game) and
+# stop: nothing is baked or exported, so the shipped model and light maps are untouched.
+if '--lamps' in argv:
+    with open(argv[argv.index('--lamps') + 1], 'w') as fh:
+        json.dump({'room': 'hall', 'lamps': LAMPS}, fh)
+    print('lamps hall', len(LAMPS))
+    sys.exit(0)
+
 bpy.ops.wm.read_factory_settings(use_empty=True)
 scene = bpy.context.scene
 

@@ -1,5 +1,18 @@
 # PROGRESS
 
+## v0.11 (2026-10-23): the owner's iPad check of v0.10
+
+Two notes from the owner: the version number could not be found in Settings, and the floors over the lift were "not
+aligned correctly" when the camera pushes in at the start of a game.
+- **The version line** is now on the first line of Settings, on the right of "Settings" (it was the last line, under
+  Done, 2 px from the bottom edge of a 1024x694 screen, and fell off with Safari's fonts), and at the foot of the Menu
+  panel in a match. Settings keeps clear of the iPad's home-indicator strip and scrolls if it ever has to.
+- **The lift's floor dial** is redrawn like a 1920s floor indicator: L, 2 ... 20 (no 13) evenly spread on a 150° arc so
+  L and 20 sit above the brass base, ticks on their own ring, a faint sunburst mirrored about the 10, the needle's
+  pivot on the hub. The needle now leaves L as the doors close and is seen resting between the 12 and the 14 (the
+  hidden 13th floor) as the screen fades; before, the screen went black while it was still on L. Same timing.
+- Two independent checks after each fix. No rule or rule number changed. Details: docs/DECISIONS.md (v0.11 sections).
+
 ## Graphics round 1 (2026-10-21): the owner's picks from the graphics review
 
 The owner asked for an agent to check the graphics quality and suggest improvements. The review (four lenses, A/B pictures, judges)

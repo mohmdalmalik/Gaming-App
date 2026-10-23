@@ -442,7 +442,7 @@ if (only.includes('e')) {
         const why = document.getElementById('set-menuMotion-why'), done = document.getElementById('btn-settings-done').getBoundingClientRect(), ver = document.getElementById('set-version').getBoundingClientRect();
         const lab = why.closest('.mf-label').getBoundingClientRect(), wr = why.getBoundingClientRect();
         return { btns: rows.map(b => ({ text: b.textContent, on: b.classList.contains('on'), disabled: b.disabled })), why: why.hidden ? null : why.textContent, whyOneLine: why.hidden || (wr.height < 22 && wr.right <= lab.right + 1),
-          fits: ver.bottom <= innerHeight && done.bottom <= innerHeight, stored: JSON.parse(localStorage.getItem('hotelEscape.settings.v1') || '{}').menuMotion ?? null }; });
+          fits: ver.top >= 0 && ver.bottom <= innerHeight && done.bottom <= innerHeight, /* (the version line: on the first line of Settings now) */ stored: JSON.parse(localStorage.getItem('hotelEscape.settings.v1') || '{}').menuMotion ?? null }; });
       let r = await row();
       if (reduce) {
         check(r.btns.length === 2 && r.btns[0].text === 'Animated' && r.btns[0].disabled && !r.btns[1].disabled && r.btns[1].on, `${name}: Still is chosen and Animated is dimmed and cannot be tapped (${JSON.stringify(r.btns)})`);

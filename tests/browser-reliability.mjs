@@ -12,7 +12,10 @@
 //    and clears the marker; no WebGL says so (and does not reload for nothing); offline: no automatic reload
 //    (the browser's own error page would replace the game), the card and its Reload button instead
 // 3. slow loading: no "check the internet" alarm after 20 s, what is loading is shown (files and MB), the
-//    menu comes up, the Settings screen's Version line (not on the main menu); a load that stalls for 30 s
+//    menu comes up, the Settings screen's Version line (on its first line, on the screen at the four iPad sizes, also
+//    30 px taller; not on the main menu); Settings with the iPad's safe areas (the home indicator, 20 px, and 24 px at
+//    the top): Done fully on the screen above the home indicator at 1133 x 670 (an iPad mini in Safari), or brought there
+//    by a swipe that scrolls Settings inside the panel and never the page; a load that stalls for 30 s
 //    gets a plain Reload button on the loading screen
 // 4. a step of the frame that throws: the picture goes on drawing and the camera on moving, a one-off shows
 //    nothing, repeated failure shows "Something went wrong" (Back to menu, Reload, the version and the last
@@ -219,14 +222,95 @@ console.log('\n3. slow loading: no false alarm, real progress');
   await page.evaluate(() => window.__game.menuShow('settings'));
   await sleep(700);
   const ver = await page.textContent('#set-version');
-  check(ver === versionLine() && /^Version v\d+\.\d+ · \d/.test(ver), `Settings ends with the quiet line "${ver}" (src/version.js)`);
-  const at = await page.evaluate(() => { const v = document.getElementById('set-version').getBoundingClientRect(), d = document.getElementById('btn-settings-done').getBoundingClientRect(); return { below: v.top >= d.bottom - 1, inside: v.bottom <= innerHeight }; });
-  check(at.below && at.inside, 'it sits below the Done button and on the screen');
+  check(ver === versionLine() && /^Version v\d+\.\d+ · \d/.test(ver), `Settings shows the quiet line "${ver}" (src/version.js)`);
+  // Where it is. It used to be the last line, under Done, 2 px from the bottom of a 1024 x 694 screen, and on an iPad it was
+  // not seen. It is now on the first line, on the right of "Settings", and the Settings screen never rises above the top of
+  // the screen (styles.css "Settings > Version"): at the four iPad sizes it is on the screen with room to spare, also when
+  // the screen is 30 px taller than here (Safari's taller fonts).
+  const still = () => page.waitForFunction(() => !document.getAnimations().some(a => a.playState === 'running' && a.effect?.target?.closest?.('#menu-settings')), null, { timeout: 10000, polling: 100 }).catch(() => {});
+  const place = () => page.evaluate(() => {
+    const box = e => { const r = e.getBoundingClientRect(); return { t: r.top, b: r.bottom, l: r.left, r: r.right }; };
+    const s = document.getElementById('menu-settings'), v = document.getElementById('set-version'), cs = getComputedStyle(v);
+    return { v: box(v), kicker: box(s.querySelector('.menu-kicker')), h2: box(s.querySelector('.menu-h2')), done: box(document.getElementById('btn-settings-done')), s: box(s),
+      h: innerHeight, w: innerWidth, size: parseFloat(cs.fontSize), shown: cs.display !== 'none' && cs.visibility === 'visible' && v.getClientRects().length > 0 };
+  });
+  const r0 = (n) => Math.round(n);
+  await still();
+  let at = await place();
+  check(at.shown && at.size >= 13, `it is shown at ${at.size} px (13 px or more)`);
+  check(at.v.b <= at.h2.t && Math.abs(at.v.b - at.kicker.b) <= 3 && at.v.l > at.kicker.r && at.v.r <= at.s.r + 1, `it is on the first line, on the right of "Settings", above the title (${r0(at.v.l)}..${r0(at.v.r)}, ${r0(at.v.t)}..${r0(at.v.b)})`);
   await run.shot('3-settings');
-  for (const [w, h] of [[1024, 768], [1024, 694], [1366, 1024]]) {
-    await page.setViewportSize({ width: w, height: h }); await sleep(500);
-    const r = await page.evaluate(() => { const v = document.getElementById('set-version').getBoundingClientRect(), s = document.querySelector('.menu-panel').getBoundingClientRect(); return { top: s.top, bottom: v.bottom, h: innerHeight }; });
-    check(r.top >= 0 && r.bottom <= r.h, `${w}x${h}: the whole Settings screen, version line included, fits (${Math.round(r.top)}..${Math.round(r.bottom)} of ${r.h})`);
+  for (const [w, h] of [[1180, 820], [1024, 768], [1024, 694], [1366, 1024]]) {
+    await page.setViewportSize({ width: w, height: h }); await sleep(500); await still();
+    at = await place();
+    check(at.v.t >= 8 && at.v.b <= at.h - 8 && at.v.l >= 0 && at.v.r <= at.w && at.s.t >= 0 && at.done.b <= at.h,
+      `${w}x${h}: the version line is on the screen with room to spare (${r0(at.v.t)}..${r0(at.v.b)} of ${at.h}), and the whole Settings screen fits (${r0(at.s.t)}..${r0(at.done.b)})`);
+    // (Safari's fonts can be taller than here: 30 px more on the Settings screen, and the line is still on the screen)
+    await page.evaluate(() => { const x = document.createElement('div'); x.id = 'test-taller'; x.style.height = '30px'; document.getElementById('set-tips').closest('.menu-field').before(x); });
+    await sleep(200);
+    at = await place();
+    await page.evaluate(() => document.getElementById('test-taller')?.remove());
+    check(at.v.t >= 8 && at.v.b <= at.h - 8 && at.v.t >= at.s.t && at.v.b <= at.h2.t,
+      `${w}x${h}, the Settings screen 30 px taller: the version line is still on the screen (${r0(at.v.t)}..${r0(at.v.b)} of ${at.h}; the screen ${r0(at.s.t)}..${r0(at.s.b)})`);
+  }
+  // The iPad's safe areas: the home-indicator strip along the bottom (20 px) and, in full screen, 24 px at the top, given to
+  // the page as env(safe-area-inset-*) by Chromium's own emulation (a CSS stand-in if this Chromium has none). Settings keeps
+  // 8 px clear of each, the top margin following the top one and the bottom margin the bottom one, and when it is taller than
+  // the space it scrolls inside the panel. On an iPad mini 6 in Safari (1133 x 670) Done is fully on the screen, above the
+  // home indicator, or a swipe on the panel brings it there; the version line shows at the top as Settings opens; the swipe
+  // scrolls Settings and never the page (the lobby behind stays put); Settings opens at its top again next time.
+  {
+    const cdp = await page.context().newCDPSession(page);
+    const insets = () => page.evaluate(() => {
+      const p = document.createElement('div'); p.style.cssText = 'position:fixed;left:0;width:1px;top:env(safe-area-inset-top,0px);bottom:env(safe-area-inset-bottom,0px);pointer-events:none';
+      document.body.append(p); const r = p.getBoundingClientRect(); p.remove(); return [r.top, innerHeight - r.bottom];
+    });
+    const safe = async (top, bottom) => {
+      await page.evaluate(() => document.getElementById('test-safe')?.remove());
+      try { await cdp.send('Emulation.setSafeAreaInsetsOverride', { insets: { top, bottom, left: 0, right: 0 } }); } catch { /* (an older Chromium) */ }
+      await sleep(100);
+      const [t, b] = await insets();
+      if (t !== top || b !== bottom) await page.evaluate(([t, b]) => { const s = document.createElement('style'); s.id = 'test-safe'; s.textContent = `:root { --safe-top: ${t}px !important; --safe-bottom: ${b}px !important; }`; document.head.append(s); }, [top, bottom]);
+      return t === top && b === bottom ? 'env()' : 'a CSS stand-in';
+    };
+    const more = () => page.evaluate(() => {
+      const s = document.getElementById('menu-settings'), c = document.querySelector('#view').getBoundingClientRect();
+      return { scrollTop: s.scrollTop, scrolls: s.scrollHeight > s.clientHeight + 1, page: [scrollX, scrollY, visualViewport.offsetTop, visualViewport.pageTop, document.documentElement.scrollTop, document.body.scrollTop], view: [c.top, c.left, c.height] };
+    });
+    const swipeUp = async () => {   // a finger on the Music row's label, 200 px up
+      const [x, y] = await page.evaluate(() => { const r = document.getElementById('set-music').closest('.menu-field').querySelector('.mf-label').getBoundingClientRect(); return [r.left + 20, r.top + r.height / 2]; });
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x, y }] });
+      for (let i = 1; i <= 10; i++) { await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x, y: y - i * 20 }] }); await sleep(16); }
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+      await sleep(700);
+    };
+    for (const [w, h, top, bottom, extra] of [[1133, 670, 0, 20, 0], [1133, 670, 0, 20, 30], [1133, 670, 24, 20, 30], [1024, 694, 24, 20, 30], [1180, 746, 24, 20, 0]]) {
+      await page.setViewportSize({ width: w, height: h });
+      const how = await safe(top, bottom);
+      await page.evaluate(() => { window.__game.menuShow('main'); window.__game.menuShow('settings'); });
+      if (extra) await page.evaluate(px => { const x = document.createElement('div'); x.id = 'test-taller'; x.style.height = `${px}px`; document.getElementById('set-tips').closest('.menu-field').before(x); }, extra);
+      await sleep(300); await still();
+      const name = `${w}x${h}, safe areas ${top} px top and ${bottom} px bottom (${how})${extra ? `, Settings ${extra} px taller` : ''}`;
+      at = await place();
+      const m0 = await more();
+      check(at.v.t >= top && at.v.b <= at.h2.t && at.v.b <= h && m0.scrollTop === 0, `${name}: Settings opens at its top, the version line on the screen (${r0(at.v.t)}..${r0(at.v.b)})`);
+      const clear = d => d.t >= top && d.b <= h - bottom;
+      if (clear(at.done)) check(true, `...Done is fully on the screen, above the home indicator (${r0(at.done.t)}..${r0(at.done.b)} of ${h}, the strip from ${h - bottom}), no scrolling needed`);
+      else {
+        check(m0.scrolls, `...Done (${r0(at.done.t)}..${r0(at.done.b)} of ${h}, the strip from ${h - bottom}) is further down, and Settings scrolls inside the panel`);
+        await swipeUp();
+        const d = await place(), m1 = await more();
+        check(clear(d.done) && m1.scrollTop > 0, `...a swipe on the panel brings Done fully on the screen, above the home indicator (${r0(d.done.t)}..${r0(d.done.b)}; scrolled ${r0(m1.scrollTop)} px)`);
+        check(m1.page.every(v => v === 0) && m1.view.join() === m0.view.join(), `...the swipe scrolls Settings only: the page and the lobby behind it stay put (${m1.page.join(', ')})`);
+        await page.evaluate(() => { window.__game.menuShow('main'); window.__game.menuShow('settings'); });
+        await sleep(300); await still();
+        const again = await place(), m2 = await more();
+        check(m2.scrollTop === 0 && again.v.t >= top, `...and Settings opens at its top again next time (scrolled ${m2.scrollTop} px, the version line at ${r0(again.v.t)})`);
+      }
+      await page.evaluate(() => document.getElementById('test-taller')?.remove());
+    }
+    await safe(0, 0);
+    await page.setViewportSize({ width: 1180, height: 820 });
   }
   check(!run.messages.length, `no console errors or warnings${run.messages.length ? `: ${run.messages[0]}` : ''}`);
   await run.browser.close();

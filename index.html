@@ -322,8 +322,14 @@
           </div>
         </section>
 
-        <section id="menu-settings" class="menu-screen" hidden>
-          <div class="menu-kicker">Settings</div>
+        <!-- (data-scrolls: on a short screen Settings scrolls by touch inside the panel, so Done can always be reached) -->
+        <section id="menu-settings" class="menu-screen" data-scrolls hidden>
+          <!-- The first line: "Settings", and on its right which build this is (src/version.js; filled by src/ui/menu.js):
+               quiet, for bug reports. At the top, so it is always on the screen (styles.css "Settings > Version"). -->
+          <div class="set-head">
+            <div class="menu-kicker">Settings</div>
+            <div id="set-version" class="set-version"></div>
+          </div>
           <h2 class="menu-h2">On this device</h2>
           <div class="menu-field"><div class="mf-label">Bot speed</div><div id="set-botSpeed" class="seg" role="radiogroup" aria-label="Bot speed"></div></div>
           <div class="menu-field"><div class="mf-label">Other guests&#8217; turns</div><div id="set-follow" class="seg" role="radiogroup" aria-label="The view on other guests' turns"></div></div>
@@ -343,8 +349,6 @@
           <div class="menu-actions">
             <button id="btn-settings-done" class="menu-btn primary small" type="button">Done</button>
           </div>
-          <!-- Which build this is (src/version.js; filled by src/ui/menu.js): quiet, for bug reports. -->
-          <div id="set-version" class="set-version"></div>
         </section>
 
         <!-- Your record on this device (numbers: src/record.js; filled by src/ui/record.js). -->
@@ -511,6 +515,8 @@
           <button id="btn-gm-cards" class="btn big" type="button" data-sfx="open">Cards</button>
           <button id="btn-gm-leave" class="btn big" type="button">Leave the match</button>
         </div>
+        <!-- Which build this is, the same quiet line as at the top of Settings (src/version.js; filled by src/ui/gameMenu.js). -->
+        <div id="gm-version" class="set-version gm-version"></div>
       </div>
     </div>
 

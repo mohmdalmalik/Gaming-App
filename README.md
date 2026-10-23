@@ -33,7 +33,7 @@ finished a practice), **How to play** and **Cards** side by side, then **Setting
   the kinds of cards, never anyone's hand, and changes nothing in a match (the Menu panel still holds the clock).
 - **The Menu button in a match** opens a small panel (`src/ui/gameMenu.js`): Resume, Music and Sound effects
   (the same choices and the same saved settings as Settings), How to play, and Leave, which asks "Leave the
-  match?" as before. **The turn clock does exactly what it did when the button asked that question**: it
+  match?" as before; at its foot, the version line. **The turn clock does exactly what it did when the button asked that question**: it
   stands still, and the computer guests wait, while the panel (or the question after it) is open. (Whether
   the clock should run while the Menu is open is the owner's decision, still pending.) On the end screen the
   button still goes straight to the main menu.
@@ -318,8 +318,8 @@ commit's mark after a publish.
 
 **Every publish gets a version, `v0.N`** (the next number each time):
 
-1. In `src/version.js` set `VERSION` (`'v0.6'`) and `VERSION_DATE` (`'20 Oct 2026'`). It shows at the bottom of
-   Settings ("Version v0.6 · 20 Oct 2026") and in the small print of the "Something went wrong" card, so a
+1. In `src/version.js` set `VERSION` (`'v0.6'`) and `VERSION_DATE` (`'20 Oct 2026'`). It shows at the top of
+   Settings, on the right of "Settings" ("Version v0.6 · 20 Oct 2026"), at the foot of the Menu panel in a match, and in the small print of the "Something went wrong" card, so a
    screenshot or a bug report says which build it came from. Commit it with the publish.
 2. Push to `main`, then write that exact commit into `docs/VERSIONS.md` (version, date, commit, one line on what
    is in it). The version list is a file because Claude's cloud session cannot push git tags (GitHub refuses
@@ -333,7 +333,7 @@ git log --oneline <commit-of-v0.5>..main      # what has been published since v0
 git show <commit-of-v0.5> --stat             # what v0.5 was
 ```
 
-On the iPad: Settings shows the version of the game you are playing.
+On the iPad: Settings (top right) and the Menu panel in a match (under Leave) show the version of the game you are playing.
 
 **Put the live game back on an earlier version** (to say it to Claude: "roll back to v0.5"; the commit is in `docs/VERSIONS.md`). History is never
 rewritten and nothing is force-pushed: the rollback is one new commit that makes the files exactly what they
@@ -379,7 +379,7 @@ manifest.webmanifest  the web-app manifest for Add to Home Screen: name, standal
 src/
   main.js             starts everything; the menu → lift → game flow; the turn flow (the player's turns
                       and the bots' turns, meetings both ways); window.__game debug hooks
-  version.js          the version label and date shown in Settings (set at each publish)
+  version.js          the version label and date shown in Settings and in the in-match Menu (set at each publish)
   config.js           display / camera / feel tuning
   settings.js         the player's own settings (bot speed, view, graphics, menu background, music, sound, quick chat, tips, clearer possessed eyes), kept on the device
   motion.js           the device's Reduce Motion setting (prefers-reduced-motion), read live: it holds the two flickering corridors' light steady, the menu lobby Still and, in styles.css, the decorative CSS motion quiet
@@ -410,6 +410,9 @@ src/
                       lobbyTextures.js (canvas textures, no image files), wardrobeLight.js (the Wardrobe's key
                       light on your avatar, Wardrobe only). Preview: tools/menu-preview.html
                       (?menu=1 ?blur=1 ?enter=1&guests=3); check: node tests/menu-scene-shots.mjs
+                      (also the lift's floor dial: marks clear of each other, the ticks, the rim and
+                      the base; the needle on the hub, resting between the 12 and the 14 as the screen
+                      fades; close-up tests/shots/menu/dial-end.png)
   data/
     rules.js          THE RULE NUMBERS — implements docs/GAME_RULES.md (owner-approved changes only)
     hotel.js          THE HOTEL: the lobby and the 24-tile room deck (doorways, dark, locked, furniture, moods)

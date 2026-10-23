@@ -212,36 +212,116 @@ export function liftDoorTexture() {
   });
 }
 
-// Floor-indicator dial: a cream half-disc with the floor marks (`labels`, left to right, from the layout:
-// src/menu/lobbyLayout.js lift.dial), inside a brass rim (the needle is a mesh). Drawn in a 256 x 160
-// design space and scaled to a 384 x 240 canvas, so the marks stay crisp when the camera pushes in.
-// Plain lining figures (not old-style ones, whose 3, 4, 5, 7 and 9 sink below the line), and the two-digit
-// marks are drawn a little narrow, so neighbours near the top of the arc never touch.
-export function dialTexture(labels) {
-  const K = 1.5;
-  return canvasTexture('dial:' + labels.join(','), 256 * K, 160 * K, (g) => {
+// The floor dial's face, in its 256 x 160 design space (pixels, y down). src/menu/lobbySet.js sizes the
+// plate from w x h, turns the needle on `hub` and makes it `tip` long, so the needle's pivot is the brass
+// hub drawn here and its arrow ends on the ring of ticks. Radii from the hub:
+//   rim   the brass rim's outer edge          face  the cream face inside it
+//   tick  the ring of ticks (inner, outer)    tip   where the needle's arrow ends (on the ticks)
+//   mark  where the marks' centres stand      font  the marks' largest size (smaller if they would crowd)
+export const DIAL_FACE = { w: 256, h: 160, hub: [128, 142], hubR: 9, base: 14, rim: 124, face: 114, tick: [69, 79], tip: 75, mark: 97, font: 24 };
+
+// Where a point `f` steps from the first mark stands on the dial (0 = L ... floors = the top mark): its
+// angle in radians from straight up, positive to the left. The marks spread evenly over `sweepDeg` degrees
+// (src/menu/lobbyLayout.js lift.dialSweep), centred on straight up. The texture draws its marks with this and
+// the needle turns by it (src/menu/lobbySet.js setFloor), so the needle always points exactly at a mark.
+export function dialAngle(f, floors, sweepDeg) { return (0.5 - f / floors) * sweepDeg * Math.PI / 180; }
+
+// Floor-indicator dial, after the 1920s Art Deco ones: a cream half-disc inside a brass rim on a brass base,
+// a faint sunburst round the hub (mirrored about straight up), a ring of ticks with a scale line, and the
+// floor marks (`labels`, left to right: src/menu/lobbyLayout.js lift.dial) spread evenly over `sweepDeg`
+// degrees (less than a half circle, so the first and last marks stand clear of the base). Every mark stands
+// upright on the line from the hub through its tick, outside the ring of ticks (the needle is a mesh:
+// src/menu/lobbySet.js). Drawn in the DIAL_FACE design space and scaled to a 384 x 240 canvas, so the marks
+// stay crisp when the camera pushes in.
+// Plain lining figures (old-style 3, 4, 5, 7 and 9 sink below the line), every mark drawn equally narrow
+// (MARK_NARROW: tall, condensed Deco figures); the marks' size is measured here and stepped down if any two
+// would come within MARK_GAP of each other or of the ticks, rim or base (a device's own serif font may be
+// wider). What was drawn (each mark's and tick's box, in design pixels, and the sunburst's wedges) is kept in
+// texture.userData.dial for tests/menu-scene-shots.mjs.
+const MARK_GAP = 3;   // design px (4.5 on the canvas): the least room round every mark
+const MARK_NARROW = 0.74;   // the marks' width, as a share of the font's own
+const MARK_WEIGHT = 0.9;    // design px of ink traced round each mark, so the narrow figures keep a bold stroke
+export function dialTexture(labels, sweepDeg) {
+  const K = 1.5, F = DIAL_FACE;
+  let drawn = null;
+  const tex = canvasTexture(`dial:${labels.join(',')}:${sweepDeg}`, F.w * K, F.h * K, (g) => {
     g.scale(K, K);
-    const w = 256, h = 160;
+    const { w, h } = F, [cx, cy] = F.hub, n = labels.length - 1;
+    const ang = i => dialAngle(i, n, sweepDeg);
+    const at = (a, r) => [cx - Math.sin(a) * r, cy - Math.cos(a) * r];
+    const arcA = a => -Math.PI / 2 - a;            // canvas arc angle (from +x, clockwise) for an angle from up
+    const brass = '#b08a45', brassDark = '#8a6a32', cream = '#efe2c2', creamDeep = '#e5d3aa', ink = '#2a1a10';
     g.clearRect(0, 0, w, h);
-    const cx = w / 2, cy = h - 18, R = 112;
-    g.fillStyle = '#b08a45';
-    g.beginPath(); g.arc(cx, cy, R + 12, Math.PI, 0); g.lineTo(cx + R + 12, cy + 14); g.lineTo(cx - R - 12, cy + 14); g.closePath(); g.fill();
-    g.fillStyle = '#efe2c2';
-    g.beginPath(); g.arc(cx, cy, R, Math.PI, 0); g.closePath(); g.fill();
-    g.fillStyle = '#2a1a10';
-    g.font = 'bold 27px "Times New Roman", Times, "Liberation Serif", serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
-    labels.forEach((t, i) => {
-      const a = Math.PI + (i / (labels.length - 1)) * Math.PI;
-      const c = Math.cos(a), s = Math.sin(a);
-      g.save();
-      g.translate(cx + c * (R - 20), cy + s * (R - 20) + 1);
-      if (t.length > 1) g.scale(0.84, 1);
-      g.fillText(t, 0, 0);
-      g.restore();
-      g.fillRect(cx + c * (R - 5) - 1, cy + s * (R - 5) - 1, 3, 3);
+    // brass rim and base, the cream face, a thin dark bevel where they meet
+    g.fillStyle = brass;
+    g.beginPath(); g.arc(cx, cy, F.rim, Math.PI, 0); g.lineTo(cx + F.rim, cy + F.base); g.lineTo(cx - F.rim, cy + F.base); g.closePath(); g.fill();
+    g.fillStyle = brassDark;
+    g.beginPath(); g.arc(cx, cy, F.face + 2, Math.PI, 0); g.closePath(); g.fill();
+    g.fillStyle = cream;
+    g.beginPath(); g.arc(cx, cy, F.face, Math.PI, 0); g.closePath(); g.fill();
+    // sunburst: a wedge a shade deeper on every other mark, one step wide and centred on it, from the hub to just
+    // inside the ticks. They are counted out from the middle of the sweep (straight up) in steps of two marks, so the
+    // pattern mirrors about straight up: with L ... 20 the wedges sit on the 2, 6, 10, 14 and 18, the 10's in the middle.
+    g.fillStyle = creamDeep;
+    const shade = [];
+    for (let k = -Math.ceil(n / 4); k <= Math.ceil(n / 4); k++) {
+      const c = n / 2 + 2 * k;
+      if (c - 0.5 < 0 || c + 0.5 > n) continue;
+      const a0 = ang(c - 0.5), a1 = ang(c + 0.5);
+      g.beginPath(); g.moveTo(cx, cy);
+      g.arc(cx, cy, F.tick[0] - 6, arcA(a0), arcA(a1));
+      g.closePath(); g.fill();
+      shade.push([a0, a1]);
+    }
+    // the scale line along the outer edge of the ticks, and the ticks (one per mark, on the line to it)
+    g.strokeStyle = ink; g.lineWidth = 1.2;
+    g.beginPath(); g.arc(cx, cy, F.tick[1], arcA(ang(0)), arcA(ang(n))); g.stroke();
+    g.lineWidth = 2.4; g.lineCap = 'butt';
+    const ticks = labels.map((_, i) => {
+      const a = ang(i), [x0, y0] = at(a, F.tick[0]), [x1, y1] = at(a, F.tick[1]);
+      g.beginPath(); g.moveTo(x0, y0); g.lineTo(x1, y1); g.stroke();
+      const ox = Math.abs(Math.cos(a)) * 1.2, oy = Math.abs(Math.sin(a)) * 1.2;   // half the stroke, across the tick
+      return [Math.min(x0, x1) - ox, Math.min(y0, y1) - oy, Math.max(x0, x1) + ox, Math.max(y0, y1) + oy];
     });
-    g.fillStyle = '#b08a45'; g.beginPath(); g.arc(cx, cy, 9, 0, Math.PI * 2); g.fill();
+    // the marks: measured, centred on their line (ink box, not the font's em box), stepped down if crowded
+    const layout = size => {
+      g.font = `bold ${size}px "Times New Roman", Times, "Liberation Serif", serif`;
+      return labels.map((t, i) => {
+        const m = g.measureText(t), s = MARK_NARROW, a = ang(i), [px, py] = at(a, F.mark);
+        const L = m.actualBoundingBoxLeft, R = m.actualBoundingBoxRight, A = m.actualBoundingBoxAscent, D = m.actualBoundingBoxDescent;
+        const bw = (L + R) * s, bh = A + D, o = MARK_WEIGHT / 2;   // (the box includes the traced ink)
+        return { t, a, s, x: px - bw / 2 + L * s, y: py + (A - D) / 2, box: [px - bw / 2 - o, py - bh / 2 - o, px + bw / 2 + o, py + bh / 2 + o] };
+      });
+    };
+    const gap = (p, q) => Math.max(q[0] - p[2], p[0] - q[2], q[1] - p[3], p[1] - q[3]);
+    const room = marks => {
+      let least = Infinity;
+      marks.forEach((m, i) => {
+        if (i) least = Math.min(least, gap(marks[i - 1].box, m.box));
+        for (const t of ticks) least = Math.min(least, gap(m.box, t));
+        const [x0, y0, x1, y1] = m.box;
+        const far = Math.hypot(Math.max(Math.abs(x0 - cx), Math.abs(x1 - cx)), Math.max(Math.abs(y0 - cy), Math.abs(y1 - cy)));
+        least = Math.min(least, F.face - far, cy - y1);
+      });
+      return least;
+    };
+    let size = F.font, marks = layout(size);
+    while (room(marks) < MARK_GAP && size > 14) marks = layout(size -= 0.5);
+    g.fillStyle = ink; g.strokeStyle = ink; g.lineJoin = 'round'; g.textAlign = 'left'; g.textBaseline = 'alphabetic';
+    for (const m of marks) {
+      g.save(); g.translate(m.x, m.y); g.scale(m.s, 1); g.lineWidth = MARK_WEIGHT; g.fillText(m.t, 0, 0); g.strokeText(m.t, 0, 0); g.restore();
+    }
+    // the base's top edge, then the brass hub the needle turns on
+    g.fillStyle = brassDark; g.fillRect(cx - F.rim, cy, F.rim * 2, 1.2);
+    g.fillStyle = brass; g.beginPath(); g.arc(cx, cy, F.hubR, 0, Math.PI * 2); g.fill();
+    g.strokeStyle = brassDark; g.lineWidth = 1.2; g.beginPath(); g.arc(cx, cy, F.hubR - 0.6, 0, Math.PI * 2); g.stroke();
+    drawn = { w, h, size, sweep: sweepDeg, hub: [cx, cy], face: F.face, baseTop: cy, tip: F.tip, tickRing: F.tick.slice(),
+      shade, shadeR: F.tick[0] - 6,   // (the sunburst's wedges: [from, to] angles from straight up, and their radius)
+      marks: marks.map(m => ({ label: m.t, angle: m.a, box: m.box.map(v => +v.toFixed(2)) })),
+      ticks: ticks.map(b => b.map(v => +v.toFixed(2))) };
   }, { srgb: true });
+  if (drawn) tex.userData.dial = drawn;
+  return tex;
 }
 
 // Tall night window: deep blue glass with a cold glow low down, glazing bars and an arched head.

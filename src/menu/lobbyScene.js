@@ -1,7 +1,7 @@
 // The animated 3D background of the main menu: a grand Art Deco hotel lobby at night. Guests sit on
 // the velvet sofas, chat at reception and stroll; the concierge works the desk; the manager paces the
 // back of the room, pausing at the night windows. On Play, the manager steps into the lift, the
-// chosen seated guests rise and follow him in, turn to face out, the brass doors close and the floor
+// chosen seated guests rise and follow him in, turn to face out, and as the brass doors close the floor
 // dial's needle swings up to rest between two of its marks (the hidden floor the guests are stuck on), while
 // the camera pushes in and everyone left behind turns to watch.
 //
@@ -24,8 +24,10 @@
 //   await lobby.enter({ guests: 3 });        // the boarding; resolves when the lift doors have shut
 //                                            //  (your avatar boards first: alone for 1, with Victor and
 //                                            //  Clara for 3; without one, the first guests by `boards`)
-//                                            //  (~5.8 s for 3 guests, ~4.8 s for 1); the dial keeps
-//                                            //  moving afterwards, so keep rendering during the fade.
+//                                            //  (~5.8 s for 3 guests, ~4.8 s for 1); the dial's needle
+//                                            //  is at rest in its gap by then (it climbs while the doors
+//                                            //  close), the camera may still be easing in, so keep
+//                                            //  rendering during the fade.
 //                                            //  onCue(name) (optional) is told 'liftDing' / 'liftDoors'
 //                                            //  as the bell rings and the doors open, then close
 //   lobby.reset();                           // back to the calm tableau (instant)
@@ -50,6 +52,8 @@ const D2R = Math.PI / 180;
 const ease = t => (t <= 0 ? 0 : t >= 1 ? 1 : t * t * (3 - 2 * t));
 const easeInOut = t => (t <= 0 ? 0 : t >= 1 ? 1 : t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
 const wrap = a => Math.atan2(Math.sin(a), Math.cos(a));
+// The lift doors take 0.95 s to close (updateSequence); the dial's needle climbs from L to its gap in a little less.
+const NEEDLE_S = 0.9;
 
 // Soft contact shadows (one instanced draw call for every person and piece of furniture).
 function makeShadows(max) {
@@ -436,11 +440,12 @@ export function createLobbyScene({ renderer, cfg, layout = lobbyLayout } = {}) {
     s.ding = Math.max(0, s.ding - dt * 1.2);
     if (s.t > 0.15 && !s.dinged) { s.dinged = true; s.ding = 1; cue(s, 'liftDing'); cue(s, 'liftDoors'); }
     set.lift.setDing(s.ding);
-    // shut: the dial's needle climbs to its resting gap (lift.destination); the promise resolves
+    // the dial's needle: it leaves L as the doors start to close and comes to rest in its gap (lift.destination, the
+    // hidden floor) a moment before they meet, eased in and out, so it is seen resting there through the fade to
+    // black that starts when the doors have shut (src/main.js enterGame); shut: the promise resolves
+    if (s.closeAt != null) set.lift.setFloor(ease((s.t - s.closeAt) / NEEDLE_S) * lift.destination);
     if (s.closeAt != null && s.t >= s.closeAt + 0.95) {
       if (s.shutAt == null) s.shutAt = s.t;
-      const up = ease((s.t - s.shutAt - 0.15) / 3.0);
-      set.lift.setFloor(up * lift.destination);
       if (!s.done) { s.done = true; s.resolve(); }
     }
     // the manager, once in, watches the guests come in

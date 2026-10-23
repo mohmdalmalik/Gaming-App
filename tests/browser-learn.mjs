@@ -10,13 +10,15 @@
 //   b  a match (at each size, with the 45-second clock on): the role screen's headline, its text size and its one line
 //      about the other side, fitting; the Lanterns chip (the same for both sides, following the hand, in no one's
 //      way); the in-match Menu panel (Resume, the Music and Sound effects rows saved in Settings' own place, How to
-//      play, Leave and its question with the safe answer in gold) and what the CLOCK does while it is open (it
+//      play, Leave and its question with the safe answer in gold, the quiet version line at the bottom of the card,
+//      inside it) and what the CLOCK does while it is open (it
 //      stands still, exactly as it did while the Leave question was open, and goes on after); the end screen:
 //      Victory or Defeat for your side whether or not you are alive or got out, the recap, fitting, both sides
 //   c  a possessed player's role screen, chip and end screen (the same form and words as a clean guest's)
-//   d  practice: the Menu panel says Leave practice, the end screen has no Victory or Defeat
+//   d  practice: the Menu panel says Leave practice and has the version line too, the end screen has no Victory or Defeat
 import { launch, GUARD_WAIT, settle } from './smoke-lib.mjs';
 import { LANTERN_TRADE_NOTE } from '../src/data/tips.js';
+import { versionLine } from '../src/version.js';
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -251,13 +253,20 @@ async function matchChecks(W, H, role) {
       const rows = ['gm-music', 'gm-sound'].map(id => [...document.querySelectorAll(`#${id} .seg-btn`)].map(b => `${b.textContent}${b.classList.contains('on') ? '*' : ''}`).join(' '));
       const targets = [...root.querySelectorAll('button')].map(b => { const r = b.getBoundingClientRect(); return { id: b.id || b.textContent, w: r.width, h: r.height }; });
       return { open: window.__game.menuPanelOpen(), ask: window.__game.askOpen(), title: document.getElementById('gm-title').textContent, rows, targets, card: { t: card.top, b: card.bottom, l: card.left, r: card.right },
-        main: [...root.querySelectorAll('.gm-actions .btn')].map(b => b.textContent), focus: document.activeElement?.id, resumeGold: document.getElementById('btn-gm-resume').classList.contains('primary') };
+        main: [...root.querySelectorAll('.gm-actions .btn')].map(b => b.textContent), focus: document.activeElement?.id, resumeGold: document.getElementById('btn-gm-resume').classList.contains('primary'),
+        version: (() => { const v = document.getElementById('gm-version'), r = v.getBoundingClientRect(), l = document.getElementById('btn-gm-leave').getBoundingClientRect(), cs = getComputedStyle(v);
+          return { text: v.textContent, t: r.top, b: r.bottom, l: r.left, r: r.right, belowLeave: r.top >= l.bottom, size: parseFloat(cs.fontSize), shown: v.getClientRects().length > 0 && cs.visibility === 'visible' }; })() };
     });
     let ps = await panelState();
     check(ps.open && !ps.ask && ps.title === 'Menu', 'the Menu button opens the Menu panel (not the question)');
     check(ps.main.join('|') === 'Resume|How to play|Cards|Leave the match' && ps.resumeGold, `...Resume (in gold), How to play, Cards, Leave the match (${ps.main.join(' | ')})`);
     check(ps.rows.join('|') === 'Off Low Medium* High|Off Low Medium High*', `...Music and Sound effects, with the same Off / Low / Medium / High as Settings (${ps.rows.join(' / ')})`);
     check(ps.card.t >= 0 && ps.card.b <= H && ps.card.l >= 0 && ps.card.r <= W, `...it fits (${Math.round(ps.card.t)}-${Math.round(ps.card.b)} of ${H})`);
+    {
+      const v = ps.version;
+      check(v.shown && v.text === versionLine() && v.size >= 13, `...and at its foot the quiet version line "${v.text}" (${v.size} px), as at the top of Settings`);
+      check(v.belowLeave && v.t >= ps.card.t && v.b <= ps.card.b - 8 && v.l >= ps.card.l && v.r <= ps.card.r && v.b <= H - 8, `...under Leave, inside the card and on the screen (${Math.round(v.t)}-${Math.round(v.b)}; the card ends ${Math.round(ps.card.b)} of ${H})`);
+    }
     check(ps.targets.every(b => b.w >= 44 && b.h >= 44), `...every button a touch target of 44 px or more (smallest ${Math.round(Math.min(...ps.targets.map(b => b.h)))} px tall)`);
     check(ps.focus === 'btn-gm-resume', 'the keyboard focus is in the panel (on Resume)');
     await page.screenshot({ path: `${outDir}/b-menu-${role}-${W}x${H}.png` });
@@ -424,6 +433,9 @@ if (only.includes('d')) {
     check(c.shown && /^✦ Lanterns \d\/3$/.test(c.text), `practice has the Lanterns chip too ("${c.text}")`);
     await page.click('#btn-leave'); await page.waitForTimeout(500);
     check(await ev(() => window.__game.menuPanelOpen() && document.getElementById('btn-gm-leave').textContent === 'Leave practice'), 'the Menu panel in practice says Leave practice');
+    const pv = await ev(() => { const v = document.getElementById('gm-version'), r = v.getBoundingClientRect(), c = document.querySelector('.gamemenu-card').getBoundingClientRect();
+      return { text: v.textContent, shown: v.getClientRects().length > 0, inside: r.top >= c.top && r.bottom <= c.bottom && r.bottom <= innerHeight }; });
+    check(pv.shown && pv.inside && pv.text === versionLine(), `...and has the version line at its foot too ("${pv.text}")`);
     await page.waitForTimeout(GUARD_WAIT);
     await page.click('#btn-gm-leave'); await page.waitForTimeout(400);
     check(await ev(() => window.__game.askOpen() && document.getElementById('ask-title').textContent === 'Leave practice?' && document.getElementById('btn-ask-no').classList.contains('primary')), '...and its question is "Leave practice?", Keep playing in gold');

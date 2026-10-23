@@ -74,7 +74,7 @@ export function createMenu(doc, { onPlayBots, onPractice, onSettingChanged, onSc
     for (const k of SCREENS) { const el = screenEl(k); if (el) el.hidden = k !== name; }
     if (name === 'main') { card.render(); renderHint(); }
     if (name === 'bots') renderBots();
-    if (name === 'settings') renderSettings();
+    if (name === 'settings') { renderSettings(); screenEl('settings').scrollTop = 0; }   // (it opens at its top, the version line showing, if it scrolls: styles.css "Settings > Version")
     if (name === 'record') { recordView.confirm(false); recordView.render(); }
     if (name === 'signup') register.shown();
     try { onScreenChange?.(name, prev); } catch (err) { console.error('menu screen change failed:', err); }

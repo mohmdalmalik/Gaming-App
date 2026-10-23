@@ -173,7 +173,7 @@ export function buildLobbySet(L) {
   const keysMat = new THREE.MeshLambertMaterial({ map: TX.keyBoardTexture() });
   const winMat = new THREE.MeshBasicMaterial({ map: TX.windowTexture() });
   const doorMat = new THREE.MeshLambertMaterial({ map: TX.liftDoorTexture() });
-  const dialMat = new THREE.MeshLambertMaterial({ map: TX.dialTexture(L.lift.dial), transparent: true, alphaTest: 0.05, emissive: new THREE.Color('#3a2a14') });
+  const dialMat = new THREE.MeshLambertMaterial({ map: TX.dialTexture(L.lift.dial, L.lift.dialSweep), transparent: true, alphaTest: 0.05, emissive: new THREE.Color('#3a2a14') });
   disposables.push(lam, lamDouble, glowMat, floorMat, wallMat, rugMat, runnerMat, keysMat, winMat, doorMat, dialMat);
 
   const S = new Batch();          // solid Lambert, vertex colours
@@ -297,21 +297,29 @@ export function buildLobbySet(L) {
   // call button plate
   S.box(0.12, 0.26, 0.03, lx1 + 0.42, 1.1, wallZ + 0.015, C.brass);
   const callGlow = glows.add({ type: 'bill', pos: [lx1 + 0.42, 1.14, wallZ + 0.06], size: [0.12, 0.12], color: '#ffb35a', intensity: 0.6 });
-  // floor dial above the fan: plate + needle (moving). Its marks are in the layout (`lift.dial`), drawn
-  // by TX.dialTexture; the plate sits on the plaster just above the brass frieze.
+  // floor dial above the fan: plate + needle (moving). Its marks are in the layout (`lift.dial`, spread over
+  // `lift.dialSweep` degrees), drawn by TX.dialTexture; the plate sits on the plaster just above the brass frieze.
+  // The needle is sized and placed from the texture's own face (TX.DIAL_FACE, design pixels): it turns on the
+  // brass hub and its arrow ends on the ring of ticks.
   const DS = 1.45;                   // dial scale (as large as the camera's push toward the doors leaves room for, on a short screen)
-  const dialH = 0.45 * DS;           // the plate is 0.72 x 0.45 m at scale 1 (the texture's 256 x 160 shape)
+  const FACE = TX.DIAL_FACE;
+  const px = (0.72 * DS) / FACE.w;   // metres per design pixel: the plate is 0.72 m wide at scale 1
+  const dialW = FACE.w * px, dialH = FACE.h * px;
   const dialBottom = PT + 0.12;
-  const dialG = new THREE.PlaneGeometry(0.72 * DS, dialH);
+  const dialG = new THREE.PlaneGeometry(dialW, dialH);
   const dial = new THREE.Mesh(dialG, dialMat);
   dial.position.set(lift.x, dialBottom + dialH / 2, wallZ + 0.06);
   dial.name = 'lift-dial';
   group.add(dial);
-  const needleG = new THREE.BoxGeometry(0.016 * DS, 0.23 * DS, 0.01); needleG.translate(0, 0.1 * DS, 0);
+  // a slim pointer with an arrowhead (flat, facing the room; one draw call), pointing up before it turns
+  const needleShape = new THREE.Shape();
+  const tail = 9 * px, tip = FACE.tip * px, head = 9 * px, tw = 2.4 * px, sw = 1.4 * px, hw = 4 * px;
+  needleShape.moveTo(-tw, -tail); needleShape.lineTo(tw, -tail); needleShape.lineTo(sw, tip - head); needleShape.lineTo(hw, tip - head);
+  needleShape.lineTo(0, tip); needleShape.lineTo(-hw, tip - head); needleShape.lineTo(-sw, tip - head); needleShape.closePath();
+  const needleG = new THREE.ShapeGeometry(needleShape);
   const needle = new THREE.Mesh(needleG, new THREE.MeshBasicMaterial({ color: '#1a0f08' }));
-  needle.position.set(lift.x, 0, wallZ + 0.075);
-  // the dial texture's pivot is 18/160 of the plate's height above its bottom edge
-  needle.position.y = dialBottom + (18 / 160) * dialH;
+  // on the hub: FACE.hub is measured from the plate's top-left corner, y down
+  needle.position.set(lift.x - dialW / 2 + FACE.hub[0] * px, dialBottom + dialH - FACE.hub[1] * px, wallZ + 0.075);
   needle.name = 'lift-needle';
   group.add(needle);
   disposables.push(dialG, needleG, needle.material);
@@ -706,8 +714,8 @@ export function buildLobbySet(L) {
       glows.set(liftReflect, 0.35 * lit);
       washes.set(seamGlow, 0.8 * (1 - Math.min(1, k * 8)));
     },
-    // the needle: 0 = L … floors
-    setFloor(f) { needle.rotation.z = Math.PI / 2 - (f / lift.floors) * Math.PI; },
+    // the needle: 0 = L … floors (the same angles the dial's marks are drawn at)
+    setFloor(f) { needle.rotation.z = TX.dialAngle(f, lift.floors, lift.dialSweep); },
     setDing(v) { glows.set(dingGlow, 0.15 + 0.85 * v); glows.set(callGlow, 0.6 + 0.6 * v); },
   };
   liftParts.setOpen(0);

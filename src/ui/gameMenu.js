@@ -17,12 +17,14 @@
 import { GAME_MENU as W } from '../data/gameMenu.js';
 import { SETTING_CHOICES } from '../settings.js';
 import { tooSoon, GUARD_MS } from './tapGuard.js';
+import { versionLine } from '../version.js';
 
 export function createGameMenu(doc, { settings, howTo = null, cards = null, practice = () => false, onSettingChanged = null, onLeave = null } = {}) {
   const $ = id => doc.getElementById(id);
   const el = {
     root: $('gamemenu-overlay'), title: $('gm-title'), resume: $('btn-gm-resume'), howto: $('btn-gm-howto'), cards: $('btn-gm-cards'), leave: $('btn-gm-leave'),
     music: $('gm-music'), sound: $('gm-sound'), musicLabel: $('gm-music-label'), soundLabel: $('gm-sound-label'),
+    version: $('gm-version'),
   };
   if (!el.root) return { open() {}, close() {}, swallowTap() { return false; }, get isOpen() { return false; } };
   let shownAt = 0;           // when the panel opened (the double-tap guard)
@@ -57,6 +59,7 @@ export function createGameMenu(doc, { settings, howTo = null, cards = null, prac
     el.leave.textContent = W.leave(practice());
     el.musicLabel.textContent = W.music; el.soundLabel.textContent = W.sound;
     segment(el.music, 'music'); segment(el.sound, 'sound');
+    if (el.version) el.version.textContent = versionLine();   // (which build this is, quietly at the bottom: src/version.js)
   }
 
   const api = {

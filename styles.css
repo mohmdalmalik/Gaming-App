@@ -1734,7 +1734,8 @@ html, body {
 }
 @media (max-height: 700px) {   /* (Safari with its bars: the buttons stay 44 px tall, the spacing gives instead) */
   #menu-settings .menu-field { margin-bottom: 5px; }
-  #menu-settings .mf-label { margin-bottom: 3px; }
+  #menu-settings .mf-label { margin-bottom: 3px; line-height: 1.05; }   /* (capitals, nothing below the line: about 15 px less
+     in all, so on an iPad mini in Safari, 1133 x 670 with the home indicator, Done fits above it without scrolling) */
 }
 /* Settings > Quick chat and Clearer possessed eyes: two On / Off rows side by side, so the panel is no taller; the
    one-line note under them only where the screen has room (a screen reader reads it with the row everywhere). */
@@ -1902,8 +1903,33 @@ html, body {
   .rotate-wide { display: block; }
 }
 @media (max-height: 420px) { .rotate-icon { display: none; } }
-/* Settings > Version: quiet, at the bottom. */
-.set-version { margin-top: 10px; text-align: center; font-size: 12px; line-height: 1.2; letter-spacing: 0.05em; color: var(--muted); }
+/* Settings > Version: quiet, on the first line of Settings, on the right of "Settings" (it used to be the last line,
+   under Done, 2 px from the bottom of a 1024 x 694 screen, and fell off it on an iPad). The kicker keeps its own
+   spacing to the title, so the screen is no taller. The in-match Menu shows the same line under its buttons. */
+#menu-settings .set-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 0 12px; }
+.set-version {
+  font-size: 13px; line-height: 1.2; letter-spacing: 0.04em; color: var(--muted); white-space: nowrap;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.85);   /* (readable over a bright lamp of the lobby behind) */
+}
+.gamemenu-card .gm-version { margin-top: 14px; text-align: center; }
+/* Settings is the tallest menu screen: centred like the others, but never closer than 12 px to the top of the screen
+   (or 8 px below the top safe area) nor to the bottom (or 8 px above the bottom one: the iPad's home-indicator strip).
+   When it is taller than that space (a short Safari window with the home indicator, Safari's taller fonts) it scrolls
+   inside the panel, by a finger (data-scrolls in index.html: src/input.js lets it move) or a mouse wheel, so Done can
+   always be reached; it opens scrolled to the top, its first line, the version, on the screen. (The panel's transform
+   stays as it was: only its top and height are set, to the screen's less the two margins, and the screen is centred
+   in it, filling it and scrolling when it is taller.) */
+.menu-panel:has(> :where(#menu-settings:not([hidden]))) {   /* (:where: no stronger than .menu.avatar's display: none) */
+  --set-top: max(12px, calc(var(--safe-top) + 8px));
+  --set-bottom: max(12px, calc(var(--safe-bottom) + 8px));
+  display: flex; flex-direction: column;
+  top: calc(50% + (var(--set-top) - var(--set-bottom)) / 2);
+  height: calc(100% - var(--set-top) - var(--set-bottom));
+}
+.menu-panel > #menu-settings {
+  flex: 0 1 auto; min-height: 0; margin: auto 0;
+  overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; touch-action: pan-y;
+}
 
 /* ==== Round 1, build fixes (accidental taps, found card and legend at 1024x694, Reduce Motion) ==== */
 

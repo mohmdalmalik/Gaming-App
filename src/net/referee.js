@@ -31,6 +31,7 @@
 //   ref.setPresence(seat, 'here' | 'hidden' | 'gone', now)
 //   ref.toJSON()             -> plain data;  createReferee.restore(json, opts) -> a referee carrying on from it
 //   ref.setBots(bots)           new minds (a restore, or a test's fork)
+//   ref.shift(ms)               every time it holds moved later (a restored table gets the outage + 15 s back)
 //   ref.nextDue()            -> the earliest time something is due (a test or a server can sleep until then), or null
 //   Local only (Single player): ref.hold({ bots, clock }), ref.advance(dtMs, now), ref.step(roomId, now),
 //   ref.arrived(now), ref.walkFailed(now), ref.skipToEnd(now), ref.timeLeft(), ref.setTimeLeft(ms)
@@ -928,6 +929,7 @@ function build(R, opts) {
       if (R.beat) t.push(R.beat.at);
       const b = R.bot;
       if (b && R.stage === 'turn' && b.due != null && b.afterMeet == null && !R.walk && !R.arrival) t.push(b.due);
+      if (b && b.afterMeet != null && !R.hold.bots) t.push(b.afterMeet + 1);     // (local: its pause starts at the next tick)
       for (const a of Object.values(R.asks)) if (a.deadline != null) t.push(a.deadline + R.graceMs);
       if (R.stage === 'start' && R.limits.startAckMs != null) t.push(R.startAt + R.limits.startAckMs);
       if (clockMode === 'server' && counting()) {
@@ -943,6 +945,18 @@ function build(R, opts) {
 
     toJSON() { return copy(R); },
     setBots(b) { bots = b ?? null; },
+
+    // Move every time the referee holds `ms` later (a restored table: the outage plus ONLINE.timing.restoreGraceMs,
+    // DESIGN §10.5), so whoever was playing gets their time back: clocks, deadlines, beats, bot steps, the stall.
+    shift(ms) {
+      if (!Number.isFinite(ms) || !ms) return;
+      const add = o => { if (o) for (const k of ['at', 'deadline', 'due', 'afterMeet']) if (Number.isFinite(o[k])) o[k] += ms; };
+      add(R.clock); add(R.beat); add(R.bot);
+      for (const a of Object.values(R.asks)) add(a);
+      for (const a of Object.values(R.roleAsks)) add(a);
+      for (const list of Object.values(R.results)) for (const r of list) add(r);
+      for (const k of ['turnAt', 'startAt', 'now']) if (Number.isFinite(R[k])) R[k] += ms;
+    },
 
     // --- local only (Single player, §4.4) ---
     hold({ bots: hb = false, clock: hc = false } = {}) { R.hold = { bots: !!hb, clock: !!hc }; },

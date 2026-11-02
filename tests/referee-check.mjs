@@ -25,7 +25,7 @@
 //      random sources at the same position: identical to the end; (b) fresh minds of new seeds after a restore finish
 //      every match legally. toJSON is plain data.
 import fs from 'node:fs';
-import { rules, applyMode } from '../src/data/rules.js';
+import { rules } from '../src/data/rules.js';
 import { hotel } from '../src/data/hotel.js';
 import { config } from '../src/config.js';
 import { makeCard, countableCount } from '../src/game/cards.js';
@@ -33,13 +33,11 @@ import * as S from '../src/game/state.js';
 import * as A from '../src/game/actions.js';
 import { openFrontierDoor, growTo } from '../src/game/hotel.js';
 import { createBotTable } from '../src/bots/index.js';
-import { rollProfiles } from '../src/bots/profiles.js';
-import { makeRng } from '../src/game/cards.js';
 import { playBotTurn, playOut, planWalk } from '../src/bots/autoplay.js';
 import { ONLINE, LOCAL_LIMITS, ONLINE_RULES } from '../src/data/online.js';
 import { createReferee } from '../src/net/referee.js';
 import { toSnapshot, fromSnapshot, SNAPSHOT_VERSION } from '../src/net/snapshot.js';
-import { tradeOutcome, TRADE_OUTCOMES } from '../src/net/outcomes.js';
+import { TRADE_OUTCOMES } from '../src/net/outcomes.js';
 import { playerView } from '../src/net/playerView.js';
 import { newMatch, newFloor, eventsHash } from './lib/matches.mjs';
 
@@ -291,7 +289,7 @@ function createPeople(t, { seed, unreliable = [], junk = 0.06, delay = [150, 500
   const plan = {};           // seat -> { key, at }
   const acts = {};           // seat -> commands sent this turn
   const ignored = new Set();
-  const stats = { cmds: 0, refused: 0, junk: 0, junkOk: 0, badResult: 0, discardLeak: 0, asks: {}, results: {}, timedOutTurns: 0, timedOutDiscards: 0 };
+  const stats = { cmds: 0, refused: 0, junk: 0, junkOk: 0, badResult: 0, asks: {}, results: {}, timedOutTurns: 0, timedOutDiscards: 0 };
   const rand = (lo, hi) => lo + (hi - lo) * R();
   const send = (s, cmd, now) => {
     const r = t.ref.do(s, cmd, now);
@@ -301,7 +299,7 @@ function createPeople(t, { seed, unreliable = [], junk = 0.06, delay = [150, 500
     if (keys.some(k => !COMMAND_KEYS.has(k)) || ('result' in r && !(cmd.k === 'move' && r.ok && same(Object.keys(r.result), ['rooms'])))) stats.badResult++;
     return r;
   };
-  const junkCmd = (s, now) => {
+  const junkCmd = s => {
     const pick = Math.floor(R() * 7);
     const other = (s + 1) % t.state.players.length;
     return [
@@ -319,7 +317,7 @@ function createPeople(t, { seed, unreliable = [], junk = 0.06, delay = [150, 500
   }
   function act(s, now, ex) {
     if (junk && R() < junk) {
-      const [js, jc] = junkCmd(s, now);
+      const [js, jc] = junkCmd(s);
       const before = json(t.state.events.length);
       const r = send(js, jc, now);
       stats.junk++;
@@ -373,9 +371,7 @@ function createPeople(t, { seed, unreliable = [], junk = 0.06, delay = [150, 500
         }
         if (plan[s].at <= now) {
           delete plan[s];
-          const active = t.state.activeIndex, stage = t.ref.stage;
           act(s, now, situation(s, now)?.ex ?? sit.ex);
-          void active; void stage;
           const again = situation(s, now);
           if (again) { plan[s] = { key: again.key, at: now + rand(delay[0], delay[1]) }; }
         }
@@ -417,7 +413,7 @@ function drive(t, people, { now = 0, until = 8 * 3600e3, onChange = null } = {})
 console.log('\n200 matches with 1-6 scripted people, today\'s online rules (random legal commands, junk, silences)');
 {
   const agg = { ended: 0, finished: 0, stalled: 0, stuck: 0, errors: 0, cmds: 0, refused: 0, junk: 0, junkOk: 0, badResult: 0,
-    discardLeak: 0, discardSeen: 0, phaseLeak: 0, asks: {}, results: {}, timedOutTurns: 0, timedOutDiscards: 0, startLate: 0, views: 0, viewBad: 0 };
+    discardLeak: 0, discardSeen: 0, phaseLeak: 0, asks: {}, results: {}, timedOutTurns: 0, timedOutDiscards: 0, views: 0, viewBad: 0 };
   let firstErr = null;
   for (let k = 0; k < 200; k++) {
     const seats = 4 + (k % 3);
@@ -611,7 +607,6 @@ console.log('\nquestions, results and time-outs, built on purpose');
   let nextA = { k: 'trade', with: 0 };
   const u = exitTable([0], wrapBots({ nextAction: () => { const a = nextA; nextA = { k: 'end' }; return a; } }));
   u.state.activeIndex = 1;
-  u.ref.toJSON();
   const u2 = createReferee({ state: u.state, floor: u.floor, bots: u.bots, people: [0], mode: 'online', walkMode: 'atomic', limits: TODAY, pace: () => 500, now: 0 });
   u2.tick(500);
   const q = u2.extras(0, 500).ask;
@@ -765,8 +760,6 @@ console.log('\nquestions, results and time-outs, built on purpose');
   const ex1 = t.ref.extras(0, now + 5000).clock, ex2 = t.ref.extras(0, now + 20000).clock;
   check(ex1.running === false && ex2.running === true && ex2.leftMs < ex1.leftMs,
     'pending R4: the private-screen pause is capped (10 s), then the clock runs on');
-  const o = makeTable({ seats: 4, seed: 2, people: [1], limits: PENDING, pace: () => 0, wrap: wrapBots({ nextAction: () => ({ k: 'end' }) }) });
-  void o;
 }
 {
   // Refusals, with their reasons.
@@ -953,6 +946,22 @@ console.log('\nsnapshot and restore');
   check(shape(back.floor) === shape(m.floor), `the hotel rebuilt from its placements is the same hotel (${m.floor.roomList.length} rooms, doorways, closed and jammed doors, walls, deck order)`);
   check(same(toSnapshot(back.state, back.floor), snap) && back.state.discovered instanceof Set && back.state.roomDrops instanceof Map && back.state.players[0].knows instanceof Set,
     'the state comes back whole (Sets and Maps as Sets and Maps); its snapshot again is identical');
+}
+
+{
+  // A restored table gets its time back: shift(outage + 15 s) moves every clock, deadline and step later.
+  const t = makeTable({ seats: 4, seed: 12, people: [0], limits: TODAY });
+  t.ref.tick(15000);
+  const saved = json({ engine: toSnapshot(t.state, t.floor), referee: t.ref.toJSON() });
+  const back = fromSnapshot(JSON.parse(saved).engine, { hotelData: hotel, cfg: config, rng: forkRng(1), hotelRng: forkRng(2) });
+  const r2 = createReferee.restore(JSON.parse(saved).referee, { state: back.state, floor: back.floor, bots: createBotTable(back.state, back.floor, [1, 2, 3].map(index => ({ index, profile: null })), 5) });
+  r2.shift(60000 + ONLINE.timing.restoreGraceMs);
+  const a = r2.extras(0, 75000).clock.leftMs, b = r2.extras(0, 105000).clock.leftMs;
+  r2.tick(75000 + 30000 + 15000 + GRACE - 1);
+  const before = back.state.turn;
+  r2.tick(75000 + 30000 + 15000 + GRACE);
+  check(a === 30000 && b === 15000 && before === 1 && back.state.turn === 2,
+    'a restore after a 60 s outage, shifted by the outage + 15 s: the person still has their 30 s, plus 15 s; the turn then ends on time');
 }
 
 // drive() with a stop condition: until the turn number reaches `stopTurn`.

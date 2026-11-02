@@ -197,6 +197,16 @@ function W(change) {
 }
 // A guest's real record (the rules: their hand, action points, role), from the screens' record of them. TRANSITIONAL
 const real = p => (p ? realNow().state.players[p.index] : p);
+// TRANSITIONAL (P1C S3): Practice is played through the table's referee (src/net/referee.js); a match is still run by
+// the page until S4. act(cmd, direct): the player's command to the table (DESIGN §6.3), or, at a table with no referee,
+// direct(state, floor) on the real game. Either way the screens' state is current when it returns.
+const refereed = () => !!T().referee;
+function act(cmd, direct) { return refereed() ? table.local.apply(cmd) : W(direct); }
+// The table's private results for the player (found cards, a Hand Mirror): the ones there now, and the newest of a kind
+// that was not; a result is acknowledged once its screen closes (DESIGN §6.4).
+const resultIds = () => new Set((state.results || []).map(r => r.id));
+const newResult = (kind, had) => (state.results || []).filter(r => r.kind === kind && !had.has(r.id)).pop() || null;
+const ackResult = id => { if (id != null && refereed()) table.local.apply({ k: 'ack', what: 'result', id }); };
 let botProfiles = [];         // per seat: the bot's profile (username, style), or null for the player
 const cast = seatTable({ me: myIdentity(), seat: 0 });   // the seats at the table, in seat order (src/table.js; filled in place by setupGame)
 applyMode('practice', 1);
@@ -398,7 +408,7 @@ const hand = createHand(document, cfg, { onUseBandage, onUnlock, onBarricade, on
 // The padlock of a locked door next to the guest, tapped: which key or pick to open it with (onLockTap, onUnlock).
 const lockChoice = createLockChoice(document, { onChoose: (cardId, roomId) => onUnlock(cardId, roomId) });
 const discard = createDiscard(document, cfg, {
-  onDiscard: cardId => { const r = W(S => discardCard(S, activePlayer(S), cardId)); if (!r.ok) hud.toast('That card cannot be discarded.'); refresh(); },
+  onDiscard: cardId => { const r = act({ k: 'discard', card: cardId }, S => discardCard(S, activePlayer(S), cardId)); if (!r.ok) hud.toast('That card cannot be discarded.'); refresh(); },
 });
 // The hand, held as a fan of face-up cards; tapping one opens it large in the card view.
 const fan = createHandFan(document, { onOpen: cardId => { if (running && !uiBusy()) hand.open(state, floor, cardId); } });
@@ -476,7 +486,7 @@ const uiBusy = () => map.isOpen || hand.isOpen || discard.isOpen || lockChoice.i
 const discovery = createDiscovery({
   floor, grid, state, movers, cfg,
   // (crossing into a room is the table's to settle: the real game, then the screens' state at once)
-  enter: (p, roomId) => W((S, F) => enterRoom(S, F, S.players[p.index], roomId)),
+  enter: (p, roomId) => (refereed() ? table.local.step(roomId) : W((S, F) => enterRoom(S, F, S.players[p.index], roomId))),
   before: () => pull(),
   on: {
     roomEntered(result) {
@@ -761,6 +771,7 @@ function doorName(doorwayId, fromRoom = null) {
 const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
 
 function passTurn() {
+  if (refereed()) { passTurnAtTable(); return; }
   // Never past the hand limit: anything that ends a turn goes through the discard screen first.
   if (!state.finished && overHandLimit(real(activePlayer(state))) > 0) { endTurnNow(); return; }
   hud.hideConfirm(); selectedMove = null; activeWalk = null; walkCutShort = false;
@@ -794,6 +805,40 @@ function passTurn() {
   sfx('yourTurn', { volume: 0.7 });
 }
 
+// P1C S3: at a refereed table the table passes the turn (src/net/referee.js: the hand limit settled first, the doors that
+// lock again, the barricades that come down, the next turn); the page shows it exactly as passTurn does. When the discard
+// question came first, its last discard has passed the turn already (turnEnding: the turn as it stood when it ended).
+let turnEnding = null;
+const turnNow = () => ({ game: gameToken, turn: state.turn, seat: state.activeIndex, sealed: [...(state.barricades?.keys() ?? [])], seq: state.eventSeq });
+function passTurnAtTable() {
+  const at = turnEnding?.game === gameToken && turnEnding.turn <= state.turn ? turnEnding : turnNow();
+  turnEnding = null;
+  // Never past the hand limit: anything that ends a turn goes through the discard screen first.
+  if (!state.finished && state.turn === at.turn && overHandLimit(real(activePlayer(state))) > 0) { endTurnNow(); return; }
+  if (!state.finished && state.turn === at.turn) {
+    const r = table.local.apply({ k: 'end' });
+    if (!r.ok || (!state.finished && state.turn === at.turn)) return;      // (refused, or the discard question first)
+  }
+  hud.hideConfirm(); selectedMove = null; activeWalk = null; walkCutShort = false;
+  if (myTurn()) hand.close();
+  stopTimer();
+  endTurnGuardUntil = performance.now() + END_TURN_GUARD_MS;
+  const relocked = [
+    ...state.events.filter(e => e.seq > at.seq && e.type === 'relock').map(e => `The ${floor.rooms.get(e.room)?.name ?? 'locked room'} door has locked again.`),
+    ...at.sealed.filter(id => !state.barricades.has(id)).map(id => `Barricade down: ${doorName(id, activePlayer(state).currentRoom)}.`),
+  ].join(' ');
+  movers[at.seat]?.halt();
+  syncViews(false);
+  if (state.finished) { refresh(); showEnd(); return; }
+  if (!PRACTICE) { lockNews = relocked; beginTurn(); return; }
+  rig.setFocus(...followPoint());
+  rig.recentre();
+  mood.snap(activePlayer(state).currentRoom);
+  refresh();
+  hud.toast(`Turn ${state.turn} — ${actionsWord(rules.actionPointsPerTurn)}.${relocked ? ` ${relocked}` : ''}`, relocked ? 5 : undefined);
+  sfx('yourTurn', { volume: 0.7 });
+}
+
 // End the turn (the End turn button, the turn passing by itself when the actions run out - tickAutoEnd
 // below - or the 45-second clock running out). The hand limit is settled
 // HERE and only here (approved rule): a guest holding more than 6 cards (Possession cards don't count)
@@ -812,6 +857,7 @@ function endTurnNow() {
     if (seconds === null) stopTimer();
     else { timerLeft = seconds; hud.showTimer(timerLeft, rules.turnTimerSeconds); }
     discardStamp = turnStamp();
+    if (refereed()) { turnEnding = turnNow(); table.local.apply({ k: 'end' }); }   // (the table's discard question)
     discard.open(p, passTurn, { seconds });
     return;
   }
@@ -884,6 +930,7 @@ function tickAutoEnd(now) {
 // The active guest finished walking into a room. The Fire Exit is a safe zone (never a meeting);
 // escaping there is a separate action, the Exit icon (1 action: onEscape).
 function onArrive() {
+  if (refereed()) table.local.arrived();       // (the table settles the arrival: a forced meeting there)
   const player = activePlayer(state);
   const room = floor.rooms.get(player.currentRoom);
   pendingArrival = null;
@@ -1321,22 +1368,25 @@ const SEARCH_FAIL = {
 function onSearch() {
   if (!running || state.finished || uiBusy() || activeMover().walking || !myTurn()) return;
   const player = activePlayer(state);
-  const r = W((S, F) => search(S, F, real(player)));
+  const had = resultIds();
+  const r = act({ k: 'search' }, (S, F) => search(S, F, real(player)));
   if (!r.ok) { hud.toast(SEARCH_FAIL[r.reason] || 'Cannot search now.'); return; }
-  const where = r.searchPoint || 'the room';
+  const res = refereed() ? newResult('found', had) : null;     // (the table's private result: the cards, where, picked up?)
+  const where = (res ? res.where : r.searchPoint) || 'the room';
   syncViews(false);
   // Everything found goes into the hand, even past the limit of 6 (approved rule): the limit is
   // settled only when the turn ends (endTurnNow -> the discard screen). The reveal says nothing about
   // it: the hand fan shows "Cards 8/6 · discard 2 at end of turn" the moment the reveal closes.
-  const found = r.kind === 'found' || r.kind === 'cards' ? r.cards : r.kind === 'card' ? [r.card] : [];
+  const found = res ? res.cards : r.kind === 'found' || r.kind === 'cards' ? r.cards : r.kind === 'card' ? [r.card] : [];
+  const pickup = res ? res.pickup : r.kind === 'found';
   foundThisGame.push(...found);            // (your own finds, for the achievements at the end: the rules emit no event for them)
-  const then = () => refresh();
+  const then = () => { ackResult(res?.id); refresh(); };
   // Search results are PRIVATE: the others learn only that a search happened (the public log). The
   // found cards are shown large on the player's own screen, on a light backdrop with the room still in
   // view (only the player looks at this screen), each kind with its one short line (src/ui/handoff.js).
   handoff.privateFound(player, {
     kicker: `You search ${where}`,
-    title: !found.length ? 'Nothing here' : `${r.kind === 'found' ? 'You pick up' : 'You found'} ${foundPhrase(found)}`,
+    title: !found.length ? 'Nothing here' : `${pickup ? 'You pick up' : 'You found'} ${foundPhrase(found)}`,
     cards: found,
     soft: true,
   }, then);
@@ -1385,9 +1435,9 @@ function faceTowards([x, z]) {
 
 function onUseBandage(cardId) {
   if (!myTurn() || !inActionPhase) return;
-  const r = W(S => useBandage(S, activePlayer(S), cardId));
+  const r = act({ k: 'card', type: 'bandage', card: cardId }, S => useBandage(S, activePlayer(S), cardId));
   if (!r.ok) { hud.toast(r.reason === 'full' ? 'Already at full health.' : r.reason === 'ap' ? 'No actions left.' : 'Cannot use that now.'); return; }
-  hud.toast(`Bandaged — health ${r.health} of ${rules.maxHealth}.`);
+  hud.toast(`Bandaged — health ${me().health} of ${rules.maxHealth}.`);
   sfx('bandage');
   refresh();
 }
@@ -1400,7 +1450,8 @@ const doorBarricaded = name => `The ${name} door is barricaded: a key or pick ca
 // event plays), snapped, the padlock shakes and the door stays shut (the lockFail cue is that same event's).
 function onUnlock(cardId, roomId) {
   if (!myTurn() || !inActionPhase) return;
-  const r = W((S, F) => useUnlock(S, F, activePlayer(S), cardId, roomId));
+  const type = me().hand.find(c => c.id === cardId)?.type ?? 'lockPick';
+  const r = act({ k: 'card', type, card: cardId, target: roomId }, (S, F) => useUnlock(S, F, activePlayer(S), cardId, roomId));
   const name = floor.rooms.get(roomId)?.name ?? 'locked room';
   if (!r.ok) {
     hud.toast(r.reason === 'ap' ? 'No actions left.'
@@ -1408,12 +1459,15 @@ function onUnlock(cardId, roomId) {
         : 'Cannot use that here.');
     return;
   }
-  hud.toast(r.opened ? `The ${name} door is open until the end of your turn.`
+  // (opened, or the pick snapped: what the table now shows — the door open until the end of the turn, or still locked)
+  const opened = r.opened ?? state.openLocks.has(roomId);
+  const doorway = r.doorway ?? doorBetween(floor, me().currentRoom, roomId)?.id;
+  hud.toast(opened ? `The ${name} door is open until the end of your turn.`
     : `The lock pick snapped. The ${name} door stays locked.`);
   hand.close();
   syncViews(false); refresh();
-  doorways.playUnlock(r.doorway, r.opened);
-  if (r.opened) sfx('doorOpen', { delay: 0.45 });
+  doorways.playUnlock(doorway, opened);
+  if (opened) sfx('doorOpen', { delay: 0.45 });
 }
 
 // The padlock of a locked door (or that door) was tapped by the guest standing next to it (tapTarget 'lock'): the same
@@ -1450,7 +1504,7 @@ function lockPoint(roomId, part = 'sign') {
 
 function onBarricade(cardId, doorwayId) {
   if (!myTurn() || !inActionPhase) return;
-  const r = W((S, F) => useBarricade(S, F, activePlayer(S), cardId, doorwayId));
+  const r = act({ k: 'card', type: 'barricade', card: cardId, target: doorwayId }, (S, F) => useBarricade(S, F, activePlayer(S), cardId, doorwayId));
   if (!r.ok) { hud.toast(r.reason === 'ap' ? 'No actions left.' : 'Cannot barricade that.'); return; }
   hud.toast(`${cap(doorName(doorwayId, activePlayer(state).currentRoom))} barricaded until your next turn.`, 5);
   hand.close();
@@ -1460,9 +1514,10 @@ function onBarricade(cardId, doorwayId) {
 // Espresso (free): extra action points for this turn only.
 function onEspresso(cardId) {
   if (!myTurn() || !inActionPhase) return;
-  const r = W(S => useEspresso(S, activePlayer(S), cardId));
+  const before = me().actionPoints;
+  const r = act({ k: 'card', type: 'espresso', card: cardId }, S => useEspresso(S, activePlayer(S), cardId));
   if (!r.ok) { hud.toast(r.reason === 'ap' ? 'No actions left.' : 'Cannot use that now.'); return; }
-  hud.toast(`Espresso — ${r.gained} extra actions this turn.`);
+  hud.toast(`Espresso — ${r.gained ?? me().actionPoints - before} extra actions this turn.`);
   sfx('espresso');
   refresh();
 }
@@ -1481,12 +1536,15 @@ function onHandMirror(cardId, targetId) {
   // Not mid-walk: walking into a room with a guest starts a meeting first, before anything else.
   if (activeMover().walking || pendingArrival) { hud.toast('Wait until you have arrived.'); return; }
   const player = activePlayer(state);
-  const r = W((S, F) => useHandMirror(S, F, real(player), cardId, targetId));
+  const had = resultIds();
+  const r = act({ k: 'card', type: 'handMirror', card: cardId, target: targetId }, (S, F) => useHandMirror(S, F, real(player), cardId, targetId));
   if (!r.ok) { hud.toast(MIRROR_FAIL[r.reason] || 'Cannot use that now.'); return; }
-  const target = state.players.find(q => q.id === r.target);
+  const res = refereed() ? newResult('mirror', had) : null;    // (the table's private result: whose hand, and what was in it)
+  const target = res ? state.players[res.target] : state.players.find(q => q.id === r.target);
+  const seen = res ? res.hand : r.hand;
   hand.close();
   refresh();
-  const lines = r.unmasked
+  const lines = (res ? seen.some(c => c.type === 'possession') : r.unmasked)
     ? [player.possessed
       ? `${target.name} holds a Possession card — ${target.name} is possessed too.`
       : `${target.name} holds a Possession card — ${target.name} is POSSESSED. Now you know.`]
@@ -1495,9 +1553,9 @@ function onHandMirror(cardId, targetId) {
     kicker: `Hand Mirror · private — ${player.name} only`,
     title: `${target.name}'s hand`,
     sub: `${target.name} shows you every card they carry. Nobody else sees this.`,
-    cards: r.hand,
+    cards: seen,
     lines,
-  }, () => refresh());
+  }, () => { ackResult(res?.id); refresh(); });
 }
 
 // A room with a job (src/data/hotel.js `job`). The Infirmary heals (once per match, for the whole table: the first guest to
@@ -1524,7 +1582,7 @@ function onEscape() {
   if (!myTurn() || !inActionPhase) return;
   const player = activePlayer(state);
   if (!floor.rooms.get(player.currentRoom)?.isExit) return;
-  const r = W((S, F) => escape(S, F, real(player)));
+  const r = act({ k: 'escape' }, (S, F) => escape(S, F, real(player)));
   if (r.ok) { syncViews(false); refresh(); showEnd(); return; }
   hud.toast(escapeRefusal(player, r.reason));
 }
@@ -1548,19 +1606,21 @@ function onRoom() {
   const gate = canUseRoom(state, floor, player);
   if (!gate.ok) { hud.toast(roomRefusal(gate)); return; }
   if (gate.job === 'infirmary') {
-    const r = W((S, F) => useInfirmary(S, F, real(player)));
-    if (!r.ok) { hud.toast(roomRefusal(r)); return; }
-    hud.toast(`Treated in the Infirmary — health ${r.health} of ${rules.maxHealth}.`);
+    const r = act({ k: 'job' }, (S, F) => useInfirmary(S, F, real(player)));
+    if (!r.ok) { hud.toast(roomRefusal({ job: gate.job, ...r })); return; }
+    hud.toast(`Treated in the Infirmary — health ${me().health} of ${rules.maxHealth}.`);
     refresh();     // (the icon turns to its "already used" look at once, for this Infirmary is spent for everyone)
   } else if (gate.job === 'switchboard') {
-    const r = W((S, F) => useSwitchboard(S, F, real(player)));
-    if (!r.ok) { hud.toast(roomRefusal(r)); return; }
+    const r = act({ k: 'job' }, (S, F) => useSwitchboard(S, F, real(player)));
+    if (!r.ok) { hud.toast(roomRefusal({ job: gate.job, ...r })); return; }
+    // (how many: the public event the whole table saw)
+    const count = r.count ?? state.events.filter(e => e.type === 'switchboard').pop()?.count ?? 0;
     refresh();
     // PUBLIC, for every guest: it stays up until the player taps Continue (the clock waits).
     // Practice: nobody else is in the hotel, so there is nobody to count — say what it does in a match.
     overlays.showNotice('The Switchboard', PRACTICE
       ? 'You rang the Switchboard. In a match it tells everyone how many guests are possessed. You are alone in the hotel, so there is nobody to count.'
-      : `You rang the Switchboard. ${switchboardLine(r.count)}`, refresh);
+      : `You rang the Switchboard. ${switchboardLine(count)}`, refresh);
   }
 }
 
@@ -1695,6 +1755,7 @@ function newTable(seed) {
     roster: cast, humanSeat, seed, practice: PRACTICE, possessedIndex: roleChoice, botSeats,
     clockOn: rules.turnTimerEnabled, paceScale: botPaceScale, chat: settings.get('chat') !== 'off', hotelData: hotel, cfg,
     adopt: { state: realState },           // TRANSITIONAL (P1C S1-S4): dealt into the page's one real state, as before
+    referee: PRACTICE,                     // TRANSITIONAL (P1C S3): Practice is run by the table's referee; a match from S4
   });
 }
 let roleChoice = null;                     // the seat the player chose to be possessed (or clean), for the next table
@@ -2148,6 +2209,10 @@ function offerMove(destId) {
 // Set off on a confirmed walk (the player's, or a computer guest's). The view comes back to the guest
 // so the walk can be followed (on another guest's turn, only if the view follows them: Settings).
 function startWalk(plan) {
+  if (refereed() && !isBot(state.activeIndex)) {
+    const r = table.local.apply({ k: 'move', to: plan.target ?? plan.dest });
+    if (!r.ok) { const dest = floor.rooms.get(plan.target ?? plan.dest); if (dest) hud.toast(moveRefusal(r, dest, me()), 4); return; }
+  }
   activeWalk = plan;
   walkCutShort = false;
   if (focusIndex() === state.activeIndex) rig.recentre({ zoom: false });
@@ -2216,8 +2281,12 @@ const DOOR_FAIL = {
 function onOpenDoor(doorId) {
   if (!running || state.finished || !myTurn()) return;
   const player = activePlayer(state);
-  const r = W((S, F) => openDoor(S, F, real(player), doorId));
+  const rooms = floor.roomList.length;
+  const r = act({ k: 'open', door: doorId }, (S, F) => openDoor(S, F, real(player), doorId));
   if (!r.ok) { hud.toast(DOOR_FAIL[r.reason] || 'That door will not open.'); refresh(); syncViews(false); return; }
+  // (the room behind it: the one the table placed, as the screens' copy of the hotel now holds it)
+  const room = (r.room && floor.rooms.get(r.room.id)) || floor.roomList[rooms] || floor.roomList.at(-1);
+  const locked = r.locked ?? state.lockedRooms.has(room.id);
   rebuildGrid();
   discovery.refresh();
   syncViews(true);
@@ -2225,9 +2294,9 @@ function onOpenDoor(doorId) {
   // Ease the view so the guest's room and the room just revealed are both in view (it may lie behind
   // the room's far wall or under the interface otherwise).
   const rect = q => [q.min[0], q.min[1], q.max[0], q.max[1]];
-  rig.showRooms([rect(floor.rooms.get(player.currentRoom)), rect(floor.rooms.get(r.room.id) || r.room)]);
-  hud.toast(r.room.isExit ? `The door opens onto the ${r.room.name}!`
-    : `The door opens: ${r.room.name}${r.locked ? ' — locked' : ''}${r.room.dark ? ' — dark' : ''}.`);
+  rig.showRooms([rect(floor.rooms.get(player.currentRoom)), rect(room)]);
+  hud.toast(room.isExit ? `The door opens onto the ${room.name}!`
+    : `The door opens: ${room.name}${locked ? ' — locked' : ''}${room.dark ? ' — dark' : ''}.`);
 }
 
 // A tap on a ROOM made while the guest is still walking (or just arriving) is kept and answered as soon
@@ -2556,6 +2625,8 @@ function frameLoop(now) {
       activeMover().update(dt);
       discovery.update();
       if (pendingArrival && !activeMover().walking && activeMover().path.length === 0) onArrive();
+      // (a walk the table was told of that ended without crossing into a room: it is over all the same)
+      else if (!pendingArrival && refereed() && T().referee.walking && !activeMover().walking && !activeMover().path.length) table.local.arrived();
     });
     step('queued tap', replayQueuedTap);
     step('bots', () => botTick(now));

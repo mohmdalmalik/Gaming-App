@@ -10,7 +10,9 @@ import { launch, giveCard } from './smoke-lib.mjs';
 //   3. scrambling every hidden field of the REAL game (the others' hands, roles, knows, notes, inbox, action points;
 //      the draw and discard piles, keeping whether they are empty; what lies on each floor; the room deck's order) and
 //      calling refresh() changes NOTHING in the presenter state (its JSON) or in the page's visible text;
-//   then the match is played out (Skip to the result) and the end screen reveals the roles from the table's end.
+//   then the match is played out (Skip to the result) and the end screen reveals the roles from the table's end;
+//   4. Practice: the screens read their own state and hotel too, and (from P1C S3) the table's referee runs the game:
+//      End turn passes the turn there.
 // (P1C S5 adds the write trap: no write into the presenter state outside applyView over a whole match.)
 //   node tests/browser-honesty.mjs [--url http://127.0.0.1:8123/] [--seed 4242] [--bots 5]
 const arg = (name, def) => { const i = process.argv.indexOf(name); return i > 0 ? process.argv[i + 1] : def; };
@@ -236,6 +238,27 @@ try {
     return { same: P.players.every((p, i) => !!p.possessed === !!g.state.players[i].possessed), won: P.won === g.state.won, end: !!P.end };
   });
   check(end.same && end.won && end.end, 'at the end the presenter reveals every role and the result exactly as the real game has them');
+
+  // Practice: the same honest screens, the game itself run by the table (its referee, from P1C S3).
+  await page.goto(`${base}?mode=practice&seed=${seed}&intro=off`, { waitUntil: 'domcontentloaded' });
+  await waitFor(() => window.__game && !document.getElementById('btn-begin').disabled, null, 120000);
+  await game(() => { window.__game.cfg.player.speed = 30; window.__game.setPixelRatio(0.5); });
+  await page.click('#btn-begin');
+  await waitFor(() => window.__game.isRunning());
+  await answerScreens();
+  const pr = await game(() => {
+    const g = window.__game, t = g.table(), ref = t?.local.debug.referee;
+    return { kind: t?.kind, ref: !!ref, stage: ref?.stage ?? null, apart: g.presenterState !== g.state && g.presenterFloor !== g.floor,
+      same: JSON.stringify(g.presenterState.players[0].hand.map(c => c.id)) === JSON.stringify(g.state.players[0].hand.map(c => c.id)) };
+  });
+  check(pr.kind === 'local' && pr.apart && pr.same, 'Practice: a local table; the screens read their own state and hotel, the hand card for card');
+  if (pr.ref) {
+    // a turn ended through the table: the next turn begins, the screens follow
+    const t0 = await game(() => window.__game.presenterState.turn);
+    await game(() => window.__game.endTurn());
+    const passed = await waitFor(t => window.__game.presenterState.turn === t + 1 && window.__game.state.turn === t + 1, t0, 20000).then(() => true, () => false);
+    check(pr.stage === 'turn' && passed, `Practice runs through the table's referee (stage ${pr.stage}); End turn passes the turn there, and the screens follow (turn ${t0} -> ${t0 + 1})`);
+  } else console.log('     (Practice is not yet run by the referee at this step: P1C S3)');
   const errs = messages.filter(m => !/favicon|ERR_ABORTED/.test(m));
   check(!errs.length, `no console errors${errs.length ? `: ${errs.slice(0, 3).join(' | ')}` : ''}`);
 } catch (err) {

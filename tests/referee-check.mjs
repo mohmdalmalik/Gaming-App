@@ -616,6 +616,19 @@ console.log('\nquestions, results and time-outs, built on purpose');
   check(q2?.kind === 'tradeCard' && q2.voluntary === true && q2.with === 1, '...accepted: the card question, marked voluntary');
 }
 {
+  // Single player's last discard (local): the page shows the card leaving, then ends the turn itself (as it always did).
+  const t = scenarioTable({ seats: 4, people: [0], mode: 'local', walkMode: 'device', limits: LOCAL_LIMITS });
+  const p = t.state.players[0];
+  p.hand.push(...hand(['knife', 'bandage', 'espresso', 'barricade']));
+  const turn = t.state.turn;
+  t.ref.do(0, { k: 'end' }, 1000);
+  let q = t.ref.extras(0, 1000).ask;
+  while (q?.kind === 'discard') { t.ref.do(0, { k: 'discard', card: q.cards[0] }, 1100); q = t.ref.extras(0, 1100).ask; }
+  const waits = t.ref.stage === 'discard' && t.state.turn === turn && A.overHandLimit(p) === 0 && t.ref.do(0, { k: 'search' }, 1200).reason === 'notNow';
+  const r = t.ref.do(0, { k: 'end' }, 1600);
+  check(waits && r.ok && t.state.turn === turn + 1, "Single player: the last discard leaves the turn to the page's own End (the card is seen leaving first); then it passes");
+}
+{
   // The discard: private to the active person; the discard clock; discard privacy; the time-out.
   const t = scenarioTable({ seats: 4, people: [0], limits: TODAY });
   const p = t.state.players[0];
@@ -804,6 +817,13 @@ console.log('\ndevice walks (Single player): the page walks the figure, the refe
     const r = t.ref.do(0, { k: 'move', to: route[n] }, 0);
     const ev = t.ref.drain();
     const busy = t.ref.do(0, { k: 'search' }, 0).reason;
+    // (a card from the hand is the exception in device walks: a Bandage on the way, as the page always allowed)
+    if (walks === 1) {
+      p.hand.push({ id: 'walk-bandage', type: 'bandage' }); p.health = 1;
+      const used = t.ref.do(0, { k: 'card', type: 'bandage', card: 'walk-bandage' }, 0);
+      check(used.ok && p.health === 2 && p.actionPoints === 3, 'device walk: a Bandage from the hand works on the way (as the page always allowed); everything else waits for the arrival');
+      p.actionPoints = 4; t.ref.drain();
+    }
     const okStart = r.ok && same(r.result.rooms, route) && same(ev, [{ to: 'all', ev: { type: 'walk', seat: 0, rooms: route } }]) && p.actionPoints === 4 && p.currentRoom === route[0]
       && busy === 'notNow';
     let now = 0;

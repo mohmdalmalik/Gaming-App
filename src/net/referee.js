@@ -651,10 +651,18 @@ function build(R, opts) {
       if (!r.ok) return no(r.reason);
       if (A.overHandLimit(p) > 0) { discardAsk(seat, now); return ok(); }
       delete R.asks[seat];
+      // Online the last discard passes the turn at once. Single player: the page shows the last card leaving first (half
+      // a second, the clock held) and then ends the turn itself with { k: 'end' }, exactly as it always did.
+      if (local) return ok();
       passTurn(now);
       return ok();
     }
-    if (R.stage !== 'turn' || R.walk || R.arrival || R.clock?.cut || R.asks[seat]) return no('notNow');
+    // (Single player: the hand is down to the limit, the discard screen has finished: the turn passes now)
+    if (cmd.k === 'end' && local && R.stage === 'discard' && !R.asks[seat] && A.overHandLimit(p) === 0) { passTurn(now); return ok(); }
+    // (a walk under way: nothing else now — except, in device walks, a card from the hand: the page lets a guest
+    // bandage or drink an Espresso on the way, as it always did; what may be done mid-walk is the page's to offer)
+    const walking = R.walk || R.arrival;
+    if (R.stage !== 'turn' || (walking && !(R.walkMode === 'device' && cmd.k === 'card')) || R.clock?.cut || R.asks[seat]) return no('notNow');
     switch (cmd.k) {
       case 'move': {
         const plan = planWalk(S, F, p, cmd.to);

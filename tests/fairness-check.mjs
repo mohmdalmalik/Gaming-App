@@ -345,14 +345,14 @@ console.log('\n3. discard privacy: ending under the hand limit, or over it and d
     sam.listeners.push(m => { if (m.t === 'view') samSaw.push([m.view.phase.kind, m.view.clock?.kind ?? null, m.view.ask?.kind ?? null]); });
     const steps = [[1000, () => cs.forEach(c => c.do({ k: 'ack', what: 'role' }))]];
     if (over) {
-      steps.push([11000, () => nora.do({ k: 'end' })]);
+      steps.push([11250, () => nora.do({ k: 'end' })]);              // (off the server's 1-second check: a view sent then would show)
       steps.push([16000, () => { ask = nora.view.ask; if (ask?.kind === 'discard') nora.do({ k: 'discard', card: ask.cards[ask.cards.length - 1] }); }]);
     } else steps.push([16000, () => nora.do({ k: 'end' })]);
     H.script(start, steps, 16500);
-    return { sam: trail(sam, start, start + 16500), ask, passed: M.state.activeIndex !== 0, samSaw, left: nora.msgs.filter(x => x.m.t === 'view' && x.at === start + 11000).map(x => x.m.view.ask?.leftMs)[0] };
+    return { sam: trail(sam, start, start + 16500), ask, passed: M.state.activeIndex !== 0, samSaw, left: nora.msgs.filter(x => x.m.t === 'view' && x.at === start + 11250).map(x => x.m.view.ask?.leftMs)[0] };
   };
   const U = run(false), O = run(true);
-  check(O.ask?.kind === 'discard' && O.ask.over === 1 && U.passed && O.passed, `over the limit: the discard question (over by ${O.ask?.over}; ${Math.round((O.left ?? 0) / 1000)} s on the clock), and the turn passed at the same moment both times`);
+  check(O.ask?.kind === 'discard' && O.ask.over === 1 && U.passed && O.passed, `over the limit: the discard question (over by ${O.ask?.over}; ${Math.round((O.left ?? 0) / 1000)} s on the clock at the End), and the turn passed at the same moment both times`);
   check(!O.samSaw.some(([ph, ck, ak]) => ph === 'discard' || ck === 'discard' || ak === 'discard'), 'the outsider never saw a discard phase, a discard clock or the question');
   check(U.sam.length > 2 && sameTrail(U.sam, O.sam), `the outsider's messages are identical (${U.sam.length} messages, ${trailBytes(U.sam)} bytes, same arrival times)`);
 }
@@ -603,20 +603,21 @@ console.log('\n7. the view through the server: the table, Away, no Bot label, th
   const notMine = sam.do({ k: 'search' });
   check(stale?.reason === 'stale' && foreign?.reason === 'notYourCard' && raw?.reason === 'notYourCard' && notMine?.reason === 'notYourTurn',
     `refused: an old turn (${stale?.reason}), an unknown alias (${foreign?.reason}), an engine id (${raw?.reason}), out of turn (${notMine?.reason})`);
-  const id = String(nora.nextId++);
-  const evBefore = M.state.events.length;
-  nora.send({ t: 'do', id, turn: nora.view.turn, cmd: { k: 'search' } });
-  const first = nora.res(id);
-  const evMid = M.state.events.length;
-  nora.send({ t: 'do', id, turn: nora.view.turn, cmd: { k: 'search' } });
-  const replies = nora.msgs.filter(x => x.m.t === 'res' && x.m.id === id).map(x => x.text);
-  check(replies.length === 2 && replies[0] === replies[1] && M.state.events.length === evMid && evMid >= evBefore, `the same command id twice: one effect, the same reply twice (${first?.ok ? 'searched' : first?.reason})`);
   // a move's reply is { rooms } only
   const room = growNear(M);
   H.rooms.debug.refresh(code);
   const mv = room ? nora.do({ k: 'move', to: room.id }) : null;
   check(mv?.ok && isDeepStrictEqual(Object.keys(mv), ['t', 'id', 'ok', 'result']) && Array.isArray(mv.result.rooms) && mv.result.rooms.at(-1) === room.id,
     `a move's reply: { rooms } (${json(mv?.result)})`);
+  // the same command id twice: it acts once (the second End would be out of turn), the same reply both times
+  const id = String(nora.nextId++);
+  const turnBefore = M.state.turn;
+  nora.send({ t: 'do', id, turn: nora.view.turn, cmd: { k: 'end' } });
+  const turnMid = M.state.turn;
+  nora.send({ t: 'do', id, turn: nora.view.turn, cmd: { k: 'end' } });
+  const replies = nora.msgs.filter(x => x.m.t === 'res' && x.m.id === id).map(x => x.text);
+  check(replies.length === 2 && replies[0] === replies[1] && JSON.parse(replies[0]).ok === true && turnMid === turnBefore + 1 && M.state.turn === turnMid,
+    `the same command id twice: the turn ended once, the same reply twice (${replies[0]})`);
   // the saved table: plain JSON with everything to bring it back
   const saved = d.T.saved;
   check(saved && saved.match && saved.match.engine && saved.match.referee && saved.match.aliases && isDeepStrictEqual(JSON.parse(json(saved)), saved)

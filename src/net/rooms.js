@@ -130,9 +130,15 @@ export function createRooms({
     for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; }
     return a;
   }
-  // A rolling count of events in a time window: how long until one more is allowed (0: allowed now, and counted).
+  // Rolling counts (a list of times, oldest first). waitFor: how long until one more is allowed in this window (0:
+  // allowed now); it never drops entries, because one list can serve two windows (the wrong codes: a minute and ten).
+  // within() drops what is older than the longest window (prune).
   function within(list, at, ms) { while (list.length && list[0] <= at - ms) list.shift(); return list.length; }
-  function waitFor(list, at, ms, max) { return within(list, at, ms) >= max ? Math.max(1, list[list.length - max] + ms - at) : 0; }
+  function waitFor(list, at, ms, max) {
+    let i = list.length;
+    while (i > 0 && list[i - 1] > at - ms) i--;
+    return list.length - i >= max ? Math.max(1, list[list.length - max] + ms - at) : 0;
+  }
   const ipOf = ip => { let r = ipLog.get(ip); if (!r) { r = { wrong: [], creates: [] }; ipLog.set(ip, r); } return r; };
   const tokOf = th => { let r = tokenLog.get(th); if (!r) { r = { hellos: [], creates: [] }; tokenLog.set(th, r); } return r; };
 
@@ -680,11 +686,12 @@ export function createRooms({
     const T = seatedAt(G);
     const P = personOf(T, G);
     const M = T?.match;
+    // (a command id seen before gets its stored reply first, whatever happened since: it acts once)
+    const seen = M && P && P.seat != null ? (M.doIds[P.seat] || []).find(([id]) => id === m.id) : null;
+    if (seen) return out(C, { t: 'res', id: m.id, ...seen[1] });
     if (!M || !P || P.left || P.seat == null || T.phase === 'closed' || M.stopped) return out(C, { t: 'res', id: m.id, ok: false, reason: 'notNow' });
     const seat = P.seat;
     const kept = (M.doIds[seat] ||= []);
-    const seen = kept.find(([id]) => id === m.id);
-    if (seen) return out(C, { t: 'res', id: m.id, ...seen[1] });
     const r = commit(T, at, () => {
       const cmd = fromAliases(M, seat, m.cmd);
       const res = cmd.reason ? { ok: false, reason: cmd.reason } : M.ref.do(seat, { ...cmd, turn: m.turn }, at);

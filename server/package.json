@@ -1,0 +1,11 @@
+{
+  "name": "hotel-escape-server",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22 <25"
+  },
+  "dependencies": {
+    "ws": "8.22.0"
+  }
+}

@@ -27,10 +27,11 @@
 // follows it: the wardrobe frames your avatar).
 // Co-op, kept here so src/main.js needs no change for it: the links ?join=CODE (straight to that table, after the
 // register if this device has no profile yet) and ?friends=demo (the review link: two seats on one device), read on
-// the first show; the Wardrobe's Done going back to the waiting room while a table is open; a new look sent to the
-// table; and `onCoopMatch(coop)`, which main.js passes once a Co-op match can be played (until then the waiting room
-// says the match was dealt). Development only, on localhost: ?coop=fake (a pretend server, src/net/fakeLobby.js,
-// loaded only then) and ?coop=soon (the Coming soon card).
+// the first show (with neither, a table remembered from the last 6 hours is rejoined); the Wardrobe's Done going back
+// to the waiting room while a table is open; a new look sent to the table; and `onCoopMatch(coop)`, which main.js
+// passes once a Co-op match can be played (until then the waiting room says the match was dealt). Development only,
+// on localhost: ?coop=fake (a pretend server, src/net/fakeLobby.js, loaded only then) and ?coop=soon (the Coming soon
+// card).
 import { rules } from '../data/rules.js';
 import { settings, SETTING_CHOICES } from '../settings.js';
 import { reducedMotion } from '../motion.js';
@@ -46,7 +47,7 @@ import { NEW_PLAYER_HINT } from '../data/howToPlay.js';
 import { ONLINE_TEXT, fill } from '../data/onlineText.js';
 import { createCoopMenu } from './coopMenu.js';
 import { resolveServer, isLocalHost } from '../net/serverUrl.js';
-import { openCoop } from '../net/onlineTable.js';
+import { openCoop, rememberedTable } from '../net/onlineTable.js';
 import { normaliseCode } from '../net/codes.js';
 
 const ROLE_CHOICES = [
@@ -103,13 +104,18 @@ export function createMenu(doc, { onPlayBots, onPractice, onSettingChanged, onSc
   if (local) globalThis.__coop = { state: () => coop.debug(), card: (kind, vars) => coop.showCard(kind, vars) };
 
   // ?join=CODE and ?friends=demo, read once, on the first show (after the register if there is no profile yet).
+  // With neither, a table this device sat at in the last 6 hours (src/net/onlineTable.js keeps the record) is
+  // rejoined: "Rejoining your table…" · Cancel (DESIGN §11.5). Never on the live site while Co-op is coming soon.
   let linksRead = false;
   let links = null;
   function readLinks() {
     linksRead = true;
     const join = params.get('join');
     const demo = params.get('friends') === 'demo';
-    if (join == null && !demo) return;
+    if (join == null && !demo) {
+      if (!fake && (!account || account.profile) && !serverFor().comingSoon && rememberedTable()) Promise.resolve().then(() => coop.resume());
+      return;
+    }
     links = { join, demo };
     if (account && !account.profile) {
       // the register first: "You're invited to nora's table." above it, when the table can be asked
@@ -130,8 +136,9 @@ export function createMenu(doc, { onPlayBots, onPractice, onSettingChanged, onSc
     if (l.demo) { if (current === 'signup') show('main'); startDemo(); } else coop.openJoin(l.join);
     return true;
   }
-  // The review link: two seats on this device, through the real Co-op screens. Its server runs inside the page
-  // (src/net/loopback.js); until that exists the link simply opens the menu.
+  // The review link: two seats on this device, through the real Co-op screens, on any host (it is the owner's link).
+  // Its server runs inside the page (src/net/loopback.js, ticked every 250 ms); if it can't load, the link simply
+  // opens the menu.
   async function startDemo() {
     try {
       if (fake) await coop.startDemo({});
@@ -141,7 +148,7 @@ export function createMenu(doc, { onPlayBots, onPractice, onSettingChanged, onSc
         if (typeof loop?.tick === 'function') setInterval(() => { try { loop.tick(Date.now()); } catch (err) { console.error(err); } }, 250);
         await coop.startDemo({ openCoop, resolveServer: () => ({ url: 'loopback://hotel' }), transport: loop.WebSocketImpl });
       }
-    } catch { return; }      // (not built yet: nothing to show)
+    } catch (err) { console.warn('the review link could not open its test table:', err); return; }
     show('coop');
   }
 

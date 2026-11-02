@@ -1,8 +1,9 @@
 import { launch, GUARD_WAIT, openSinglePlayer } from './smoke-lib.mjs';
 // Browser checks of the menu split and every Co-op screen (DESIGN §14; src/ui/menu.js, src/ui/coopMenu.js,
 // src/ui/seatSwitch.js, coop.css), in headless Chromium (software WebGL: a few frames a second), against the pretend
-// server of development (src/net/fakeLobby.js, ?coop=fake, localhost only). One browser at a time (the build's lock):
-//   node tests/coop-menu-check.mjs [--url http://127.0.0.1:PORT/] [--only menu,fit,keyboard,link,soon,live,demo,flows]
+// server of development (src/net/fakeLobby.js, ?coop=fake, localhost only), and the review link's in-page server (the
+// real src/net/rooms.js behind src/net/loopback.js). One browser at a time (the build's lock):
+//   node tests/coop-menu-check.mjs [--url http://127.0.0.1:PORT/] [--only menu,fit,keyboard,link,soon,live,demo,resume,flows]
 //                                  [--sizes 1024x694,1024x768,1180x820,1366x1024] [--shots DIR] [--no-shots]
 // Without --url it serves the repo itself on 127.0.0.1 (a free port). Screenshots: tests/shots/coop-menu/ (git-ignored).
 //
@@ -20,15 +21,20 @@ import { launch, GUARD_WAIT, openSinglePlayer } from './smoke-lib.mjs';
 //   soon      ?coop=soon on localhost: Coming soon, its buttons; a join link while Co-op isn't open
 //   live      the page as on the live site (a host that is not localhost, through Chromium's host-resolver rules): it
 //             loads without a console error, Co-op says Coming soon, the test links (?coop=fake, ?server=,
-//             ?friends=demo) do nothing there and the pretend server is never even fetched
-//   demo      the review link's two seats on one device (?friends=demo, here with the pretend server): start a table,
-//             "Show sam's screen", type the code as sam, join, switch back, Start, the match dealt
+//             ?coop=preview) do nothing there, a remembered table is not rejoined, and the pretend server is never even
+//             fetched; the review link (?friends=demo) works there too, with its in-page server
+//   demo      the review link's two seats on one device (?friends=demo), once with the pretend server and once with the
+//             in-page server (?pace=fast): start a table, "Show sam's screen", type the code as sam, join, switch back,
+//             Start, the match dealt
+//   resume    a table remembered on this device (the last 6 hours) and no ?join=: "Rejoining your table…" · Cancel, and
+//             Cancel forgets it (here the server is a port nobody listens on, so the rejoin never finishes)
 //   flows     the waiting room's working parts: Invite friends (the share sheet asked inside the tap) and Copy link (and
 //             the link to copy by hand when copying fails), size and lock, the joined / left / new host toasts, Remove,
 //             Start alone (Play with bots), the Wardrobe and back, a guest's countdown, being removed, every error
 //             while opening (with Try again keeping the code), the switchboard waking up, Back while opening, offline
 import fs from 'node:fs';
 import http from 'node:http';
+import net from 'node:net';
 import path from 'node:path';
 import { ONLINE_TEXT, fill } from '../src/data/onlineText.js';
 import { ONLINE } from '../src/data/online.js';
@@ -37,7 +43,7 @@ const args = process.argv.slice(2);
 const opt = (name, dflt) => (args.includes(name) ? args[args.indexOf(name) + 1] : dflt);
 const here = path.dirname(new URL(import.meta.url).pathname);
 const root = path.join(here, '..');
-const only = opt('--only', 'menu,fit,keyboard,link,soon,live,demo,flows').split(',');
+const only = opt('--only', 'menu,fit,keyboard,link,soon,live,demo,resume,flows').split(',');
 const SIZES = opt('--sizes', '1024x694,1024x768,1180x820,1366x1024').split(',').map(s => s.split('x').map(Number));
 const shots = args.includes('--no-shots') ? null : opt('--shots', path.join(here, 'shots', 'coop-menu'));
 if (shots) fs.mkdirSync(shots, { recursive: true });
@@ -384,8 +390,10 @@ if (only.includes('live')) {
   const { browser, page, messages } = await launch({ width: 1180, height: 820, args: ['--host-resolver-rules=MAP hotel.test 127.0.0.1'] });
   const fetched = [];
   page.on('request', r => fetched.push(new URL(r.url()).pathname));
+  // (a table remembered on this device: the live site never tries to rejoin it while Co-op is coming soon)
+  await page.context().addInitScript(() => { try { localStorage.setItem('hotelEscape.table.v1', JSON.stringify({ code: 'BKTWM', at: Date.now() })); } catch { /* none */ } });
   try {
-    for (const q of ['', '?coop=fake&fake=quiet&friends=demo&server=ws://localhost:9&coop=preview']) {
+    for (const q of ['', '?coop=fake&fake=quiet&server=ws://localhost:9&coop=preview']) {
       fetched.length = 0;
       await page.goto(`http://hotel.test:${port}/${q}`, { waitUntil: 'domcontentloaded' });
       await page.waitForFunction(() => window.__game && !document.getElementById('menu').hidden, null, { timeout: 180000, polling: 100 });
@@ -398,46 +406,88 @@ if (only.includes('live')) {
       check(!fetched.some(p => /fakeLobby\.js$/.test(p)) && await page.evaluate(() => window.__fakeLobby === undefined && window.__coop === undefined), '...the pretend server is never fetched, and no test hooks exist');
       if (shots) await page.screenshot({ path: path.join(shots, `live-coming-soon${q ? '-links' : ''}.png`) });
     }
+    // the review link is the owner's, on the live site too: its server runs inside the page (src/net/loopback.js)
+    fetched.length = 0;
+    await page.goto(`http://hotel.test:${port}/?friends=demo&coop=fake&fake=quiet`, { waitUntil: 'domcontentloaded' });
+    await page.waitForFunction(() => window.__game && !document.getElementById('menu').hidden, null, { timeout: 180000, polling: 100 });
+    check(await waitScreen(page, 'menu-coop', 30000) && await text(page, '#coop-demo') === T.demo.note, `?friends=demo: the review link opens on Co-op, "${await text(page, '#coop-demo')}"`);
+    await tap(page, '#btn-coop-start');
+    check(await waitScreen(page, 'menu-table', 20000) && /^[A-Z]{5}$/.test(await text(page, '#table-code') || '') && await text(page, '#btn-seat-switch') === fill(T.demo.showSeat, { name: T.demo.secondName }),
+      `...Start a table: the code ${await text(page, '#table-code')} from the in-page server, and "${await text(page, '#btn-seat-switch')}"`);
+    check(!fetched.some(p => /fakeLobby\.js$/.test(p)) && fetched.some(p => /loopback\.js$/.test(p)) && await page.evaluate(() => window.__fakeLobby === undefined && window.__coop === undefined),
+      '...through the in-page server (?coop=fake does nothing here: the pretend server is never fetched), and no test hooks exist');
+    if (shots) await page.screenshot({ path: path.join(shots, 'live-review-link.png') });
   } catch (err) { check(false, `live: ${err.message.split('\n')[0]}`); if (shots) await page.screenshot({ path: path.join(shots, 'error-live.png') }).catch(() => {}); }
   check(messages.length === 0, `no console error or warning at all${messages.length ? `: ${messages.slice(0, 3).join(' | ')}` : ''}`);
   await browser.close();
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
-if (only.includes('demo')) {
-  console.log('\ndemo. two seats on one device (?friends=demo, the pretend server)');
+// (`tag`: the screenshots' prefix; the in-page server's countdown runs 20 times faster with ?pace=fast)
+for (const [label, query, tag] of [['the pretend server', 'coop=fake&fake=quiet&friends=demo', 'demo'], ['the in-page server', 'friends=demo&pace=fast', 'demo-loop']]) {
+  if (!only.includes('demo')) break;
+  console.log(`\ndemo. two seats on one device (?friends=demo, ${label})`);
   const { browser, page, messages } = await launch({ width: 1024, height: 694 });
   try {
-    await openPage(page, 'coop=fake&fake=quiet&friends=demo', { screen: 'menu-coop' });
+    await openPage(page, query, { screen: 'menu-coop' });
     check(await text(page, '#coop-demo') === T.demo.note, `the review link opens on Co-op, with "${await text(page, '#coop-demo')}" under the heading`);
     check(!(await shown(page, '#btn-seat-switch')), 'no seat switch before the waiting room');
     await tap(page, '#btn-coop-start');
-    await waitScreen(page, 'menu-table', 8000);
+    await waitScreen(page, 'menu-table', 20000);
     const code = await text(page, '#table-code');
     check(/^[A-Z]{5}$/.test(code) && await text(page, '#table-demo') === T.demo.note, `1. Start a table: the code ${code}, the note under the heading`);
     check(await text(page, '#btn-seat-switch') === fill(T.demo.showSeat, { name: T.demo.secondName }), `2. the switch: "${await text(page, '#btn-seat-switch')}"`);
-    await fit(page, 'demo-host', '1024x694');
+    await fit(page, `${tag}-host`, '1024x694');
     await tap(page, '#btn-seat-switch');
     check(await waitScreen(page, 'menu-coop') && await page.inputValue('#coop-code') === '' && await shown(page, '#btn-coop-start'), "...sam's screen: his own Co-op screen, an empty code field");
     check(await text(page, '#btn-seat-switch') === fill(T.demo.showSeat, { name: 'tester' }), `...the switch now: "${await text(page, '#btn-seat-switch')}"`);
     await page.fill('#coop-code', code.toLowerCase());
     await tap(page, '#btn-coop-join');
-    check(await waitScreen(page, 'menu-table', 8000) && await text(page, '#table-kicker') === fill(T.table.kickerGuest, { host: 'tester' }), `3. sam types the code and joins: "${await text(page, '#table-kicker')}"`);
+    check(await waitScreen(page, 'menu-table', 20000) && await text(page, '#table-kicker') === fill(T.table.kickerGuest, { host: 'tester' }), `3. sam types the code and joins: "${await text(page, '#table-kicker')}"`);
     const samYou = await text(page, '#table-seats .cs-seat.you .cs-name');
     check(samYou === T.demo.secondName && !(await shown(page, '#btn-table-start')), `...on his screen "You" is ${samYou}, and he has no Start`);
-    await fit(page, 'demo-sam', '1024x694');
+    await fit(page, `${tag}-sam`, '1024x694');
     await tap(page, '#btn-seat-switch');
     await waitScreen(page, 'menu-table');
+    await page.waitForFunction(() => document.querySelectorAll('#table-seats .cs-seat.person').length === 2, null, { timeout: 10000, polling: 100 }).catch(() => {});
     const back = await page.evaluate(() => ({ you: document.querySelector('#table-seats .cs-seat.you .cs-name')?.textContent, n: document.querySelectorAll('#table-seats .cs-seat.person').length, title: document.getElementById('table-title').textContent }));
     check(back.you === 'tester' && back.n === 2 && back.title === T.table.ready, `4. back to your screen: you are tester, ${back.n} at the table, "${back.title}"`);
     await tap(page, '#btn-table-start');
     await page.waitForFunction(() => !document.getElementById('table-countdown').hidden, null, { timeout: 5000 }).catch(() => {});
     check(await shown(page, '#table-countdown'), '...Start: the countdown');
-    await page.waitForFunction(t => document.getElementById('table-status').textContent === t, T.demo.dealt, { timeout: 12000 }).catch(() => {});
+    await page.waitForFunction(t => document.getElementById('table-status').textContent === t, T.demo.dealt, { timeout: 30000 }).catch(() => {});
     check(await text(page, '#table-status') === T.demo.dealt, `...then "${await text(page, '#table-status')}"`);
-    await fit(page, 'demo-dealt', '1024x694');
-  } catch (err) { check(false, `demo: ${err.message.split('\n')[0]}`); if (shots) await page.screenshot({ path: path.join(shots, 'error-demo.png') }).catch(() => {}); }
+    await fit(page, `${tag}-dealt`, '1024x694');
+  } catch (err) { check(false, `demo (${label}): ${err.message.split('\n')[0]}`); if (shots) await page.screenshot({ path: path.join(shots, `error-${tag}.png`) }).catch(() => {}); }
   check(quiet(messages).length === 0, `console clean${quiet(messages).length ? `: ${quiet(messages).slice(0, 3).join(' | ')}` : ''}`);
+  await browser.close();
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+if (only.includes('resume')) {
+  console.log('\nresume. a table remembered on this device, opened without ?join=');
+  const { browser, page, messages } = await launch({ width: 1024, height: 694 });
+  // (a port nobody listens on, on this computer: the page keeps trying, and the rejoin never finishes)
+  const deadPort = await new Promise(r => { const s = net.createServer().listen(0, '127.0.0.1', () => { const p = s.address().port; s.close(() => r(p)); }); });
+  const deadServer = `ws://127.0.0.1:${deadPort}`;
+  try {
+    await page.context().addInitScript(() => { if (!sessionStorage.getItem('seeded')) { sessionStorage.setItem('seeded', '1'); localStorage.setItem('hotelEscape.table.v1', JSON.stringify({ code: 'BKTWM', at: Date.now() - 60000 })); } });
+    await openPage(page, `server=${encodeURIComponent(deadServer)}`);
+    check(await waitScreen(page, 'menu-coop', 15000) && await text(page, '#coop-status') === T.coop.rejoining && await shown(page, '#btn-coop-cancel'),
+      `the page opens on Co-op: "${await text(page, '#coop-status')}" · ${await text(page, '#btn-coop-cancel')}`);
+    check(await page.evaluate(() => document.getElementById('btn-coop-start').disabled && document.getElementById('btn-coop-join').disabled), '...Start a table and Join wait meanwhile');
+    if (shots) await page.screenshot({ path: path.join(shots, '1024x694-rejoining.png') });
+    await tap(page, '#btn-coop-cancel');
+    check(await waitScreen(page, 'menu-main') && await page.evaluate(() => localStorage.getItem('hotelEscape.table.v1')) === null, 'Cancel: the main menu, and the table is forgotten');
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await page.waitForFunction(() => window.__game && !document.getElementById('menu').hidden, null, { timeout: 180000, polling: 100 });
+    await page.waitForTimeout(1500);
+    check(await screenNow(page) === 'menu-main', `...and the next visit opens on the main menu (${await screenNow(page)})`);
+  } catch (err) { check(false, `resume: ${err.message.split('\n')[0]}`); if (shots) await page.screenshot({ path: path.join(shots, 'error-resume.png') }).catch(() => {}); }
+  // (the dead server's refused sockets are the browser's own console lines, and the reload cuts the first visit's
+  // sound downloads short: neither is the page's)
+  const own = quiet(messages).filter(m => !/WebSocket connection to 'ws:\/\/127\.0\.0\.1/.test(m) && !/^requestfailed: .* net::ERR_ABORTED$/.test(m));
+  check(own.length === 0, `console clean${own.length ? `: ${own.slice(0, 3).join(' | ')}` : ''}`);
   await browser.close();
 }
 

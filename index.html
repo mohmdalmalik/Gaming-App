@@ -18,6 +18,9 @@
 <title>Hotel Escape</title>
 <link rel="stylesheet" href="./styles.css">
 <link rel="stylesheet" href="./wardrobe.css">
+<!-- Co-op: the menu's screens (src/ui/coopMenu.js) and, later, the match's additions (src/ui/coopMatch.js). -->
+<link rel="stylesheet" href="./coop.css">
+<link rel="stylesheet" href="./coop-match.css">
 <script type="importmap">
 {
   "imports": {
@@ -246,6 +249,8 @@
       <div class="menu-panel">
         <!-- "Sign the register": the first visit's username (src/ui/register.js); also Change name. -->
         <section id="menu-signup" class="menu-screen" hidden>
+          <!-- A Co-op invite link on a device with no profile: "You're invited to nora's table." (src/ui/register.js) -->
+          <p id="su-invite" class="su-invite" hidden></p>
           <div id="su-kicker" class="menu-kicker">Welcome to Hotel Escape</div>
           <h2 id="su-title" class="menu-h2">Sign the register</h2>
           <form id="su-form" class="su-form" novalidate autocomplete="off">
@@ -272,12 +277,11 @@
             <span id="pc-portrait" class="pc-portrait"></span>
             <span class="pc-text"><span class="pc-kicker">Playing as</span><span id="pc-name" class="pc-name"></span><span class="pc-edit">Wardrobe &#x203A;</span></span>
           </button>
+          <!-- The two ways to play: Single player (with bots, or practice alone) and Co-op (a private table with friends).
+               Their words: src/data/onlineText.js (data-ot, filled by src/ui/coopMenu.js). -->
           <div class="menu-buttons">
-            <button id="btn-menu-bots" class="menu-btn primary" type="button" disabled><span class="mb-main">Play with bots</span><span class="mb-sub">Join a table of 4&#8211;6 guests</span></button>
-            <button id="btn-menu-practice" class="menu-btn" type="button" aria-describedby="menu-hint" disabled><span class="mb-main">Practice alone</span><span class="mb-sub">Explore the hotel and find the way out</span></button>
-            <!-- Only until the player has played a match or finished a practice (src/ui/menu.js, the words:
-                 src/data/howToPlay.js). -->
-            <p id="menu-hint" class="menu-hint" hidden></p>
+            <button id="btn-menu-single" class="menu-btn primary" type="button" data-sfx="open" disabled><span class="mb-main" data-ot="menu.single"></span><span class="mb-sub" data-ot="menu.singleLine"></span></button>
+            <button id="btn-menu-coop" class="menu-btn" type="button" data-sfx="open"><span class="mb-main" data-ot="menu.coop"></span><span class="mb-sub" data-ot="menu.coopLine"></span></button>
             <!-- Learn (How to play, Cards: src/ui/howToPlay.js, src/ui/cardsGuide.js) and then Settings and Your record:
                  two rows of two, so the menu still fits without scrolling on the shortest iPad window. -->
             <div class="menu-row2 learn">
@@ -291,6 +295,104 @@
           </div>
           <!-- (the count of what has loaded so far is the start-up script's, at the bottom of this page) -->
           <div id="menu-loading" class="menu-loading">Opening the hotel&#8230;<span id="menu-loading-count" class="boot-count"></span></div>
+        </section>
+
+        <!-- Single player (src/ui/menu.js): today's two ways to play alone, with today's words, and the new-player hint. -->
+        <section id="menu-single" class="menu-screen" hidden>
+          <div class="menu-kicker" data-ot="single.kicker"></div>
+          <h2 class="menu-h2" data-ot="single.heading"></h2>
+          <div class="menu-buttons">
+            <button id="btn-menu-bots" class="menu-btn primary" type="button" disabled><span class="mb-main">Play with bots</span><span class="mb-sub">Join a table of 4&#8211;6 guests</span></button>
+            <button id="btn-menu-practice" class="menu-btn" type="button" aria-describedby="menu-hint" disabled><span class="mb-main">Practice alone</span><span class="mb-sub">Explore the hotel and find the way out</span></button>
+            <!-- Only until the player has played a match or finished a practice (src/ui/menu.js, the words:
+                 src/data/howToPlay.js). -->
+            <p id="menu-hint" class="menu-hint" hidden></p>
+          </div>
+          <div class="menu-actions">
+            <button id="btn-single-back" class="menu-btn small" type="button" data-ot="single.back"></button>
+          </div>
+        </section>
+
+        <!-- Co-op, "A private table" (src/ui/coopMenu.js; the words: src/data/onlineText.js): Start a table, or a code and
+             Join. The same screen shows one card instead (#coop-card): Coming soon, or why a table can't be joined. -->
+        <section id="menu-coop" class="menu-screen coop" hidden>
+          <div class="menu-kicker" data-ot="coop.kicker"></div>
+          <div id="coop-form" class="coop-form">
+            <h2 class="menu-h2" data-ot="coop.heading"></h2>
+            <p id="coop-demo" class="coop-quiet" hidden></p>
+            <p id="coop-line" class="coop-line" data-ot="coop.line"></p>
+            <button id="btn-coop-start" class="menu-btn primary coop-start" type="button"><span class="mb-main" data-ot="coop.start"></span><span class="mb-sub" data-ot="coop.startLine"></span></button>
+            <label class="mf-label coop-code-label" for="coop-code" data-ot="coop.codeLabel"></label>
+            <!-- (a form, so the keyboard's Go key joins; maxlength is set by the script: a whole pasted invite link fits) -->
+            <form id="coop-join-form" class="coop-code-row" novalidate autocomplete="off">
+              <input id="coop-code" class="su-input coop-code" type="text" inputmode="text" autocapitalize="characters" autocomplete="off" autocorrect="off" spellcheck="false" enterkeyhint="go" data-ot="coop.codePlaceholder" aria-describedby="coop-status">
+              <button id="btn-coop-join" class="menu-btn small" type="button" data-ot="coop.join"></button>
+            </form>
+            <div id="coop-status" class="coop-status" role="status" aria-live="polite"></div>
+            <div class="menu-actions">
+              <button id="btn-coop-back" class="menu-btn small" type="button" data-ot="coop.back"></button>
+              <button id="btn-coop-cancel" class="menu-btn small" type="button" data-ot="coop.cancel" hidden></button>
+            </div>
+          </div>
+          <div id="coop-card" class="coop-card" hidden>
+            <h2 id="coop-card-title" class="menu-h2"></h2>
+            <p id="coop-card-line" class="coop-line" role="status" aria-live="polite"></p>
+            <div class="menu-actions">
+              <button id="btn-coop-card-a" class="menu-btn small primary" type="button"></button>
+              <button id="btn-coop-card-b" class="menu-btn small" type="button"></button>
+            </div>
+          </div>
+        </section>
+
+        <!-- Your private table: the Co-op waiting room (src/ui/coopMenu.js). A wider panel (coop.css). The seats, the host's
+             size and lock and the questions are drawn by the script from the table as the server sends it. -->
+        <section id="menu-table" class="menu-screen coop-table" hidden>
+          <div id="table-kicker" class="menu-kicker"></div>
+          <h2 id="table-title" class="menu-h2"></h2>
+          <p id="table-demo" class="coop-quiet" hidden></p>
+          <div id="table-body" class="table-body">
+            <div class="coop-code-card">
+              <div class="ccc-code">
+                <div class="ccc-label" data-ot="table.codeLabel"></div>
+                <div id="table-code" class="ccc-letters" role="img"></div>
+              </div>
+              <div id="table-invite-row" class="ccc-actions">
+                <button id="btn-table-invite" class="menu-btn small primary" type="button" data-ot="table.invite"></button>
+                <button id="btn-table-copy" class="menu-btn small" type="button" data-ot="table.copy"></button>
+              </div>
+              <p id="table-locked-line" class="ccc-locked" hidden></p>
+            </div>
+            <input id="table-link" class="coop-link" type="text" readonly hidden>
+            <ul id="table-seats" class="coop-seats"></ul>
+            <div id="table-host-opts" class="menu-pair coop-opts">
+              <div class="menu-field"><div class="mf-label" data-ot="table.sizeLabel"></div><div id="table-size" class="seg" role="radiogroup"></div></div>
+              <div class="menu-field"><div class="mf-label" data-ot="table.newGuests"></div><div id="table-lock" class="seg" role="radiogroup"></div></div>
+            </div>
+            <p id="table-note" class="coop-note"></p>
+            <div id="table-status" class="coop-status" role="status" aria-live="polite"></div>
+            <div id="table-actions" class="menu-actions coop-actions">
+              <button id="btn-table-start" class="menu-btn primary small" type="button" data-ot="table.start"></button>
+              <button id="btn-table-leave" class="menu-btn small" type="button" data-ot="table.leave"></button>
+              <button id="btn-table-wardrobe" class="menu-btn small quiet" type="button" data-sfx="open" data-ot="table.wardrobe"></button>
+            </div>
+            <div id="table-countdown" class="coop-countdown" role="timer" aria-live="polite" hidden>
+              <span class="cc-dial"><span id="table-count-n" class="cc-n"></span></span>
+              <span id="table-count-text" class="cc-text"></span>
+              <span id="table-count-guests" class="cc-guests"></span>
+              <button id="btn-table-wait" class="menu-btn small" type="button" data-ot="table.wait"></button>
+            </div>
+            <p class="coop-footer" data-ot="table.footer"></p>
+            <p id="table-storage" class="coop-footer warn" data-ot="table.notPersistent" hidden></p>
+          </div>
+          <!-- Remove sam? · Nobody has joined yet · ivy is away: one question at a time, in place of the room. -->
+          <div id="table-dialog" class="coop-dialog" role="alertdialog" aria-modal="true" aria-labelledby="table-dlg-title" hidden>
+            <h2 id="table-dlg-title" class="menu-h2"></h2>
+            <p id="table-dlg-line" class="coop-line"></p>
+            <div class="menu-actions">
+              <button id="btn-table-dlg-no" class="menu-btn small" type="button"></button>
+              <button id="btn-table-dlg-yes" class="menu-btn small primary" type="button"></button>
+            </div>
+          </div>
         </section>
 
         <section id="menu-bots" class="menu-screen" hidden>
@@ -384,6 +486,9 @@
         </section>
       </div>
 
+      <!-- Co-op's toasts in the menu ("sam joined.", "Link copied…": src/ui/coopMenu.js) -->
+      <div id="coop-toast" class="coop-toast" role="status" aria-live="polite" hidden></div>
+
       <!-- The Wardrobe (src/ui/wardrobe/wardrobe.js; the look: wardrobe.css): the menu's 'avatar' screen, over the live
            lobby where your guest stands large by the lift. Left, the areas as brass key fobs; middle, the stage (your
            name, Hotel Honours, Undo, Surprise me, drag to turn); right, the options for the area and Save look. -->
@@ -427,6 +532,9 @@
         </aside>
       </section>
     </div>
+
+    <!-- The review link's seat switch, "Show sam's screen" (?friends=demo: src/ui/seatSwitch.js): from the waiting room on. -->
+    <button id="btn-seat-switch" class="seat-switch" type="button" hidden></button>
 
     <!-- Black between the lobby and the game (the lift doors close, the screen fades, the game opens). -->
     <div id="fade" class="fade" hidden></div>

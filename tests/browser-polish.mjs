@@ -19,7 +19,7 @@
 //           for, and no HUD block overlaps another or clips its words at 1024x768 and 1024x694
 //   seats   guests easier to tell apart (G7): each guest's initial in the strip's portrait and in the plan's dot, the
 //           six seat colours, and the floor rings (about 0.6 for the other guests, with a dark and a light edge)
-import { launch, GUARD_WAIT, settle } from './smoke-lib.mjs';
+import { launch, GUARD_WAIT, settle, openSinglePlayer } from './smoke-lib.mjs';
 import { guestMarks } from '../src/table.js';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -56,6 +56,7 @@ async function matchFromMenu(page, extra = '') {
   await page.goto(`${baseUrl}?intro=off&botpace=0.1&timer=off&seed=5${extra}`, { waitUntil: 'domcontentloaded' });
   await waitFor(page, () => window.__game && !document.getElementById('btn-menu-bots').disabled, null, 180000);
   await page.waitForTimeout(600);
+  await openSinglePlayer(page);     // (the menu split: Play with bots and Practice alone are on the Single player screen)
   await page.click('#btn-menu-bots'); await page.waitForTimeout(500);
   await page.click('#btn-bots-find');
   await waitFor(page, () => window.__game.handoffKind() === 'role', null, 240000);
@@ -236,6 +237,7 @@ if (only.includes('reload')) {
     await ev(k => localStorage.removeItem(k), MARKER);
     await page.goto(`${baseUrl}?intro=off&botpace=0.1&timer=off`, { waitUntil: 'domcontentloaded' });
     await menuUp(page); await page.waitForTimeout(600);
+    await openSinglePlayer(page);
     await page.click('#btn-menu-practice');
     await waitFor(page, () => window.__game.phase() === 'game', null, 120000);
     await page.waitForTimeout(1500);

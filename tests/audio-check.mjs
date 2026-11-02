@@ -14,7 +14,7 @@
 //    download that fails once is tried again after a pause and the sound arrives
 //    (the logic of the retries to the millisecond, with the network and the clock faked: tests/audio-load-check.mjs)
 // The console must stay clean, and no audio file may 404.
-import { launch, giveCard, settle, settleNode } from './smoke-lib.mjs';
+import { launch, giveCard, settle, settleNode, openSinglePlayer } from './smoke-lib.mjs';
 
 const args = process.argv.slice(2);
 const base = args.includes('--url') ? args[args.indexOf('--url') + 1] : 'http://127.0.0.1:8123/';
@@ -130,6 +130,7 @@ await page.click('#btn-settings-done');
 // --- 3. Play with bots, through the menu and the lift ----------------------------------------------
 console.log('3. Play with bots (menu, matchmaking, the lift)');
 await waitFor(() => window.__audio.state().unlocked && window.__game.lobbyReady(), null, 60000);
+await openSinglePlayer(page);     // (the menu split: Play with bots and Practice alone are on the Single player screen)
 await page.click('#btn-menu-bots');
 await page.waitForTimeout(400);
 await page.click('#opt-bots .seg-btn[data-value="3"]');

@@ -103,6 +103,7 @@ export const ONLINE_TEXT = {
     countdown: 'The lift is on its way… {n}',
     countdownGuests: '{host} can still stop it.',
     wait: 'Wait',
+    removeAria: 'Remove {name} from the table',       // (read aloud on a friend's seat, for the host)
   },
 
   // --- Questions (one card: title / line / buttons) ------------------------------------------------------------
@@ -238,7 +239,18 @@ export const ONLINE_TEXT = {
     note: 'Test table: the online rules are not decided yet.',
     dealt: 'Match dealt: the match itself arrives next.',
     showSeat: "Show {name}'s screen",
+    secondName: 'sam',                                // the second seat you hold on the review link
     mustChooseCard: '{name} must choose a card',
+    // when a question waits on the other seat, the switch says so (by the question's kind: DESIGN §6.3)
+    waits: {
+      meetWhom: '{name} must choose whom to meet',
+      meetAct: '{name} must choose: Trade or Attack',
+      card: '{name} must choose a card',
+      offer: '{name} must answer a trade offer',
+      discard: '{name} must discard',
+      role: '{name} must read their role',
+      screen: "{name} has a screen to read",
+    },
   },
 };
 

@@ -28,7 +28,7 @@
 //                 others let go; the strip's portraits are the seats' own; geometry, shader programs and draw calls
 //                 stay bounded
 import fs from 'node:fs';
-import { launch } from './smoke-lib.mjs';
+import { launch, openSinglePlayer } from './smoke-lib.mjs';
 import { item } from '../src/data/wardrobe.js';
 import { lobbyLayout } from '../src/menu/lobbyLayout.js';
 
@@ -472,6 +472,7 @@ if (!skip.has('lift')) {
   {
     const { browser, page, messages } = await menuPage(1180, 820);
     await sleep(600);
+    await openSinglePlayer(page);     // (the menu split: Play with bots and Practice alone are on the Single player screen)
     await page.click('#btn-menu-practice');
     await page.waitForFunction(() => window.__game.lobbyBoarders(), null, { timeout: 20000 });
     check(JSON.stringify(await page.evaluate(() => window.__game.lobbyBoarders())) === '["you"]', 'practice: your avatar boards alone');
@@ -484,6 +485,7 @@ if (!skip.has('lift')) {
   {
     const { browser, page, messages } = await menuPage(1180, 820);
     await sleep(600);
+    await openSinglePlayer(page);
     await page.click('#btn-menu-bots');
     await sleep(500);
     await page.click('#btn-bots-find');

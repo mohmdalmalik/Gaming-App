@@ -42,8 +42,10 @@ export const profileOn = (profile) => {
   } catch { /* no storage on this page */ }
 };
 
-export async function launch({ width = 1180, height = 820, touch = true, tips = false, profile = true, reducedMotion = null, autoEnd = false } = {}) {
-  const browser = await chromium.launch({ executablePath: chrome, headless: true, args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--no-sandbox'] });
+// `args`: more Chromium switches (tests/coop-menu-check.mjs maps a made-up host name to 127.0.0.1 with one, so the page
+// runs as it does on the live site, where the host is not localhost).
+export async function launch({ width = 1180, height = 820, touch = true, tips = false, profile = true, reducedMotion = null, autoEnd = false, args = [] } = {}) {
+  const browser = await chromium.launch({ executablePath: chrome, headless: true, args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--no-sandbox', ...args] });
   // (`reducedMotion: 'reduce'`: the device's Reduce Motion setting is on, prefers-reduced-motion: src/motion.js)
   const context = await browser.newContext({ viewport: { width, height }, deviceScaleFactor: 1, hasTouch: touch, ...(reducedMotion ? { reducedMotion } : {}) });
   if (!tips) await context.addInitScript(tipsOff);
@@ -73,6 +75,25 @@ export async function settleNode(cond, timeout = 15000, every = 100) {
   const end = Date.now() + timeout;
   while (Date.now() < end) { if (await cond()) return true; await new Promise(r => setTimeout(r, every)); }
   return !!(await cond());
+}
+
+// --- The main menu's Single player screen (src/ui/menu.js) ----------------------------------------------------
+// Play with bots and Practice alone sit on the Single player screen now; the main menu has Single player and Co-op.
+// openSinglePlayer(page) waits until Single player can be tapped (the hotel has opened: the same moment Play with bots
+// and Practice alone stop being dimmed), taps it, and waits until its screen is up and past the moment a screen ignores
+// a tap (src/ui/tapGuard.js), so the next tap counts. Already there: nothing to do. Resolves true once it is showing.
+export async function openSinglePlayer(page, { timeout = 120000 } = {}) {
+  const showing = () => page.evaluate(() => { const s = document.getElementById('menu-single'); return !!s && !s.hidden && !document.getElementById('menu').hidden; });
+  await page.waitForFunction(() => { const b = document.getElementById('btn-menu-single'); return (!!b && !b.disabled) || !document.getElementById('menu-single')?.hidden; }, null, { timeout, polling: 100 });
+  for (let i = 0; i < 8 && !(await showing()); i++) {
+    // (a tap in a screen's first moments is ignored: tried again until it takes; a busy machine may need a while
+    // before the button stands still enough to be tapped)
+    if (await page.isVisible('#btn-menu-single')) await page.click('#btn-menu-single', { timeout: 30000 }).catch(() => {});
+    await page.waitForFunction(() => !document.getElementById('menu-single').hidden, null, { timeout: 1500, polling: 50 }).catch(() => {});
+  }
+  if (!(await showing())) return false;
+  await page.waitForTimeout(GUARD_WAIT);
+  return true;
 }
 
 // --- Taps that take two steps now (src/ui/handoff.js, src/hud.js) -------------------------------------------

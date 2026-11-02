@@ -457,7 +457,7 @@ console.log('\n9. render.yaml\'s build filter and the server\'s import graph');
   const unused = pats.filter((p, i) => !files.some(f => res[i].test(f)));
   check(files.length > 30 && uncovered.length === 0, `every file the server imports (${files.length}) is in the build filter${uncovered.length ? '; missing: ' + uncovered.join(', ') : ''}`);
   check(unused.length === 0, `...and the filter names nothing the server does not import${unused.length ? ': ' + unused.join(', ') : ''}`);
-  check(/region:\s*singapore/.test(yaml) && /plan:\s*free/.test(yaml) && /healthCheckPath:\s*\/health/.test(yaml) && /startCommand:\s*node server\/index\.js/.test(yaml)
+  check(/region:\s*singapore/.test(yaml) && /plan:\s*free/.test(yaml) && /healthCheckPath:\s*\/health/.test(yaml) && /startCommand:\s*node (--max-old-space-size=\d+ )?server\/index\.js/.test(yaml)
     && /NODE_ENV[\s\S]{0,40}production/.test(yaml) && /TRUST_PROXY[\s\S]{0,40}render/.test(yaml) && !/TIME_SCALE|LIMITS_SCALE/.test(yaml),
     'render.yaml: Singapore, the free plan, /health, node server/index.js, production, behind Render\'s proxy, no test switch');
 }

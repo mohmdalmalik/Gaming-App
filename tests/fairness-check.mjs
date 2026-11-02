@@ -619,7 +619,7 @@ console.log('\n7. the view through the server: the table, Away, no Bot label, th
   check(replies.length === 2 && replies[0] === replies[1] && JSON.parse(replies[0]).ok === true && turnMid === turnBefore + 1 && M.state.turn === turnMid,
     `the same command id twice: the turn ended once, the same reply twice (${replies[0]})`);
   // the saved table: plain JSON with everything to bring it back
-  const saved = d.T.saved;
+  const saved = typeof d.T.saved === 'string' ? JSON.parse(d.T.saved) : d.T.saved;
   check(saved && saved.match && saved.match.engine && saved.match.referee && saved.match.aliases && isDeepStrictEqual(JSON.parse(json(saved)), saved)
     && !json(saved).includes(nora.token), `the table is saved after every step (${(json(saved).length / 1024).toFixed(1)} KB), plain JSON, never a device key`);
 }

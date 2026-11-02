@@ -11,7 +11,9 @@
 // other work, so a timing target would mean nothing here. Run it alone (under the browser lock): it measures timing.
 // The test people answer every question at once, read their results, and on their own turn search once and end it
 // (the bots play the rest), each from its own X-Forwarded-For (the server runs with TRUST_PROXY=render).
-// It prints one line every 10 s and a summary; exit code 0 when the gate passes.
+// It prints one line every 10 s and a summary; exit code 0 when the gate passes. The server runs with render.yaml's
+// heap cap. (Note: the server ticks every 250 ms and a bot takes at most one step a tick, so a TIME_SCALE above about
+// 3 does not make the matches any faster or the load any heavier.)
 import fs from 'node:fs';
 import os from 'node:os';
 import net from 'node:net';
@@ -44,7 +46,9 @@ const port = Number(arg('port', 0)) || await freePort();
 const dataDir = MEMORY_ONLY ? '' : fs.mkdtempSync(path.join(os.tmpdir(), 'hotel-load-'));
 
 // --- the server ---------------------------------------------------------------------------------------------------------
-const child = spawn(process.execPath, [path.join(root, 'server/index.js')], {
+// (started as render.yaml starts it: with its heap cap)
+const HEAP = (fs.readFileSync(path.join(root, 'render.yaml'), 'utf8').match(/--max-old-space-size=\d+/) || [])[0];
+const child = spawn(process.execPath, [...(HEAP ? [HEAP] : []), path.join(root, 'server/index.js')], {
   cwd: root, stdio: ['ignore', 'pipe', 'pipe'],
   env: { ...process.env, NODE_ENV: '', PORT: String(port), DATA_DIR: dataDir, TIME_SCALE: String(SCALE), TRUST_PROXY: 'render', ALLOWED_ORIGINS: '', MAX_TABLES: String(Math.max(300, TABLES + 10)) },
 });
@@ -66,8 +70,9 @@ const counts = { sent: 0, recv: 0, bytes: 0, refused: 0, drops: 0 };
 function person(name) {
   ipSeq++;
   const ip = `100.${64 + ((ipSeq >> 16) & 63)}.${(ipSeq >> 8) & 255}.${ipSeq & 255}`;
-  const p = { name, ws: null, token: null, view: null, lobby: null, live: false, n: 0, plan: null, searched: null, ended: false, stop: false };
-  const send = msg => { if (p.live) { p.ws.send(JSON.stringify(msg)); counts.sent++; } };
+  const p = { name, ws: null, token: null, view: null, lobby: null, live: false, n: 0, plan: null, searched: null, ended: false, stop: false, closes: [], places: [] };
+  // (a person taps at most about 4 times a second: the server closes a socket over 10 a second)
+  const send = msg => { if (p.live) { p.ws.send(JSON.stringify(msg)); counts.sent++; p.lastSent = Date.now(); } };
   const doCmd = cmd => send({ t: 'do', id: `${(p.n++).toString(36)}`, turn: p.view?.turn ?? 0, cmd });
   p.send = send;
   p.connect = () => {
@@ -78,18 +83,22 @@ function person(name) {
     ws.on('message', raw => {
       counts.recv++; counts.bytes += raw.length;
       const m = JSON.parse(String(raw));
-      if (m.t === 'welcome') p.token = m.token;
+      if (m.t === 'welcome') { p.token = m.token; p.places.push(m.place); }
       else if (m.t === 'lobby') p.lobby = m.lobby;
-      else if (m.t === 'view') { p.view = m.view; if (m.view.end) p.ended = true; p.plan = null; }
+      else if (m.t === 'view') { p.view = m.view; if (m.view.end) p.ended = true; }
       else if (m.t === 'res' && !m.ok) counts.refused++;
     });
-    ws.on('close', () => { p.live = false; if (!p.stop) { counts.drops++; setTimeout(p.connect, 300); } });
+    ws.on('close', code => {
+      p.live = false;
+      if (p.stop || (code === 4003 && p.ended)) return;          // (the table closed after the match: nothing to come back to)
+      counts.drops++; p.closes.push(code); setTimeout(p.connect, 300);
+    });
     ws.on('error', () => {});
   };
   // one decision now and then: questions answered at once, results read, a turn = one search and the end
   p.step = now => {
     const v = p.view;
-    if (!v || v.end || !p.live) return;
+    if (!v || v.end || !p.live || now - (p.lastSent || 0) < 250) return;
     let key = null;
     if (v.ask) key = `a${v.ask.id}`;
     else if (v.results.length) key = `r${v.results[0].id}`;
@@ -115,7 +124,7 @@ function person(name) {
 
 // --- the run --------------------------------------------------------------------------------------------------------------
 const t0 = Date.now();
-console.log(`load: ${TABLES} tables x ${PEOPLE} people + bots, TIME_SCALE ${SCALE}, ${MEMORY_ONLY ? 'memory store' : 'file store'}, server on 127.0.0.1:${port}`);
+console.log(`load: ${TABLES} tables x ${PEOPLE} people + bots, TIME_SCALE ${SCALE}, ${MEMORY_ONLY ? 'memory store' : 'file store'}, server on 127.0.0.1:${port}${HEAP ? ` (${HEAP}, as render.yaml)` : ''}`);
 const tables = [];
 const everyone = [];
 const driver = setInterval(() => { const now = Date.now(); for (const p of everyone) p.step(now); }, 25);
@@ -130,22 +139,24 @@ for (const t of tables) { t.ps[0].send({ t: 'create', size: 4 + (tables.indexOf(
 await until(() => tables.every(t => t.ps[0].lobby?.code), 30000);
 for (const t of tables) { t.code = t.ps[0].lobby?.code; for (const p of t.ps.slice(1)) p.send({ t: 'join', code: t.code }); }
 await until(() => tables.every(t => t.ps.every(p => p.lobby?.code === t.code)), 30000);
-for (const t of tables) t.ps[0].send({ t: 'lobby', id: 'start', op: { k: 'start' } });
+// (tables start a few at a time, as friends would, not all in one tick)
+for (let k = 0; k < tables.length; k++) { tables[k].ps[0].send({ t: 'lobby', id: 'start', op: { k: 'start' } }); if (k % 10 === 9) await sleep(250); }
 const seated = tables.filter(t => t.code && t.ps.every(p => p.lobby?.code === t.code)).length;
 console.log(`  ${seated}/${TABLES} tables seated and started (${((Date.now() - t0) / 1000).toFixed(1)} s)`);
 
-let maxRss = 0, lastPrint = 0, samples = [];
+let maxRss = 0, maxHeap = 0, lastPrint = 0, samples = [];
 const deadline = Date.now() + MINUTES * 60000;
 while (Date.now() < deadline) {
   await sleep(2000);
   const h = await health();
-  if (h) { maxRss = Math.max(maxRss, h.rssMB); samples.push(h); }
+  if (h) { maxRss = Math.max(maxRss, h.rssMB); maxHeap = Math.max(maxHeap, h.heapMB ?? 0); samples.push(h); }
   const done = tables.filter(t => t.ps.every(p => p.ended)).length;
   if (Date.now() - lastPrint > 10000) {
     lastPrint = Date.now();
-    console.log(`  ${((Date.now() - t0) / 1000).toFixed(0)} s: ${done}/${TABLES} matches ended, ${h?.matches ?? '?'} playing, server ${h?.rssMB ?? '?'} MB, event-loop p99 ${h?.loopP99Ms ?? '?'} ms, saves ${h?.saves?.n ?? '?'} (mean ${h?.saves?.meanMs ?? '?'} ms)`);
+    console.log(`  ${((Date.now() - t0) / 1000).toFixed(0)} s: ${done}/${TABLES} matches ended, ${h?.matches ?? '?'} playing, server ${h?.rssMB ?? '?'} MB (heap ${h?.heapMB ?? '?'} MB), event-loop p99 ${h?.loopP99Ms ?? '?'} ms, saves ${h?.saves?.n ?? '?'} (mean ${h?.saves?.meanMs ?? '?'} ms)`);
   }
   if (done === TABLES || exited) break;
+  if (h && h.tables === 0 && Date.now() - t0 > 30000) break;          // (every table has closed: nothing more will end)
 }
 clearInterval(driver);
 const h = await health();
@@ -156,10 +167,17 @@ const summary = {
   tables: TABLES, people: TABLES * PEOPLE, timeScale: SCALE, store: MEMORY_ONLY ? 'memory' : 'file',
   ended: done, unfinished: TABLES - done, stoppedWithoutResult: stopped,
   seconds: Math.round((Date.now() - t0) / 1000),
-  serverMaxRssMB: maxRss, serverEventLoopP99Ms: h?.loopP99Ms ?? null,
+  serverMaxRssMB: maxRss, serverMaxHeapMB: maxHeap, serverEventLoopP99Ms: h?.loopP99Ms ?? null,
   saves: h?.saves ?? null, messages: { sent: counts.sent, received: counts.recv, receivedMB: Math.round(counts.bytes / 1048576), refused: counts.refused, drops: counts.drops },
   serverErrors: serverLog.filter(l => /fault|failed|uncaught|could not/i.test(l)).length,
 };
+summary.serverSockets = h?.sockets ?? null;
+summary.closedEmpty = serverLog.filter(l => /closed \(nobody connected\)/.test(l)).length;
+summary.dropCodes = everyone.flatMap(p => p.closes).reduce((o, c) => ((o[c] = (o[c] || 0) + 1), o), {});
+for (const t of tables.filter(t => !t.ps.every(p => p.ended)).slice(0, 8)) {
+  console.log(`  unfinished ${t.code}: ${t.ps.map(p => `${p.name} ${p.view ? `round ${p.view.round} turn ${p.view.turn} ${p.view.phase.kind}` : 'no view'}, closes [${p.closes.join(',')}], places [${p.places.join(',')}]`).join(' | ')}`);
+}
+if (flag('log')) fs.writeFileSync(arg('log'), serverLog.join('\n'));
 const pass = summary.unfinished === 0 && maxRss < GATE_MB && !exited;
 console.log(`  summary ${JSON.stringify(summary)}`);
 console.log(pass ? `LOAD GATE PASSED: ${done}/${TABLES} matches finished, server memory at most ${maxRss} MB (< ${GATE_MB}); event-loop p99 ${summary.serverEventLoopP99Ms} ms (a measurement)`

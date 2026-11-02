@@ -53,7 +53,7 @@ import { newCode, normaliseCode } from './codes.js';
 import { createAliases } from './aliases.js';
 import { createReferee } from './referee.js';
 import { playerView, seatEvents } from './playerView.js';
-import { toSnapshot, fromSnapshot } from './snapshot.js';
+import { snapshotJson, fromSnapshot } from './snapshot.js';
 import { createMemoryStore } from './store.js';
 import { createHotel } from '../game/hotel.js';
 import { createState } from '../game/state.js';
@@ -80,6 +80,8 @@ const LOBBY_OPS_KEPT = 16;
 const TIMED = ['turnMs', 'discardMinMs', 'meetMs', 'cardMs', 'offerMs', 'screenCapMs', 'startAckMs', 'stallMs', 'standInGraceMs'];
 
 const copy = x => (x == null ? x : JSON.parse(JSON.stringify(x)));
+const ENGINE_SLOT = '@@engine-snapshot@@';                 // (stands in for the snapshot text while a save is built)
+const ENGINE_SLOT_JSON = JSON.stringify(ENGINE_SLOT);
 
 // The rule limits a referee is given: the rules divided by the test-only time scale (rule 14).
 export function scaledRules(rules, timeScale = 1) {
@@ -213,8 +215,10 @@ export function createRooms({
     if (M.stopped) extras = { ...extras, phase: { kind: 'ended', seats: [] }, clock: null, stall: null, ask: null, end: { won: null, dawn: false, stopped: M.stopped } };
     return playerView(M.state, M.floor, seat, extras, { aliasOf: M.aliases.aliasFor });
   }
-  // A view as compared between two sends: the same apart from time (every leftMs) is the same.
-  const viewKey = v => JSON.stringify(v, (k, x) => (k === 'leftMs' ? undefined : x));
+  // A view as compared between two sends: the same apart from time (the clock's, the stall's and the question's
+  // leftMs, the only times in a view) is the same.
+  const timeless = x => (x && typeof x === 'object' && 'leftMs' in x ? { ...x, leftMs: 0 } : x);
+  const viewKey = v => JSON.stringify({ ...v, clock: timeless(v.clock), stall: timeless(v.stall), ask: timeless(v.ask) });
 
   // Send `P` their view if it changed (or always, `force`). The first view of a match on a socket is `fresh` and
   // carries the seat's whole event stream; later ones only the new events.
@@ -256,7 +260,7 @@ export function createRooms({
       savedAt: at,
       match: M ? {
         n: M.n, dataHash: M.dataHash, startedAt: M.startedAt, people: [...M.people], stopped: M.stopped ?? null,
-        engine: toSnapshot(M.state, M.floor),
+        engine: ENGINE_SLOT,
         referee: M.ref.toJSON(),
         aliases: M.aliases.toJSON(),
         doIds: copy(M.doIds),
@@ -264,10 +268,13 @@ export function createRooms({
       } : null,
     };
   }
+  // The save as JSON text, built once (the engine's snapshot goes in as text: no round trip through objects). The
+  // last save is kept as that text too (compact), for a fault's reload.
   function save(T, at) {
-    const obj = serialise(T, at);
-    store.save(T.id, obj);
-    T.saved = obj;
+    let text = JSON.stringify(serialise(T, at));
+    if (T.match) text = text.replace(ENGINE_SLOT_JSON, () => snapshotJson(T.match.state, T.match.floor));
+    store.save(T.id, text);
+    T.saved = text;
   }
 
   // A match back from its save: the engine and the hotel (snapshot), new bot minds with fresh crypto seeds (they catch
@@ -401,7 +408,7 @@ export function createRooms({
   // Back to the last save (the input that threw is dropped). Nothing was sent after that save, so every device still
   // holds exactly what the table now holds.
   function reload(T, at) {
-    const s = T.saved;
+    const s = typeof T.saved === 'string' ? JSON.parse(T.saved) : T.saved;
     if (!s) throw new Error('nothing saved');
     const R = tableFromSave(s);
     const M = s.match ? rebuildMatch(R, s.match) : null;

@@ -5,8 +5,8 @@
 // Pure: no DOM, no Node APIs, no clock.
 //
 //   const store = createMemoryStore();
-//   store.save(id, obj)    keep this table's latest save (a plain object; a copy is kept, so later changes to `obj`
-//                          never reach it)
+//   store.save(id, obj)    keep this table's latest save (a plain object, or its JSON text; a copy is kept, so
+//                          later changes to `obj` never reach it)
 //   store.load()        -> [obj, ...]  every table saved (copies), in no particular order
 //   store.remove(id)       forget a table (a closed table's file, a day after it closed)
 //   store.kind             'memory'
@@ -17,7 +17,7 @@ export function createMemoryStore() {
   const saved = new Map();      // id -> JSON text
   return {
     kind: 'memory',
-    save(id, obj) { saved.set(String(id), JSON.stringify(obj)); },
+    save(id, obj) { saved.set(String(id), typeof obj === 'string' ? obj : JSON.stringify(obj)); },
     load() { return [...saved.values()].map(text => JSON.parse(text)); },
     remove(id) { saved.delete(String(id)); },
     // (tests: how many tables are kept, and the text of one)

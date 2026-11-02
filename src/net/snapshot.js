@@ -4,6 +4,7 @@
 //
 //   toSnapshot(state, floor)                                 -> a plain object (JSON-safe: Sets as { $set: [...] },
 //                                                               Maps as { $map: [[k, v]...] }, no functions)
+//   snapshotJson(state, floor)                               -> the same as JSON text (a server's save)
 //   fromSnapshot(snap, { hotelData, cfg, rng, hotelRng })     -> { state, floor }   (snap: that object or its JSON text)
 //
 // The STATE is kept whole (every field: hands, piles, events, inboxes, notes, locks...), minus its random generator
@@ -34,9 +35,15 @@ function revive(x) {
 }
 
 export function toSnapshot(state, floor) {
+  return JSON.parse(snapshotJson(state, floor));
+}
+
+// The same snapshot as JSON text (what a server saves): no round trip through objects, so saving after every step
+// stays cheap. JSON.parse(snapshotJson(s, f)) is exactly toSnapshot(s, f).
+export function snapshotJson(state, floor) {
   const lobby = floor.rooms.get(floor.start.room);
   const { rng, ...rest } = state;           // the generator is a function: never stored (it is handed back in)
-  return JSON.parse(JSON.stringify({
+  return JSON.stringify({
     v: SNAPSHOT_VERSION,
     state: rest,
     floor: {
@@ -46,7 +53,7 @@ export function toSnapshot(state, floor) {
       deck: floor.deck.map(t => t.id),
       version: floor.version,
     },
-  }, replacer));
+  }, replacer);
 }
 
 export function fromSnapshot(snap, { hotelData, cfg, rng = null, hotelRng = null } = {}) {

@@ -5,6 +5,9 @@
 #   has the same steps.
 # Render deploys again only when a file the server imports changes (buildFilter below). tests/protocol-check.mjs
 # compares that list with the server's real import graph, so the two can't drift apart.
+# The heap cap: a table needs about half a megabyte of live memory (300 tables: about 150 MB), but without a cap Node
+# lets garbage pile up when memory looks plentiful (600 MB at 300 tables in tools/load/coop-load.mjs). 256 MB keeps
+# the whole process well under the free plan's 512 MB.
 services:
   - type: web
     name: hotel-escape
@@ -12,7 +15,7 @@ services:
     region: singapore          # can't be changed later (owner decision D7)
     plan: free                 # sleeps after 15 minutes without traffic; tables live in memory (no disk)
     buildCommand: cd server && npm ci
-    startCommand: node server/index.js
+    startCommand: node --max-old-space-size=256 server/index.js   # a heap cap: the free plan has 512 MB (see the top)
     healthCheckPath: /health
     autoDeploy: true
     buildFilter:

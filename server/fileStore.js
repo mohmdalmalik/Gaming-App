@@ -2,9 +2,12 @@
 // has a disk (DATA_DIR: a Render disk on a paid plan, or a folder on this computer for restore-check).
 //
 //   const store = createFileStore(dir, { log })
-//   store.save(id, obj)    one file per table, <dir>/<id>.json, written safely: a temporary file, flushed to the disk
-//                          (fsync), then renamed over the old one, so a crash at any moment leaves either the old save
-//                          or the new one, never half of one
+//   store.save(id, obj)    one file per table, <dir>/<id>.json (obj: a plain object or its JSON text), written
+//                          safely: a temporary file, flushed to the disk (fsync), then renamed over the old one, so a
+//                          crash at any moment leaves either the old save or the new one, never half of one. (The
+//                          folder itself is not flushed after each rename: if the machine lost power just then, the
+//                          rename could be undone, which leaves the previous save, still whole. Flushing it too
+//                          doubled the cost of a save, and the server saves after every step.)
 //   store.load()        -> [obj, ...]   every table saved (a file that can't be read is skipped and logged)
 //   store.remove(id)       delete a table's file
 //   store.kind             'file'
@@ -23,8 +26,6 @@ export function createFileStore(dir, { log = () => {} } = {}) {
     if (!SAFE_ID.test(String(id))) throw new Error(`fileStore: not a table id: ${String(id).slice(0, 40)}`);
     return path.join(dir, `${id}.json`);
   };
-  let dirFd = null;
-  try { dirFd = fs.openSync(dir, 'r'); } catch { dirFd = null; }   // (to make the renames themselves durable)
 
   return {
     kind: 'file',
@@ -34,13 +35,12 @@ export function createFileStore(dir, { log = () => {} } = {}) {
       const tmp = `${target}.tmp`;
       const fd = fs.openSync(tmp, 'w');
       try {
-        fs.writeSync(fd, JSON.stringify(obj));
+        fs.writeSync(fd, typeof obj === 'string' ? obj : JSON.stringify(obj));
         fs.fsyncSync(fd);
       } finally {
         fs.closeSync(fd);
       }
       fs.renameSync(tmp, target);
-      if (dirFd != null) { try { fs.fsyncSync(dirFd); } catch { /* not every system can */ } }
     },
     load() {
       const out = [];

@@ -150,8 +150,11 @@ export async function startServer({
     if (req.method === 'GET' && url === '/health') {
       const h = rooms.health(now());
       h.loopP99Ms = Math.round(lag.percentile(99) / 1e6);
-      h.rssMB = Math.round(process.memoryUsage().rss / 1048576);
+      const mem = process.memoryUsage();
+      h.rssMB = Math.round(mem.rss / 1048576);
+      h.heapMB = Math.round(mem.heapUsed / 1048576);
       h.saves = { n: saves.n, meanMs: saves.n ? Math.round((saves.ms / saves.n) * 1000) / 1000 : 0, maxMs: Math.round(saves.maxMs * 10) / 10 };
+      h.sockets = { open: wss.clients.size, ...stats };
       res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' });
       res.end(JSON.stringify(h));
       return;

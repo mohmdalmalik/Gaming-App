@@ -15,7 +15,7 @@ import { seatTable, botAvatars, STAND_IN } from './table.js';
 import { createHotel, stackDeck, growTo, searchSpotOf, roomAt, cellOf, fogCells } from './game/hotel.js';
 import { buildGrid } from './game/grid.js';
 import {
-  createState, resetState, endTurn, activePlayer, nextPlayer, checkWin, canEscape,
+  createState, endTurn, activePlayer, nextPlayer, checkWin, canEscape,
   openableDoors, pendingEncounters, lockEncounter, playersInRoom, isLocked,
   isBarricaded, canTradeVoluntarily, doorBetween, encountersIn, adjacentLockedRooms,
 } from './game/state.js';
@@ -93,7 +93,7 @@ import { createCardsGuide } from './ui/cardsGuide.js';
 import { createGameMenu } from './ui/gameMenu.js';
 import { endRecap } from './ui/endRecap.js';
 import { END_WORDS } from './data/endScreen.js';
-import { CHAT, BOT_CHAT } from './data/chat.js';
+import { CHAT } from './data/chat.js';
 import { settings } from './settings.js';
 import { createAudio } from './audio/index.js';
 import { createGameSounds } from './audio/gameSounds.js';
@@ -151,7 +151,12 @@ const newSeed = () => (Number.isFinite(forcedSeed) && forcedSeed > 0 ? forcedSee
 // The game being played (or about to be). setupGame() changes it before each new game.
 let PRACTICE = true;          // practice alone, or a match against bots
 let humanSeat = 0;            // the player's own seat (a match: random, like joining an online table)
-let bots = null;              // the computer guests' brains (src/bots/index.js), in a match
+// The table this game is played at (src/net/localTable.js): it deals the game and owns the computer guests' brains
+// (src/bots/index.js) and their chatter (src/bots/chatter.js). TRANSITIONAL (multiplayer build plan, P1C S1-S4): the
+// page still runs the match itself, on the table's own objects, reached only through T(); P1C S5 removes T().
+let table = null;
+const NO_TABLE = Object.freeze({ state: null, floor: null, bots: null, chatter: null, referee: null });
+const T = () => table?.local.debug ?? NO_TABLE;     // TRANSITIONAL
 let botProfiles = [];         // per seat: the bot's profile (username, style), or null for the player
 const cast = seatTable({ me: myIdentity(), seat: 0 });   // the seats at the table, in seat order (src/table.js; filled in place by setupGame)
 applyMode('practice', 1);
@@ -170,7 +175,7 @@ const startSpot = i => floor.start.positions[i % floor.start.positions.length];
 const movers = cast.map((_, i) => createPlayer(cfg, startSpot(i)));   // one per seat (rebuilt in place)
 // The player's own guest, and whether it is their turn. In practice they are the only guest.
 const me = () => state.players[humanSeat];
-const isBot = i => !!bots && !!botProfiles[i];
+const isBot = i => !!T().bots && !!botProfiles[i];
 const myTurn = () => !state.finished && state.activeIndex === humanSeat;
 
 // --- Rendering -------------------------------------------------------------------------
@@ -363,8 +368,9 @@ const chat = createChatUI(document, {
       .map(p => ({ seat: p.index, player: p, red: red.has(p.id) }));
   },
 });
-let chatter = null, chatPollAt = 0;
+let chatPollAt = 0;
 chatChannel.onMessage(msg => {
+  const { bots, chatter } = T();
   if (!chatter) return;
   bots?.hear(msg);
   chatter.hear(msg, performance.now());
@@ -452,6 +458,7 @@ function syncChat(now) {
   const clear = screenClear() && !hand.isOpen;
   const ended = running && !PRACTICE && overlays.endOpen;
   chat.update({ clear, ended });
+  const { chatter } = T();
   if (!chatter || !running || now < chatPollAt) return;
   chatPollAt = now + CHAT.pollMs;
   for (const msg of chatter.tick(now, { hold: !clear && !ended })) chatChannel.post(msg);
@@ -874,13 +881,13 @@ function botMeeting(P, candidates) {
     if (state.finished) { meetingLive = false; return; }
     let pick = candidates[0].index;
     if (candidates.length > 1) {
-      try { pick = bots.meetWhom(P.index, candidates.map(q => q.index)); } catch (err) { console.warn('bot meetWhom failed', err); }
+      try { pick = T().bots.meetWhom(P.index, candidates.map(q => q.index)); } catch (err) { console.warn('bot meetWhom failed', err); }
     }
     const Q = candidates.find(q => q.index === pick) || candidates[0];
     lockEncounter(state, P.currentRoom, P.index, Q.index);
     const canAttack = weaponsIn(P.hand).length > 0 && P.actionPoints >= rules.actionCost.attack;
     let weapon = null;
-    if (canAttack) { try { weapon = bots.attackWith(P.index, Q.index); } catch (err) { console.warn('bot attackWith failed', err); } }
+    if (canAttack) { try { weapon = T().bots.attackWith(P.index, Q.index); } catch (err) { console.warn('bot attackWith failed', err); } }
     if (!isBot(Q.index)) { hand.close(); map.close(); hud.hideConfirm(); selectedMove = null; rig.recentre({ zoom: false }); }
     if (weapon && P.hand.some(c => c.id === weapon)) botAttack(P, Q, weapon);
     else runTrade(P, Q);
@@ -907,7 +914,7 @@ function runTrade(A, B, onDone = afterMeeting, { voluntary = false } = {}) {
   const botCard = (X, Y) => {
     const ids = tradeableCards(X).map(c => c.id);
     let id = null;
-    try { id = bots.tradeCard(X.index, Y.index, ids); } catch (err) { console.warn('bot tradeCard failed', err); }
+    try { id = T().bots.tradeCard(X.index, Y.index, ids); } catch (err) { console.warn('bot tradeCard failed', err); }
     return ids.includes(id) ? id : ids[0];
   };
   if (!human) {
@@ -1007,7 +1014,7 @@ function onTrade() {
     after(botThink(Q.index, 'reply'), () => {
       meeting.close();
       let yes = false;
-      try { yes = !!bots.acceptTrade(Q.index, P.index); } catch (err) { console.warn('bot acceptTrade failed', err); }
+      try { yes = !!T().bots.acceptTrade(Q.index, P.index); } catch (err) { console.warn('bot acceptTrade failed', err); }
       if (yes) runTrade(P, Q, afterMeeting, { voluntary: true });
       else meeting.notice(`${Q.name} declined.`, afterMeeting, 'No trade');
     });
@@ -1022,7 +1029,7 @@ function botProposeTrade(P, Q) {
   if (isBot(Q.index)) {
     after(botThink(Q.index, 'reply'), () => {
       let yes = false;
-      try { yes = !!bots.acceptTrade(Q.index, P.index); } catch (err) { console.warn('bot acceptTrade failed', err); }
+      try { yes = !!T().bots.acceptTrade(Q.index, P.index); } catch (err) { console.warn('bot acceptTrade failed', err); }
       if (yes) runTrade(P, Q); else afterMeeting();
     });
     return;
@@ -1058,10 +1065,12 @@ let botSteps = 0, botRefusals = 0;
 // A bot's thinking pause, scaled by the Bot speed setting (quicker still once the player is out).
 function botThink(i, kind) {
   let base = 600;
-  try { base = bots?.thinkMs(i, kind) ?? 600; } catch { /* keep the default */ }
+  try { base = T().bots?.thinkMs(i, kind) ?? 600; } catch { /* keep the default */ }
   const k = settings.choice('botSpeed')?.think ?? 1;
   return base * k * BOT_PACE * (me()?.alive ? 1 : 0.5);
 }
+// (the same scale, for the table: Bot speed × ?botpace × a half once the player is out)
+const botPaceScale = () => (settings.choice('botSpeed')?.think ?? 1) * BOT_PACE * (me()?.alive ? 1 : 0.5);
 function botWalkScale() { return (settings.choice('botSpeed')?.walk ?? 1.45) * (me()?.alive ? 1 : 1.4); }
 
 function startBotTurn(p) {
@@ -1074,7 +1083,7 @@ function startBotTurn(p) {
 }
 
 function botTick(now) {
-  if (!running || PRACTICE || state.finished || !bots) return;
+  if (!running || PRACTICE || state.finished || !T().bots) return;
   const p = activePlayer(state);
   if (!isBot(p.index) || now < botNextAt || walkCutShort) return;
   if (meetingLive || pendingArrival || activeMover().walking || activeMover().path.length) return;
@@ -1085,13 +1094,13 @@ function botTick(now) {
 function botStep(p) {
   if (++botSteps > 40 || botRefusals >= 3) { endTurnNow(); return; }
   let a = null;
-  try { a = bots.nextAction(p.index); } catch (err) { console.error('A computer guest could not decide:', err); endTurnNow(); return; }
+  try { a = T().bots.nextAction(p.index); } catch (err) { console.error('A computer guest could not decide:', err); endTurnNow(); return; }
   let ok = false;
   try { ok = runBotAction(p, a || { k: 'end' }); } catch (err) { console.error('A computer guest action failed:', err); ok = false; }
   if (ok === 'ended') return;
   if (!ok) {
     botRefusals++;
-    try { bots.reject(p.index, a, 'refused'); } catch { /* nothing to tell */ }
+    try { T().bots.reject(p.index, a, 'refused'); } catch { /* nothing to tell */ }
     botNextAt = performance.now() + 150;
     return;
   }
@@ -1192,7 +1201,7 @@ function botDiscardDown(p) {
   for (let guard = 12; overHandLimit(p) > 0 && guard > 0; guard--) {
     const ids = p.hand.filter(c => c.type !== 'possession').map(c => c.id);
     let id = null;
-    try { id = bots.discard(p.index, ids); } catch (err) { console.warn('bot discard failed', err); }
+    try { id = T().bots.discard(p.index, ids); } catch (err) { console.warn('bot discard failed', err); }
     if (!discardCard(state, p, id).ok) discardCard(state, p, ids[0]);
   }
 }
@@ -1201,6 +1210,7 @@ function botDiscardDown(p) {
 // rules (src/bots/autoplay.js), and the guests are put where the rules left them.
 let botsAutoplay = null;     // src/bots/autoplay.js, loaded with the bots
 function skipToEnd() {
+  const { bots } = T();
   if (state.finished || !bots || !botsAutoplay) return;
   if (meetingLive) { overlays.hideAsk(); hud.toast('A meeting is under way — skipping as soon as it ends.', 3); skipQueued = true; return; }
   skipQueued = false;
@@ -1571,8 +1581,7 @@ function resetWorld() {
   gameToken++;
   foundThisGame = [];
   seed = newSeed();
-  resetState(state, floor, seed);          // a new random hotel
-  state.viewerIndex = humanSeat;
+  table = newTable(seed);                  // a new random hotel and a new deal, at a new table (src/net/localTable.js)
   clearRoomViews(roomViews, view.scene);
   releaseTileTextures();                   // (the old hotel's room light maps leave the graphics chip)
   doorways.reset();
@@ -1597,6 +1606,17 @@ function resetWorld() {
   refresh();
 }
 
+// A new table for the game being set up (src/net/localTable.js): it deals (a new random hotel, the cards, the hidden
+// role) and seats the computer guests and their chatter, with the page's own seeds.
+function newTable(seed) {
+  const botSeats = botProfiles.map((profile, index) => (profile ? { index, profile } : null)).filter(Boolean);
+  return tableModule.createLocalTable({
+    roster: cast, humanSeat, seed, practice: PRACTICE, possessedIndex: state.setup?.possessedIndex ?? null, botSeats,
+    clockOn: rules.turnTimerEnabled, paceScale: botPaceScale, chat: settings.get('chat') !== 'off', hotelData: hotel, cfg,
+    adopt: { state, floor },               // TRANSITIONAL (P1C S1): dealt into the page's own objects, as before
+  });
+}
+
 // The end screen's main button, and Restart practice: practice starts again in a new hotel; a match
 // becomes a new match at a new table with the same choices (how many guests, your role).
 function restart() {
@@ -1619,6 +1639,7 @@ let lobby = null;            // the lobby scene, once it has loaded (or null: th
 let lobbyReady = false;
 let lastChoice = { practice: true };
 let botModules = null;       // src/bots/*, loaded the first time a match is set up
+let tableModule = null;      // src/net/localTable.js (and the computer guests' brains it seats), loaded when a game is set up
 const LIFT_MAX_MS = 9000;    // the lift sequence normally takes about 5 s
 const fadeEl = document.getElementById('fade');
 const wait = ms => new Promise(r => setTimeout(r, ms));
@@ -1635,11 +1656,14 @@ async function fade(on, ms) {
 
 async function loadBots() {
   if (!botModules) {
-    const [index, profiles, autoplay, chatterMod] = await Promise.all([
-      import('./bots/index.js'), import('./bots/profiles.js'), import('./bots/autoplay.js'), import('./bots/chatter.js')]);
-    botModules = { index, profiles, autoplay, chatter: chatterMod };
+    const [profiles, autoplay] = await Promise.all([import('./bots/profiles.js'), import('./bots/autoplay.js')]);
+    botModules = { profiles, autoplay };
   }
   return botModules;
+}
+async function loadTable() {
+  tableModule ||= await import('./net/localTable.js');
+  return tableModule;
 }
 
 // Who sits where, who the computer guests are, and who starts possessed — like joining a random online
@@ -1655,6 +1679,7 @@ const shownHere = seats => {
 };
 async function planGame(choice) {
   portraits.resume();                      // (a game is coming: its portraits must be drawn)
+  await loadTable();
   const mine = myIdentity();
   if (choice.practice) {
     const seats = shownHere(seatTable({ me: mine, seat: 0 }));
@@ -1708,16 +1733,10 @@ function setupGame(plan) {
   castCharacters();
   usePracticeWording(PRACTICE);
   ownSoul = PRACTICE ? null : prepareSoulCards([cast[humanSeat].id]);   // (the player's own soul-card face first: soulsRest)
-  bots = null;
-  chatter = null;
+  table = null;
   hud.rebuild();
-  resetWorld();
+  resetWorld();                            // (the new table: the deal, the computer guests and their chatter)
   if (!PRACTICE) {
-    const seats = botProfiles.map((profile, index) => (profile ? { index, profile } : null)).filter(Boolean);
-    bots = botModules.index.createBotTable(state, floor, seats, ((seed * 2654435761) >>> 0) || 1);
-    // (their chat has its own random numbers; talking alone never changes the game, listening does:
-    // each bot weighs what it hears from what it knows, src/bots/brain.js)
-    if (settings.get('chat') !== 'off') chatter = botModules.chatter.createChatter(state, floor, seats, ((seed * 2246822519) >>> 0) || 1, BOT_CHAT, bots);
     botsAutoplay = botModules.autoplay;
     movers.forEach((m, i) => { m.speedScale = isBot(i) ? botWalkScale() : 1; });
   }
@@ -1886,8 +1905,7 @@ async function backToMenu() {
   screenTags.begin(); screenTags.end();
   movers.forEach(m => m.halt());
   meetingLive = false;
-  bots = null;
-  chatter = null;
+  table = null;                          // (no computer guests think or talk behind the menu)
   if (lobbyReady) releaseTileTextures();  // (the menu shows the lobby scene: the hotel's maps are not drawn)
   lobby?.reset();
   linkUser = null;                       // (the menu plays as the profile its card shows)
@@ -2350,7 +2368,7 @@ function applyPixelRatio() { view.setPixelRatio(phase === 'menu' && !DIRECT && !
 function applySettings(name = null) {
   if (!name || name === 'graphics') applyPixelRatio();
   if (name === 'music' || name === 'sound') audio.applySettings();
-  if (name === 'botSpeed' && bots) movers.forEach((m, i) => { if (isBot(i)) m.speedScale = botWalkScale(); });
+  if (name === 'botSpeed' && T().bots) movers.forEach((m, i) => { if (isBot(i)) m.speedScale = botWalkScale(); });
 }
 applySettings();
 
@@ -2573,7 +2591,7 @@ window.__game = {
   // whose turn, the menu and the lift.
   humanSeat: () => humanSeat,
   isBot: i => isBot(i),
-  bots: () => bots,
+  bots: () => T().bots,
   botProfiles: () => botProfiles.map(p => (p ? { username: p.username, style: p.style } : null)),
   // Who you are (src/account/account.js: the saved profile, or null before the register), and the seats
   // of this table (src/table.js: id, username, colour, avatar), you marked.
@@ -2596,10 +2614,10 @@ window.__game = {
   chatOpen: () => chat.isOpen,
   chatPanel: () => chat.panelState(),
   chatPost: msg => chatChannel.post(msg),
-  botsHeard: () => bots?.heardCount?.() ?? 0,
+  botsHeard: () => T().bots?.heardCount?.() ?? 0,
   chatBubbles: () => screenTags.list('chat:'),
   chatRecent: () => chat.recent(),
-  chatter: () => chatter,
+  chatter: () => T().chatter,
   tips: () => tips.debug(),          // first-match tips (tests): the one showing, the ones waiting, the ones seen
   skipToEnd: () => skipToEnd(),
   backToMenu: () => backToMenu(),

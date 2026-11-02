@@ -1,12 +1,16 @@
 # A quiet safety net: the fast suites (the rules, the generated hotels, the computer guests, quick chat, the
 # profile, the avatars' catalogue and the achievements, the frame safety net, which sound each button makes, the corridors' flicker, the words that teach the
-# game, what the public events may carry, Your record, and the documents' facts) run on every push and
+# game, what the public events may carry, Your record, the documents' facts, the engine's options for Co-op and the
+# Co-op suites, several still stubs that only say "PENDING STUB") run on every push and
 # pull request, and a red cross on the commit says one of them failed. It only REPORTS. The live game is published straight from the main branch by GitHub Pages and
 # does not wait for this, so a red run never blocks (or removes) a publish.
 # See README > Publishing and rolling back.
 #
-# These suites import only src/, with no three.js and no browser, so nothing is installed: no npm ci, no
-# tests/node_modules. (The browser suites need Chromium and take 5-15 minutes each; they are run by hand.)
+# These suites import only src/, with no three.js and no browser, so tests/node_modules is never installed. The one
+# install is for the Co-op server's two suites (protocol-check, restore-check): once server/package-lock.json exists,
+# a step runs `npm ci --prefix server` first, which installs the server's only package, ws (it has no dependencies of
+# its own). Until then that step does nothing. (The browser suites need Chromium and take 5-15 minutes each; they
+# are run by hand.)
 name: Tests
 
 on:
@@ -24,11 +28,14 @@ jobs:
     strategy:
       fail-fast: false        # every suite reports, even if another one failed
       matrix:
-        suite: [rules-check, logic-check, bots-check, chat-check, profile-check, wardrobe-check, honours-check, crash-check, audio-buttons-check, audio-load-check, flicker-check, polish-check, howto-check, public-events-check, record-check, docs-check, strip-check, discard-clock-check]
+        suite: [rules-check, logic-check, bots-check, chat-check, profile-check, wardrobe-check, honours-check, crash-check, audio-buttons-check, audio-load-check, flicker-check, polish-check, howto-check, public-events-check, record-check, docs-check, strip-check, discard-clock-check, engine-options-check, view-check, referee-check, fairness-check, seam-check, connection-check, protocol-check, restore-check]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+      - name: Install the Co-op server's package (ws), once it has a lockfile
+        if: hashFiles('server/package-lock.json') != ''
+        run: npm ci --prefix server
       - name: Run ${{ matrix.suite }}
         run: node tests/${{ matrix.suite }}.mjs

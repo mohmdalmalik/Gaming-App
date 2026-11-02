@@ -53,22 +53,19 @@ export function createHotel(data, cfg) {
 }
 
 // A fresh hotel for a new match: the lobby with 3 or 4 open doorways, and a shuffled deck with the
-// Fire Exit somewhere in its last five tiles.
-export function resetHotel(floor, seed) {
+// Fire Exit somewhere in its last five tiles. `rng` (optional, () => [0, 1)): the source to build it with (a
+// server passes one from crypto); without it, one made from `seed`, as always.
+export function resetHotel(floor, seed, rng = null) {
   const data = floor.data;
-  const rng = makeRng(((seed >>> 0) ^ 0x5eed7e11) >>> 0 || 1);
+  rng = rng || makeRng(((seed >>> 0) ^ 0x5eed7e11) >>> 0 || 1);
   floor.rng = rng;
-  floor.rooms.clear(); floor.roomList.length = 0; floor.doorways.length = 0;
-  floor.walls.length = 0; floor.frontier.length = 0; floor.cells.clear();
-  floor.exitRoom = null; floor.problems.length = 0;
-  floor.bounds = { min: [Infinity, Infinity], max: [-Infinity, -Infinity] };
+  clearHotel(floor);
 
   // The lobby: how many doorways, then which sides are walls.
   const counts = data.lobbyDoorways;
   const open = counts[Math.floor(rng() * counts.length)];
   const sides = shuffle([...SIDES], rng).slice(0, open);   // (shuffle works in place: copy first)
-  const lobbyDef = { ...data.lobby, doors: SIDES.filter(s => sides.includes(s)), searchable: false };
-  const lobby = placeRoom(floor, lobbyDef, [0, 0], 0);
+  placeLobby(floor, sides);
 
   // The deck: every ordinary tile shuffled, the Fire Exit shuffled into the last few.
   const exitDef = data.tiles.find(t => t.isExit);
@@ -77,10 +74,30 @@ export function resetHotel(floor, seed) {
   rest.splice(Math.max(0, Math.min(rest.length, at)), 0, exitDef);
   floor.deck = rest;
 
-  const positions = data.lobby.startPositions.map(([x, z]) => [lobby.center[0] + x, lobby.center[1] + z]);
-  floor.start = { room: lobby.id, pos: positions[0], positions };
   floor.version++;
   return floor;
+}
+
+// An empty hotel: no rooms, doorways, walls, closed doors, cells, Fire Exit or problems, and no bounds. (The
+// deck, the start and the version are left to the caller.) resetHotel starts from it; so can a copy of a hotel
+// rebuilt from what has been placed (a saved table, a device's own copy).
+export function clearHotel(floor) {
+  floor.rooms.clear(); floor.roomList.length = 0; floor.doorways.length = 0;
+  floor.walls.length = 0; floor.frontier.length = 0; floor.cells.clear();
+  floor.exitRoom = null; floor.problems.length = 0;
+  floor.bounds = { min: [Infinity, Infinity], max: [-Infinity, -Infinity] };
+}
+
+// Place the lobby at cell (0, 0) with doorways on the sides `doors` (e.g. ['north', 'east', 'west']), the
+// others walls, and set floor.start (its room and the guests' starting spots). Returns the lobby room.
+export function placeLobby(floor, doors) {
+  const data = floor.data;
+  const open = new Set(doors);
+  const lobbyDef = { ...data.lobby, doors: SIDES.filter(s => open.has(s)), searchable: false };
+  const lobby = placeRoom(floor, lobbyDef, [0, 0], 0);
+  const positions = data.lobby.startPositions.map(([x, z]) => [lobby.center[0] + x, lobby.center[1] + z]);
+  floor.start = { room: lobby.id, pos: positions[0], positions };
+  return lobby;
 }
 
 export const roomAtCell = (floor, i, j) => floor.rooms.get(floor.cells.get(key(i, j))) || null;

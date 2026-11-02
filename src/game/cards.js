@@ -18,13 +18,22 @@ export function makeRng(seed) {
 let nextId = 1;
 // `owner`: for a Possession card, the player id of the guest whose soul it is (soul cards, approved
 // 10 Oct 2026): only they hold it and only they can give it (resolveTrade in actions.js).
-export function makeCard(type, { owner = null } = {}) {
+// `id`: the card's id when the table numbers its own cards (nextCardId below); without one the card takes the
+// next number of this module's counter, as every card always has (Single player passes none).
+export function makeCard(type, { owner = null, id = null } = {}) {
   const meta = CARDS[type];
-  const card = { id: `c${nextId++}`, type };
+  const card = { id: id ?? `c${nextId++}`, type };
   if (meta?.shots != null) card.shots = meta.shots; // per-instance ammo (revolver)
   if (owner != null) card.owner = owner;
   return card;
 }
+
+// Per-table card ids (an engine option for a server running many tables in one process; Single player never
+// sets it): createState(..., { perTableIds: true }) sets state.cardSeq = 0, and every card of that table is
+// then numbered c1, c2, ... by its own counter, so tables never share module state and a saved table restores
+// without id clashes. Without the option (state.cardSeq unset) this returns null and makeCard falls back to the
+// module counter, so ids are exactly as before.
+export const nextCardId = state => (state?.cardSeq != null ? `c${++state.cardSeq}` : null);
 
 // A card coming back from the discard pile is as good as new (docs/GAME_RULES.md: the discard pile is
 // shuffled into a new deck; a Revolver has two shots and is discarded when empty): its ammunition is
@@ -35,18 +44,20 @@ export function renewCard(card) {
   return card;
 }
 
-// The draw pile (Possession cards are never in it).
-export function buildDrawDeck(spec = rules.deck) {
+// The draw pile (Possession cards are never in it). `newId` (optional, () => id or null): where each card's id
+// comes from (state.js passes the table's own counter, nextCardId); without it, the module counter.
+export function buildDrawDeck(spec = rules.deck, newId = null) {
   const deck = [];
   for (const [type, count] of Object.entries(spec)) {
-    for (let i = 0; i < count; i++) deck.push(makeCard(type));
+    for (let i = 0; i < count; i++) deck.push(makeCard(type, { id: newId?.() ?? null }));
   }
   return deck;
 }
 
 // The first possessed guest's starting souls: rules.possessionSupply (3) Possession cards, all theirs.
-export function buildPossessionSupply(owner) {
-  return Array.from({ length: rules.possessionSupply }, () => makeCard('possession', { owner }));
+// `newId`: as buildDrawDeck's.
+export function buildPossessionSupply(owner, newId = null) {
+  return Array.from({ length: rules.possessionSupply }, () => makeCard('possession', { owner, id: newId?.() ?? null }));
 }
 
 

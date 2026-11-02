@@ -2,7 +2,7 @@
 // forced meeting resolves — trade or attack. Pure logic; the interface calls these and shows
 // whatever they return. Implements docs/GAME_RULES.md (the owner's design — see CLAUDE.md).
 import { rules } from '../data/rules.js';
-import { CARDS, takeCard, isWeapon, countableCount, shuffle, makeCard, renewCard } from './cards.js';
+import { CARDS, takeCard, isWeapon, countableCount, shuffle, makeCard, renewCard, nextCardId } from './cards.js';
 import {
   checkWin, canEscape, logPublic, convertToPossessed, isLocked, unlockRoom, placeBarricade, isBarricaded,
   adjacentLockedRooms, doorBetween, emitPublic, emitPrivate, isSpent, endTurn,
@@ -478,7 +478,7 @@ export function resolveTrade(state, floor, P, Q, cardIdP, cardIdQ) {
       G.hand.push(rc);
       convertToPossessed(state, R, G.id);
       const souls = Math.max(0, rules.soulsOnConvert | 0);
-      for (let k = 0; k < souls; k++) R.hand.push(makeCard('possession', { owner: R.id }));
+      for (let k = 0; k < souls; k++) R.hand.push(makeCard('possession', { owner: R.id, id: nextCardId(state) }));
       events.possessed.push({ newly: R.id, by: G.id, souls });
       privately.push([R, { type: 'possessed', by: G.index, souls }], [G, { type: 'converted', who: R.index }]);
       note(R.id, `You received a Possession card from ${G.name}. You are now POSSESSED: their card is used up, and you get ${soulsOfYourOwn(souls)}`);

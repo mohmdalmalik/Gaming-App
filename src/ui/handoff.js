@@ -28,7 +28,9 @@ import { LANTERN_TRADE_NOTE } from '../data/tips.js';
 // for every viewer, whatever their role.
 export const MIRROR_NO_SOUL = 'No Possession card. A possessed guest who has used all their souls shows none.';
 
-export function createHandoff(doc) {
+// `onNotesRead(player)`: the player's waiting notes have been shown on their own screen. The table clears them (they
+// are the table's, not this screen's: src/main.js passes it on). Without it they are cleared here, as before.
+export function createHandoff(doc, { onNotesRead = null } = {}) {
   const el = {
     overlay: doc.getElementById('handoff-overlay'),
     card: doc.getElementById('handoff-card'),
@@ -118,7 +120,8 @@ export function createHandoff(doc) {
       const d = doc.createElement('div'); d.className = 'handoff-note'; d.textContent = line;
       el.notes.appendChild(d);
     }
-    if (player.notes) player.notes.length = 0;   // read once, on the owner's own screen
+    // read once, on the owner's own screen
+    if (player.notes?.length) { if (onNotesRead) onNotesRead(player); else player.notes.length = 0; }
   }
 
   function renderHand(player) {

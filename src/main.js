@@ -15,7 +15,7 @@ import { seatTable, botAvatars, STAND_IN } from './table.js';
 import { createHotel, stackDeck, growTo, searchSpotOf, roomAt, cellOf, fogCells } from './game/hotel.js';
 import { buildGrid } from './game/grid.js';
 import {
-  createState, endTurn, activePlayer, nextPlayer, checkWin, canEscape,
+  createState, endTurn, activePlayer, nextPlayer, checkWin, canEscape, enterRoom,
   openableDoors, pendingEncounters, lockEncounter, playersInRoom, isLocked,
   isBarricaded, canTradeVoluntarily, doorBetween, encountersIn, adjacentLockedRooms,
 } from './game/state.js';
@@ -68,6 +68,10 @@ import { standable } from './game/moves.js';
 import { usePracticeWording, prepareSoulCards } from './ui/cards.js';
 import { redEyedAllies, knownPossessedIds } from './ui/allies.js';
 import { createMenu } from './ui/menu.js';
+// (the screens' own state and hotel, written from what the table shows: src/net/, DESIGN §6.6-§6.7)
+import { createFloorCopy, syncFloor } from './net/floorCopy.js';
+import { applyView, blankState } from './net/viewAsState.js';
+import { playerView, seatEvents } from './net/playerView.js';
 // (avatars: the wardrobe screen, the runtime portraits and the soul cards' faces from each seat's avatar)
 import { createWardrobe } from './ui/wardrobe/wardrobe.js';
 import { createHonoursPage } from './ui/honours.js';
@@ -102,8 +106,10 @@ import { makeRng, shuffle } from './game/cards.js';
 
 // --- World (pure data + rules) ---------------------------------------------------------
 // The hotel is random every match: it starts as the lobby and grows as doors are opened
-// (src/game/hotel.js). createState builds a fresh one.
-const floor = createHotel(hotel, cfg);
+// (src/game/hotel.js). The real hotel, and the room deck, are the table's (src/net/localTable.js); the page draws, walks
+// and plans on its own copy (src/net/floorCopy.js), grown only from the rooms the table shows as placed. ONE object for
+// the page's life: discovery, the map, the search marks, the doorways and the search spot keep it.
+const floor = createFloorCopy(hotel, cfg);
 
 // What the page opens on: the main menu. A direct link skips it, straight to a "Tap to begin" card for
 // one kind of game (the tests use these):
@@ -157,13 +163,59 @@ let humanSeat = 0;            // the player's own seat (a match: random, like jo
 let table = null;
 const NO_TABLE = Object.freeze({ state: null, floor: null, bots: null, chatter: null, referee: null });
 const T = () => table?.local.debug ?? NO_TABLE;     // TRANSITIONAL
+const realNow = () => (table ? T() : lastReal);      // TRANSITIONAL: the real game, with or without a table
+// The table's latest view, written into the screens' state and their copy of the hotel (DESIGN §6.6, §6.7).
+function present(view, events, { newMatch = null, fresh = false } = {}) {
+  applyView(state, view, events, { newMatch, fresh });
+  syncFloor(floor, view.hotel, { newMatch: newMatch === true });
+}
+// The table told the page that something changed (table.on): the screens' state follows at once.
+function onTableChange({ view, events, fresh }) {
+  const newMatch = presented !== table;
+  presented = table;
+  present(view, events, { newMatch, fresh });
+}
+// Build the view again from the real game and present it (no table: the hotel behind the menu).
+function syncTable() {
+  if (table) { table.local.sync(); return; }
+  present(playerView(lastReal.state, lastReal.floor, humanSeat), seatEvents(lastReal.state, humanSeat).events);
+}
+// The screens never read anything stale: after a test hook handed out the real game (window.__game.state, .floor,
+// .activePlayer ...), everything that reads (refresh, discovery, any hook) catches up first, for the rest of that
+// frame: the real objects handed out may be changed at any moment until then. The next frame catches up once more and
+// lets go (pullFrame).
+function pull() { if (dirty) syncTable(); }
+function pullFrame() { if (dirty) { syncTable(); dirty = false; } }
+// TRANSITIONAL (P1C S2-S4): a change to the table's real game, `change(state, floor)` with the REAL objects, then the
+// screens' state brought up to date at once, so whatever the page reads next is current. S3-S4 turn these into the
+// table's own commands.
+function W(change) {
+  const R = realNow();
+  const out = change(R.state, R.floor);
+  syncTable();
+  return out;
+}
+// A guest's real record (the rules: their hand, action points, role), from the screens' record of them. TRANSITIONAL
+const real = p => (p ? realNow().state.players[p.index] : p);
 let botProfiles = [];         // per seat: the bot's profile (username, style), or null for the player
 const cast = seatTable({ me: myIdentity(), seat: 0 });   // the seats at the table, in seat order (src/table.js; filled in place by setupGame)
 applyMode('practice', 1);
 if (TIMER_OFF) rules.turnTimerEnabled = false;
 let seed = newSeed();
-const state = createState(floor, cast, seed, { mode: 'practice' });
-state.viewerIndex = humanSeat;
+// What the screens read (src/net/viewAsState.js): ONE object for the page's life, shaped like the rules' state but
+// written only by applyView, from what the table shows this seat (src/net/playerView.js): never another guest's hand,
+// role or notes, the piles or the room deck. gameSounds, the feed and the allies' memo keep it, its guests, its events.
+const state = blankState();
+// TRANSITIONAL (P1C S2-S4): the real game is the table's, but the page still runs the match itself on it, through T()
+// and W() below. Every table deals into this one real state (adopt); here it is first dealt as the hotel behind the
+// menu, a practice deal nobody plays. `lastReal`: the real game when no table is set (before the first game, the menu).
+const bootFloor = createHotel(hotel, cfg);
+const realState = createState(bootFloor, cast, seed, { mode: 'practice' });
+realState.viewerIndex = humanSeat;
+let lastReal = { state: realState, floor: bootFloor };
+let presented = null;        // the table the screens show (a new one is a new match on screen)
+let dirty = false;           // a test hook handed out the real game: the screens catch up before they read again (pull)
+present(playerView(realState, bootFloor, humanSeat), seatEvents(realState, humanSeat).events, { newMatch: true });
 const grid = buildGrid(floor, cfg);
 if (floor.problems.length) throw new Error(`Problems in the hotel:\n• ${floor.problems.join('\n• ')}`);
 // The walkable grid follows the hotel as it grows (rebuilt in place: everyone keeps the same object).
@@ -346,7 +398,7 @@ const hand = createHand(document, cfg, { onUseBandage, onUnlock, onBarricade, on
 // The padlock of a locked door next to the guest, tapped: which key or pick to open it with (onLockTap, onUnlock).
 const lockChoice = createLockChoice(document, { onChoose: (cardId, roomId) => onUnlock(cardId, roomId) });
 const discard = createDiscard(document, cfg, {
-  onDiscard: cardId => { const r = discardCard(state, activePlayer(state), cardId); if (!r.ok) hud.toast('That card cannot be discarded.'); refresh(); },
+  onDiscard: cardId => { const r = W(S => discardCard(S, activePlayer(S), cardId)); if (!r.ok) hud.toast('That card cannot be discarded.'); refresh(); },
 });
 // The hand, held as a fan of face-up cards; tapping one opens it large in the card view.
 const fan = createHandFan(document, { onOpen: cardId => { if (running && !uiBusy()) hand.open(state, floor, cardId); } });
@@ -376,11 +428,19 @@ chatChannel.onMessage(msg => {
   chatter.hear(msg, performance.now());
 });
 const topLeftEl = document.querySelector('.hud-top-left');
-const handoff = createHandoff(document);
+// (the notes the player has read on their own screen: taken off the table's waiting list, not off the screens' copy)
+const notesRead = (p, lines = null) => W(S => {
+  const r = S.players[p.index];
+  if (!r?.notes) return;
+  if (!lines) { r.notes.length = 0; return; }
+  const gone = new Set(lines);
+  for (let i = r.notes.length - 1; i >= 0; i--) if (gone.has(r.notes[i])) r.notes.splice(i, 1);
+});
+const handoff = createHandoff(document, { onNotesRead: p => notesRead(p) });
 // (`known`: the face-off's crimson ring, only on a guest the player certainly knows is possessed: the strip's own marker)
 const meeting = createMeeting(document, cfg, { isViewer: p => !PRACTICE && p.index === humanSeat, redEyes: p => redEyedAllies(state, me()).has(p.id),
   known: p => knownPossessedIds(state, me()).has(p.id) });
-const tradeReveal = createTradeReveal(document, { handoff });   // the player's own trade, as cards
+const tradeReveal = createTradeReveal(document, { handoff, onNotesRead: (p, lines) => notesRead(p, lines) });   // the player's own trade, as cards
 // First-match tips (src/ui/tips.js; the words: src/data/tips.js): a small card near the thing it explains,
 // the first time it comes up. What they may go by is only the player's own situation and what the whole
 // table sees, never anything hidden from them; they never stop the clock or take a tap meant for the game,
@@ -415,6 +475,9 @@ const uiBusy = () => map.isOpen || hand.isOpen || discard.isOpen || lockChoice.i
 
 const discovery = createDiscovery({
   floor, grid, state, movers, cfg,
+  // (crossing into a room is the table's to settle: the real game, then the screens' state at once)
+  enter: (p, roomId) => W((S, F) => enterRoom(S, F, S.players[p.index], roomId)),
+  before: () => pull(),
   on: {
     roomEntered(result) {
       // (a walk through several rooms already ends in the first room where a meeting is forced:
@@ -489,6 +552,7 @@ function mistAt(x, z) {
   return false;
 }
 function syncViews(animate) {
+  pull();
   // A view for every room the hotel has grown (dressed if it has dressing), and for every door.
   for (const room of floor.roomList) {
     if (roomViews.has(room.id)) continue;
@@ -523,7 +587,7 @@ function refreshUsable() {
   doorways.setKeyable(canKey ? adjacentLockedRooms(state, floor, p) : []);
 }
 
-function refresh() { hud.update(state, floor); refreshUsable(); hand.refresh(); searchMarks.update(state); discovery.refresh(); syncHandFan(); syncSearchSpot(); }
+function refresh() { pull(); hud.update(state, floor); refreshUsable(); hand.refresh(); searchMarks.update(state); discovery.refresh(); syncHandFan(); syncSearchSpot(); }
 
 function activeMover() { return movers[state.activeIndex]; }
 
@@ -548,7 +612,7 @@ function begin() {
   if (PRACTICE) return;
   // A match: the player reads their secret role first, then the first turn begins.
   inActionPhase = false;
-  handoff.revealRole(me(), {}, () => { me().roleSeen = true; beginTurn(); });
+  handoff.revealRole(me(), {}, () => { W(S => { S.players[humanSeat].roleSeen = true; }); beginTurn(); });
   if (!DIRECT) matchMarker.set();      // (a real match, not a direct test link: if the browser cuts it short, the next start says so)
 }
 
@@ -585,7 +649,7 @@ function beginTurn() {
     lockNews = '';
   };
   if (p.roleChangePending) {
-    p.roleChangePending = false;
+    W(S => { S.players[p.index].roleChangePending = false; });
     handoff.revealRole(p, { changed: true, by: state.players.find(q => q.id === p.convertedBy)?.name }, go);
     return;
   }
@@ -648,9 +712,9 @@ function cutWalkShort() {
   // already in a room on the way: they stop in it — nothing more is spent once the time is up)
   const route = activeWalk?.rooms || [];
   const next = !pendingArrival && route.length > 1 && route[0] === player.currentRoom ? route[1] : player.currentRoom;
-  const plan = next !== player.currentRoom ? discovery.planToRoom(next, standAtFor(player.index)) : null;
+  const plan = next !== player.currentRoom ? discovery.planToRoom(next, standAtFor(player.index), real(player)) : null;
   if (plan?.ok) { activeWalk = plan; discovery.go(plan); return; }
-  const here = discovery.planToRoom(player.currentRoom, standAtFor(player.index));
+  const here = discovery.planToRoom(player.currentRoom, standAtFor(player.index), real(player));
   if (here.ok) { activeWalk = here; discovery.go(here); } else m.halt();
 }
 
@@ -676,7 +740,7 @@ function endTurnByClock(p) {
   discard.close();
   hand.close(); map.close(); hud.hideConfirm(); selectedMove = null;
   if (activeMover().walking) activeMover().halt();
-  const gone = discardRandomDown(state, p);
+  const gone = W(state => discardRandomDown(state, state.players[p.index]));
   sfx('timeUp');
   passTurn();
   if (gone.length && !state.finished) discard.note(discardedLine(gone));
@@ -698,16 +762,19 @@ const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
 
 function passTurn() {
   // Never past the hand limit: anything that ends a turn goes through the discard screen first.
-  if (!state.finished && overHandLimit(activePlayer(state)) > 0) { endTurnNow(); return; }
+  if (!state.finished && overHandLimit(real(activePlayer(state))) > 0) { endTurnNow(); return; }
   hud.hideConfirm(); selectedMove = null; activeWalk = null; walkCutShort = false;
   if (myTurn()) hand.close();     // (a computer guest's turn ending leaves the player's card view open)
   stopTimer();
   const sealedBefore = [...(state.barricades?.keys() ?? [])];
-  const result = endTurn(state, floor);
+  const result = W((S, F) => {
+    const r = endTurn(S, F);
+    // (What the engine told the computer guests in private is theirs to read from their inbox: src/bots/.)
+    if (r.ok) for (const q of S.players) if (isBot(q.index)) q.notes.length = 0;
+    return r;
+  });
   if (!result.ok) { endTurnNow(); return; }   // (the rules refuse it over the hand limit too: canEndTurn)
   endTurnGuardUntil = performance.now() + END_TURN_GUARD_MS;
-  // (What the engine told the computer guests in private is theirs to read from their inbox: src/bots/.)
-  for (const q of state.players) if (isBot(q.index)) q.notes.length = 0;
   // A locked door opened this turn has locked again (its door swings shut in syncViews below).
   const relocked = [
     ...(result.relocked || []).map(id => `The ${floor.rooms.get(id)?.name ?? 'locked room'} door has locked again.`),
@@ -717,7 +784,7 @@ function passTurn() {
   movers[result.from.index]?.halt();
   syncViews(false);
   if (result.finished) { refresh(); showEnd(); return; }
-  if (checkWin(state, floor)) { refresh(); showEnd(); return; }
+  if (W((S, F) => checkWin(S, F))) { refresh(); showEnd(); return; }
   if (!PRACTICE) { lockNews = relocked; beginTurn(); return; }
   rig.setFocus(...followPoint());
   rig.recentre();
@@ -737,7 +804,7 @@ function passTurn() {
 // (onTimeUp). Where the clock is off (Practice, ?timer=off) the discard has no time limit.
 function endTurnNow() {
   const p = activePlayer(state);
-  if (overHandLimit(p) > 0) {
+  if (overHandLimit(real(p)) > 0) {
     if (isBot(p.index)) { botDiscardDown(p); passTurn(); return; }
     hand.close(); map.close(); hud.hideConfirm(); selectedMove = null;
     if (activeMover().walking) activeMover().halt();
@@ -861,7 +928,7 @@ function startMeeting(P, candidates) {
   hand.close(); map.close();
   rig.recentre();      // the meeting is where the guest is
   const met = Q => {
-    lockEncounter(state, P.currentRoom, P.index, Q.index);
+    W(S => lockEncounter(S, P.currentRoom, P.index, Q.index));
     const canAttack = weaponsIn(P.hand).length > 0 && P.actionPoints >= rules.actionCost.attack;
     // Trade or Attack; the weapon picker's Back returns here (nothing has happened yet).
     const chooseAction = () => meeting.chooseAction(P, Q, {
@@ -884,12 +951,13 @@ function botMeeting(P, candidates) {
       try { pick = T().bots.meetWhom(P.index, candidates.map(q => q.index)); } catch (err) { console.warn('bot meetWhom failed', err); }
     }
     const Q = candidates.find(q => q.index === pick) || candidates[0];
-    lockEncounter(state, P.currentRoom, P.index, Q.index);
-    const canAttack = weaponsIn(P.hand).length > 0 && P.actionPoints >= rules.actionCost.attack;
+    W(S => lockEncounter(S, P.currentRoom, P.index, Q.index));
+    const RP = real(P);       // (the computer guest's hand and actions: the table's)
+    const canAttack = weaponsIn(RP.hand).length > 0 && RP.actionPoints >= rules.actionCost.attack;
     let weapon = null;
     if (canAttack) { try { weapon = T().bots.attackWith(P.index, Q.index); } catch (err) { console.warn('bot attackWith failed', err); } }
     if (!isBot(Q.index)) { hand.close(); map.close(); hud.hideConfirm(); selectedMove = null; rig.recentre({ zoom: false }); }
-    if (weapon && P.hand.some(c => c.id === weapon)) botAttack(P, Q, weapon);
+    if (weapon && RP.hand.some(c => c.id === weapon)) botAttack(P, Q, weapon);
     else runTrade(P, Q);
   });
 }
@@ -909,16 +977,17 @@ function afterMeeting() {
 // is shown but the public line in the feed. If either has no card they may give, the trade is skipped
 // (GAME_RULES, Trade): skippedTrade.
 function runTrade(A, B, onDone = afterMeeting, { voluntary = false } = {}) {
-  if (!canTrade(A, B).ok) { skippedTrade(A, B, onDone); return; }
+  A = state.players[A.index]; B = state.players[B.index];     // (the screens' records; their hands are the table's: real())
+  if (!canTrade(real(A), real(B)).ok) { skippedTrade(A, B, onDone); return; }
   const human = !isBot(A.index) ? A : !isBot(B.index) ? B : null;
   const botCard = (X, Y) => {
-    const ids = tradeableCards(X).map(c => c.id);
+    const ids = tradeableCards(real(X)).map(c => c.id);
     let id = null;
     try { id = T().bots.tradeCard(X.index, Y.index, ids); } catch (err) { console.warn('bot tradeCard failed', err); }
     return ids.includes(id) ? id : ids[0];
   };
   if (!human) {
-    resolveTrade(state, floor, A, B, botCard(A, B), botCard(B, A));   // (the feed says they traded)
+    W((S, F) => resolveTrade(S, F, real(A), real(B), botCard(A, B), botCard(B, A)));   // (the feed says they traded)
     onDone();
     return;
   }
@@ -937,15 +1006,15 @@ function runTrade(A, B, onDone = afterMeeting, { voluntary = false } = {}) {
         meeting.close();
         const [cA, cB] = human === A ? [card, theirs] : [theirs, card];
         // (the two cards, kept before they change hands: the reveal shows them)
-        const mine = human.hand.find(c => c.id === card), given = other.hand.find(c => c.id === theirs);
+        const mine = human.hand.find(c => c.id === card), given = real(other).hand.find(c => c.id === theirs);
         const wasPossessed = human.possessed;
         // (whether the player sees red eyes on the other guest before the trade, and after it: src/ui/allies.js)
         const allyBefore = redEyedAllies(state, human).has(other.id);
         const markBefore = knownPossessedIds(state, human).has(other.id);   // (the strip's marker: for a clean guest too)
-        const events = resolveTrade(state, floor, A, B, cA, cB);
+        const events = W((S, F) => resolveTrade(S, F, real(A), real(B), cA, cB));
         if (!events.ok) { refresh(); handoff.privateNote(human, ['The trade could not be made.'], onDone); return; }
         const newly = events.possessed?.find(e => e.newly === human.id);
-        if (newly) human.roleChangePending = false;
+        if (newly) W(S => { S.players[human.index].roleChangePending = false; });
         // What the player sees in private: the trade as cards with its effect (src/ui/tradeReveal.js),
         // then, if it possessed them, their new role. The souls they hold now: if it possessed them, the
         // new souls of their own the rules dealt (the card that did it is used up).
@@ -964,7 +1033,8 @@ function runTrade(A, B, onDone = afterMeeting, { voluntary = false } = {}) {
 // The trade is skipped: nothing changes hands, the meeting ends. The player (if in it) reads why, in
 // private (the rules' own note, worded the same whatever anyone's role).
 function skippedTrade(A, B, onDone) {
-  const r = skipTrade(state, floor, A, B);
+  A = state.players[A.index]; B = state.players[B.index];
+  const r = W((S, F) => skipTrade(S, F, real(A), real(B)));
   const human = [A, B].find(X => !isBot(X.index));
   if (!human) { onDone(); return; }
   if (!r.ok) { handoff.privateNote(human, [], onDone); return; }
@@ -980,7 +1050,7 @@ function skippedTrade(A, B, onDone) {
 function runAttack(P, Q, onBack = null) {
   meeting.attackPick(P, Q, weaponId => {
     const before = Q.health;
-    const events = resolveAttack(state, floor, P, Q, weaponId);
+    const events = W((S, F) => resolveAttack(S, F, real(P), real(Q), weaponId));
     if (events.killed) layBodyClear(Q.index);   // (the figure falls when the result is dismissed)
     meeting.attackResult(P, Q, events, afterMeeting, { before });
   }, onBack);
@@ -990,7 +1060,7 @@ function runAttack(P, Q, onBack = null) {
 // computer guests a short public line says what happened.
 function botAttack(P, Q, weaponId) {
   const before = Q.health;
-  const events = resolveAttack(state, floor, P, Q, weaponId);
+  const events = W((S, F) => resolveAttack(S, F, real(P), real(Q), weaponId));
   if (!events.ok) { runTrade(P, Q); return; }
   if (events.killed) layBodyClear(Q.index);
   if (!isBot(Q.index)) { meeting.attackResult(P, Q, events, afterMeeting, { before }); return; }
@@ -1004,7 +1074,7 @@ function botAttack(P, Q, weaponId) {
 function onTrade() {
   if (!running || state.finished || uiBusy() || activeMover().walking || PRACTICE || !myTurn() || !inActionPhase) return;
   const P = me();
-  if (!canTradeVoluntarily(state, floor, P)) return;
+  if (!canTradeVoluntarily(realNow().state, realNow().floor, real(P))) return;
   const others = playersInRoom(state, P.currentRoom, P.id);
   if (!others.length) return;
   hud.hideConfirm(); selectedMove = null;
@@ -1113,18 +1183,18 @@ function runBotAction(p, a) {
     case 'end': endTurnNow(); return 'ended';
     case 'move': {
       if (!floor.rooms.has(a.to) || a.to === p.currentRoom) return false;
-      const plan = discovery.planToRoom(a.to, standAtFor(p.index));
+      const plan = discovery.planToRoom(a.to, standAtFor(p.index), real(p));
       if (!plan.ok) return false;
       startWalk(plan);
       return true;
     }
     case 'open': return botOpenDoor(p, a.door);
     case 'search': {
-      const gate = canSearch(state, floor, p);
+      const gate = canSearch(realNow().state, realNow().floor, real(p));
       if (!gate.ok) return false;
       const spot = searchSpotOf(floor.rooms.get(p.currentRoom));
       if (spot) faceTowards(spot.center);
-      const r = search(state, floor, p);
+      const r = W((S, F) => search(S, F, real(p)));
       if (!r.ok) return false;
       syncViews(false); refresh();
       return true;
@@ -1132,14 +1202,14 @@ function runBotAction(p, a) {
     case 'card': return botCard(p, a);
     case 'job': return botJob(p);
     case 'escape': {
-      const r = escape(state, floor, p);
+      const r = W((S, F) => escape(S, F, real(p)));
       if (!r.ok) return false;
       syncViews(false); refresh(); showEnd();
       return 'ended';
     }
     case 'trade': {
       const Q = state.players[a.with];
-      if (!Q || !Q.alive || Q.currentRoom !== p.currentRoom || !canTradeVoluntarily(state, floor, p)) return false;
+      if (!Q || !Q.alive || Q.currentRoom !== p.currentRoom || !canTradeVoluntarily(realNow().state, realNow().floor, real(p))) return false;
       botProposeTrade(p, Q);
       return true;
     }
@@ -1148,7 +1218,7 @@ function runBotAction(p, a) {
 }
 
 function botOpenDoor(p, doorId) {
-  const r = openDoor(state, floor, p, doorId);
+  const r = W((S, F) => openDoor(S, F, real(p), doorId));
   // A jammed door is a discovery, not a mistake: the bot learns it (its view drops that door) and nothing
   // is spent, so it does not count as a refused action.
   if (!r.ok) { refresh(); return r.reason === 'jammed'; }
@@ -1158,37 +1228,39 @@ function botOpenDoor(p, doorId) {
   refresh();
   if (focusIndex() === p.index) {
     const rect = q => [q.min[0], q.min[1], q.max[0], q.max[1]];
-    rig.showRooms([rect(floor.rooms.get(p.currentRoom)), rect(r.room)]);
+    rig.showRooms([rect(floor.rooms.get(p.currentRoom)), rect(floor.rooms.get(r.room.id) || r.room)]);
   }
   return true;
 }
 
 function botCard(p, a) {
   let r = null;
-  if (a.type === 'bandage') r = useBandage(state, p, a.card);
-  else if (a.type === 'espresso') r = useEspresso(state, p, a.card);
+  const P = real(p);
+  if (a.type === 'bandage') r = W(S => useBandage(S, P, a.card));
+  else if (a.type === 'espresso') r = W(S => useEspresso(S, P, a.card));
   else if (a.type === 'handMirror') {
-    r = useHandMirror(state, floor, p, a.card, a.target);
+    r = W((S, F) => useHandMirror(S, F, P, a.card, a.target));
     // The player was looked at: told at once (the feed says it too), not again at their next turn.
     if (r.ok && a.target === me().id) {
       const line = `${p.name} looked at your whole hand with a Hand Mirror.`;
-      me().notes = me().notes.filter(n => n !== line);
+      notesRead(me(), [line]);
       hud.toast(line, 4);
     }
-  } else if (a.type === 'masterKey' || a.type === 'lockPick') r = useUnlock(state, floor, p, a.card, a.target);
-  else if (a.type === 'barricade') r = useBarricade(state, floor, p, a.card, a.target);
+  } else if (a.type === 'masterKey' || a.type === 'lockPick') r = W((S, F) => useUnlock(S, F, P, a.card, a.target));
+  else if (a.type === 'barricade') r = W((S, F) => useBarricade(S, F, P, a.card, a.target));
   if (!r?.ok) return false;
   syncViews(false); refresh();
   return true;
 }
 
 function botJob(p) {
-  const gate = canUseRoom(state, floor, p);
+  const P = real(p);
+  const gate = canUseRoom(realNow().state, realNow().floor, P);
   if (!gate.ok) return false;
   if (gate.job === 'infirmary') {
-    if (!useInfirmary(state, floor, p).ok) return false;
+    if (!W((S, F) => useInfirmary(S, F, P)).ok) return false;
   } else if (gate.job === 'switchboard') {
-    const r = useSwitchboard(state, floor, p);
+    const r = W((S, F) => useSwitchboard(S, F, P));
     if (!r.ok) return false;
     hud.toast(`${p.name} rang the Switchboard. ${switchboardLine(r.count)}`, 6);
   } else return false;
@@ -1198,12 +1270,15 @@ function botJob(p) {
 
 // A bot over the hand limit at the end of its turn chooses what to drop.
 function botDiscardDown(p) {
-  for (let guard = 12; overHandLimit(p) > 0 && guard > 0; guard--) {
-    const ids = p.hand.filter(c => c.type !== 'possession').map(c => c.id);
-    let id = null;
-    try { id = T().bots.discard(p.index, ids); } catch (err) { console.warn('bot discard failed', err); }
-    if (!discardCard(state, p, id).ok) discardCard(state, p, ids[0]);
-  }
+  W(S => {
+    const P = S.players[p.index];
+    for (let guard = 12; overHandLimit(P) > 0 && guard > 0; guard--) {
+      const ids = P.hand.filter(c => c.type !== 'possession').map(c => c.id);
+      let id = null;
+      try { id = T().bots.discard(P.index, ids); } catch (err) { console.warn('bot discard failed', err); }
+      if (!discardCard(S, P, id).ok) discardCard(S, P, ids[0]);
+    }
+  });
 }
 
 // The player is out (dead): the rest of the match is played at once by the bots, through the same
@@ -1221,10 +1296,12 @@ function skipToEnd() {
   // A bot arriving in a room this very moment still has its forced meeting.
   const arriving = !!pendingArrival;
   pendingArrival = null;
-  try {
-    if (arriving && isBot(state.activeIndex)) botsAutoplay.runMeeting(state, floor, bots, activePlayer(state));
-    botsAutoplay.playOut(state, floor, bots, { maxTurns: 600 });
-  } catch (err) { console.error('could not finish the match:', err); }
+  W((S, F) => {
+    try {
+      if (arriving && isBot(S.activeIndex)) botsAutoplay.runMeeting(S, F, bots, activePlayer(S));
+      botsAutoplay.playOut(S, F, bots, { maxTurns: 600 });
+    } catch (err) { console.error('could not finish the match:', err); }
+  });
   movers.forEach((m, i) => { const s = standingSlot(state.players[i].currentRoom, i); m.reset(s.x, s.z); });
   rebuildGrid(); discovery.refresh(); syncViews(false); refresh();
   if (state.finished) showEnd();
@@ -1244,7 +1321,7 @@ const SEARCH_FAIL = {
 function onSearch() {
   if (!running || state.finished || uiBusy() || activeMover().walking || !myTurn()) return;
   const player = activePlayer(state);
-  const r = search(state, floor, player);
+  const r = W((S, F) => search(S, F, real(player)));
   if (!r.ok) { hud.toast(SEARCH_FAIL[r.reason] || 'Cannot search now.'); return; }
   const where = r.searchPoint || 'the room';
   syncViews(false);
@@ -1308,7 +1385,7 @@ function faceTowards([x, z]) {
 
 function onUseBandage(cardId) {
   if (!myTurn() || !inActionPhase) return;
-  const r = useBandage(state, activePlayer(state), cardId);
+  const r = W(S => useBandage(S, activePlayer(S), cardId));
   if (!r.ok) { hud.toast(r.reason === 'full' ? 'Already at full health.' : r.reason === 'ap' ? 'No actions left.' : 'Cannot use that now.'); return; }
   hud.toast(`Bandaged — health ${r.health} of ${rules.maxHealth}.`);
   sfx('bandage');
@@ -1323,7 +1400,7 @@ const doorBarricaded = name => `The ${name} door is barricaded: a key or pick ca
 // event plays), snapped, the padlock shakes and the door stays shut (the lockFail cue is that same event's).
 function onUnlock(cardId, roomId) {
   if (!myTurn() || !inActionPhase) return;
-  const r = useUnlock(state, floor, activePlayer(state), cardId, roomId);
+  const r = W((S, F) => useUnlock(S, F, activePlayer(S), cardId, roomId));
   const name = floor.rooms.get(roomId)?.name ?? 'locked room';
   if (!r.ok) {
     hud.toast(r.reason === 'ap' ? 'No actions left.'
@@ -1373,7 +1450,7 @@ function lockPoint(roomId, part = 'sign') {
 
 function onBarricade(cardId, doorwayId) {
   if (!myTurn() || !inActionPhase) return;
-  const r = useBarricade(state, floor, activePlayer(state), cardId, doorwayId);
+  const r = W((S, F) => useBarricade(S, F, activePlayer(S), cardId, doorwayId));
   if (!r.ok) { hud.toast(r.reason === 'ap' ? 'No actions left.' : 'Cannot barricade that.'); return; }
   hud.toast(`${cap(doorName(doorwayId, activePlayer(state).currentRoom))} barricaded until your next turn.`, 5);
   hand.close();
@@ -1383,7 +1460,7 @@ function onBarricade(cardId, doorwayId) {
 // Espresso (free): extra action points for this turn only.
 function onEspresso(cardId) {
   if (!myTurn() || !inActionPhase) return;
-  const r = useEspresso(state, activePlayer(state), cardId);
+  const r = W(S => useEspresso(S, activePlayer(S), cardId));
   if (!r.ok) { hud.toast(r.reason === 'ap' ? 'No actions left.' : 'Cannot use that now.'); return; }
   hud.toast(`Espresso — ${r.gained} extra actions this turn.`);
   sfx('espresso');
@@ -1404,7 +1481,7 @@ function onHandMirror(cardId, targetId) {
   // Not mid-walk: walking into a room with a guest starts a meeting first, before anything else.
   if (activeMover().walking || pendingArrival) { hud.toast('Wait until you have arrived.'); return; }
   const player = activePlayer(state);
-  const r = useHandMirror(state, floor, player, cardId, targetId);
+  const r = W((S, F) => useHandMirror(S, F, real(player), cardId, targetId));
   if (!r.ok) { hud.toast(MIRROR_FAIL[r.reason] || 'Cannot use that now.'); return; }
   const target = state.players.find(q => q.id === r.target);
   hand.close();
@@ -1447,7 +1524,7 @@ function onEscape() {
   if (!myTurn() || !inActionPhase) return;
   const player = activePlayer(state);
   if (!floor.rooms.get(player.currentRoom)?.isExit) return;
-  const r = escape(state, floor, player);
+  const r = W((S, F) => escape(S, F, real(player)));
   if (r.ok) { syncViews(false); refresh(); showEnd(); return; }
   hud.toast(escapeRefusal(player, r.reason));
 }
@@ -1471,12 +1548,12 @@ function onRoom() {
   const gate = canUseRoom(state, floor, player);
   if (!gate.ok) { hud.toast(roomRefusal(gate)); return; }
   if (gate.job === 'infirmary') {
-    const r = useInfirmary(state, floor, player);
+    const r = W((S, F) => useInfirmary(S, F, real(player)));
     if (!r.ok) { hud.toast(roomRefusal(r)); return; }
     hud.toast(`Treated in the Infirmary — health ${r.health} of ${rules.maxHealth}.`);
     refresh();     // (the icon turns to its "already used" look at once, for this Infirmary is spent for everyone)
   } else if (gate.job === 'switchboard') {
-    const r = useSwitchboard(state, floor, player);
+    const r = W((S, F) => useSwitchboard(S, F, real(player)));
     if (!r.ok) { hud.toast(roomRefusal(r)); return; }
     refresh();
     // PUBLIC, for every guest: it stays up until the player taps Continue (the clock waits).
@@ -1581,7 +1658,11 @@ function resetWorld() {
   gameToken++;
   foundThisGame = [];
   seed = newSeed();
+  table?.leave();
   table = newTable(seed);                  // a new random hotel and a new deal, at a new table (src/net/localTable.js)
+  lastReal = table.local.debug;
+  table.on(onTableChange);
+  syncTable();                             // (the screens' state and hotel: the new match)
   clearRoomViews(roomViews, view.scene);
   releaseTileTextures();                   // (the old hotel's room light maps leave the graphics chip)
   doorways.reset();
@@ -1611,11 +1692,12 @@ function resetWorld() {
 function newTable(seed) {
   const botSeats = botProfiles.map((profile, index) => (profile ? { index, profile } : null)).filter(Boolean);
   return tableModule.createLocalTable({
-    roster: cast, humanSeat, seed, practice: PRACTICE, possessedIndex: state.setup?.possessedIndex ?? null, botSeats,
+    roster: cast, humanSeat, seed, practice: PRACTICE, possessedIndex: roleChoice, botSeats,
     clockOn: rules.turnTimerEnabled, paceScale: botPaceScale, chat: settings.get('chat') !== 'off', hotelData: hotel, cfg,
-    adopt: { state, floor },               // TRANSITIONAL (P1C S1): dealt into the page's own objects, as before
+    adopt: { state: realState },           // TRANSITIONAL (P1C S1-S4): dealt into the page's one real state, as before
   });
 }
+let roleChoice = null;                     // the seat the player chose to be possessed (or clean), for the next table
 
 // The end screen's main button, and Restart practice: practice starts again in a new hotel; a match
 // becomes a new match at a new table with the same choices (how many guests, your role).
@@ -1726,8 +1808,7 @@ function setupGame(plan) {
   botProfiles = plan.profiles;
   applyMode(PRACTICE ? 'practice' : 'match', cast.length);
   if (TIMER_OFF) rules.turnTimerEnabled = false;
-  Object.assign(state, { roster: cast, mode: PRACTICE ? 'practice' : 'match', practice: PRACTICE });
-  state.setup = { possessedIndex: plan.possessedIndex };
+  roleChoice = plan.possessedIndex;
   movers.length = 0;
   cast.forEach((_, i) => movers.push(createPlayer(cfg, startSpot(i))));
   castCharacters();
@@ -2135,7 +2216,7 @@ const DOOR_FAIL = {
 function onOpenDoor(doorId) {
   if (!running || state.finished || !myTurn()) return;
   const player = activePlayer(state);
-  const r = openDoor(state, floor, player, doorId);
+  const r = W((S, F) => openDoor(S, F, real(player), doorId));
   if (!r.ok) { hud.toast(DOOR_FAIL[r.reason] || 'That door will not open.'); refresh(); syncViews(false); return; }
   rebuildGrid();
   discovery.refresh();
@@ -2144,7 +2225,7 @@ function onOpenDoor(doorId) {
   // Ease the view so the guest's room and the room just revealed are both in view (it may lie behind
   // the room's far wall or under the interface otherwise).
   const rect = q => [q.min[0], q.min[1], q.max[0], q.max[1]];
-  rig.showRooms([rect(floor.rooms.get(player.currentRoom)), rect(r.room)]);
+  rig.showRooms([rect(floor.rooms.get(player.currentRoom)), rect(floor.rooms.get(r.room.id) || r.room)]);
   hud.toast(r.room.isExit ? `The door opens onto the ${r.room.name}!`
     : `The door opens: ${r.room.name}${r.locked ? ' — locked' : ''}${r.room.dark ? ' — dark' : ''}.`);
 }
@@ -2468,6 +2549,7 @@ function frameLoop(now) {
   // The main menu and the lift: the lobby scene (once loaded; until then, the hotel itself shows,
   // blurred, behind the menu).
   if (phase !== 'game' && lobbyReady && lobby) { lobbyFrame(now, dt, time, prevLobby); return; }
+  step('table', pullFrame);    // (a test hook handed out the real game: the screens catch up before anything reads)
   if (running && !state.finished) {
     step('clock', () => tickTimer(dt));
     step('walk', () => {
@@ -2552,13 +2634,19 @@ document.addEventListener('visibilitychange', () => { last = performance.now(); 
 
 // --- Debug / test hooks ------------------------------------------------------------------
 window.__game = {
-  cfg, rules, hotel, floor, grid, state, movers, rig, roomViews, doorways, characters, discovery, view, pathPreview, fog, screenTags,
+  // the REAL game (the table's), for the tests' direct engine calls; handing it out marks the screens to catch up
+  // before they read again (pull). What the screens read: presenterState, presenterFloor.
+  get state() { dirty = true; return realNow().state; },
+  get floor() { dirty = true; return realNow().floor; },
+  presenterState: state, presenterFloor: floor,
+  table: () => table,
+  cfg, rules, hotel, grid, movers, rig, roomViews, doorways, characters, discovery, view, pathPreview, fog, screenTags,
   crash,        // the safety net (src/ui/crash.js): ring(), shown, limits, step(), note()
   begin, restart, endTurn: () => doEndTurn({ ask: false }),     // (tests: End turn with the question answered; the button asks)
   autoEnd: on => { if (on !== undefined) { autoEndOn = !!on; autoEndKey = ''; } return autoEndOn; }, autoEndFired: () => autoEndFired,     // (tests: the turn passing by itself when the actions run out, on or off)
   refresh,
-  activePlayer: () => activePlayer(state),
-  nextPlayer: () => nextPlayer(state),
+  activePlayer: () => { dirty = true; return activePlayer(realNow().state); },
+  nextPlayer: () => { dirty = true; return nextPlayer(realNow().state); },
   activeMover,
   walkTo: (x, z) => discovery.walkTo(x, z),
   moveToRoom,
@@ -2572,7 +2660,7 @@ window.__game = {
   cardViewId: () => hand.cardId,
   useBandage: id => onUseBandage(id),
   // Part 2: rooms with jobs and the new cards (same paths as the buttons).
-  roomJob: () => canUseRoom(state, floor, activePlayer(state)),
+  roomJob: () => canUseRoom(realNow().state, realNow().floor, activePlayer(realNow().state)),
   useRoom: () => onRoom(),
   useEspresso: id => onEspresso(id),
   useHandMirror: (id, targetId) => onHandMirror(id, targetId),
@@ -2655,13 +2743,13 @@ window.__game = {
   // tile — so leaving the page cuts no download off)
   settled: () => !holdHotel && dressingDone && (!warmPrep || warmSettled)
     && characters.every(cv => { const d = cv.debug(); return !d.model || d.loaded; }),
-  publicLog: () => state.log.map(l => l.text),
-  notesOf: i => [...(state.players[i].notes || [])],
-  possessedIndexes: () => state.players.filter(p => p.possessed).map(p => p.index),
-  lanterns: () => activePlayer(state).hand.filter(c => c.type === 'lantern').length,
+  publicLog: () => realNow().state.log.map(l => l.text),
+  notesOf: i => [...(realNow().state.players[i].notes || [])],
+  possessedIndexes: () => realNow().state.players.filter(p => p.possessed).map(p => p.index),
+  lanterns: () => activePlayer(realNow().state).hand.filter(c => c.type === 'lantern').length,
   lockedRooms: () => [...state.lockedRooms],
   openLocks: () => [...state.openLocks.keys()],       // locked doors a key opened this turn
-  canEscape: () => canEscape(state, floor, activePlayer(state)),
+  canEscape: () => canEscape(realNow().state, realNow().floor, activePlayer(realNow().state)),
   escape: () => onEscape(),         // (the Exit icon's tap)
   openHand: cardId => hand.open(state, floor, cardId),
   rotate: steps => rig.rotate(steps),
@@ -2705,14 +2793,16 @@ window.__game = {
   // the random hotel: closed doors of the active guest's room, open one, stack the deck (tests)
   closedDoors: () => (floor.rooms.get(activePlayer(state).currentRoom)?.frontier || []).map(d => ({ id: d.id, side: d.side, jammed: d.jammed, center: d.center, fog: `${d.cell[0]},${d.cell[1]}` })),
   openDoor: id => onOpenDoor(id),
-  stackDeck: id => stackDeck(floor, id),
+  stackDeck: id => stackDeck(realNow().floor, id),
   // Tests: put a particular room on the board (next to room `nextTo` if given), as if its door
   // had been opened, without spending anyone's action points.
   revealTile: (id, nextTo = null) => {
-    for (const room of growTo(floor, id, { isLocked: r => isLocked(state, r) }, nextTo)) {
-      state.discovered.add(room.id);
-      if (room.locked && rules.lockedDoorsEnabled) state.lockedRooms.add(room.id);
-    }
+    W((S, F) => {
+      for (const room of growTo(F, id, { isLocked: r => isLocked(S, r) }, nextTo)) {
+        S.discovered.add(room.id);
+        if (room.locked && rules.lockedDoorsEnabled) S.lockedRooms.add(room.id);
+      }
+    });
     rebuildGrid(); discovery.refresh(); syncViews(false); refresh();
     return floor.rooms.has(id) && (!nextTo || floor.rooms.get(id).neighbours.has(nextTo));
   },
@@ -2737,13 +2827,21 @@ window.__game = {
   setPixelRatio: cap => view.setPixelRatio(cap),
 };
 
+// Every hook reads the latest: a test may have changed the real game since it was handed out, so the screens catch up
+// first (pull). (The two getters above are left as they are.)
+for (const [k, d] of Object.entries(Object.getOwnPropertyDescriptors(window.__game))) {
+  if (typeof d.value !== 'function' || k === 'table') continue;
+  const fn = d.value;
+  window.__game[k] = (...args) => { pull(); return fn(...args); };
+}
+
 // Move the active player into a room by id, as a confirmed tap on it would (tests): the
 // fewest-rooms route to a free spot in its middle. Returns the plan; the walk and any meeting resolve
 // over the next frames.
 function moveToRoom(destId) {
   const player = activePlayer(state);
   if (!floor.rooms.has(destId) || destId === player.currentRoom) return { ok: false, reason: 'noRoom' };
-  const plan = discovery.planToRoom(destId, standAtFor(player.index));
+  const plan = discovery.planToRoom(destId, standAtFor(player.index), real(player));
   if (plan.ok) startWalk(plan);
   return plan;
 }

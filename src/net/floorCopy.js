@@ -6,11 +6,14 @@
 //   const floor = createFloorCopy(hotelData, cfg)   ONE object for the page's life (created at boot, where main.js
 //                                                   creates the floor today: discovery, the map and the search marks
 //                                                   keep it)
-//   syncFloor(floor, view.hotel)                    bring it up to date, in place. True when anything changed.
+//   syncFloor(floor, view.hotel, { newMatch })      bring it up to date, in place. True when anything changed.
+//                                                   newMatch: true re-deals it whatever it holds (the page knows a new
+//                                                   table began: new room objects, as resetHotel gives).
 //
 // A placement list that is not a continuation of what the copy holds (another lobby, a different first room, fewer
-// rooms, a jammed door that is no longer jammed) means a new match: the same object is re-dealt in place (clearHotel +
-// placeLobby, as resetHotel does), then grown. New rooms go in with placeTile, exactly as openDoor placed them, so the
+// rooms) means a new match: the same object is re-dealt in place (clearHotel + placeLobby, as resetHotel does), then
+// grown. A door jammed here but not in the view, the rooms being the same, is freed in place (only a test that jammed a
+// door by hand and freed it does that; a new match says so with newMatch, or by its other rooms). New rooms go in with placeTile, exactly as openDoor placed them, so the
 // rooms, doorways, closed doors, walls and the Fire Exit come out as on the real floor. floor.version moves on with
 // every change (placeTile bumps it, a jammed door bumps it), so room views, fog and the grid catch up as after an
 // openDoor today. floor.deck holds `roomTilesLeft` placeholders (HIDDEN_TILE): its length is public, never its order.
@@ -52,20 +55,22 @@ function place(floor, placed, from) {
   }
 }
 
-export function syncFloor(floor, hotel) {
+export function syncFloor(floor, hotel, { newMatch = false } = {}) {
   if (!hotel) return false;
   const doors = SIDES.filter(s => (hotel.lobbyDoors || []).includes(s));
   const placed = hotel.placed || [];
   const jammed = new Set(hotel.jammed || []);
   let changed = false;
-  let redeal = !continues(floor, hotel, doors);
+  let redeal = newMatch || !continues(floor, hotel, doors);
+  let unjams = 0;
   if (!redeal) {
     const had = floor.roomList.length - 1;
     if (placed.length > had) { place(floor, placed, had); changed = true; }
-    // within a match a jammed door stays jammed (or goes when a room is placed behind it): one that is jammed
-    // here but not there means this is another hotel
-    if (floor.frontier.some(d => d.jammed && !jammed.has(d.id))) redeal = true;
+    // within a match a jammed door stays jammed (or goes when a room is placed behind it): one still jammed here but
+    // not there, the rooms being the same, was freed by hand (a test): freed here too
+    for (const d of floor.frontier) if (d.jammed && !jammed.has(d.id)) { d.jammed = false; unjams++; }
   }
+  if (unjams) { floor.version++; changed = true; }
   if (redeal) {
     clearHotel(floor);
     placeLobby(floor, doors);

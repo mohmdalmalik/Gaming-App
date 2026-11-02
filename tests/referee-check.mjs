@@ -92,11 +92,11 @@ for (const f of ['referee.js', 'snapshot.js', 'outcomes.js']) {
     const j = src.indexOf('\n}\n', i);
     return i < 0 || j < 0 ? null : src.slice(i, j + 2).replace(/\s+/g, ' ');
   };
-  const mine = body('../src/net/outcomes.js', 'tradeOutcome'), theirs = body('../src/ui/tradeReveal.js', 'tradeOutcome');
-  check(mine && mine === theirs, 'outcomes.js tradeOutcome is a pure copy of the one in src/ui/tradeReveal.js (same text)');
+  // (P1C: the page's trade reveal re-exports the referee's own, so the two can never differ)
   const tr = fs.readFileSync(new URL('../src/ui/tradeReveal.js', import.meta.url), 'utf8');
-  const list = tr.match(/export const TRADE_OUTCOMES = (\[[^\]]*\]);/)?.[1];
-  check(list && same(JSON.parse(list.replace(/'/g, '"')), TRADE_OUTCOMES), `...and its outcome list is the same (${TRADE_OUTCOMES.length} outcomes)`);
+  check(/export \{ tradeOutcome, TRADE_OUTCOMES \} from '\.\.\/net\/outcomes\.js';/.test(tr) && !body('../src/ui/tradeReveal.js', 'tradeOutcome') && !/export const TRADE_OUTCOMES/.test(tr),
+    'src/ui/tradeReveal.js re-exports tradeOutcome and TRADE_OUTCOMES from src/net/outcomes.js (no copy of its own)');
+  check(body('../src/net/outcomes.js', 'tradeOutcome') && TRADE_OUTCOMES.length === 9, `outcomes.js names the ${TRADE_OUTCOMES.length} outcomes`);
 }
 
 // --- 1. replay ---------------------------------------------------------------------------------------------------------

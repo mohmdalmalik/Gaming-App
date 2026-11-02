@@ -5,6 +5,9 @@
 // buttons stay above the iPad's on-screen keyboard. The rules of a name are src/account/username.js;
 // the account (src/account/account.js) keeps it. Checked when Continue (or Enter) is pressed, then
 // live while typing once a name has been refused.
+// A Co-op invite link opened on a device with no profile shows one line above it, "You're invited to nora's table."
+// (`invite(line)`: the words are src/data/onlineText.js's, handed in by src/ui/menu.js; null takes it away). After
+// Continue the menu goes straight to that table: a join link never seats "Guest".
 import { USERNAME, checkUsername, suggestUsername } from '../account/username.js';
 import { startingAvatar } from '../account/profile.js';
 import { settings } from '../settings.js';
@@ -36,8 +39,16 @@ export function createRegister(doc, { account, guard = () => false, onDone } = {
   let mode = 'signup';
   let live = false;          // checking while typing (after a refused name)
   let busy = false;
-  if (!input || !form) return { open() {}, shown() {}, get mode() { return mode; } };
+  let invited = null;        // the Co-op invite line, or null
+  if (!input || !form) return { open() {}, shown() {}, invite() {}, get mode() { return mode; } };
   input.maxLength = USERNAME.max;
+  const showInvite = () => {
+    const line = $('su-invite');
+    if (!line) return;
+    const on = !!invited && mode === 'signup';
+    line.textContent = on ? invited : '';
+    line.hidden = !on;
+  };
 
   const setHint = (text, bad) => { hint.textContent = text; hint.classList.toggle('bad', !!bad); input.classList.toggle('bad', !!bad); input.setAttribute('aria-invalid', String(!!bad)); };
   const setCount = () => { if (count) count.textContent = `${input.value.length} / ${USERNAME.max}`; };
@@ -61,6 +72,7 @@ export function createRegister(doc, { account, guard = () => false, onDone } = {
     $('su-device').textContent = note && mode === 'signup' ? WORDS.rename.note : w.note;
     const priv = $('su-private');
     if (priv) { priv.textContent = note; priv.hidden = !note; }
+    showInvite();
   }
 
   async function submit() {
@@ -112,5 +124,7 @@ export function createRegister(doc, { account, guard = () => false, onDone } = {
     },
     // The screen is showing (src/ui/menu.js).
     shown() { render(); setCount(); },
+    // The Co-op invite line above the register ("You're invited to nora's table."), or null.
+    invite(line = null) { invited = line || null; showInvite(); },
   };
 }

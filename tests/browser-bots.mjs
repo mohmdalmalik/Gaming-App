@@ -13,7 +13,7 @@
 //    every role, Play again, Main menu, the Menu button mid-match
 // 6. playing possessed: the role screen and the reminder; trading a Possession card to a bot
 // 7. whole matches with a simple stand-in player: no stalls, no errors, every match ends
-import { launch, giveCard, discardDown } from './smoke-lib.mjs';
+import { launch, giveCard, discardDown, openSinglePlayer } from './smoke-lib.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -127,7 +127,7 @@ await waitFor(() => window.__game && !document.getElementById('btn-menu-bots').d
 await page.goto(`${baseUrl}?seed=31337&botpace=0.15`, { waitUntil: 'domcontentloaded' });
 await waitFor(() => window.__game && !document.getElementById('btn-menu-bots').disabled, null, 60000);
 check(await visible('#menu-main'), 'the page opens on the main menu');
-check(await visible('#btn-menu-bots') && await visible('#btn-menu-practice') && await visible('#btn-menu-settings'), 'Play with bots, Practice alone, Settings');
+check(await visible('#btn-menu-single') && await visible('#btn-menu-coop') && await visible('#btn-menu-settings'), 'Single player, Co-op, Settings');     // (the menu split)
 check(await visible('#btn-profile') && await game(() => document.getElementById('pc-name').textContent) === 'tester', 'the profile card says who you play as (the test profile, tester)');
 check(!(await visible('#hud')) && !(await visible('#start-overlay')), 'no game interface behind the menu');
 check(await game(() => document.getElementById('view').classList.contains('blurred')), 'the lobby behind it is blurred');
@@ -151,6 +151,7 @@ check(await game(() => document.querySelector('#set-botSpeed .seg-btn.on')?.data
 await page.click('#set-follow .seg-btn[data-value="follow"]');
 await tap('#btn-settings-done');
 
+await openSinglePlayer(page);     // (the menu split: Play with bots and Practice alone are on the Single player screen)
 await tap('#btn-menu-bots');
 check(await visible('#menu-bots'), 'Play with bots opens the table screen');
 await page.click('#opt-bots .seg-btn[data-value="3"]');
@@ -489,6 +490,7 @@ console.log('\n5. out of the match, the end screen');
 // ------------------------------------------------------------------------------------------------
 console.log('\n6. playing possessed');
 {
+  await openSinglePlayer(page);
   await tap('#btn-menu-bots');
   await page.click('#opt-bots .seg-btn[data-value="5"]');
   await page.click('#opt-role .seg-btn[data-value="possessed"]');

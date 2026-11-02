@@ -16,7 +16,7 @@
 // 6. a direct link with ?user=: never the register, the name for the visit only (not saved), no bot with
 //    that name (case ignored) even where the seed would have dealt one; long names stay inside their
 //    boxes (strip, panel, End turn); names put into the meeting panel are text, never markup
-import { launch } from './smoke-lib.mjs';
+import { launch, openSinglePlayer } from './smoke-lib.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import { makeRng } from '../src/game/cards.js';
@@ -149,6 +149,7 @@ console.log('\n4. a device that keeps nothing');
   await waitFor(() => window.__game.menuScreen() === 'main');
   check((await game(() => window.__game.profile()))?.username === 'pebble_x' && await page.textContent('#pc-name') === 'pebble_x', 'sign-up still works for this visit');
   await waitFor(() => !document.getElementById('btn-menu-practice').disabled, null, 90000);
+  await openSinglePlayer(page);     // (the menu split: Play with bots and Practice alone are on the Single player screen)
   await tap('#btn-menu-practice');
   await waitFor(() => window.__game.phase() === 'game' && window.__game.isRunning(), null, 90000);
   check(await game(() => window.__game.state.players.length === 1 && window.__game.state.players[0].name === 'pebble_x'), 'practice starts, as pebble_x');
@@ -166,6 +167,7 @@ console.log('\n5. a match from the menu');
   await page.goto(`${baseUrl}?seed=2024&botpace=0.1&intro=off&timer=off`, { waitUntil: 'domcontentloaded' });
   await waitFor(() => window.__game && !document.getElementById('btn-menu-bots').disabled, null, 90000);
   check(await game(() => window.__game.menuScreen()) === 'main', 'a saved profile: the menu opens on the main screen');
+  await openSinglePlayer(page);
   await tap('#btn-menu-bots');
   check(await game(() => !document.getElementById('opt-guest') && !document.querySelector('.guest-btn')), 'the table screen has no "Your guest" row any more');
   await page.click('#opt-bots .seg-btn[data-value="3"]');

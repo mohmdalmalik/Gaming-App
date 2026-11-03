@@ -86,6 +86,7 @@ async function openPage(page, query, { fake = query.includes('coop=fake'), scree
 const screenNow = page => page.evaluate(() => [...document.querySelectorAll('#menu .menu-screen')].find(s => !s.hidden)?.id || null);
 const waitScreen = (page, id, timeout = 15000) => page.waitForFunction(s => !document.getElementById(s).hidden, id, { timeout, polling: 50 }).then(() => true, () => false);
 const text = (page, sel) => page.evaluate(s => { const e = document.querySelector(s); return e ? e.textContent.replace(/\s+/g, ' ').trim() : null; }, sel);
+const flat = s => String(s).replace(/\s+/g, ' ').trim();     // (the words as text() reads them: a no-break space is a space)
 const shown = (page, sel) => page.evaluate(s => { const e = document.querySelector(s); return !!e && !e.closest('[hidden]') && e.getClientRects().length > 0; }, sel);
 // a tap the way a finger makes it, after the moment a new screen ignores taps (src/ui/tapGuard.js)
 const tap = async (page, sel) => { await page.waitForTimeout(GUARD_WAIT); await page.click(sel, { timeout: 30000 }); await page.waitForTimeout(150); };
@@ -369,7 +370,7 @@ if (only.includes('soon')) {
     await openPage(page, 'coop=soon');
     await tap(page, '#btn-menu-coop');
     await waitScreen(page, 'menu-coop');
-    check(await text(page, '#coop-card-title') === T.soon.heading && await text(page, '#coop-card-line') === `${T.soon.line} ${T.soon.ready}` && !(await shown(page, '#btn-coop-start')),
+    check(await text(page, '#coop-card-title') === T.soon.heading && await text(page, '#coop-card-line') === T.soon.line && await text(page, '#coop-card-line2') === flat(T.soon.ready) && !(await shown(page, '#btn-coop-start')),
       `Co-op: "${await text(page, '#coop-card-title')}" — "${(await text(page, '#coop-card-line'))?.slice(0, 50)}…", no Start a table`);
     check(await text(page, '#btn-coop-card-a') === T.soon.single && await text(page, '#btn-coop-card-b') === T.soon.back, `...its buttons: ${await text(page, '#btn-coop-card-a')} · ${await text(page, '#btn-coop-card-b')}`);
     await fit(page, 'soon', '1024x694');
@@ -669,7 +670,7 @@ if (only.includes('flows')) {
     await tap(page, '#btn-menu-coop');
     await page.context().setOffline(true);
     await page.waitForTimeout(400);
-    check(await text(page, '#coop-status') === T.coop.offline && await page.evaluate(() => document.getElementById('btn-coop-start').disabled && document.getElementById('btn-coop-join').disabled), `offline: "${await text(page, '#coop-status')}", the buttons dimmed`);
+    check(await text(page, '#coop-status') === flat(T.coop.offline) && await page.evaluate(() => document.getElementById('btn-coop-start').disabled && document.getElementById('btn-coop-join').disabled), `offline: "${await text(page, '#coop-status')}", the buttons dimmed`);
     if (shots) await page.screenshot({ path: path.join(shots, '1180x820-offline.png') });
     await page.context().setOffline(false);
     await page.waitForTimeout(400);

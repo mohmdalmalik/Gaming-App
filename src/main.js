@@ -3006,9 +3006,10 @@ function netTableNews(events) {
   }
 }
 // The connection of the table on screen: the pill (coopUI), "You're back at the table." once it is live again after
-// the pill showed, the card after 20 s, and the restart notice once a restored match is back.
+// the pill showed, the card after 20 s, and the restart notice once a restored match is back (once per restart: a
+// polite one says `bye restart`, a crash says so in the next welcome; coop.restarts counts both).
 let netDownSince = null;
-const netRestartSeen = new WeakSet();
+const netRestartSeen = new WeakMap();
 function netStatus(t, s) {
   if (t !== table) return;
   coopUI.pill(s);
@@ -3017,7 +3018,8 @@ function netStatus(t, s) {
     netDownSince = null;
     if (coopUI.cardKind === 'lost') coopUI.hideCard();
     const coop = coopRun?.coops.find(c => c?.table === t);
-    if (coop?.restarted && !netRestartSeen.has(coop) && phase === 'game' && !state.finished) { netRestartSeen.add(coop); coopUI.card('restarted', { ok: () => refresh() }); }
+    const restarts = coop?.restarts ?? (coop?.restarted ? 1 : 0);
+    if (restarts > (netRestartSeen.get(coop) ?? 0) && phase === 'game' && !state.finished) { netRestartSeen.set(coop, restarts); coopUI.card('restarted', { ok: () => refresh() }); }
     return;
   }
   if (s === 'reconnecting' || s === 'lost') netDownSince ??= performance.now();
@@ -3027,7 +3029,7 @@ function netStatus(t, s) {
 // the menu's Co-op screen shows its card (src/ui/coopMenu.js already holds it). A restart says nothing: it comes back.
 const netByeHeard = new WeakSet();
 function netBye(coop, why) {
-  if (!['removed', 'closed', 'elsewhere', 'update', 'serverOld', 'busy'].includes(why)) return;
+  if (!['removed', 'closed', 'elsewhere', 'update', 'serverOld', 'busy', 'restartLost'].includes(why)) return;
   if (!online() || coopRun?.coops.every(c => c !== coop) || coop.table !== table) return;
   coopRun = null;
   backToMenu({ screen: 'coop' });

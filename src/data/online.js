@@ -54,6 +54,7 @@ export const ONLINE = {
     wakeSlowMs: 4000,            // "The hotel's switchboard is waking up…" after this long
     stallBannerMs: 60000,        // the stall countdown (TP3) shows after one wait passes this
     rememberTableMs: 21600000,   // a reload within this long rejoins the remembered table
+    pendingLeaveMs: 86400000,    // a Leave made while offline is sent on the next opening within this long
     walkMsPerRoom: 1900,         // derived, not measured: rooms are 8 m apart (src/config.js), bots walk
                                  // player.speed 2.9 m/s x 1.45 (src/main.js) ≈ 4.2 m/s → ≈ 1.9 s a room
     helloTimeoutMs: 5000,        // a socket that sends no hello this long is closed (4010)
@@ -82,7 +83,7 @@ export const ONLINE = {
     slowStepMs: 200,             // a table step this slow twice ends that match politely
     doIdMaxChars: 12,            // a command's id is at most this long
   },
-  storage: { guest: 'hotelEscape.guest.v1', table: 'hotelEscape.table.v1' },
+  storage: { guest: 'hotelEscape.guest.v1', table: 'hotelEscape.table.v1', leave: 'hotelEscape.leave.v1' },
   botLabels: false,       // OWNER DECISION D3 (recommended: true, a small "Bot" tag at Co-op tables). TP8
   countInRecord: false,   // OWNER DECISIONS D4/D5 (recommended: true, your own actions only). TP7
 };

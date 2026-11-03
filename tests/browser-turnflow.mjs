@@ -9,12 +9,14 @@
 //      not with an Espresso (End turn glows), once only, an End turn tap in the beat passes only one turn, the off switch
 //   d  auto end turn in a match with bots: to the next guest, never on a bot's turn, waits for a meeting, not with a free Trade
 //   e  the walking speed: a room-to-room walk (8 m) takes about 2.8 s of game time
+//   f  the clock runs out mid-walk (a two-room walk): still in the first room, or past the first doorway, the guest
+//      ends in the next room on the way, on its spot, one action spent, "Time is up", and the turn passes
 // (The other browser suites switch auto end off, tests/smoke-lib.mjs autoEndOff, because they tap End turn themselves.)
 import { launch, giveCard } from './smoke-lib.mjs';
 
 const args = process.argv.slice(2);
 const baseUrl = args.includes('--url') ? args[args.indexOf('--url') + 1] : 'http://127.0.0.1:8123/';
-const only = args.includes('--only') ? args[args.indexOf('--only') + 1].split(',') : ['a', 'b', 'c', 'd', 'e'];
+const only = args.includes('--only') ? args[args.indexOf('--only') + 1].split(',') : ['a', 'b', 'c', 'd', 'e', 'f'];
 const failures = [];
 const check = (cond, msg) => { if (cond) console.log('  ok  ', msg); else { console.log('  FAIL', msg); failures.push(msg); } };
 const quiet = messages => messages.filter(m => !/favicon/i.test(m));
@@ -324,6 +326,57 @@ if (only.includes('e')) {
   } catch (err) { check(false, `e: ${err.message}`); }
   check(!quiet(messages).length, `e: a clean console${quiet(messages).length ? ` (${quiet(messages).slice(0, 3).join(' | ')})` : ''}`);
   await browser.close();
+}
+
+// --- f. the clock runs out mid-walk ----------------------------------------------------------------
+// (The referee cuts the walk, src/net/referee.js cutWalk; the page walks the guest on to the next room's spot,
+// main.js cutWalkShort. Seed 31: the Lounge and the Ballroom are put on the board two rooms on from the Lobby.)
+if (only.includes('f')) {
+  console.log('f. the clock runs out while the player walks');
+  for (const variant of ['A', 'B']) {
+    const { browser, page, messages } = await launch({ width: 1024, height: 768, autoEnd: true });
+    try {
+      const ev = (fn, a) => page.evaluate(fn, a);
+      const wait = (fn, a, t = 60000) => page.waitForFunction(fn, a, { timeout: t, polling: 100 });
+      await page.goto(`${baseUrl}?mode=bots&bots=3&role=clean&botpace=0.1&intro=off&seed=31&seat=0`, { waitUntil: 'domcontentloaded' });
+      await wait(() => window.__game && !document.getElementById('btn-begin').disabled, null, 120000);
+      await ev(() => { window.__game.setPixelRatio(0.5); window.__game.cfg.player.speed = 4; });
+      await page.click('#btn-begin');
+      await wait(() => window.__game.handoffKind() === 'role');
+      await page.waitForTimeout(400);
+      await page.click('#btn-handoff-next');
+      await wait(() => window.__game.myTurn() && window.__game.inActionPhase() && !window.__game.handoffOpen(), null, 120000);
+      const plan = await ev(() => {
+        const g = window.__game;
+        g.revealTile('lounge', 'hall');
+        g.revealTile('ballroom', 'lounge');
+        const me = g.state.players[g.humanSeat()];
+        return { start: me.currentRoom, ap: me.actionPoints };
+      });
+      await page.waitForTimeout(500);
+      const t0 = await ev(() => ({ turn: window.__game.state.turn, events: window.__game.state.events.length }));
+      await ev(() => window.__game.moveToRoom('ballroom'));
+      await page.waitForTimeout(150);
+      if (await ev(() => { const b = document.getElementById('btn-confirm-move'); return !!b && !b.closest('[hidden]'); })) await page.click('#btn-confirm-move').catch(() => {});
+      await wait(() => window.__game.activeMover().walking || window.__game.activeMover().path.length > 0, null, 20000).catch(() => {});
+      if (variant === 'B') await wait(() => { const g = window.__game; return g.state.players[g.humanSeat()].currentRoom === 'lounge'; }, null, 120000).catch(() => {});
+      const at = await ev(() => { const g = window.__game; return g.state.players[g.humanSeat()].currentRoom; });
+      await ev(() => window.__game.forceTimeUp());
+      const passed = await wait(t => window.__game.state.turn !== t, t0.turn, 180000).then(() => true, () => false);
+      await page.waitForTimeout(800);
+      const r = await ev(t0 => {
+        const g = window.__game, me = g.state.players[g.humanSeat()], m = g.movers[g.humanSeat()], c = g.roomCenter(me.currentRoom);
+        return { room: me.currentRoom, ap: me.actionPoints, toast: document.getElementById('toast')?.textContent || '', off: m ? Math.hypot(m.x - c[0], m.z - c[1]) : null,
+          entered: g.state.events.slice(t0.events).some(e => e.type === 'enter' && (e.to === 'lounge' || e.room === 'lounge')) };
+      }, t0);
+      const where = variant === 'A' ? `still in the ${plan.start}` : 'past the first doorway, in the lounge';
+      check(variant === 'A' ? at === plan.start : at === 'lounge', `${variant}: the clock ran out ${where} (the guest was in the ${at})`);
+      check(passed && r.room === 'lounge' && r.entered && r.ap === plan.ap - 1 && /Time is up/.test(r.toast) && r.off != null && r.off < 0.6,
+        `${variant}: the guest ends in the lounge (${r.room}), on its spot (${r.off?.toFixed(2)} m off), ${plan.ap - r.ap} action spent, "${r.toast}", and the turn passed`);
+    } catch (err) { check(false, `f ${variant}: ${err.message.split('\n')[0]}`); }
+    check(quiet(messages).length === 0, `${variant}: no console errors${quiet(messages).length ? ': ' + quiet(messages).slice(0, 2).join(' | ') : ''}`);
+    await browser.close();
+  }
 }
 
 console.log(failures.length ? `\n${failures.length} FAILED` : '\nALL TURN-FLOW BROWSER CHECKS PASSED');

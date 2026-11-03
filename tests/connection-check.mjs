@@ -10,7 +10,8 @@
 //      8 s ±25%, then every 10 s at most) never gives up and says "lost" after 20 s; a try stuck connecting is dropped
 //      after 10 s; too many hellos waits as told; old handlers are detached (sockets and page events); acts are not
 //      sent again after a reconnect, answers and acks are, once each, with the same id
-//   2. the device key (src/net/guestKey.js): storage fallbacks, persistent only in localStorage, bad keys ignored
+//   2. the device key (src/net/guestKey.js): storage fallbacks, persistent only in localStorage, bad keys ignored;
+//      openCoop against a scripted server; a Leave made offline sent on the next opening; a restored match's welcome
 //   3. openCoop through the loopback: create, peek, join by a typed code, host-only refusals, start, both dealt, role
 //      acks, refusals that never close the socket, unique command ids, quick chat, a dropped device back at the same
 //      seat with a fresh view (the other sees Away then back), newest device wins, the table record and ?join=
@@ -473,9 +474,65 @@ console.log('2b. openCoop against a scripted server');
   sock.recv({ ...WELCOME, token: key, place: 'none' });
   check(sock.sent.some(m => m.t === 'join' && m.code === 'BKTWM'), 'unseated after the restart: one join to get back');
   sock.recv({ t: 'err', code: 'notFound' });
-  check(w.byes[w.byes.length - 1]?.why === 'closed' && coop.status === 'closed', 'the table is gone: bye closed, status closed');
+  check(w.byes[w.byes.length - 1]?.why === 'restartLost' && coop.status === 'closed', 'the table is gone (unknown to the server mid-match): bye restartLost ("The hotel closed for a moment"), status closed');
   check(rememberedTable({ storage: store, at: Date.now() }) === null, 'and the table record is forgotten');
   check(rememberedTable({ storage: (() => { const m = memoryStorage(); m.setItem(ONLINE.storage.table, json({ code: 'BKTWM', at: 0 })); return m; })(), at: ONLINE.timing.rememberTableMs + 1 }) === null, 'a record older than 6 h is not offered');
+}
+
+// --- 2c. a Leave the server never heard, and a restore without a goodbye (the review, Nov 2026) --------------------------
+console.log('\n2c. a Leave made offline reaches the server next time; a restored match says so without a goodbye');
+{
+  const clock = fakeClock();
+  const FS = fakeSocketClass(clock);
+  const store = memoryStorage();
+  const key = 'Y'.repeat(32);
+  const opts = intent => ({ server: { url: 'ws://127.0.0.1:9171/' }, profile: { username: 'bert', avatar: null }, intent, transport: FS, storage: store,
+    doc: undefined, win: undefined, now: clock.now, setTimer: clock.setTimer, clearTimer: clock.clearTimer, random: () => 0.5 });
+  const lobbyOf = (code, n, phase = 'playing') => ({ t: 'lobby', n, lobby: { code, phase, startsInMs: null, size: 4, locked: false, you: 'u2', host: 'u1', canStart: false, why: null, people: [], queued: null } });
+  const viewOf = (code, n, fresh = true) => ({ t: 'view', n, ...(fresh ? { fresh: true } : {}), view: { seat: 1, seats: 4, round: 1, turn: 1, clock: null, me: { inbox: [] }, end: null, table: { code } }, events: [{ o: 1, type: 'deal' }] });
+  // in a match; the connection drops; Leave match on the "Still reconnecting" card
+  const c1 = await openCoop(opts({ join: { code: 'BKTWM' } }));
+  let sock = FS.all[FS.all.length - 1];
+  sock.open(); sock.recv({ ...WELCOME, token: key });
+  sock.recv(lobbyOf('BKTWM', 1)); sock.recv(viewOf('BKTWM', 2));
+  check(!!c1.table && c1.table.view.table.code === 'BKTWM', 'seated in a match at BKTWM');
+  sock.die(1006);
+  const sentBefore = FS.all.reduce((k, x) => k + x.sent.filter(m => m.t === 'leave').length, 0);
+  c1.leave();
+  check(FS.all.reduce((k, x) => k + x.sent.filter(m => m.t === 'leave').length, 0) === sentBefore && JSON.parse(store.getItem(ONLINE.storage.leave) || 'null')?.code === 'BKTWM',
+    'Leave while not connected: nothing could be sent, so the Leave is kept on the device (BKTWM)');
+  // later: Co-op again, Start a table. The server still seats bert at BKTWM (it never heard the Leave)
+  const c2 = await openCoop(opts({ create: { size: 4 } }));
+  const w2 = watch(c2);
+  sock = FS.all[FS.all.length - 1];
+  sock.open(); sock.recv({ ...WELCOME, token: key, place: 'match' });
+  const after = sock.sent.slice(1).map(m => m.t);
+  check(after[0] === 'leave' && after[1] === 'create', `the next opening finds bert still seated: it sends the kept Leave first, then its own request (${after.join(', ')})`);
+  sock.recv(lobbyOf('BKTWM', 1)); sock.recv(viewOf('BKTWM', 2));
+  check(c2.lobby === null && !c2.table && w2.matches.length === 0, 'what the server still sends of the left table is not shown');
+  sock.recv(lobbyOf('CDFGH', 3, 'waiting'));
+  check(c2.lobby?.code === 'CDFGH' && store.getItem(ONLINE.storage.leave) === null, 'the new table is seated, and the kept Leave is gone');
+  c2.leave();
+  // a match restored after a crash (no bye restart): the welcome says so, and the page hears it as a status
+  store.removeItem(ONLINE.storage.leave);
+  const c3 = await openCoop(opts({ join: { code: 'GHJKM' } }));
+  const w3 = watch(c3);
+  sock = FS.all[FS.all.length - 1];
+  sock.open(); sock.recv({ ...WELCOME, token: key });
+  sock.recv(lobbyOf('GHJKM', 1)); sock.recv(viewOf('GHJKM', 2));
+  sock.die(1006); clock.advance(0);
+  sock = FS.all[FS.all.length - 1]; sock.open();
+  const lives = w3.statuses.filter(x => x === 'live').length;
+  sock.recv({ ...WELCOME, token: key, place: 'match', restored: 'match' });
+  check(c3.restarted === true && c3.restarts === 1 && w3.statuses.filter(x => x === 'live').length === lives + 2 && !sock.sent.some(m => m.t === 'join' || m.t === 'leave'),
+    'welcome restored: coop.restarted (1 restart), and the page is told again once the flag is set (no join, no leave)');
+  // a polite restart afterwards: bye restart, then the welcome that says restored: ONE more restart, not two
+  sock.recv({ t: 'bye', why: 'restart', retryMs: 3000 });
+  clock.advance(3000);
+  sock = FS.all[FS.all.length - 1]; sock.open();
+  sock.recv({ ...WELCOME, token: key, place: 'match', restored: 'match' });
+  check(c3.restarts === 2, `a second restart (bye restart, then its welcome): counted once (${c3.restarts} in all)`);
+  c3.leave();
 }
 
 // --- helpers for the two-device runs ------------------------------------------------------------------------------------

@@ -29,11 +29,11 @@ import { holdWakeLock } from '../net/wakeLock.js';
 const CARD_ACTIONS = {
   notFound: ['edit', 'back'], full: ['create', 'back'], midMatch: ['retry', 'main'], locked: ['back'], removed: ['main'],
   closed: ['create', 'main'], tooMany: ['back'], busy: ['retry', 'single'], offline: ['single', 'retry'],
-  unreachable: ['retry', 'single'], update: ['update'], serverOld: ['retry'], elsewhere: ['resume', 'main'],
+  unreachable: ['retry', 'single'], update: ['update'], serverOld: ['retry'], elsewhere: ['resume', 'main'], restartLost: ['main'],
   soon: ['single', 'main'], soonJoin: ['single', 'main'],     // (Coming soon's Back: there is no Co-op screen to go back to)
 };
 const CLOSERS = new Set(['back', 'main']);   // (they sound like a closing drawer: src/audio/buttonCues.js)
-const BYE_CARDS = { removed: 'removed', closed: 'closed', elsewhere: 'elsewhere', update: 'update', serverOld: 'serverOld', busy: 'busy' };
+const BYE_CARDS = { removed: 'removed', closed: 'closed', elsewhere: 'elsewhere', update: 'update', serverOld: 'serverOld', busy: 'busy', restartLost: 'restartLost' };
 
 // A memory storage, for a seat that must not share the device's key (the review link's second seat).
 export function memoryStorage() {
@@ -113,7 +113,7 @@ export function createCoopMenu(doc, {
     stopWaiting(seat);
     detach(seat);
     if (leave) { try { seat.coop?.leave?.(); } catch { /* gone */ } }
-    seat.coop = null; seat.lobby = null; seat.pending = null; seat.dealt = false; seat.status = 'closed'; seat.screen = 'coop';
+    seat.coop = null; seat.lobby = null; seat.pending = null; seat.dealt = false; seat.status = 'closed'; seat.screen = 'coop'; seat.linkShown = null;
     stopCount(seat);
     if (seat === seats[0]) switcher?.show(false);
     awake();
@@ -285,16 +285,18 @@ export function createCoopMenu(doc, {
     el.form.hidden = true; el.card.hidden = false;
     const { kind, vars = {} } = seat.card;
     const v = { size: ONLINE.table.maxPeople, ...vars };
-    let title, line, buttons;
-    if (kind === 'soon') { title = words('soon.heading'); line = `${words('soon.line')} ${words('soon.ready')}`; buttons = [words('soon.single'), words('soon.back')]; }
+    let title, line, buttons, line2 = '';
+    if (kind === 'soon') { title = words('soon.heading'); line = words('soon.line'); line2 = words('soon.ready'); buttons = [words('soon.single'), words('soon.back')]; }
     else if (kind === 'soonJoin') { title = words('soon.joinHeading'); line = words('soon.joinLine'); buttons = [words('soon.single'), words('soon.mainMenu')]; }
-    else if (kind === 'elsewhere') { const e = text.recovery.elsewhere; title = fill(e.title, v); line = fill(e.line, v); buttons = e.buttons; }
+    else if (kind === 'elsewhere' || kind === 'restartLost') { const e = text.recovery[kind]; title = fill(e.title, v); line = fill(e.line, v); buttons = e.buttons; }
     else {
       const e = text.errors[kind] || text.errors.unreachable;
       title = fill(e.title, v); line = fill(e.line, v); buttons = e.buttons;
     }
     $('coop-card-title').textContent = title;
     $('coop-card-line').textContent = line;
+    const l2 = $('coop-card-line2');
+    if (l2) { l2.textContent = line2; l2.hidden = !line2; }
     const acts = CARD_ACTIONS[kind] || CARD_ACTIONS.unreachable;
     [el.cardA, el.cardB].forEach((b, i) => {
       b.hidden = !acts[i];
@@ -323,9 +325,19 @@ export function createCoopMenu(doc, {
     $('table-invite-row').hidden = lockedForMe;
     const lockedLine = $('table-locked-line');
     lockedLine.hidden = !lockedForMe; lockedLine.textContent = lockedForMe ? words('table.lockedGuest', { host: hostName }) : '';
-    $('table-link').hidden = true;
+    // (the link to copy by hand, once copying failed, stays up with its selection while the table changes)
+    const link = $('table-link');
+    const byHand = seat.linkShown && seat.linkShown.code === lv.code ? seat.linkShown.url : null;
+    if (!byHand) link.hidden = true;
+    else if (link.hidden || link.value !== byHand) { link.value = byHand; link.hidden = false; }
     // the seats
     renderSeats(seat, lv, isHost);
+    const hint = $('table-remove-hint');
+    if (hint) {
+      const canRemove = isHost && lv.phase === 'waiting' && others > 0;
+      hint.textContent = canRemove ? words('table.removeHint') : '';
+      hint.hidden = !canRemove;
+    }
     // the host's choices, or the guest's line
     $('table-host-opts').hidden = !isHost;
     if (isHost) {
@@ -478,6 +490,7 @@ export function createCoopMenu(doc, {
     const url = linkFor(code);
     const byHand = () => {
       const f = $('table-link');
+      seat.linkShown = { code, url };
       f.value = url; f.hidden = false;
       try { f.focus(); f.select(); f.setSelectionRange(0, url.length); } catch { /* fine */ }
     };

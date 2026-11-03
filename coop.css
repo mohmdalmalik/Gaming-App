@@ -31,6 +31,10 @@
 #menu-coop .menu-actions { margin-top: 14px; }
 #menu-coop.offline .coop-start, #menu-coop.offline .coop-code-row { opacity: 0.55; }
 .coop-card .coop-line { margin-bottom: 4px; }
+.coop-card .coop-line + .coop-line { margin-top: 6px; }
+/* the card's buttons: the closer (Back, Main menu) on the left, the gold one on the right, as on every other menu
+   screen (the button ids keep their meaning: -a is the card's main action) */
+#coop-card #btn-coop-card-a { order: 2; }
 
 /* The iPad's on-screen keyboard covers about half the screen in landscape: while the code field has the focus and
    the keyboard is up, the panel goes to the top and keeps only what typing a code needs (src/ui/coopMenu.js). */
@@ -95,6 +99,9 @@ button.cs-box:focus-visible { outline: 2px solid var(--brass-bright); outline-of
 .coop-opts .menu-field { margin-bottom: 0; }
 .coop-opts .mf-label { margin-bottom: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .coop-opts .seg-btn { min-height: 44px; padding: 6px 8px; }
+/* a choice that can't be made now (a size below the people seated; everything during the countdown) looks it */
+#menu-table .seg-btn:disabled { opacity: 0.4; cursor: default; }
+.coop-hint { margin: 6px 0 0; min-height: 0; }
 .coop-note { margin: 8px 0 0; min-height: 1.35em; font-size: 13.5px; line-height: 1.35; color: var(--muted); text-wrap: pretty; }
 #menu-table .coop-status { margin-top: 4px; min-height: 1.3em; font-size: 14px; color: var(--ivory-dim); }
 .coop-actions { margin-top: 10px; }

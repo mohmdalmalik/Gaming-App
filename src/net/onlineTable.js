@@ -25,9 +25,13 @@
 //                  connection; restart only says the server restarted, the connection comes back by itself)
 //   coop.lobbyOp(op) -> Promise<{ ok, reason? }>  op: {k:'size',n} · {k:'lock',on} · {k:'remove',pid} · {k:'start'} ·
 //                  {k:'wait'} · {k:'again'} · {k:'look',avatar}. reason 'offline': it could not be sent (not resent)
-//   coop.leave()   leave the table (waiting room: the seat is freed; a match: your guest stays, TP4) and close
+//   coop.leave()   leave the table (waiting room: the seat is freed; a match: your guest stays, TP4) and close. A
+//                  Leave that can't reach the server now (the connection is down) is kept on the device and sent
+//                  first thing the next time it opens Co-op, so it is never lost (ONLINE.storage.leave)
 //   coop.table     the match's Table (below), from the first view of a match; a new one for each new match
-//   coop.restarted true once the server has said `bye restart` (P4 shows its notice once the table is back)
+//   coop.restarted true once the server has said `bye restart`, or its welcome says it restored this seat's match
+//                  (a crash: no goodbye). coop.restarts counts those restarts (one each, however it was heard), so
+//                  the page shows its notice once per restart, once the table is back
 //
 // The Table (kind 'online'):
 //   table.seat, table.view          my seat; the latest PlayerView (DESIGN §6.1), a new object each time (frozen on
@@ -203,6 +207,27 @@ export function openCoop({
     } catch { /* the address bar stays as it is */ }
   }
   function unseat() { forgetTable(); urlJoin(false); }
+  // A Leave the server may not have heard (sent while the connection was down, or lost with the socket): kept as
+  // { code, at } and sent right after the next welcome that still finds this device seated (DESIGN §8.8, review F2).
+  const keepLeave = !inPage && !anonymous;
+  function pendingLeave() {
+    if (!keepLeave) return null;
+    try {
+      const r = JSON.parse(key.storage.getItem(ONLINE.storage.leave) || 'null');
+      if (r && normaliseCode(r.code) && Number.isFinite(r.at) && wallNow() - r.at >= 0 && wallNow() - r.at < ONLINE.timing.pendingLeaveMs) return r;
+      if (r) key.storage.removeItem(ONLINE.storage.leave);
+    } catch { /* nothing kept */ }
+    return null;
+  }
+  function setPendingLeave(c) {
+    if (!keepLeave) return;
+    try {
+      if (c) key.storage.setItem(ONLINE.storage.leave, JSON.stringify({ code: c, at: wallNow() }));
+      else key.storage.removeItem(ONLINE.storage.leave);
+    } catch { /* kept nowhere */ }
+  }
+  let skipCode = null;         // the table a pending Leave left: what the server still sends of it is not ours
+  let byeRestart = false;      // a `bye restart` was heard since the last welcome
 
   // --- what the server says ----------------------------------------------------------------------------------------
   function onMessage(m) {
@@ -234,6 +259,22 @@ export function openCoop({
     lastN = null;
     if (!anonymous) key.set(m.token);
     if (anonymous) { sendChecked({ t: 'peek', code: String(intent.peek).slice(0, ONLINE.code.inputMax) }); return; }
+    // (the server came back with this seat's match after a restart it could not announce: its notice, once)
+    // (after a `bye restart` this is the same restart: already counted)
+    if (m.restored === 'match' && !byeRestart) { coop.restarted = true; coop.restarts++; emit('status', coop.status); }
+    byeRestart = false;
+    // A Leave this device made that the server never heard: send it now, and go on as if unseated (what the server
+    // sends of that table right after this welcome is dropped). Going back to that same table by its code: no Leave.
+    const gone = pendingLeave();
+    if (gone) {
+      setPendingLeave(null);
+      const back = normaliseCode(intent.join?.code) === gone.code;
+      if (m.place !== 'none' && !back && !seated) {
+        skipCode = gone.code;
+        sendChecked({ t: 'leave' });
+        m = { ...m, place: 'none' };
+      }
+    }
     // Seated already (a reload, a reconnect, or a table this device never left): the server sends that seat's lobby
     // (and the match) by itself, whatever the intent asked for. A device sits at one table at a time.
     if (m.place !== 'none') return;
@@ -249,6 +290,7 @@ export function openCoop({
 
   function onLobby(lv) {
     if (!lv || typeof lv !== 'object') return;
+    if (skipCode && lv.code === skipCode) return;        // (the table this device just left)
     seated = true;
     rejoining = false;
     code = lv.code ?? code;
@@ -264,7 +306,9 @@ export function openCoop({
     if (Number.isFinite(m.retryMs)) e.retryMs = m.retryMs;
     if (rejoining) {                                     // could not get back to the table: it is gone for us
       rejoining = false;
-      const why = m.code === 'removed' ? 'removed' : 'closed';
+      // (a table the server no longer knows at all, mid-match: the server restarted without a disk and lost it,
+      // DESIGN §10.5 "The hotel closed for a moment"; a table that closed normally answers `closed`)
+      const why = m.code === 'removed' ? 'removed' : m.code === 'notFound' && table ? 'restartLost' : 'closed';
       unseat();
       conn.close();
       dropUnsent({ all: true });
@@ -277,7 +321,7 @@ export function openCoop({
   function onBye(m) {
     const b = { why: m.why };
     if (Number.isFinite(m.retryMs)) b.retryMs = m.retryMs;
-    if (m.why === 'restart') coop.restarted = true;
+    if (m.why === 'restart') { coop.restarted = true; coop.restarts++; byeRestart = true; }
     else {
       dropUnsent({ all: true });
       if (ENDS_SEAT.has(m.why)) unseat();
@@ -294,6 +338,7 @@ export function openCoop({
   // --- the match ------------------------------------------------------------------------------------------------------
   let table = null;
   function onView(m) {
+    if (skipCode && m.view?.table?.code === skipCode) return;      // (the match this device just left)
     const view = freezeViews ? deepFreeze(m.view) : m.view;
     if (!view || typeof view !== 'object') return;
     const events = Array.isArray(m.events) ? m.events : [];
@@ -397,6 +442,7 @@ export function openCoop({
     lobby: null,
     table: null,
     restarted: false,
+    restarts: 0,
     on(kind, fn) {
       if (!listeners[kind] || typeof fn !== 'function') return () => {};
       listeners[kind].add(fn);
@@ -415,6 +461,8 @@ export function openCoop({
     leave() {
       if (left) return;
       left = true;
+      // (kept until the next welcome finds this device unseated, so a Leave the socket lost still reaches the server)
+      if (!anonymous && code) setPendingLeave(code);
       if (!anonymous && conn.status === 'live') conn.send({ t: 'leave' });
       unseat();
       conn.close();

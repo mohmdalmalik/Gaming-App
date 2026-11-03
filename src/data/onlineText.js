@@ -48,7 +48,7 @@ export const ONLINE_TEXT = {
     opening: 'Opening your table…',          // on the pressed button after 1 s
     looking: 'Looking for the table…',       // on the pressed button after 1 s
     waking: "The hotel's switchboard is waking up. The first table of the day can take up to a minute.",   // after 4 s
-    offline: "You're offline. Connect to Wi-Fi to play with friends. Single player still works offline.",
+    offline: "You're offline. Connect to Wi-Fi to play with friends. Single\u00a0player still works offline.",
     codeLetters: 'Codes use only consonants: no A, E, I, O, U, Y, L or Q.',
     codeLength: 'Codes are {length} letters.',
     rejoining: 'Rejoining your table…',
@@ -62,12 +62,12 @@ export const ONLINE_TEXT = {
     kicker: '{label}',
     heading: 'Coming soon',
     line: "Soon you'll start a private table and send your friends a link. Everyone plays on their own iPad, phone or computer.",
-    ready: 'Single player is ready now.',
+    ready: 'Single\u00a0player is ready now.',      // (its own line under `line`; \u00a0: the name never splits)
     single: 'Single player',
     back: '‹ Back',
     // a ?join= link opened while Co-op isn't open
     joinHeading: "{label} isn't open yet",
-    joinLine: "This link is for a {label} table, which isn't open yet. Single player is ready now.",
+    joinLine: "This link is for a {label} table, which isn't open yet. Single\u00a0player is ready now.",
     mainMenu: 'Main menu',
   },
 
@@ -104,6 +104,7 @@ export const ONLINE_TEXT = {
     countdownGuests: '{host} can still stop it.',
     wait: 'Wait',
     removeAria: 'Remove {name} from the table',       // (read aloud on a friend's seat, for the host)
+    removeHint: "Tap a friend's seat to remove them.",  // (the host only, under the seats, once a friend is seated)
   },
 
   // --- Questions (one card: title / line / buttons) ------------------------------------------------------------
@@ -205,28 +206,28 @@ export const ONLINE_TEXT = {
     notFound: {
       title: 'No table with that code',
       line: "There's no table with code {code}. Check the letters, or ask your friend to send the link again.",
-      buttons: ['Try again', 'Back'],
+      buttons: ['Try again', '‹ Back'],
     },
-    full: { title: 'This table is full', line: 'All {size} seats are taken. Ask the host to make room, or start your own table.', buttons: ['Start a table', 'Back'] },
+    full: { title: 'This table is full', line: 'All {size} seats are taken. Ask the host to make room, or start your own table.', buttons: ['Start a table', '‹ Back'] },
     midMatch: {
       title: 'This table is mid-match',
       line: 'This table is in the middle of a match. Matches usually take about 20 minutes.',
       buttons: ['Try again', 'Main menu'],
       buttonsWaitHere: ['Wait here', 'Main menu'],   // only once "a friend who arrives mid-match" is built (not tonight)
     },
-    locked: { title: 'This table is locked', line: 'The host has locked this table. Ask them to unlock it.', buttons: ['Back'] },
+    locked: { title: 'This table is locked', line: 'The host has locked this table. Ask them to unlock it.', buttons: ['‹ Back'] },
     removed: { title: "You've left the table", line: 'The host removed you from this table.', buttons: ['Main menu'] },
     closed: { title: 'This table has closed', line: 'Everyone has left this table. Ask your friend for a new link.', buttons: ['Start a table', 'Main menu'] },
     tooMany: { title: 'Too many tries', line: 'Wait a minute, then try again.', buttons: ['OK'] },
     busy: {
       title: 'The hotel is full right now',
-      line: 'Too many tables are open at the moment. Try again in a few minutes. Single player still works.',
+      line: 'Too many tables are open at the moment. Try again in a few minutes. Single\u00a0player still works.',
       buttons: ['Try again', 'Single player'],
     },
-    offline: { title: "You're offline", line: 'Connect to Wi-Fi to play with friends. Single player still works offline.', buttons: ['Single player', 'Try again'] },
+    offline: { title: "You're offline", line: 'Connect to Wi-Fi to play with friends. Single\u00a0player still works offline.', buttons: ['Single player', 'Try again'] },
     unreachable: {
       title: "Can't reach the game",
-      line: "We can't connect right now. Check your internet, then try again. Single player still works.",
+      line: "We can't connect right now. Check your internet, then try again. Single\u00a0player still works.",
       buttons: ['Try again', 'Single player'],
     },
     update: { title: 'Update needed', line: 'A new version of Hotel Escape is out. Update to join this table.', buttons: ['Update now'] },

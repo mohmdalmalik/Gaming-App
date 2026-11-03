@@ -2,8 +2,14 @@
    and card, the stall banner, the ask ring and the end buttons (DESIGN §14.6-14.7). body.coop-match is set while a
    Co-op match is on screen. */
 
-/* --- the review link's seat switch in the match: under the top-right buttons, clear of the clock ------------------- */
-body.coop-match .seat-switch { top: calc(var(--safe-top) + 156px); right: calc(var(--safe-right) + 14px); font-size: 16px; min-height: 44px; }
+/* --- the review link's seat switch in the match: under the top-right buttons, clear of the clock and the guest strip -- */
+body.coop-match .seat-switch { top: calc(var(--safe-top) + 176px); right: calc(var(--safe-right) + 14px); font-size: 16px; min-height: 44px; }
+/* While a centred full-screen card is up (the role screen, a meeting, a notice, a question, the discard), the switch
+   waits in the bottom-right corner, clear of the card (at 1024 x 694 it covered the role card's top-right corner). */
+body.coop-match:has(#handoff-overlay:not([hidden]), #encounter-overlay:not([hidden]), #notice-overlay:not([hidden]),
+  #ask-overlay:not([hidden]), #start-overlay:not([hidden]), #discard-overlay:not([hidden])) .seat-switch {
+  top: auto; bottom: calc(var(--safe-bottom) + 14px);
+}
 
 /* --- Away on a guest of the strip: a grey ring and the word ---------------------------------------------------------- */
 .mini-player.away .mini-portrait { filter: grayscale(0.85) brightness(0.8); box-shadow: 0 0 0 2px #8a8f9c; }

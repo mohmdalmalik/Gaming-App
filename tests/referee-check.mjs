@@ -916,6 +916,44 @@ console.log('\ndevice walks (Single player): the page walks the figure, the refe
     'walkFailed (the page could not plan the walk): a refused action, reported to the bot, tried again 150 ms later');
 }
 {
+  // Single player (local mode only): an attack a person is in also tells them, apart from the public event, whether a
+  // Revolver fired its last shot (attackSeen: the page's attack screen marks it "Empty", as it always did). Online: nothing.
+  const personAttacks = mode => {
+    const t = scenarioTable({ seats: 4, people: [0], mode, walkMode: mode === 'local' ? 'device' : 'atomic', limits: mode === 'local' ? LOCAL_LIMITS : TODAY });
+    const Y = plainRoomNextToLobby(t).id;
+    t.state.players[1].currentRoom = Y;
+    const p = t.state.players[0];
+    p.hand = hand(['lantern', 'revolver']);
+    const gun = p.hand.find(c => c.type === 'revolver');
+    gun.shots = 1;
+    t.ref.do(0, { k: 'move', to: Y }, 0);
+    if (mode === 'local') { t.ref.step(Y, 10); t.ref.arrived(20); }
+    const q = t.ref.extras(0, 30).ask;
+    t.ref.drain();
+    const r = t.ref.do(0, { k: 'answer', ask: q?.id, value: { attack: gun.id } }, 40);
+    return { r, out: t.ref.drain(), gone: !p.hand.some(c => c.id === gun.id) };
+  };
+  const loc = personAttacks('local'), onl = personAttacks('online');
+  check(loc.r.ok && loc.gone && same(loc.out, [{ to: 0, ev: { type: 'attackSeen', by: 0, target: 1, weapon: 'revolver', discarded: true } }])
+    && onl.r.ok && onl.gone && onl.out.length === 0,
+  "local: the person's own attack with a Revolver's last shot says so to them (attackSeen, discarded); online it says nothing");
+  const hold = {};
+  const t = scenarioTable({ seats: 4, people: [3], mode: 'local', walkMode: 'device', limits: LOCAL_LIMITS, pace: () => 500,
+    wrap: wrapBots({ nextAction: () => ({ k: 'move', to: hold.room }), attackWith: i => hold.t.state.players[i].hand.find(c => c.type === 'knife')?.id ?? null }) });
+  hold.t = t;
+  hold.room = plainRoomNextToLobby(t).id;
+  t.state.players[3].currentRoom = hold.room;
+  t.state.players[0].hand.push(...hand(['knife']));
+  t.ref.tick(500);
+  t.ref.drain();
+  t.ref.step(hold.room, 600);
+  t.ref.arrived(700);
+  t.ref.tick(1300);
+  const out = t.ref.drain();
+  check(t.state.events.at(-1)?.type === 'attack' && same(out, [{ to: 3, ev: { type: 'attackSeen', by: 0, target: 3, weapon: 'knife', discarded: false } }]),
+    'local: a computer guest attacking the person tells them the same (a Knife: not discarded)');
+}
+{
   // Single player's whole matches: one scripted person in device walks, the page's clock and holds, LOCAL_LIMITS.
   let ended = 0, errors = 0, frames = 0, cuts = 0, firstErr = null, holds = 0;
   for (let k = 0; k < 10; k++) {

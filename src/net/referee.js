@@ -27,7 +27,8 @@
 //   ref.extras(seat, now)    -> { phase, clock, stall, ask, results, end }   what playerView adds for THAT seat
 //   ref.phase                   the public phase { kind, seats }
 //   ref.drain()              -> [{ to: 'all' | seat, ev }]   what happened outside the engine's events since the last
-//                               drain: { type: 'walk', seat, rooms } and { type: 'walkCut', seat, to } (device walks)
+//                               drain: { type: 'walk', seat, rooms } and { type: 'walkCut', seat, to } (device walks);
+//                               local only, to a person in an attack: { type: 'attackSeen', by, target, weapon, discarded }
 //   ref.setPresence(seat, 'here' | 'hidden' | 'gone', now)
 //   ref.toJSON()             -> plain data;  createReferee.restore(json, opts) -> a referee carrying on from it
 //   ref.setBots(bots)           new minds (a restore, or a test's fork)
@@ -421,9 +422,19 @@ function build(R, opts) {
     if (canAttack) { try { weapon = bots.attackWith(W.index, Q.index); } catch { weapon = null; } }
     if (weapon && W.hand.some(c => c.id === weapon)) {
       const r = A.resolveAttack(S, F, W, Q, weapon);
-      if (r.ok) return endMeeting(now);
+      if (r.ok) { attackSeen(W, Q, r); return endMeeting(now); }
     }
     startTrade(W, Q, now, false);
+  }
+
+  // Single player: the one thing the attack's own screen shows a person in it that the public attack event does not say:
+  // whether a Revolver fired its last shot (the card is discarded; the screen marks it "Empty", main.js / ui/meeting.js).
+  // Online leaves it out (a Co-op screen draws the attack from the public event alone).
+  function attackSeen(W, Q, r) {
+    if (!local) return;
+    for (const s of [W.index, Q.index]) {
+      if (person(s)) out(s, { type: 'attackSeen', by: W.index, target: Q.index, weapon: r.weapon, discarded: !!r.discarded });
+    }
   }
 
   // A person walked in and met `q`: Trade or Attack, always asked (Attack greyed when unarmed or out of actions).
@@ -747,6 +758,7 @@ function build(R, opts) {
         const r = A.resolveAttack(S, F, p, P(m.met), w.id);
         if (!r.ok) return no(r.reason);
         delete R.asks[seat];
+        attackSeen(p, P(m.met), r);
         endMeeting(now);
         return ok();
       }

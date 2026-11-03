@@ -30,9 +30,9 @@
 //   table.local.sync()         build the view again from the real game (after anything changed it) and tell `on`;
 //                              the listeners have run when it returns
 //   table.local.debug          { state, floor, bots, chatter, referee }: the real objects, for the page's test hooks
-//                              only (window.__game); TRANSITIONAL until P1C S5: the page still runs part of the match
-//                              on them
-// With `referee: true` (P1C S3: Practice; S4: every table) the match is run by the referee (src/net/referee.js) in
+//                              only (window.__game); TRANSITIONAL until P1C S5: the page's test hooks, its chat and a
+//                              few of its rules checks still read them
+// With `referee: true` (every table the page sets up, from P1C S4) the match is run by the referee (src/net/referee.js) in
 // local mode: LOCAL_LIMITS, device walks, botRules 'page' (DESIGN §4.4), and the page drives it with
 //   table.local.apply(cmd)     the player's command (DESIGN §6.3) -> { ok, reason?, result? }, SYNCHRONOUS: the view is
 //                              built again and the listeners have run when it returns (a refusal too: a jammed door is
@@ -41,7 +41,8 @@
 //   table.local.tick(now, dt)  with dt: the clock counts dt (at most 50 ms a frame); without: a due bot step or beat runs
 //   table.local.step(roomId)   the active guest's figure crossed into roomId; arrived(): its walk ended (the meeting)
 //   table.local.walkFailed()   the page could not plan a computer guest's walk; skipToEnd(): the rest at once
-//   change.local               [{ type: 'walk', seat, rooms } | { type: 'walkCut', seat, to }]: what the figures do
+//   change.local               [{ type: 'walk', seat, rooms } | { type: 'walkCut', seat, to }]: what the figures do;
+//                              { type: 'attackSeen', by, target, weapon, discarded }: an attack the player is in
 import { resetState } from '../game/state.js';
 import { playerView, seatEvents } from './playerView.js';
 import { createHotel } from '../game/hotel.js';

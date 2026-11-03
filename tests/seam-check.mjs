@@ -19,7 +19,9 @@
 //   6. src/net/ is pure (no DOM, THREE, Node API, Math.random, engine generator, clock, timer or storage: the regexes of
 //      tests/bots-check.mjs and tests/view-check.mjs), except the files that drive the page or the network (BUILD-PLAN
 //      rule 7);
-//   7. docs/GAME_RULES.md matches its recorded hash (tests/fixtures/game-rules.sha256).
+//   7. docs/GAME_RULES.md matches its recorded hash (tests/fixtures/game-rules.sha256);
+//   8. no stub is left (multiplayer build plan P6): no file of the game, the server, the tests or the tools still says
+//      "PENDING STUB" (the marker every planned file and suite carried until its phase built it).
 //   node tests/seam-check.mjs
 import fs from 'node:fs';
 import path from 'node:path';
@@ -233,6 +235,26 @@ console.log('\n7. the owner\'s rules');
   const recorded = fs.readFileSync(path.join(root, 'tests/fixtures/game-rules.sha256'), 'utf8').trim().split(/\s+/)[0];
   const now = crypto.createHash('sha256').update(fs.readFileSync(path.join(root, 'docs/GAME_RULES.md'))).digest('hex');
   check(recorded === now, `docs/GAME_RULES.md matches its recorded hash (sha256 ${now.slice(0, 12)}…, tests/fixtures/game-rules.sha256)`);
+}
+
+// --- 8. no stub left -------------------------------------------------------------------------------------------------
+console.log('\n8. no stub is left');
+{
+  const MARK = ['PENDING', 'STUB'].join(' ');          // (spelled in two pieces, so this file does not find itself)
+  const SKIP = new Set(['node_modules', 'shots', '.git', '__pycache__', 'old']);
+  const CODE = /\.(?:js|mjs|cjs|html|py|yml|yaml|json)$/;
+  const files = [];
+  const scan = dir => {
+    for (const e of fs.readdirSync(path.join(root, dir), { withFileTypes: true })) {
+      const rel = dir ? `${dir}/${e.name}` : e.name;
+      if (e.isDirectory()) { if (!SKIP.has(e.name)) scan(rel); }
+      else if (CODE.test(e.name)) files.push(rel);
+    }
+  };
+  for (const dir of ['src', 'server', 'tests', 'tools', '.github']) if (fs.existsSync(path.join(root, dir))) scan(dir);
+  for (const f of ['index.html', 'render.yaml']) if (fs.existsSync(path.join(root, f))) files.push(f);
+  const left = files.filter(f => f !== 'tests/seam-check.mjs' && fs.readFileSync(path.join(root, f), 'utf8').includes(MARK));
+  check(files.length > 200 && !left.length, `${files.length} files of the game, the server, the tests and the tools: none still says "${MARK}"${left.length ? ` — ${left.join(', ')}` : ''}`);
 }
 
 console.log(failures ? `\n${failures} FAILED` : `\nALL SEAM CHECKS PASSED (${((Date.now() - t0) / 1000).toFixed(1)} s)`);

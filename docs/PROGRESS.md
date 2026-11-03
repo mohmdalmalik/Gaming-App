@@ -1,5 +1,39 @@
 # PROGRESS
 
+## v0.12 (2026-11-03): Co-op built and tested, not open yet; Single player through the table
+
+The owner asked for multiplayer: the main menu split into Single player and Co-op, friends each on their own device.
+Built from a judged design (`docs/ONLINE_DESIGN.md`) in phases, each merged only with every existing suite green, then
+reviewed (security, fairness, the table's life, the screens) and fixed.
+- **The main menu** now shows **Single player** ("Play with bots, or practice alone.") and **Co-op** ("A private table
+  with friends, each on their own device."). Single player holds Play with bots and Practice alone, unchanged. On the
+  live site Co-op says **Coming soon**.
+- **Single player plays exactly as before**, but underneath it now runs through the same pieces as Co-op: a table deals
+  and runs the match, and the screens show only the player's own view. Checked: every existing suite passes; 600
+  all-bot matches identical to v0.11; seeded matches in the real page identical in events, hands, the end screen and
+  Your record. The one measurable difference is that a bot's step can land one frame later (about 17 ms on an iPad).
+- **Co-op is built**: the server (`server/`, one small Node program), private tables with a 5-letter code and a link,
+  the waiting room (lock, remove, Start with a countdown), the match with Away, reconnecting and the server's own
+  clock, saving every table after every step so a server restart doesn't end a match, Play again. Each device receives
+  only what its own guest may know. Tested end to end against the real server: six devices at one table, a whole
+  three-person match with the server killed mid-trade and restarted, a 40-second drop, a polite restart, Play again.
+- **The review link** for the owner: `https://mohmdalmalik.github.io/Gaming-App/?friends=demo` plays a whole Co-op
+  match on one iPad with two seats (yours and sam's), through the real Co-op screens.
+- **Waiting for the owner** (the decisions list handed over with this build; nothing blocks Single player): the
+  button's name (D1, recommended "Play with friends"), the online rule list R1-R12 (D2), bot labels (D3), whether
+  Co-op counts in Your record and achievements (D4, D5), chat for guests who are out (D6), hosting money and region
+  (D7: Render, Singapore), minimum age (D8), the web address (D9), and when Co-op opens (D10). Co-op opens to players
+  only after D2 and D7. Until the rule list is approved, a Co-op table plays today's rules plus marked technical
+  stand-ins (TP1-TP9); `docs/GAME_RULES.md` is untouched.
+- **What to test on the iPad:** (1) Single player as before: Play with bots at 4 and 6 guests, Practice, a meeting you
+  walk into and one a bot walks into, a Fire Exit trade, the clock running out while walking, too many cards at the end
+  of a turn, Hand Mirror, searching, dying and "Skip to the result", the end screen and Your record. (2) The main menu:
+  Single player and Co-op; Co-op says Coming soon. (3) The review link in landscape: Start a table, read the code,
+  Show sam's screen, type the code as sam and join, switch back, Start the match, and play on, switching to check that
+  each player sees only their own cards.
+- No rule or rule number changed. Details: docs/DECISIONS.md 'Co-op (v0.12)' (five sections); how to run the server
+  and the page locally, and every new suite: README "Co-op", "Run locally" and "Tests".
+
 ## v0.11 (2026-10-23): the owner's iPad check of v0.10
 
 Two notes from the owner: the version number could not be found in Settings, and the floors over the lift were "not

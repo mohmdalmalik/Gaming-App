@@ -8,6 +8,15 @@ research reports (`scratchpad/mp/research/code.md`, `ux.md`, `tech.md`, `rules.m
 *Companion files: `BUILD-PLAN.md` (what builders do tonight, in order) and `OWNER-DECISIONS.md` (what waits for the
 owner, with the rule BEFORE/AFTER list).*
 
+*__As built (v0.12, 3 Nov 2026).__ This design was built as written, except for the points listed in
+`docs/DECISIONS.md`, section "Co-op (v0.12): what was built differently from the design, and what is not built yet".
+The largest: `render.yaml` starts the server with a 256 MB heap cap (§17); the build filter also lists
+`src/config.js` (§10.6); a page on another protocol or with other data gets `bye update` / `serverOld` and close
+4004 / 4005 rather than `err` (§7.4); IPv6 limits count a /56 with a /48 share and a server-wide brake (§7.5). Not
+built: the stand-ins of §5.7 (R6/R7), the Relaxed clock, "a friend who arrives mid-match" (§8.10), quick chat in the
+waiting room and `table.clockLeft()` (§4.1). The file references (file:line) below are to `dacfcde` (v0.11), before
+the build.*
+
 *__Amended 2 Nov after critique.__ `CRITIQUE.md` (44 findings, checked against `dacfcde`) led to changes marked
 **[Amended 2 Nov after critique, #n]**, where n is the critique's finding number. The largest are:*
 - *the screens keep **one long-lived presenter state** (`applyView`), not a fresh object per view (§4.1, §6.6);*

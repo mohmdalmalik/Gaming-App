@@ -9,16 +9,19 @@ The authoritative rules are **[docs/GAME_RULES.md](docs/GAME_RULES.md)**. Workin
 coding agents are in **[CLAUDE.md](CLAUDE.md)** (see also [AGENTS.md](AGENTS.md)); key
 technical choices are in **[docs/DECISIONS.md](docs/DECISIONS.md)**; status and next steps in
 **[docs/PROGRESS.md](docs/PROGRESS.md)**; the plan for going online and onto the app stores (accounts, a
-server, cosmetics, packaging) in **[docs/ONLINE_PLAN.md](docs/ONLINE_PLAN.md)**.
+server, cosmetics, packaging) in **[docs/ONLINE_PLAN.md](docs/ONLINE_PLAN.md)**; the design of Co-op (playing with
+friends online), as built, in **[docs/ONLINE_DESIGN.md](docs/ONLINE_DESIGN.md)**.
 
 ## Status
 
 **The owner's restored ruleset is implemented and playable** (see `docs/GAME_RULES.md`, the product
 design; `CLAUDE.md` says no rule or number changes without the owner's approval of a before/after
 list). The page opens on a **main menu** over an animated, blurred hotel lobby (reception and concierge,
-guests seated and strolling, the manager walking by): **Play with bots**, **Practice alone** (with a hint
-under it, "New to Hotel Escape? Practice alone is the best place to start.", until you have played a match or
-finished a practice), **How to play** and **Cards** side by side, then **Settings** and **Your record**.
+guests seated and strolling, the manager walking by): **Single player** ("Play with bots, or practice alone."),
+**Co-op** ("A private table with friends, each on their own device."; on the live site it says **Coming soon**,
+see "Co-op" below), **How to play** and **Cards** side by side, then **Settings** and **Your record**. Single
+player opens a screen with **Play with bots** and **Practice alone** (with a hint under it, "New to Hotel Escape?
+Practice alone is the best place to start.", until you have played a match or finished a practice) and ‹ Back.
 
 - **How to play** (`src/ui/howToPlay.js`; every word in `src/data/howToPlay.js`, with the numbers read from
   `src/data/rules.js` so it follows the rules): five short pages (the goal, your turn, meetings and trades,
@@ -107,8 +110,12 @@ finished a practice), **How to play** and **Cards** side by side, then **Setting
 Hot-seat (several people passing one iPad) was removed at the owner's request; old `?mode=hotseat`
 links open a match against bots instead.
 
-**Online multiplayer is not implemented.** There is no server, no networking, no online accounts and no
-database in this project: your username and avatar are kept on this device only.
+**Co-op (playing with friends online) is built and tested, but not open to players yet** (v0.12). Co-op on the
+live site shows **Coming soon** until the owner has approved the online rule list and opened a hosting account
+(see "Co-op" below). Underneath, Single player now runs through the same pieces as Co-op: a table
+(`src/net/localTable.js`) deals and runs the match, and the screens show only the player's own view of it; nothing
+you see or feel in Single player changed. There are still no online accounts and no database: your username, avatar,
+settings and record are kept on this device only.
 
 ## Open the preview
 
@@ -128,7 +135,8 @@ something iOS is known to honour, so `standalone` is the value that behaves the 
 
 ## Play with bots
 
-1. Open the preview: the main menu appears over the lobby. Tap **Play with bots**.
+1. Open the preview: the main menu appears over the lobby. Tap **Single player**, then **Play with bots** (its
+   ‹ Back returns to the Single player screen).
 2. Choose how many **other guests** (3, 4 or 5) and **your role** (Random, Clean guest, Possessed), then
    **Find a table**. The guests join one by one, each by username (yours marked "You"); seat colours go
    by seat, so yours can change from table to table. When the table is full the lift sequence plays
@@ -164,6 +172,62 @@ active guest (a wardrobe, a side wall at a doorway) faded out around them. Viewi
 any mode: `?camera=square` shows the previous square-on view, `?camera=classic` the older, higher one
 (both for comparison), and `?stats=1` shows a small frame-rate / draw-call
 readout at the top left (below the room name), for measuring speed on the iPad.
+
+## Co-op (playing with friends online)
+
+**What it is.** A private table for friends, each on their own iPad, phone or computer. The host taps **Co-op** →
+**Start a table** and gets a 5-letter code and a link (**Invite friends** opens the iPad share sheet, **Copy link** sits
+beside it). Friends open the link, or type the code under "Have a code?", and sit down in **Your private table** (the
+waiting room). A friend's device with no profile signs the register first ("You're invited to nora's table."), so
+nobody sits down as "Guest". The host chooses 4, 5 or 6 guests and taps **Start the match**; a 5-second countdown
+follows (the host can stop it with **Wait**), then computer guests fill the empty seats and the match plays with every
+rule of Play with bots. There is no password: the code works only while the table waits, and the host can **lock** the table and
+**remove** someone before the match. After the match everyone goes back to the same table, and **Play again** starts
+the countdown again.
+
+**What each device receives.** Only what its own guest may know. The server runs the rules and the bots with the same
+code as Single player (`src/game/`, `src/bots/`, `src/net/referee.js`) and sends each device its own view
+(`src/net/playerView.js`). Card names are disguised differently for each player, so nobody can follow a card or read
+another hand, even by taking the page apart. From outside, a meeting looks the same whether or not the walker is
+armed, and a turn that ends with a discard looks like any other turn. iPads that sleep or lose Wi-Fi reconnect by
+themselves to the same seat ("Reconnecting…" after 1 second, "You're back at the table." on return); the others see
+that friend as **Away**.
+
+**Where it stands (v0.12).**
+- On the live site Co-op shows **Coming soon** (`src/data/online.js`: `ONLINE.server.live` is null and
+  `ONLINE.server.open` is false). A `?join=` link says "Co-op isn't open yet". Nothing opens a connection.
+- It waits for two owner decisions: the online rule list (D2: what happens when a friend's iPad falls asleep, when
+  someone never picks a card, who may start) and a hosting account (D7: Render; the steps are in `server/README.md`).
+- Until the rule list is approved, a Co-op table plays **today's rules unchanged plus marked technical stand-ins**
+  (TP1-TP9 in `src/data/online.js`; none of them is a rule, and `docs/GAME_RULES.md` is untouched):
+  - every role is dealt at random (no role picker);
+  - no time limit on meeting choices, but a single wait over 5 minutes stops the match without a result ("This match
+    was stopped");
+  - an away friend keeps their seat, and their guest's turns run out on the 45-second clock;
+  - a guest who is out can watch or leave (no "Skip to the result");
+  - the table's clock is the server's: no device can pause it, and `?timer=off` does nothing there;
+  - Co-op matches don't count in Your record or achievements yet;
+  - bots look like players in the match.
+- Waiting for the rule list: the proposed time limits on meeting choices, cards, Fire Exit answers and private screens
+  are built into the referee but switched off (`ONLINE_RULES.approved` is false). Not built yet: a bot that plays for
+  an away friend, the Relaxed clock, and waiting at a running table for the next match.
+
+**The review link: two seats on one iPad, no account needed.** Open
+`https://mohmdalmalik.github.io/Gaming-App/?friends=demo` in landscape. The page runs the server inside itself
+(`src/net/loopback.js`). You hold two seats, yours and **sam**'s, and bots hold the rest.
+1. Tap **Start a table** and read the code.
+2. Tap **Show sam's screen**, type the code as sam and join.
+3. Switch back and tap **Start the match**.
+
+The match then plays to the end screen. **Show sam's screen** switches players, and each screen shows only its own
+cards. When a question waits on the other seat, the button turns gold ("sam must choose a card", "It's sam's turn").
+A quiet line says "Test table: the online rules are not decided yet."
+
+**Links for development and the tests** (honoured only when the page is on `localhost` or `127.0.0.1`):
+`?server=ws://127.0.0.1:PORT` (that server; without it, `ws://localhost:8787`), `?coop=soon` (the Coming soon card),
+`?coop=fake` (a pretend server for the screens, `src/net/fakeLobby.js`, with `fake=quiet|friends`, `fakeErr=<code>`,
+`fakeDelay=<ms>`) and `?friends=demo&pace=fast` (the review link 20 times faster). On the live site, `?coop=preview`
+will reach the real server once it has an address, for the owner's own two-device test before Co-op opens.
 
 ## How to play (each turn, 4 action points)
 
@@ -217,8 +281,8 @@ readout at the top left (below the room name), for measuring speed on the iPad.
   needed, never a Possession card) and the turn ends; you are told which ones, privately, in a short notice ("Time ran
   out. The game discarded your Knife and your Lantern."), and the table sees nothing. The same happens at once if the
   45 s clock runs out in your action phase while you hold more than 6 (the discard screen then never opens).
-  Practice (and `?timer=off`) has no clock, so no limit. (`src/main.js` `endTurnNow` / `onTimeUp` / `endTurnByClock`,
-  `src/ui/discardClock.js`.)
+  Practice (and `?timer=off`) has no clock, so no limit. (`src/main.js` `endTurnNow` / `onTimeUp` / `endTurnByClock` on
+  the screen, `src/net/referee.js` `timeUp` for the random discard itself, `src/ui/discardClock.js`.)
 - **Rooms with jobs** — an Infirmary or the Switchboard has no Search: its action is the icon on its furniture
   (`src/ui/searchSpot.js`, kinds `heal` and `switchboard`, same button as the search icon; no button in the bottom bar).
   Infirmary (1 AP, heal 2, **once per match** for the whole table: the first guest to use it spends it for everyone; grey at
@@ -256,7 +320,7 @@ readout at the top left (below the room name), for measuring speed on the iPad.
 - **End turn** — refills action points to 4; if you hold more than 6 ordinary cards you discard
   first (Lanterns count; Possession cards never do): tap a card to pick it, then confirm with the
   button. The rules engine itself refuses to end a turn over the limit (`canEndTurn` in
-  `src/game/state.js`), so a future server enforces it too. With actions left, End turn asks first ("You still
+  `src/game/state.js`), so the Co-op server enforces it too. With actions left, End turn asks first ("You still
   have 3 actions. End turn?", with End turn and Keep playing in the same bar as Move); no question with none
   left, when the clock runs out, or for a computer guest. A double tap on End turn only asks, never ends two
   turns. **The turn also passes by itself** a short quiet beat (900 ms) after your last action, the same way End turn
@@ -295,13 +359,33 @@ hidden `.git` history included) is served to everyone on the same Wi-Fi.
 
 Three.js loads from a CDN, so the first load needs an internet connection.
 
+**Co-op against a server on this computer** (no account needed; Node 22 to 24, as `server/package.json` asks). In one
+terminal, the server:
+
+```
+cd server && npm ci && node index.js
+```
+
+It listens on `127.0.0.1:8787` (`curl 127.0.0.1:8787/health` answers) and, outside production, admits pages on
+`http://localhost:*` and `http://127.0.0.1:*`. `npm ci` installs its one package, `ws`, into `server/node_modules`
+(git-ignored); it is needed once. In a second terminal, the page:
+
+```
+python3 -m http.server 8080 --bind 127.0.0.1
+```
+
+then open `http://127.0.0.1:8080/?server=ws://127.0.0.1:8787` in two browser windows (a second browser profile or a
+private window, so each has its own device key), sign the register in each, and use **Co-op** → **Start a table** in
+one and the code in the other. Tables live in memory and end when the server stops; `DATA_DIR=<folder> node index.js`
+saves them as files and brings them back after a restart. Every setting is in `server/README.md`.
+
 ## Running the tests
 
 You need Node 20.19 or newer (the GitHub Action uses 22) and Python 3; nothing else for the fast suites.
 
-1. **Fast suites** (the rules, the computer guests, the words, the documents; no browser, a few minutes in all): `node tests/run-fast.mjs`. It runs exactly what the GitHub Action runs (the list is in `.github/workflows/tests.yml`); one alone: `node tests/rules-check.mjs`. If `server/package-lock.json` exists, run `npm ci --prefix server` once before `node tests/run-fast.mjs`: the server suites need `ws`.
-2. **Browser suites** (each plays the real game in headless Chromium with software WebGL, 1 to 3 frames a second, so each takes 5 to 15 minutes: run only the ones your change touches, one at a time). Once: `npm --prefix tests ci` (Playwright and the three.js files the tests serve in place of the CDN: `tests/package.json`), then `node tests/node_modules/playwright-core/cli.js install chromium` (or set `CHROME_PATH` to a Chromium you already have).
-3. Serve the folder **bound to this machine only**: `python3 -m http.server 8123 --bind 127.0.0.1 &`, then run a suite: `node tests/browser-lobby.mjs` (they use port 8123; `--url http://127.0.0.1:PORT/` says another). Stop the server when you are done.
+1. **Fast suites** (the rules, the computer guests, the words, the documents; no browser, a few minutes in all): `node tests/run-fast.mjs`. It runs exactly what the GitHub Action runs (the list is in `.github/workflows/tests.yml`); one alone: `node tests/rules-check.mjs`. Run `npm ci --prefix server` once before `node tests/run-fast.mjs`: the Co-op server suites (`tests/protocol-check.mjs`, `tests/restore-check.mjs`, and the real-server part of `tests/connection-check.mjs`) start the real server and need its one package, `ws` (the GitHub Action does the same). The whole run takes 3 to 6 minutes.
+2. **Browser suites** (each plays the real game in headless Chromium with software WebGL, 1 to 3 frames a second, so each takes 5 to 15 minutes, and the two Co-op ones about 20 minutes each: run only the ones your change touches). **One browser suite at a time on the machine**: they measure timing, and two side by side make each other fail. When several agents share one machine, take a lock: `flock <lockfile> node tests/<suite>.mjs`. A suite that fails is run again alone once before looking for a cause; a failure that repeats is real. Once: `npm --prefix tests ci` (Playwright and the three.js files the tests serve in place of the CDN: `tests/package.json`), then `node tests/node_modules/playwright-core/cli.js install chromium` (or set `CHROME_PATH` to a Chromium you already have).
+3. Serve the folder **bound to this machine only**: `python3 -m http.server 8123 --bind 127.0.0.1 &`, then run a suite: `node tests/browser-lobby.mjs` (they use port 8123; `--url http://127.0.0.1:PORT/` says another). Stop the server when you are done. `tests/coop-menu-check.mjs` and `tests/browser-coop.mjs` serve the folder themselves on a free port when given no `--url`, and start the Co-op server they need (`npm ci --prefix server` first).
 4. A suite prints one line per check and exits 0 only if all passed. Screenshots go to `tests/shots/` (not in git). `tests/old/` holds historical QA scripts that nothing runs.
 5. **Direct links** skip the menu and are what the suites use (more under "Play with bots"): `?mode=practice`, `?mode=bots&bots=3&role=clean&seed=7&intro=off&botpace=0.1&timer=off`; `window.__game` (end of `src/main.js`) is how a test looks inside the game.
 
@@ -312,7 +396,7 @@ The list of every suite, and the maintenance tools, is under "Changing the rules
 **How the live game is made.** GitHub Pages serves the `main` branch as it is: no build, no staging copy. A
 change is live for everyone about a minute after it reaches `main`, and a browser may keep the old files for up
 to about ten minutes (reload twice to be sure). Nothing waits for the tests: a GitHub Action
-(`.github/workflows/tests.yml`) runs the fast suites (the list is in the workflow, and `node tests/run-fast.mjs` runs the same; no install needed) on every
+(`.github/workflows/tests.yml`) runs the fast suites (the list is in the workflow, and `node tests/run-fast.mjs` runs the same; its one install is the Co-op server's `ws`) on every
 push and shows a red cross on the commit if one fails. That is a warning only; it never blocks or removes a publish. Look at the Actions tab or the
 commit's mark after a publish.
 
@@ -359,6 +443,16 @@ outsiders, and CLAUDE.md fixes "no build step for now". This is the cheapest net
 screen way back, a warning when a fast suite fails. If outside players ever arrive, the next step is to let
 Pages publish from a workflow, so a red run blocks the publish (Settings → Pages → Source: GitHub Actions).
 
+**Publishing and the Co-op server.** Until the owner opens a hosting account there is no server online, and nothing
+here applies: the live site's Co-op says Coming soon. Once there is one, the page and the server must agree on the
+protocol version (`ONLINE.protocol` in `src/data/online.js`) and the shared data: `dataHash()` (`src/net/dataHash.js`),
+an 8-character fingerprint of the hotel, the rule numbers, the quick-chat ids and the name rules. Render deploys the
+server again by itself when a file it imports reaches `main` (`buildFilter` in `render.yaml`;
+`tests/protocol-check.mjs` checks that list against the server's real imports), so nobody presses "deploy". A page
+and a server that still disagree for a moment never mix: the device gets "Update needed" or "One moment" instead. A
+publish that changes the shared data ends the Co-op matches running then without a result, so publish those while
+`/health` shows no match where possible. Rolling back works as above; the server follows the same commit.
+
 **If the game will not load** (right after a publish Safari can mix old and new files): the page reloads once by
 itself (not while the device is offline: a reload cannot help), then says "The game could not load. Try again."
 with a **Reload** button (technical text in small print under it). A load that never finishes (a stalled
@@ -374,11 +468,21 @@ index.html            page shell: import map, HUD, panels, overlays, the start-u
                       old-browser message, one automatic reload, the problem card)
 styles.css            interface styling (touch-safe, safe-area aware)
 wardrobe.css          the Wardrobe's and the Hotel Honours page's styling (its three iPad sizes, Reduce Motion)
+coop.css              the Co-op screens' styling: the Co-op screen, Your private table (the waiting room), the can't-join cards, the seat switch
+coop-match.css        Co-op's additions in a match: Away on the strip, the Reconnecting… pill and card, the stall banner, the ask ring, the end buttons
 manifest.webmanifest  the web-app manifest for Add to Home Screen: name, standalone, landscape, navy colours, the icons (relative paths, so it works at the sub-path)
 .github/workflows/tests.yml   the fast node suites on every push and pull request (a warning only, see above)
+render.yaml           the Co-op server's Render Blueprint (owner decision D7; no secrets): region, start command, health check, and
+                      buildFilter, the files whose change redeploys the server (tests/protocol-check.mjs checks it against the real imports)
+server/               the Co-op server (Node 22, one package: ws 8.22.0, pinned with its lockfile; README.md there has every setting and
+                      the Render steps): index.js (http GET /health, the WebSocket, allowed pages, per-socket limits, the heartbeat, the
+                      250 ms tick, a polite drain on SIGTERM), fileStore.js (tables saved as files when DATA_DIR is set), clientIp.js
+                      (the address the limits count by: behind Render the right-most X-Forwarded-For entry; IPv6 by its /64),
+                      package.json, package-lock.json. Its brain, the referee and the rules are the same src/ files the page runs
 src/
-  main.js             starts everything; the menu → lift → game flow; the turn flow (the player's turns
-                      and the bots' turns, meetings both ways); window.__game debug hooks
+  main.js             starts everything; the menu → lift → game flow; PRESENTS the table's view (it holds no game of its own:
+                      the screens, walks, meetings and trades both ways, the end screen) and hands the player's taps to the
+                      table (src/net/localTable.js in Single player, src/net/onlineTable.js in Co-op); window.__game test hooks
   version.js          the version label and date shown in Settings and in the in-match Menu (set at each publish)
   config.js           display / camera / feel tuning
   settings.js         the player's own settings (bot speed, view, graphics, menu background, music, sound, quick chat, tips, clearer possessed eyes), kept on the device
@@ -461,30 +565,40 @@ src/
                         (accusations after their own Lantern block or Hand Mirror, denials, trust, a
                         possessed bot's lies) — from each bot's own view and mind only; its own random numbers
                         (listening is in brain.js: onChat / hearsay, weights in data/chat.js BOT_HEAR)
-  net/                CO-OP (playing with friends online; being built, and nothing in the live game uses it yet). Pure (the page, a
-                      server and Node alike) unless it says "page":
+  net/                THE TABLE: the match run from outside the screens, the same for Single player (localTable.js) and
+                      Co-op (onlineTable.js to the server, or loopback.js on the review link); each seat's own view.
+                      Pure (the page, the server and Node alike) unless it says "page" (tests/seam-check.mjs checks it):
     protocol.js         the message types, the error and close codes, and validate(): every message a device sends is checked before the server reads it
     dataHash.js         the 8-hex fingerprint of the data page and server must share (hotel, rule numbers, chat ids, name rules), fixed when it loads
     serverUrl.js        which server the page talks to, or "coming soon" (?server= and ?coop=soon only on localhost); page
     codes.js            the 5-letter table codes: drawn evenly from 18 consonants, a blocklist, a typed or pasted code cleaned up
     rng.js              cryptoRng(): a [0, 1) source from injected crypto bytes, for everything secret at a Co-op table
-    playerView.js       what one seat may know: the view each device receives (being built)
-    viewAsState.js      a view written into the screens' one long-lived state (being built)
-    floorCopy.js        the device's own copy of the hotel, grown from what has been placed (being built)
-    aliases.js          per-seat card aliases, so no card can be followed from hand to hand (being built)
-    referee.js          the match's turn flow, questions, clocks and bot steps, the same for the page and the server (being built)
-    snapshot.js         a table's state and hotel to plain JSON and back, for saving (being built)
-    outcomes.js         tradeOutcome(): the trade reveal's outcome names, pure (being built)
-    localTable.js       Single player through the referee, in the page (being built)
-    rooms.js            the server's brain: tables by code, the waiting room, presence, each seat's view, saving (being built)
-    store.js            where tables are saved after every step: memory (being built)
-    connection.js       page: the WebSocket, hello, reconnecting, Safari's wake-ups (being built)
-    onlineTable.js      page: openCoop(), the waiting room and the match over the connection; until built it only answers "coming soon" (being built)
-    loopback.js         page: the server running inside the page, for the review link with two seats on one iPad (being built)
-    guestKey.js         page: this device's key, kept in storage (being built)
-    fakeLobby.js        page, development only (?coop=fake on localhost): scripted waiting-room states and errors (being built)
-    presentQueue.js     page: plays updates in order, skipping ahead past 3 s of backlog (being built)
-    wakeLock.js         page: keeps the screen awake in the waiting room and the match (being built)
+    playerView.js       what one seat may know: the view each device receives (the public board, its own hand, role, questions
+                        and private results; never another hand, card count or role), built from botView
+    viewAsState.js      applyView: a view written into the screens' one long-lived presenter state (the only writer of it)
+    floorCopy.js        the device's own copy of the hotel, grown only from what has been placed (the room deck never leaves the table)
+    aliases.js          per-seat card aliases (8 random characters, never reissued), so no card can be followed from hand to hand
+    referee.js          the match's turn flow, questions, clocks, time-outs and bot steps, the same in the page, on the server and in
+                        Node; meeting and discard privacy; toJSON / restore for saving
+    snapshot.js         a table's engine state and hotel to plain JSON and back, for saving after every step
+    outcomes.js         tradeOutcome(): the trade reveal's outcome names, pure (src/ui/tradeReveal.js re-exports it)
+    localTable.js       page: Single player's table: deals the game, owns the bots' minds and chatter, runs the referee with the
+                        page's own pacing (walks, holds, the clock), quick chat; the real game reaches the page only for window.__game
+    rooms.js            the server's brain: tables by code, the waiting room, host, lock and remove, presence, the deal, each seat's
+                        view, the limits, saving before anyone is told, faults, restore after a restart
+    store.js            where tables are saved: in memory (the tests, the review link, a server without a disk); server/fileStore.js
+                        is the same shape on files
+    connection.js       page: the WebSocket, hello, reconnecting for as long as it takes (backoff up to 10 s), iPad Safari's
+                        wake-ups and silent sockets, "lost" after 20 s
+    onlineTable.js      page: openCoop(): one seat's connection, the waiting room's calls, and the match as the same Table interface
+                        LocalTable gives; the remembered table (6 hours), a Leave made offline sent next time
+    loopback.js         page: the server's own brain running inside the page behind a pretend WebSocket, for the review link
+                        (?friends=demo: two seats on one iPad); every message still goes through JSON and the protocol's checks
+    guestKey.js         page: this device's key from the server (24 random bytes), kept in localStorage (never in a link), sent only in hello
+    fakeLobby.js        page, development only (?coop=fake on localhost; never fetched on the live site): a pretend server with
+                        scripted waiting-room states and errors, for the Co-op screens
+    presentQueue.js     page: plays a Co-op table's updates in order, skipping to the latest past 3 s of backlog
+    wakeLock.js         page: keeps the screen awake at a Co-op table (the waiting room and the match)
   render/             Three.js visuals (placeholder boxes where a model is missing, baked glTF rooms and guests otherwise):
                       scene.js the renderer, scene, camera and global light, sized to its container;
                       materials.js the shared greybox geometry and materials (the one place a material swap happens);
@@ -560,23 +674,27 @@ src/
     souls.js                          the possessed player's own "Souls to trade: N" count
     meeting.js                        the PUBLIC side of a meeting: who, Trade or Attack, weapon, outcome
     discard.js                        the end-of-turn discard down to the hand limit (the only hand-limit screen), with its countdown (where the turn clock is on) and the private "the game discarded..." notice
-    coopMenu.js                       the Co-op screen, the waiting room ("Your private table"), joining, the can't-join cards, Coming soon (being built)
-    seatSwitch.js                     the review link's "Show sam's screen" switch (being built)
-    coopMatch.js                      Co-op's additions in a match: Away, the reconnect pill and card, the stall banner, the ask ring, the end buttons (being built)
+    coopMenu.js                       the Co-op screen, the waiting room ("Your private table": the code, Invite friends, size, lock, remove, Start and its countdown), joining, the can't-join cards, Coming soon (words: src/data/onlineText.js)
+    seatSwitch.js                     the review link's "Show sam's screen" switch (gold when a question waits on the other seat)
+    coopMatch.js                      Co-op's additions in a match: Away, the reconnect pill and card, the restart notices, the stall banner, the ask ring, the end buttons
     discardClock.js                   the discard clock's seconds maths and words, as pure functions: how long the screen runs (what is left of the turn clock, never under rules.discardMinSeconds; none where the clock is off), what zero does, the "10 / 5 seconds left" announcements, the notice's sentence (tests/discard-clock-check.mjs)
 assets/audio/         the music and effects (MP3), generated by tools/audio/ (see tools/audio/README.md)
 assets/icons/         the app icon: a brass lantern on navy in an Art Deco ring. icon.svg is the master (1024), favicon.svg the simpler tab icon, icon-maskable.svg the same at 80 % for round masks;
                       the PNGs (icon-180 = apple-touch-icon, icon-192, icon-512, icon-maskable-512, favicon-32, favicon-16) are rasterised from them with headless Chromium (README in the folder)
 assets/cards/         the card pictures: face/<type>.jpg (the owner's finished card faces, 512 x 768) and back.jpg (the card back)
 assets/characters/ assets/portraits/ assets/models/   the guests' glTF models, their stock portraits, and the baked rooms (models/lobby, models/rooms)
-tools/                not part of the game (the whole repo is published, tools included); each folder has a README:
+tools/                not part of the game (the whole repo is published, tools included); the pipelines have a README each:
   audio/              the Python that makes every sound from code: dsp.py, instruments.py, music.py (the scores),
                       sfx.py (the effects), build.py (mix, master, encode, measure -> report.json, library.js)
   balance/            the bot simulators: who wins, trust-building, tells (can a player tell the possessed bots apart?)
   card-pipeline/ char-pipeline/ lobby-pipeline/ room-pipeline/   Blender and Python that make the cards, guests, lobby and rooms (below)
-docs/                 GAME_RULES (spec), GAME_CONCEPT, DECISIONS (start with "Read this first"), PROGRESS (newest first), VERSIONS (each publish), ONLINE_PLAN (going online, step by step), ONLINE_DESIGN (the Co-op design being built)
+  load/               tools/load/coop-load.mjs: many Co-op tables against the real server at once (--tables 300); every match must
+                      finish and the server stay under 400 MB. Run it alone: it measures timing
+  coop-record/        tools/coop-record/make-sheet.mjs: the contact sheet of tests/browser-coop.mjs's screenshots (--shots DIR --out DIR, --inline)
+docs/                 GAME_RULES (spec), GAME_CONCEPT, DECISIONS (start with "Read this first"), PROGRESS (newest first), VERSIONS (each publish), ONLINE_PLAN (going online, step by step), ONLINE_DESIGN (the Co-op design, with a note on what was built differently)
 tests/                the suites ("Running the tests" above; the list is under "Tests" below), run-fast.mjs (the fast ones in one command), smoke-lib.mjs (the browser launcher), old/ (historical QA scripts: nothing runs them),
-                      tests/lib/matches.mjs (seeded all-bot matches shared by the Node suites), tests/fixtures/ (engine-baseline.json: 150 matches
+                      tests/lib/matches.mjs (seeded all-bot matches shared by the Node suites), tests/lib/coop.mjs (the Co-op browser
+                      suite's helpers: pages, a local server, a player who taps through the screens, the secrets scan), tests/fixtures/ (engine-baseline.json: 150 matches
                       recorded before the engine's Co-op options were added; game-rules.sha256: the hash of docs/GAME_RULES.md)
 ```
 
@@ -685,21 +803,21 @@ node tests/record-check.mjs       # Your record (src/record.js, an injected stor
 node tests/strip-check.mjs        # the top guest strip (no browser, ~2 s): the "Possessed" marker is exactly what the viewer's own knowledge says (either side, never a guess, never the viewer, nothing while a trade scene holds it back), and "3 turns left in Round 2" follows the engine's own turn order (the dead skipped, the final round says dawn)
 node tests/discard-clock-check.mjs # the discard clock (no browser, ~1 s): 30 s left -> 30 s, 2 s left -> 10 s, clock off -> no limit; 6 cards no screen, 7 or 9 ask for exactly the number over; zero (or the 45 s clock out in the action phase) -> the engine's random discard of ordinary cards only, nothing public, then the turn passes; the countdown's words and the notice
 node tests/engine-options-check.mjs # the engine's optional parameters for Co-op (no browser, ~10 s): without them, 150 seeded matches play exactly as recorded before they were added (tests/fixtures/engine-baseline.json; docs/GAME_RULES.md's hash too); fed today's sources they reproduce today; crypto sources and per-table card ids deal valid hands and finish 200 matches; two tables in one process never mix their card ids; the hotel rebuilt from its placements; planWalk; and the small Co-op modules (online.js, onlineText.js, codes, rng, dataHash, serverUrl, protocol) [--write-baseline: only after an APPROVED rules change]
-node tests/view-check.mjs         # Co-op, being built (until then it prints PENDING STUB and passes): the per-player view: nothing a seat may not know, no engine card id, the floor copy, the button checks
-node tests/referee-check.mjs      # Co-op, being built (PENDING STUB until then): the referee replays the bots' seeded matches event for event, questions, time-outs, walk modes, saving a table
-node tests/seam-check.mjs         # Co-op, being built (PENDING STUB until then): no screen file changes the game or reads a hidden field; src/net/ purity; docs/GAME_RULES.md's hash
-node tests/fairness-check.mjs     # Co-op, being built (PENDING STUB until then): meeting and discard privacy, equal traffic for every kind of trade, card aliases, interleaved tables
-node tests/protocol-check.mjs     # Co-op, being built (PENDING STUB until then): an in-process server: origins, codes, limits, refusals, reconnects, a fuzz, no secret on the wire (needs ws: npm ci --prefix server)
-node tests/restore-check.mjs      # Co-op, being built (PENDING STUB until then): the real server killed and restarted mid-match, every match finishing (needs ws)
-node tests/connection-check.mjs   # Co-op, being built (PENDING STUB until then): the page's connection with a fake WebSocket: Safari's wake-ups, zombie sockets, restarts, backoff
-node tests/browser-honesty.mjs    # Co-op, being built (PENDING STUB until then): Single player in a real browser: the screens hold nothing secret
-node tests/coop-menu-check.mjs    # Co-op, being built (PENDING STUB until then): the menu split and every Co-op screen at the four iPad sizes, in a real browser
-node tests/browser-coop.mjs       # Co-op, being built (PENDING STUB until then): a local server and several browsers playing a whole Co-op match
+node tests/view-check.mjs         # Co-op and Single player, the per-player view (no browser, ~20 s): 24 seeded matches, every seat checked at random moments: scrambling all it can't know changes nothing it receives; no engine card id, card aliases, the floor copy, the button checks on the presenter state
+node tests/referee-check.mjs      # the referee (no browser, ~30 s): replays the engine baseline and bots-check's seeded matches event for event; the page's four bot rules; 200 matches of scripted people (questions, results, time-outs, the 5-minute stall); a sealed trade; device walks; saving and restoring a table mid-turn
+node tests/seam-check.mjs         # the seam between the screens and the game (no browser, ~1 s): no screen file changes the game or reads a hidden field; the real game only behind window.__game; src/net/ purity; docs/GAME_RULES.md's hash; no "PENDING STUB" left anywhere
+node tests/fairness-check.mjs     # Co-op fairness (no browser, ~20 s): the server's brain in this process; a meeting with or without a weapon, five kinds of trade, ending a turn over or under the hand limit look identical to everyone else (messages, bytes, arrival times); 12 whole matches scanned for leaks; card aliases; two tables side by side
+node tests/protocol-check.mjs     # the Co-op server over real sockets (needs ws: npm ci --prefix server; ~90 s): settings, allowed pages, hello, codes, the waiting room, a match, refusals, the per-address limits (IPv6 homes too), the table's life after Play again, faults and restarts (8b), a 5,000-message fuzz, the build filter, 30 matches scanned for secrets on the wire
+node tests/restore-check.mjs      # the real server killed (kill -9) and restarted mid-match from its saved files, 20 tables, every match finishing and every device's history a prefix of the final one; a SIGTERM drain and the clock given back (needs ws; ~2 min; under heavy load it may kill the server only 4 times, run it alone)
+node tests/connection-check.mjs   # the page's Co-op connection (no browser, ~2 s): a fake WebSocket and clock (iPad Safari's wake-ups, silent sockets, restarts, the backoff, "lost" after 20 s, a Leave made offline, 2c), then two devices through the in-page loopback and through the real server
+node tests/browser-honesty.mjs    # Single player in a real browser: the screens read only the presenter state (scrambling every hidden field of the real game changes nothing on screen), the end screen's roles, and a write trap (nothing writes into the presenter state but applyView)
+node tests/coop-menu-check.mjs    # the menu split and every Co-op screen at the four iPad sizes, in a real browser, about 20 min alone [--only menu,fit,keyboard,link,soon,live,demo,resume,flows,server]: against the pretend server, the live site's Coming soon, the review link with its in-page server, and three devices at a real local server (create, join by code, lock, remove, start)
+node tests/browser-coop.mjs       # Co-op end to end, about 20 min alone [--only room,match,demo] [--ts 2] [--server-port N] [--server-port2 N] [--shots DIR] [--no-shots]: six devices at one table (link, code, lock, remove, a second device, the keyboard), three people playing a whole match against the real server killed mid-trade and restarted, a 40 s drop, a polite restart, Play again; the review link; a scan of every page for another player's secrets. Shots: tests/shots/coop/ (tools/coop-record/make-sheet.mjs makes the contact sheet). Away and the return message are timing checks: under heavy load one can fail once; run it again alone
 node tests/docs-check.mjs         # the documents' facts (no browser, ~1 s): the numbers in docs/DECISIONS.md "Read this first" are rules.js's, the README's file list names every src/ file, the paths the documents name exist, the GitHub Action runs every fast suite, a preview server is bound to 127.0.0.1
 node tests/run-fast.mjs           # every fast suite (the GitHub Action's list) in one command
 node tests/howto-check.mjs        # the words that teach the game (no browser): the How to play pages follow the rules' numbers (a copy of the rules with every number changed), the round-4 rules are in the words (Infirmary once per match, Switchboard 2 actions, the discard's time limit: pages and tips), the hint, the role screen's lines, the tips, the end screen's recap, no "AP" anywhere the player reads (~1 s)
 node tests/browser-learn.mjs      # How to play, the hint, the role screen, the Lanterns chip, the in-match Menu panel and what the clock does while it is open, the end screen's Victory / Defeat, at the four iPad sizes [--only a,b,c,d] [--sizes 1024x694,1180x820]
-node tests/browser-turnflow.mjs   # the turn flow (round 4): the turn passing by itself when the actions run out (not with an action left, an Espresso or a free Trade, a reveal, a meeting or the card view open; once only; Practice and a match), the discard screen that closes by itself (no "Keep these 6"), the short found-card reveal, the walking speed [--only a,b,c,d,e]. The other browser suites switch auto end off (tests/smoke-lib.mjs autoEndOff)
+node tests/browser-turnflow.mjs   # the turn flow (round 4): the turn passing by itself when the actions run out (not with an action left, an Espresso or a free Trade, a reveal, a meeting or the card view open; once only; Practice and a match), the discard screen that closes by itself (no "Keep these 6"), the short found-card reveal, the walking speed, the clock running out mid-walk (f) [--only a,b,c,d,e,f]. The other browser suites switch auto end off (tests/smoke-lib.mjs autoEndOff)
 python3 tools/audio/build.py      # rebuild every sound, ~6 min (tools/audio/README.md); needs numpy, scipy, ffmpeg
 python3 tools/audio/build.py revolver lobby   # rebuild only these (effect or music names); updates library.js + report.json
 node tools/balance/hotseat-sim.mjs 400 6   # 400 six-player matches under the rules as they stand (--before: same bots on the rules before Part 2; --compare: Lantern variants; --cautious)

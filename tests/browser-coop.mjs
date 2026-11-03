@@ -24,7 +24,7 @@ import { GUARD_WAIT } from './smoke-lib.mjs';
 //   match  three devices play a whole match against a child-process server with DATA_DIR (the saves on disk) and
 //          TIME_SCALE --ts: a meeting from both sides (one person opens a door and walks in, another walks in on them
 //          and chooses Trade); the server is killed (SIGKILL) while both are choosing their card, started again on the
-//          same folder, and the match comes back where it was, with the trade done exactly once; a 40 s drop
+//          same folder, and the match comes back where it was, with the trade done exactly once; a 60 s drop
 //          (setOffline): Away and the feed line for the others, "Reconnecting…" and, after 20 s, "Still reconnecting…"
 //          for the one who dropped, "You're back at the table." and "… is back." on return; a polite restart (SIGTERM):
 //          "The hotel's server restarted" once on every device; the end screen with the Co-op buttons; Play again: the
@@ -273,7 +273,7 @@ if (only.includes('room')) {
 
 // =====================================================================================================================
 if (only.includes('match')) {
-  console.log(`\nmatch. three devices, a whole match, a child-process server with DATA_DIR and TIME_SCALE ${TS}: kill -9 mid-trade, a 40 s drop, a polite restart, the end, Play again`);
+  console.log(`\nmatch. three devices, a whole match, a child-process server with DATA_DIR and TIME_SCALE ${TS}: kill -9 mid-trade, a 60 s drop, a polite restart, the end, Play again`);
   S.reset('match');
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'browser-coop-'));
   const sport = Number(opt('--server-port2', 0)) || await freePort();
@@ -510,33 +510,35 @@ if (only.includes('match')) {
       check(gotResult || nTrades === 1, `${sc.A.name} reads what the trade did (the private result)`);
       sc.home = true;
     }
-    // --- a 40 s drop: the person who is not A (or the last one)
+    // --- a 60 s drop: the person who is not A (or the last one). (Chromium's offline mode can keep answering the
+    // server's pings on the open socket, so the drop may be noticed only when the page itself gives up on the silence,
+    // about 28 s in and later on a loaded machine: Away is waited for up to 55 s.)
     const C3 = devs.find(d => d !== sc.A && d !== sc.B) || devs[2];
     const others = devs.filter(d => d !== C3);
     const notEnded = async () => !(await nora.page.evaluate(() => !!window.__net.view()?.end));
     if (await notEnded()) {
       hold.drop = C3;
       await sleep(1500);
-      info(`${C3.name} (seat ${C3.seat}) goes offline for 40 s`);
+      info(`${C3.name} (seat ${C3.seat}) goes offline for 60 s`);
       // (every feed line the others' screen shows is kept as it appears: the feed holds only 4 lines, and on a busy table a
       // line can be pushed out before a look at the page catches it)
       for (const o of others) await o.page.evaluate(() => { if (window.__feedSeen) return; window.__feedSeen = []; const host = document.getElementById('feed'); new MutationObserver(ms => { for (const m of ms) for (const n of m.addedNodes) if (n.classList?.contains('feed-line')) window.__feedSeen.push(n.textContent); }).observe(host, { childList: true }); });
       const fed = (o, line, timeout) => waitFor(o.page, l => (window.__feedSeen || []).some(t => t.includes(l)), line, timeout, 250);
       const tDrop = Date.now();
       await C3.context.setOffline(true);
-      const awayAt = await waitFor(others[0].page, i => document.querySelectorAll('#strip-cards .mini-player')[i]?.classList.contains('away'), C3.seat, 40000, 250).then(ok => ok && Date.now() - tDrop);
+      const awayAt = await waitFor(others[0].page, i => document.querySelectorAll('#strip-cards .mini-player')[i]?.classList.contains('away'), C3.seat, 55000, 250).then(ok => ok && Date.now() - tDrop);
       check(awayAt !== false, `${others[0].name}'s strip shows ${C3.name} Away (${awayAt !== false ? `${Math.round(awayAt / 1000)} s after the drop` : 'never'}): "${await others[0].page.evaluate(i => document.querySelectorAll('#strip-cards .mini-player')[i]?.querySelector('.mini-away')?.textContent, C3.seat)}"`);
       const droppedLine = fill(T.match.feed.dropped.today, { name: C3.name });
       check(await fed(others[0], droppedLine, 15000), `...and the feed: "${droppedLine}"`);
       await shoot(others[0], 'away', `${C3.name} dropped: Away on ${others[0].name}'s strip`);
       check(await waitFor(C3.page, () => !document.getElementById('coop-pill').hidden, null, 40000, 250), `${C3.name}'s own screen: "${await text(C3.page, '#coop-pill')}"`);
       await shoot(C3, 'drop-pill', `${C3.name} offline: Reconnecting…`);
-      const left = 40000 - (Date.now() - tDrop);
+      const left = 60000 - (Date.now() - tDrop);
       if (left > 0) await sleep(left);
       await C3.context.setOffline(false);
       const t2 = Date.now();
       const toast = await waitFor(C3.page, w => !document.getElementById('toast')?.hidden && document.getElementById('toast')?.textContent.includes(w), T.recovery.back, 40000, 100).then(ok => ok && Date.now() - t2);
-      check(toast !== false, `back online after 40 s: "${T.recovery.back}" (${toast !== false ? `${(toast / 1000).toFixed(1)} s` : 'never'})`);
+      check(toast !== false, `back online after 60 s: "${T.recovery.back}" (${toast !== false ? `${(toast / 1000).toFixed(1)} s` : 'never'})`);
       check(await waitFor(C3.page, () => document.getElementById('coop-pill').hidden, null, 10000), '...the pill is gone');
       await shoot(C3, 'back', `${C3.name} is back`);
       const backLine = fill(T.match.feed.back, { name: C3.name });

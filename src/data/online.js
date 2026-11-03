@@ -47,6 +47,7 @@ export const ONLINE = {
     afterMatchCloseMs: 600000,   // an ended table unused this long closes
     closedFilesKeepMs: 86400000, // a closed table's saved file is deleted after this
     reconnectPillMs: 1000,       // "Reconnecting…" shows after this long without the server
+    backToastKeepMs: 1800,       // "You're back at the table." stays this long before another message replaces it
     lostCardMs: 20000,           // "Still reconnecting…" shows after this long
     retryCapMs: 10000,           // reconnect retries back off to at most this
     pingCheckMs: 3000,           // no pong this long after a ping: reconnect

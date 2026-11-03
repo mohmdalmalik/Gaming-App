@@ -3014,7 +3014,7 @@ function netStatus(t, s) {
   if (t !== table) return;
   coopUI.pill(s);
   if (s === 'live') {
-    if (netDownSince != null && performance.now() - netDownSince >= ONLINE.timing.reconnectPillMs) hud.toast(ONLINE_TEXT.recovery.back);
+    if (netDownSince != null && performance.now() - netDownSince >= ONLINE.timing.reconnectPillMs) hud.toast(ONLINE_TEXT.recovery.back, undefined, { keep: ONLINE.timing.backToastKeepMs });
     netDownSince = null;
     if (coopUI.cardKind === 'lost') coopUI.hideCard();
     const coop = coopRun?.coops.find(c => c?.table === t);

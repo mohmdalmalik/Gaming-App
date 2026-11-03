@@ -358,8 +358,13 @@ export function scanHits(holds, truth) {
       if (pr.convertedBy != null || pr.knows || pr.notes || pr.inbox) hits.push(`the presenter holds seat ${p.seat}'s private fields`);
     }
     if (p.possessed && !holds.finished && !holds.knows.includes(p.id) && p.name) {
-      const re = new RegExp(`${p.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}[^.\\n]{0,40}\\bpossessed\\b`, 'i');
-      if (re.test(holds.text)) hits.push(`the screen names ${p.name} (seat ${p.seat}) possessed`);
+      const esc = p.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const re = new RegExp(`${esc}[^.\\n]{0,40}\\bpossessed\\b`, 'i');
+      // (public lines are not a leak: the Switchboard's count, "X rang the Switchboard: 2 guests are possessed.", and
+      // a quick-chat accusation anyone may make, "X is possessed!" (src/data/chat.js isPossessed))
+      const said = new RegExp(`${esc} is possessed!`, 'gi');
+      const shown = holds.text.split('\n').filter(l => !/rang the Switchboard/i.test(l)).map(l => l.replace(said, '')).join('\n');
+      if (re.test(shown)) hits.push(`the screen names ${p.name} (seat ${p.seat}) possessed`);
     }
   }
   return hits;

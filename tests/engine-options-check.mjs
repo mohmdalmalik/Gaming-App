@@ -293,7 +293,7 @@ console.log('\nsrc/data/online.js and src/data/onlineText.js');
   check(onMatch === 'device' && LOCAL_LIMITS.clock === null && LOCAL_LIMITS.devicePauses === true && LOCAL_LIMITS.turnMs === rules.turnTimerSeconds * 1000,
     'LOCAL_LIMITS: the device\'s clock in a match, none in practice, device pauses, today\'s numbers');
   const keys = ['tickMs', 'graceMs', 'startCountdownMs', 'roleAckMs', 'heartbeatMs', 'awayAfterHiddenMs', 'hostAwayMs', 'lobbyAwayFreeMs', 'emptyMatchCloseMs',
-    'idleWaitingCloseMs', 'afterMatchCloseMs', 'closedFilesKeepMs', 'reconnectPillMs', 'lostCardMs', 'retryCapMs', 'pingCheckMs', 'liveSilenceMs', 'wakeSlowMs',
+    'idleWaitingCloseMs', 'afterMatchCloseMs', 'closedFilesKeepMs', 'reconnectPillMs', 'backToastKeepMs', 'lostCardMs', 'retryCapMs', 'pingCheckMs', 'liveSilenceMs', 'wakeSlowMs',
     'stallBannerMs', 'rememberTableMs', 'pendingLeaveMs', 'walkMsPerRoom', 'helloTimeoutMs', 'restartRetryMs', 'restoreGraceMs', 'faultWindowMs', 'drainMs'];
   check(keys.every(k => Number.isFinite(ONLINE.timing[k]) && ONLINE.timing[k] > 0) && Object.keys(ONLINE.timing).length === keys.length,
     `ONLINE.timing has its ${keys.length} numbers (walkMsPerRoom ${ONLINE.timing.walkMsPerRoom})`);

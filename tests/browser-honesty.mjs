@@ -13,7 +13,12 @@ import { launch, giveCard } from './smoke-lib.mjs';
 //   then the match is played out (Skip to the result) and the end screen reveals the roles from the table's end;
 //   4. Practice: the screens read their own state and hotel too, and (from P1C S3) the table's referee runs the game:
 //      End turn passes the turn there.
-// (P1C S5 adds the write trap: no write into the presenter state outside applyView over a whole match.)
+//   5. The write trap (P1C S5): over the whole match (deal, role screen, two rounds and more, the scrambles, Skip to the
+//      result, the end screen), NOTHING writes into the presenter state outside applyView. Counted by a deep compare:
+//      before every call the page makes into the table (apply, tick, step, arrived, walkFailed, skipToEnd, setTimeLeft,
+//      sync, revealTile: the only ways the presenter is written), the presenter state must equal
+//      applyView(blankState(), the last view, every event received this match) — what applyView alone makes of it.
+//      (Not a Proxy: Sets and Maps break inside one, DESIGN §6.8.)
 //   node tests/browser-honesty.mjs [--url http://127.0.0.1:8123/] [--seed 4242] [--bots 5]
 const arg = (name, def) => { const i = process.argv.indexOf(name); return i > 0 ? process.argv[i + 1] : def; };
 const base = arg('--url', 'http://127.0.0.1:8123/');
@@ -89,6 +94,49 @@ const visibleText = () => game(() => {
   out.forEach((e, i) => { e.style.display = was[i]; });
   return text;
 });
+
+// The write trap (5): installed in the page once the match is dealt. Its counts are in window.__writeTrap.
+const installTrap = () => game(async () => {
+  const g = window.__game, t = g.table();
+  const { applyView, blankState } = await import(new URL('src/net/viewAsState.js', document.baseURI).href);
+  const { seatEvents } = await import(new URL('src/net/playerView.js', document.baseURI).href);
+  const canon = x => {
+    if (x instanceof Set) return { $set: [...x].map(canon).sort((a, b) => (JSON.stringify(a) < JSON.stringify(b) ? -1 : 1)) };
+    if (x instanceof Map) return { $map: [...x].map(([k, v]) => [canon(k), canon(v)]).sort((a, b) => (JSON.stringify(a[0]) < JSON.stringify(b[0]) ? -1 : 1)) };
+    if (Array.isArray(x)) return x.map(canon);
+    if (x && typeof x === 'object') { const o = {}; for (const k of Object.keys(x).sort()) { if (typeof x[k] !== 'function') o[k] = canon(x[k]); } return o; }
+    return x;
+  };
+  const json = x => JSON.stringify(canon(x));
+  const trap = window.__writeTrap = { compares: 0, writes: 0, changes: 0, first: null, table: t };
+  // (from a fresh sync: the presenter, the last view and every event of this seat so far agree)
+  t.local.sync();
+  let view = t.view;
+  const received = seatEvents(t.local.debug.state, g.humanSeat(), 0).events;
+  let expected = null;
+  t.on(change => { trap.changes++; view = change.view; received.push(...change.events); expected = null; });
+  const look = () => {
+    if (window.__game.table() !== t) return;            // (another table: not this match's)
+    expected ??= json(applyView(blankState(), view, received));
+    const now = json(window.__game.presenterState);
+    trap.compares++;
+    if (now === expected) return;
+    trap.writes++;
+    if (!trap.first) {
+      let i = 0; while (i < now.length && now[i] === expected[i]) i++;
+      trap.first = `at ${i}: presenter …${now.slice(Math.max(0, i - 120), i + 80)}… / applyView …${expected.slice(Math.max(0, i - 120), i + 80)}…`;
+    }
+  };
+  for (const k of ['apply', 'tick', 'step', 'arrived', 'walkFailed', 'skipToEnd', 'setTimeLeft', 'sync']) {
+    const fn = t.local[k];
+    t.local[k] = (...a) => { look(); return fn(...a); };
+  }
+  const reveal = t.local.debug.revealTile;
+  t.local.debug.revealTile = (...a) => { look(); return reveal(...a); };
+  look();
+  return trap.compares;
+});
+const trapCounts = () => game(() => { const t = window.__writeTrap; return t ? { compares: t.compares, writes: t.writes, changes: t.changes, first: t.first } : null; });
 
 // Every hidden field of the real game, scrambled (and kept, to put back). `on`: true scrambles, false restores.
 async function scramble(on) {
@@ -198,6 +246,7 @@ try {
   await page.goto(`${base}?mode=bots&bots=${nBots}&seed=${seed}&seat=0&timer=off&intro=off&botpace=0.1`, { waitUntil: 'domcontentloaded' });
   await waitFor(() => window.__game && !document.getElementById('btn-begin').disabled, null, 120000);
   await game(() => { window.__game.cfg.player.speed = 30; window.__game.setPixelRatio(0.5); });
+  check((await installTrap()) === 1, 'the write trap is set on the table of this match, before its first turn');
   await page.click('#btn-begin');
   await waitFor(() => window.__game.handoffKind() === 'role');
   await page.waitForTimeout(400);
@@ -238,6 +287,21 @@ try {
     return { same: P.players.every((p, i) => !!p.possessed === !!g.state.players[i].possessed), won: P.won === g.state.won, end: !!P.end };
   });
   check(end.same && end.won && end.end, 'at the end the presenter reveals every role and the result exactly as the real game has them');
+  // (the end screen up for a moment: Your record and the achievements read the presenter then too)
+  await frames(10);
+  await game(() => window.__game.table().local.sync());
+  const trap = await trapCounts();
+  check(!!trap && trap.compares > 200 && trap.changes > 50 && trap.writes === 0,
+    `the write trap: 0 writes into the presenter state outside applyView over the whole match (deep compare with applyView(blankState(), view, received) before every call into the table: ${trap?.compares} compares, ${trap?.changes} changes from the table, ${trap?.writes} writes)`);
+  if (trap?.first) console.log(`     first write ${trap.first}`);
+  // (the trap itself: a write made on purpose is caught, and applyView puts it right at the next sync)
+  const caught = await game(() => {
+    const g = window.__game, mine = () => g.presenterState.players[g.humanSeat()], before = window.__writeTrap.writes;
+    mine().notes.push('written by hand');
+    g.table().local.sync();
+    return { caught: window.__writeTrap.writes - before, gone: !mine().notes.includes('written by hand') };
+  });
+  check(caught.caught === 1 && caught.gone, `the trap catches a write made on purpose (a note pushed into the presenter by hand: ${caught.caught} caught), and applyView puts it right at the next sync`);
 
   // Practice: the same honest screens, the game itself run by the table (its referee, from P1C S3).
   // (first nothing still downloading: Skip to the result reveals the last rooms, whose models load now, and leaving the

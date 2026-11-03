@@ -3,10 +3,10 @@
 // in `on`, so the rules stay reusable.
 // `state` and `floor` are what the screens draw: in the page, its presenter state and its own copy of the hotel
 // (src/net/viewAsState.js, src/net/floorCopy.js). Crossing into a room is the table's to decide: `enter(player,
-// roomId)` (default: enterRoom on these same objects) returns enterRoom's result, with `state` already up to date.
+// roomId)` settles it and returns its result, with `state` already up to date (without `enter`, nothing is settled).
 // `before()` (optional) runs before the walking cells are worked out again, so they follow the latest state.
 import { roomAt } from './game/hotel.js';
-import { enterRoom, activePlayer } from './game/state.js';
+import { activePlayer } from './game/state.js';
 import { buildAllowed, planMove, planRoomMove } from './game/moves.js';
 
 // `movers` are the movement objects (src/player.js), one per entry in state.players.
@@ -57,7 +57,8 @@ export function createDiscovery({ floor, grid, state, movers, cfg, on = {}, ente
       const mover = movers[player.index];
       const roomId = roomAt(floor, mover.x, mover.z);
       if (!roomId || roomId === player.currentRoom) return null;
-      const result = enter ? enter(player, roomId) : enterRoom(state, floor, player, roomId);
+      if (!enter) return null;
+      const result = enter(player, roomId);
       allowed = buildAllowed(state, floor, grid);
       on.roomEntered?.(result);
       return result;

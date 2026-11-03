@@ -12,18 +12,14 @@ import { hotel } from './data/hotel.js';
 import { account } from './account/account.js';
 import { checkUsername } from './account/username.js';
 import { seatTable, botAvatars, STAND_IN } from './table.js';
-import { createHotel, stackDeck, growTo, searchSpotOf, roomAt, cellOf, fogCells } from './game/hotel.js';
+import { searchSpotOf, roomAt, cellOf, fogCells } from './game/hotel.js';
 import { buildGrid } from './game/grid.js';
+// (only the rules' questions, asked of the screens' own state: whatever changes the game is the table's, src/net/)
 import {
-  createState, activePlayer, nextPlayer, canEscape, enterRoom,
-  openableDoors, playersInRoom, isLocked,
+  activePlayer, nextPlayer, canEscape, openableDoors, playersInRoom,
   isBarricaded, canTradeVoluntarily, doorBetween, encountersIn, adjacentLockedRooms,
 } from './game/state.js';
-import {
-  search, canSearch, escape, useBandage, useUnlock, useBarricade,
-  discardCard, overHandLimit, tradeableCards, openDoor,
-  canUseRoom, useInfirmary, useSwitchboard, useHandMirror, useEspresso,
-} from './game/actions.js';
+import { canSearch, overHandLimit, tradeableCards, canUseRoom } from './game/actions.js';
 import { CARDS, lanternCount } from './game/cards.js';
 import { createScene } from './render/scene.js';
 import { addRoomView, clearRoomViews, createDoorwayViews } from './render/roomView.js';
@@ -70,8 +66,7 @@ import { redEyedAllies, knownPossessedIds } from './ui/allies.js';
 import { createMenu } from './ui/menu.js';
 // (the screens' own state and hotel, written from what the table shows: src/net/, DESIGN §6.6-§6.7)
 import { createFloorCopy, syncFloor } from './net/floorCopy.js';
-import { applyView, blankState } from './net/viewAsState.js';
-import { playerView, seatEvents } from './net/playerView.js';
+import { applyView, blankState, idleView } from './net/viewAsState.js';
 // (avatars: the wardrobe screen, the runtime portraits and the soul cards' faces from each seat's avatar)
 import { createWardrobe } from './ui/wardrobe/wardrobe.js';
 import { createHonoursPage } from './ui/honours.js';
@@ -90,7 +85,6 @@ import { showEndHonours } from './ui/honoursEnd.js';
 import { displayAvatar } from './data/wardrobe.js';
 import { createFeed } from './ui/feed.js';
 import { createChatUI } from './ui/chat.js';
-import { createChatChannel } from './social/chat.js';
 import { createTips } from './ui/tips.js';
 import { createHowToPlay } from './ui/howToPlay.js';
 import { createCardsGuide } from './ui/cardsGuide.js';
@@ -157,15 +151,14 @@ const newSeed = () => (Number.isFinite(forcedSeed) && forcedSeed > 0 ? forcedSee
 // The game being played (or about to be). setupGame() changes it before each new game.
 let PRACTICE = true;          // practice alone, or a match against bots
 let humanSeat = 0;            // the player's own seat (a match: random, like joining an online table)
-// The table this game is played at (src/net/localTable.js): it deals the game and owns the computer guests' brains
-// (src/bots/index.js) and their chatter (src/bots/chatter.js); its referee (src/net/referee.js) runs every game, Practice
-// and matches alike: the turns, the clock, the computer guests' steps, the meetings and trades. The page presents what it
-// does, asks the player its questions and sends their answers. TRANSITIONAL (multiplayer build plan, P1C S1-S4): the
-// table's own objects are still reached through T() (the test hooks, the chat, a few rules checks); P1C S5 removes T().
-let table = null;
-const NO_TABLE = Object.freeze({ state: null, floor: null, bots: null, chatter: null, referee: null });
-const T = () => table?.local.debug ?? NO_TABLE;     // TRANSITIONAL
-const realNow = () => (table ? T() : lastReal);      // TRANSITIONAL: the real game, with or without a table
+// The table this game is played at (src/net/localTable.js): it deals the game and holds it, with the computer guests'
+// brains (src/bots/index.js) and their chatter (src/bots/chatter.js); its referee (src/net/referee.js) runs every game,
+// Practice and matches alike: the turns, the clock, the computer guests' steps, the meetings and trades. The page only
+// presents what the table shows this seat (table.view, table.on), asks the player its questions and sends their answers
+// and acknowledgements (table.local.apply). The real game never comes into the page: only the test hooks reach it
+// (window.__game, tests/seam-check.mjs).
+let table = null;             // the table being played (none behind the menu: nobody thinks or talks there)
+let lastTable = null;         // the table last set up (behind the menu, the test hooks still hand out its game)
 // The table's latest view, written into the screens' state and their copy of the hotel (DESIGN §6.6, §6.7).
 function present(view, events, { newMatch = null, fresh = false } = {}) {
   applyView(state, view, events, { newMatch, fresh });
@@ -173,9 +166,9 @@ function present(view, events, { newMatch = null, fresh = false } = {}) {
 }
 // The table told the page that something changed (table.on): the screens' state follows at once. What the page shows of
 // it (a computer guest's walk or door, a meeting, the turn passing) waits for follow(), once the table's call is over.
-function onTableChange({ view, events, fresh, local = [] }) {
-  const newMatch = presented !== table;
-  presented = table;
+function onTableChange(t, { view, events, fresh, local = [] }) {
+  const newMatch = presented !== t;
+  presented = t;
   // (an attack's screen shows the hearts its target lost: their health as it was just before)
   if (!newMatch) for (const e of events) if (e.type === 'attack') healthBefore.set(e.o, state.players[e.target]?.health);
   present(view, events, { newMatch, fresh });
@@ -187,39 +180,24 @@ function onTableChange({ view, events, fresh, local = [] }) {
 // screen (shown: turnNow()), the hearts before each attack and what the last attack the player was in showed.
 let tableNews = false, localNews = [], seenO = 0, shown = null, attackSeen = null;
 const healthBefore = new Map();
-// Build the view again from the real game and present it (no table: the hotel behind the menu).
-function syncTable() {
-  if (table) { table.local.sync(); return; }
-  present(playerView(lastReal.state, lastReal.floor, humanSeat), seatEvents(lastReal.state, humanSeat).events);
-}
+// The table builds its view again from its real game, and the screens follow (behind the menu: the last table's; before
+// the first table, the hotel behind the menu never changes).
+function syncTable() { (table ?? lastTable)?.local.sync(); }
 // The screens never read anything stale: after a test hook handed out the real game (window.__game.state, .floor,
 // .activePlayer ...), everything that reads (refresh, discovery, any hook) catches up first, for the rest of that
 // frame: the real objects handed out may be changed at any moment until then. The next frame catches up once more and
 // lets go (pullFrame).
 function pull() { if (dirty) syncTable(); }
 function pullFrame() { if (dirty) { syncTable(); dirty = false; } }
-// TRANSITIONAL (P1C S2-S4): a change to the table's real game, `change(state, floor)` with the REAL objects, then the
-// screens' state brought up to date at once, so whatever the page reads next is current. S3-S4 turn these into the
-// table's own commands.
-function W(change) {
-  const R = realNow();
-  const out = change(R.state, R.floor);
-  syncTable();
-  return out;
-}
-// A guest's real record (the rules: their hand, action points, role), from the screens' record of them. TRANSITIONAL
-const real = p => (p ? realNow().state.players[p.index] : p);
-// Every game is played through the table's referee (src/net/referee.js: Practice from P1C S3, matches from S4).
-// act(cmd, direct): the player's command to the table (DESIGN §6.3), or, TRANSITIONAL (S5 removes it), at a table with no
-// referee, direct(state, floor) on the real game. Either way the screens' state is current when it returns.
-const refereed = () => !!T().referee;
-function act(cmd, direct) { return refereed() ? table.local.apply(cmd) : W(direct); }
+// The player's command to the table (DESIGN §6.3; its referee, src/net/referee.js, runs every game): synchronous, the
+// screens' state is current when it returns.
+const act = cmd => (table ? table.local.apply(cmd) : { ok: false, reason: 'notNow' });
 // The table's private results for the player (found cards, a Hand Mirror): the ones there now, and the newest of a kind
 // that was not; a result is acknowledged once its screen closes (DESIGN §6.4).
 const resultIds = () => new Set((state.results || []).map(r => r.id));
 const newResult = (kind, had) => (state.results || []).filter(r => r.kind === kind && !had.has(r.id)).pop() || null;
 const newestResult = kind => (state.results || []).filter(r => r.kind === kind).pop() || null;
-const ackResult = id => { if (id != null && refereed()) table.local.apply({ k: 'ack', what: 'result', id }); };
+const ackResult = id => { if (id != null && table) table.local.apply({ k: 'ack', what: 'result', id }); };
 let botProfiles = [];         // per seat: the bot's profile (username, style), or null for the player
 const cast = seatTable({ me: myIdentity(), seat: 0 });   // the seats at the table, in seat order (src/table.js; filled in place by setupGame)
 applyMode('practice', 1);
@@ -229,16 +207,11 @@ let seed = newSeed();
 // written only by applyView, from what the table shows this seat (src/net/playerView.js): never another guest's hand,
 // role or notes, the piles or the room deck. gameSounds, the feed and the allies' memo keep it, its guests, its events.
 const state = blankState();
-// TRANSITIONAL (P1C S2-S4): the real game is the table's, but the page still runs the match itself on it, through T()
-// and W() below. Every table deals into this one real state (adopt); here it is first dealt as the hotel behind the
-// menu, a practice deal nobody plays. `lastReal`: the real game when no table is set (before the first game, the menu).
-const bootFloor = createHotel(hotel, cfg);
-const realState = createState(bootFloor, cast, seed, { mode: 'practice' });
-realState.viewerIndex = humanSeat;
-let lastReal = { state: realState, floor: bootFloor };
 let presented = null;        // the table the screens show (a new one is a new match on screen)
 let dirty = false;           // a test hook handed out the real game: the screens catch up before they read again (pull)
-present(playerView(realState, bootFloor, humanSeat), seatEvents(realState, humanSeat).events, { newMatch: true });
+// Before the first table: the hotel behind the menu, a practice deal nobody plays (src/net/viewAsState.js idleView: only
+// its view comes here).
+{ const idle = idleView({ roster: cast, seat: humanSeat, seed, hotelData: hotel, cfg }); present(idle.view, idle.events, { newMatch: true }); }
 const grid = buildGrid(floor, cfg);
 if (floor.problems.length) throw new Error(`Problems in the hotel:\n• ${floor.problems.join('\n• ')}`);
 // The walkable grid follows the hotel as it grows (rebuilt in place: everyone keeps the same object).
@@ -250,7 +223,7 @@ const startSpot = i => floor.start.positions[i % floor.start.positions.length];
 const movers = cast.map((_, i) => createPlayer(cfg, startSpot(i)));   // one per seat (rebuilt in place)
 // The player's own guest, and whether it is their turn. In practice they are the only guest.
 const me = () => state.players[humanSeat];
-const isBot = i => !!T().bots && !!botProfiles[i];
+const isBot = i => !!table && !!botProfiles[i];
 const myTurn = () => !state.finished && state.activeIndex === humanSeat;
 
 // --- Rendering -------------------------------------------------------------------------
@@ -421,20 +394,29 @@ const hand = createHand(document, cfg, { onUseBandage, onUnlock, onBarricade, on
 // The padlock of a locked door next to the guest, tapped: which key or pick to open it with (onLockTap, onUnlock).
 const lockChoice = createLockChoice(document, { onChoose: (cardId, roomId) => onUnlock(cardId, roomId) });
 const discard = createDiscard(document, cfg, {
-  onDiscard: cardId => { const r = act({ k: 'discard', card: cardId }, S => discardCard(S, activePlayer(S), cardId)); if (!r.ok) hud.toast('That card cannot be discarded.'); refresh(); },
+  onDiscard: cardId => { const r = act({ k: 'discard', card: cardId }); if (!r.ok) hud.toast('That card cannot be discarded.'); refresh(); },
 });
 // The hand, held as a fan of face-up cards; tapping one opens it large in the card view.
 const fan = createHandFan(document, { onOpen: cardId => { if (running && !uiBusy()) hand.open(state, floor, cardId); } });
 const feed = createFeed(document);     // what the other guests just did (a match)
-// Quick chat (a match, Settings > Quick chat On): the table's channel (src/social/chat.js: a message is
-// { seat, id, at }, + `about` for a line that names a guest), the Chat button, panel, bubbles and feed
-// lines (src/ui/chat.js), and the computer guests' own chat (src/bots/chatter.js, set up with the bots:
-// syncChat). Every line said reaches every bot: their chatter (a bot it names may answer) and their minds
-// (src/bots/brain.js: they weigh what they hear). With Quick chat Off the table is silent: the bots
-// neither talk nor listen.
-const chatChannel = createChatChannel({ now: () => performance.now(), seats: () => state.players.length });
+// Quick chat (a match, Settings > Quick chat On) is the table's (src/net/localTable.js table.say, table.onChat; a message
+// is { seat, id, at }, + `about` for a line that names a guest: src/social/chat.js). Every line said there reaches every
+// bot: their chatter (src/bots/chatter.js: a bot it names may answer) and their minds (src/bots/brain.js: they weigh what
+// they hear); the bots talk there too (syncChat). The Chat button, panel, bubbles and feed lines (src/ui/chat.js) use it
+// through this one road, whichever table is set up. With Quick chat Off the table is silent: the bots neither talk nor
+// listen.
+const chatHeard = new Set();
+const chatRoad = {
+  onMessage(fn) { chatHeard.add(fn); return () => chatHeard.delete(fn); },
+  waitFor: () => (table ? table.local.chatWait() : 0),
+  say: (seat, id, about = null) => (table ? table.local.say(id, about) : null),
+  post: msg => (table ? table.local.post(msg) : null),
+  reset() { /* a new table starts with nobody cooling down */ },
+};
+// (what a table says reaches the chat screen while it is the table being played)
+const hearChat = t => msg => { if (t === table) for (const fn of [...chatHeard]) fn(msg); };
 const chat = createChatUI(document, {
-  channel: chatChannel, feed, sfx, mySeat: () => humanSeat,
+  channel: chatRoad, feed, sfx, mySeat: () => humanSeat,
   nameOf: i => state.players[i]?.name ?? 'A guest', colorOf: i => state.players[i]?.color ?? '#c9a24e',
   // the guests a line may name: the others still in the hotel, in seat order (red eyes as in the strip)
   guests: () => {
@@ -444,12 +426,6 @@ const chat = createChatUI(document, {
   },
 });
 let chatPollAt = 0;
-chatChannel.onMessage(msg => {
-  const { bots, chatter } = T();
-  if (!chatter) return;
-  bots?.hear(msg);
-  chatter.hear(msg, performance.now());
-});
 const topLeftEl = document.querySelector('.hud-top-left');
 // (the notes the player has read on their own screen: the table takes them off its waiting list, all of them or only
 // `lines`: { k: 'ack', what: 'notes' } (DESIGN §6.3); never off the screens' copy)
@@ -499,7 +475,7 @@ const uiBusy = () => map.isOpen || hand.isOpen || discard.isOpen || lockChoice.i
 const discovery = createDiscovery({
   floor, grid, state, movers, cfg,
   // (crossing into a room is the table's to settle: the real game, then the screens' state at once)
-  enter: (p, roomId) => (refereed() ? table.local.step(roomId) : W((S, F) => enterRoom(S, F, S.players[p.index], roomId))),
+  enter: (p, roomId) => (table ? table.local.step(roomId) : { ok: false, reason: 'notNow' }),
   before: () => pull(),
   on: {
     roomEntered(result) {
@@ -544,10 +520,9 @@ function syncChat(now) {
   const clear = screenClear() && !hand.isOpen;
   const ended = running && !PRACTICE && overlays.endOpen;
   chat.update({ clear, ended });
-  const { chatter } = T();
-  if (!chatter || !running || now < chatPollAt) return;
+  if (!table?.local.chats || !running || now < chatPollAt) return;
   chatPollAt = now + CHAT.pollMs;
-  for (const msg of chatter.tick(now, { hold: !clear && !ended })) chatChannel.post(msg);
+  table.local.chatTick(now, { hold: !clear && !ended });
 }
 // The point a guest's speech bubble stands on: over their head (lower over a body); none once escaped.
 function chatPoint(i) {
@@ -752,9 +727,9 @@ function cutWalkShort(to) {
   const m = activeMover();
   if (!m.walking && !m.path.length) return;           // (only arriving: that finishes by itself)
   const player = activePlayer(state);
-  const plan = to != null && to !== player.currentRoom ? discovery.planToRoom(to, standAtFor(player.index), real(player)) : null;
+  const plan = to != null && to !== player.currentRoom ? discovery.planToRoom(to, standAtFor(player.index), walker(player)) : null;
   if (plan?.ok) { activeWalk = plan; discovery.go(plan); return; }
-  const here = discovery.planToRoom(player.currentRoom, standAtFor(player.index), real(player));
+  const here = discovery.planToRoom(player.currentRoom, standAtFor(player.index), walker(player));
   if (here.ok) { activeWalk = here; discovery.go(here); } else m.halt();
 }
 
@@ -810,7 +785,7 @@ const turnNow = () => ({ game: gameToken, turn: state.turn, seat: state.activeIn
 function passTurn() {
   if (!table || state.finished || shown?.game !== gameToken || state.turn !== shown.turn) return;   // (passed already, and shown)
   // Never past the hand limit: anything that ends a turn goes through the discard screen first.
-  if (overHandLimit(real(activePlayer(state))) > 0) { endTurnNow(); return; }
+  if (overHandLimit(activePlayer(state)) > 0) { endTurnNow(); return; }
   const at = turnNow();
   const r = table.local.apply({ k: 'end' });
   if (!r.ok || (!state.finished && state.turn === at.turn)) return;      // (refused, or the discard question first)
@@ -852,7 +827,7 @@ function turnPassed(at) {
 // (onTimeUp). Where the clock is off (Practice, ?timer=off) the discard has no time limit.
 function endTurnNow() {
   const p = activePlayer(state);
-  if (overHandLimit(real(p)) > 0) {
+  if (overHandLimit(p) > 0) {
     hand.close(); map.close(); hud.hideConfirm(); selectedMove = null;
     if (activeMover().walking) activeMover().halt();
     const seconds = discardAllowance(timerLeft, rules.turnTimerEnabled);
@@ -1126,21 +1101,24 @@ function afterMeeting() {
 // Voluntary trade in a safe zone that allows it (the Fire Exit; never the lobby): the other guest must
 // agree before anyone chooses. The player proposes it with the Trade button; a computer guest takes a
 // moment to answer (the table's pause), then the trade, or "declined".
+// (Whether a trade is allowed here is the table's to say: with one other guest there the proposal goes straight to it,
+// and a refusal shows nothing, as before; with several, the screens' own answer first, before the player picks whom.)
 function onTrade() {
   if (!running || state.finished || uiBusy() || activeMover().walking || PRACTICE || !myTurn() || !inActionPhase) return;
   const P = me();
-  if (!canTradeVoluntarily(realNow().state, realNow().floor, real(P))) return;
   const others = playersInRoom(state, P.currentRoom, P.id);
   if (!others.length) return;
-  hud.hideConfirm(); selectedMove = null;
   const ask = Q => {
     if (!table.local.apply({ k: 'trade', with: Q.index }).ok) { refresh(); return; }
+    hud.hideConfirm(); selectedMove = null;
     meetingLive = true;
     talk = { waiting: 'reply' };
     meeting.waiting('A trade is proposed', `${Q.name} is thinking it over…`);
   };
-  if (others.length === 1) ask(others[0]);
-  else meeting.choose(P, others, ask, { voluntary: true, onCancel: refresh });
+  if (others.length === 1) { ask(others[0]); return; }
+  if (!canTradeVoluntarily(state, floor, P)) return;
+  hud.hideConfirm(); selectedMove = null;
+  meeting.choose(P, others, ask, { voluntary: true, onCancel: refresh });
 }
 
 // A computer guest proposes a trade in the Fire Exit to the player: Accept or Decline, in private.
@@ -1279,16 +1257,15 @@ function botWalk(ev) {
   const p = state.players[ev.seat];
   const to = ev.rooms?.[ev.rooms.length - 1];
   const plan = p && ev.seat === state.activeIndex && to != null && to !== p.currentRoom && floor.rooms.has(to)
-    ? discovery.planToRoom(to, standAtFor(ev.seat), real(p)) : null;
+    ? discovery.planToRoom(to, standAtFor(ev.seat), walker(p)) : null;
   if (!plan?.ok) { table.local.walkFailed(); return; }
   startWalk(plan);
 }
 
 // The player is out (dead): the rest of the match is played at once by the bots, through the same
 // rules (src/bots/autoplay.js, run by the table: table.local.skipToEnd), and the guests are put where the rules left them.
-let botsAutoplay = null;     // src/bots/autoplay.js, loaded with the bots
 function skipToEnd() {
-  if (state.finished || !table || !T().bots || !botsAutoplay) return;
+  if (state.finished || !table || PRACTICE) return;
   if (meetingLive) { overlays.hideAsk(); hud.toast('A meeting is under way — skipping as soon as it ends.', 3); skipQueued = true; return; }
   skipQueued = false;
   overlays.hideAsk();
@@ -1323,16 +1300,16 @@ function onSearch() {
   if (!running || state.finished || uiBusy() || activeMover().walking || !myTurn()) return;
   const player = activePlayer(state);
   const had = resultIds();
-  const r = act({ k: 'search' }, (S, F) => search(S, F, real(player)));
+  const r = act({ k: 'search' });
   if (!r.ok) { hud.toast(SEARCH_FAIL[r.reason] || 'Cannot search now.'); return; }
-  const res = refereed() ? newResult('found', had) : null;     // (the table's private result: the cards, where, picked up?)
-  const where = (res ? res.where : r.searchPoint) || 'the room';
+  const res = newResult('found', had);     // (the table's private result: the cards, where, picked up?)
+  const where = res?.where || 'the room';
   syncViews(false);
   // Everything found goes into the hand, even past the limit of 6 (approved rule): the limit is
   // settled only when the turn ends (endTurnNow -> the discard screen). The reveal says nothing about
   // it: the hand fan shows "Cards 8/6 · discard 2 at end of turn" the moment the reveal closes.
-  const found = res ? res.cards : r.kind === 'found' || r.kind === 'cards' ? r.cards : r.kind === 'card' ? [r.card] : [];
-  const pickup = res ? res.pickup : r.kind === 'found';
+  const found = res?.cards || [];
+  const pickup = !!res?.pickup;
   foundThisGame.push(...found);            // (your own finds, for the achievements at the end: the rules emit no event for them)
   const then = () => { ackResult(res?.id); refresh(); };
   // Search results are PRIVATE: the others learn only that a search happened (the public log). The
@@ -1389,7 +1366,7 @@ function faceTowards([x, z]) {
 
 function onUseBandage(cardId) {
   if (!myTurn() || !inActionPhase) return;
-  const r = act({ k: 'card', type: 'bandage', card: cardId }, S => useBandage(S, activePlayer(S), cardId));
+  const r = act({ k: 'card', type: 'bandage', card: cardId });
   if (!r.ok) { hud.toast(r.reason === 'full' ? 'Already at full health.' : r.reason === 'ap' ? 'No actions left.' : 'Cannot use that now.'); return; }
   hud.toast(`Bandaged — health ${me().health} of ${rules.maxHealth}.`);
   sfx('bandage');
@@ -1405,7 +1382,7 @@ const doorBarricaded = name => `The ${name} door is barricaded: a key or pick ca
 function onUnlock(cardId, roomId) {
   if (!myTurn() || !inActionPhase) return;
   const type = me().hand.find(c => c.id === cardId)?.type ?? 'lockPick';
-  const r = act({ k: 'card', type, card: cardId, target: roomId }, (S, F) => useUnlock(S, F, activePlayer(S), cardId, roomId));
+  const r = act({ k: 'card', type, card: cardId, target: roomId });
   const name = floor.rooms.get(roomId)?.name ?? 'locked room';
   if (!r.ok) {
     hud.toast(r.reason === 'ap' ? 'No actions left.'
@@ -1414,8 +1391,8 @@ function onUnlock(cardId, roomId) {
     return;
   }
   // (opened, or the pick snapped: what the table now shows — the door open until the end of the turn, or still locked)
-  const opened = r.opened ?? state.openLocks.has(roomId);
-  const doorway = r.doorway ?? doorBetween(floor, me().currentRoom, roomId)?.id;
+  const opened = state.openLocks.has(roomId);
+  const doorway = doorBetween(floor, me().currentRoom, roomId)?.id;
   hud.toast(opened ? `The ${name} door is open until the end of your turn.`
     : `The lock pick snapped. The ${name} door stays locked.`);
   hand.close();
@@ -1458,7 +1435,7 @@ function lockPoint(roomId, part = 'sign') {
 
 function onBarricade(cardId, doorwayId) {
   if (!myTurn() || !inActionPhase) return;
-  const r = act({ k: 'card', type: 'barricade', card: cardId, target: doorwayId }, (S, F) => useBarricade(S, F, activePlayer(S), cardId, doorwayId));
+  const r = act({ k: 'card', type: 'barricade', card: cardId, target: doorwayId });
   if (!r.ok) { hud.toast(r.reason === 'ap' ? 'No actions left.' : 'Cannot barricade that.'); return; }
   hud.toast(`${cap(doorName(doorwayId, activePlayer(state).currentRoom))} barricaded until your next turn.`, 5);
   hand.close();
@@ -1469,9 +1446,9 @@ function onBarricade(cardId, doorwayId) {
 function onEspresso(cardId) {
   if (!myTurn() || !inActionPhase) return;
   const before = me().actionPoints;
-  const r = act({ k: 'card', type: 'espresso', card: cardId }, S => useEspresso(S, activePlayer(S), cardId));
+  const r = act({ k: 'card', type: 'espresso', card: cardId });
   if (!r.ok) { hud.toast(r.reason === 'ap' ? 'No actions left.' : 'Cannot use that now.'); return; }
-  hud.toast(`Espresso — ${r.gained ?? me().actionPoints - before} extra actions this turn.`);
+  hud.toast(`Espresso — ${me().actionPoints - before} extra actions this turn.`);
   sfx('espresso');
   refresh();
 }
@@ -1491,14 +1468,14 @@ function onHandMirror(cardId, targetId) {
   if (activeMover().walking || pendingArrival) { hud.toast('Wait until you have arrived.'); return; }
   const player = activePlayer(state);
   const had = resultIds();
-  const r = act({ k: 'card', type: 'handMirror', card: cardId, target: targetId }, (S, F) => useHandMirror(S, F, real(player), cardId, targetId));
+  const r = act({ k: 'card', type: 'handMirror', card: cardId, target: targetId });
   if (!r.ok) { hud.toast(MIRROR_FAIL[r.reason] || 'Cannot use that now.'); return; }
-  const res = refereed() ? newResult('mirror', had) : null;    // (the table's private result: whose hand, and what was in it)
-  const target = res ? state.players[res.target] : state.players.find(q => q.id === r.target);
-  const seen = res ? res.hand : r.hand;
+  const res = newResult('mirror', had);    // (the table's private result: whose hand, and what was in it)
+  const target = state.players[res?.target] ?? state.players.find(q => q.id === targetId);
+  const seen = res?.hand || [];
   hand.close();
   refresh();
-  const lines = (res ? seen.some(c => c.type === 'possession') : r.unmasked)
+  const lines = seen.some(c => c.type === 'possession')
     ? [player.possessed
       ? `${target.name} holds a Possession card — ${target.name} is possessed too.`
       : `${target.name} holds a Possession card — ${target.name} is POSSESSED. Now you know.`]
@@ -1536,7 +1513,7 @@ function onEscape() {
   if (!myTurn() || !inActionPhase) return;
   const player = activePlayer(state);
   if (!floor.rooms.get(player.currentRoom)?.isExit) return;
-  const r = act({ k: 'escape' }, (S, F) => escape(S, F, real(player)));
+  const r = act({ k: 'escape' });
   if (r.ok) { syncViews(false); refresh(); showEnd(); return; }
   hud.toast(escapeRefusal(player, r.reason));
 }
@@ -1560,15 +1537,15 @@ function onRoom() {
   const gate = canUseRoom(state, floor, player);
   if (!gate.ok) { hud.toast(roomRefusal(gate)); return; }
   if (gate.job === 'infirmary') {
-    const r = act({ k: 'job' }, (S, F) => useInfirmary(S, F, real(player)));
+    const r = act({ k: 'job' });
     if (!r.ok) { hud.toast(roomRefusal({ job: gate.job, ...r })); return; }
     hud.toast(`Treated in the Infirmary — health ${me().health} of ${rules.maxHealth}.`);
     refresh();     // (the icon turns to its "already used" look at once, for this Infirmary is spent for everyone)
   } else if (gate.job === 'switchboard') {
-    const r = act({ k: 'job' }, (S, F) => useSwitchboard(S, F, real(player)));
+    const r = act({ k: 'job' });
     if (!r.ok) { hud.toast(roomRefusal({ job: gate.job, ...r })); return; }
     // (how many: the public event the whole table saw)
-    const count = r.count ?? state.events.filter(e => e.type === 'switchboard').pop()?.count ?? 0;
+    const count = state.events.filter(e => e.type === 'switchboard').pop()?.count ?? 0;
     refresh();
     // PUBLIC, for every guest: it stays up until the player taps Continue (the clock waits).
     // Practice: nobody else is in the hotel, so there is nobody to count — say what it does in a match.
@@ -1579,6 +1556,15 @@ function onRoom() {
 }
 
 // --- End of the match ----------------------------------------------------------------------
+// How the match ended, from the table's end of it (view.end, DESIGN §6.1: the result, dawn, and every guest's role,
+// whether they lived and got out, revealed once the match is over). The end screen, Your record and the music read it;
+// the achievements read the whole history it brings (applyView puts it in the screens' events and the player's inbox).
+// (Shown before the table has ended it, from the tests' hook: the match as the screens know it.)
+function endOf() {
+  if (state.end) return state.end;
+  return { won: state.won, dawn: !!state.dawn, reveal: state.players.map(p => ({
+    seat: p.index, possessed: !!p.possessed, convertedBy: p.convertedBy ?? null, alive: !!p.alive, escaped: !!state.escaped?.has(p.id) })) };
+}
 function showEnd() {
   if (!DIRECT) matchMarker.clear();         // (the match ended: it is not one the browser cut short)
   stopTimer();
@@ -1594,17 +1580,19 @@ function showEnd() {
     countHonours();
     return;
   }
-  const you = me();
-  const out = [...state.escaped].map(id => state.players.find(p => p.id === id)).filter(Boolean);
-  const cleanWon = state.won === 'humans';
-  const yourSideWon = cleanWon !== !!you.possessed;
+  const end = endOf();
+  const role = new Map(end.reveal.map(r => [r.seat, r]));
+  const yours = role.get(humanSeat) || {};
+  const out = end.reveal.filter(r => r.escaped).map(r => state.players[r.seat]).filter(Boolean);
+  const cleanWon = end.won === 'humans';
+  const yourSideWon = cleanWon !== !!yours.possessed;
   const name = p => (p.index === humanSeat ? 'You' : p.name);
   // What happened, in a line or two; then every guest's role revealed (the match is over).
   let title, line;
   if (cleanWon) {
     title = out.some(p => p.index === humanSeat) ? 'You got out!' : 'The guests got out';
     line = `${andList(out.map(name))} escaped carrying ${rules.lanternsToEscape} Lanterns.`;
-  } else if (state.dawn) {
+  } else if (end.dawn) {
     title = 'Dawn breaks';
     line = `Round ${rules.roundLimit} has ended and nobody got out. The hotel keeps them.`;
   } else {
@@ -1617,17 +1605,19 @@ function showEnd() {
     name: p.name,                                   // (the username; your own row is marked "You")
     who: p.index === humanSeat ? 'You' : '',
     color: p.color,
-    possessed: p.possessed,
-    status: state.escaped.has(p.id) ? 'Escaped' : !p.alive ? 'Dead' : '',
+    possessed: !!role.get(p.index)?.possessed,
+    status: role.get(p.index)?.escaped ? 'Escaped' : !role.get(p.index)?.alive ? 'Dead' : '',
     you: p.index === humanSeat,
     player: p,                                      // (their face in the row: the normal portrait, never the red-eyed one)
   }));
+  // (who was possessed first, and whom they possessed: the roles as the end reveals them)
+  const revealed = { players: state.players.map(p => ({ ...p, possessed: !!role.get(p.index)?.possessed, convertedBy: role.get(p.index)?.convertedBy ?? null })) };
   overlays.showEnd(title, `${line}\n${winners} · ${roundLabel(state)}`, {
     restartLabel: 'Play again', reveal, won: yourSideWon,
     verdict: yourSideWon ? END_WORDS.victory : END_WORDS.defeat,       // (whether or not you are alive or got out)
-    recap: endRecap(state, humanSeat),                                  // (who was possessed first, whom they possessed)
+    recap: endRecap(revealed, humanSeat),
   });
-  countRecord({ won: yourSideWon, possessed: !!you.possessed, escaped: state.escaped.has(you.id) });
+  countRecord({ won: yourSideWon, possessed: !!yours.possessed, escaped: !!yours.escaped });
   countHonours();
 }
 // Your record (src/record.js): each finished game is counted once, when its end screen shows (it can
@@ -1672,10 +1662,11 @@ function resetWorld() {
   gameToken++;
   foundThisGame = [];
   seed = newSeed();
-  table?.leave();
-  table = newTable(seed);                  // a new random hotel and a new deal, at a new table (src/net/localTable.js)
-  lastReal = table.local.debug;
-  table.on(onTableChange);
+  (table ?? lastTable)?.leave();
+  const t = newTable(seed);                // a new random hotel and a new deal, at a new table (src/net/localTable.js)
+  table = lastTable = t;
+  t.on(change => onTableChange(t, change));
+  t.onChat(hearChat(t));
   syncTable();                             // (the screens' state and hotel: the new match)
   clearRoomViews(roomViews, view.scene);
   releaseTileTextures();                   // (the old hotel's room light maps leave the graphics chip)
@@ -1711,7 +1702,6 @@ function newTable(seed) {
   return tableModule.createLocalTable({
     roster: cast, humanSeat, seed, practice: PRACTICE, possessedIndex: roleChoice, botSeats,
     clockOn: rules.turnTimerEnabled, paceScale: botPaceScale, chat: settings.get('chat') !== 'off', hotelData: hotel, cfg,
-    adopt: { state: realState },           // TRANSITIONAL (P1C S1-S4): dealt into the page's one real state, as before
     referee: true,                         // (the table's referee runs the game: Practice from P1C S3, every match from S4)
   });
 }
@@ -1738,7 +1728,7 @@ let phase = 'menu';          // 'menu' (the lobby behind the menu) | 'intro' (th
 let lobby = null;            // the lobby scene, once it has loaded (or null: the menu shows over the hotel)
 let lobbyReady = false;
 let lastChoice = { practice: true };
-let botModules = null;       // src/bots/*, loaded the first time a match is set up
+let botModules = null;       // src/bots/profiles.js (the computer guests' names and looks), loaded the first time a match is set up
 let tableModule = null;      // src/net/localTable.js (and the computer guests' brains it seats), loaded when a game is set up
 const LIFT_MAX_MS = 9000;    // the lift sequence normally takes about 5 s
 const fadeEl = document.getElementById('fade');
@@ -1756,8 +1746,8 @@ async function fade(on, ms) {
 
 async function loadBots() {
   if (!botModules) {
-    const [profiles, autoplay] = await Promise.all([import('./bots/profiles.js'), import('./bots/autoplay.js')]);
-    botModules = { profiles, autoplay };
+    const profiles = await import('./bots/profiles.js');
+    botModules = { profiles };
   }
   return botModules;
 }
@@ -1835,10 +1825,7 @@ function setupGame(plan) {
   table = null;
   hud.rebuild();
   resetWorld();                            // (the new table: the deal, the computer guests and their chatter)
-  if (!PRACTICE) {
-    botsAutoplay = botModules.autoplay;
-    movers.forEach((m, i) => { m.speedScale = isBot(i) ? botWalkScale() : 1; });
-  }
+  if (!PRACTICE) movers.forEach((m, i) => { m.speedScale = isBot(i) ? botWalkScale() : 1; });
   document.title = PRACTICE ? 'Hotel Escape — Practice' : `Hotel Escape — ${cast.length} guests`;
   refresh();
 }
@@ -2166,7 +2153,7 @@ function offerMove(destId) {
 // Set off on a confirmed walk (the player's, or a computer guest's). The view comes back to the guest
 // so the walk can be followed (on another guest's turn, only if the view follows them: Settings).
 function startWalk(plan) {
-  if (refereed() && !isBot(state.activeIndex)) {
+  if (table && !isBot(state.activeIndex)) {
     const r = table.local.apply({ k: 'move', to: plan.target ?? plan.dest });
     if (!r.ok) { const dest = floor.rooms.get(plan.target ?? plan.dest); if (dest) hud.toast(moveRefusal(r, dest, me()), 4); return; }
   }
@@ -2194,6 +2181,10 @@ function standingSlot(roomId, forIndex) {
 
 // The standing spot for guest `index` in any room (what planRoomMove asks for).
 const standAtFor = index => roomId => { const s = standingSlot(roomId, index); return [s.x, s.z]; };
+// The active guest as a walk is planned for them (discovery.planToRoom): the player's own record holds their action
+// points; a computer guest's never reach the screens, and the table has already allowed its walk (its walk news, a walk
+// cut short), so action points are not what the figure's path is planned by.
+const walker = p => (p.index === humanSeat ? p : { ...p, actionPoints: Infinity });
 
 // Bodies on the floor. A guest who dies falls on their back: feet where they stood, head about a
 // body length behind them (src/render/characterView.js setDead turns the figure about its feet, and
@@ -2239,11 +2230,11 @@ function onOpenDoor(doorId) {
   if (!running || state.finished || !myTurn()) return;
   const player = activePlayer(state);
   const rooms = floor.roomList.length;
-  const r = act({ k: 'open', door: doorId }, (S, F) => openDoor(S, F, real(player), doorId));
+  const r = act({ k: 'open', door: doorId });
   if (!r.ok) { hud.toast(DOOR_FAIL[r.reason] || 'That door will not open.'); refresh(); syncViews(false); return; }
   // (the room behind it: the one the table placed, as the screens' copy of the hotel now holds it)
-  const room = (r.room && floor.rooms.get(r.room.id)) || floor.roomList[rooms] || floor.roomList.at(-1);
-  const locked = r.locked ?? state.lockedRooms.has(room.id);
+  const room = floor.roomList[rooms] || floor.roomList.at(-1);
+  const locked = state.lockedRooms.has(room.id);
   rebuildGrid();
   discovery.refresh();
   syncViews(true);
@@ -2397,10 +2388,11 @@ function endMusic() {
   audio.setScene('end');
   const lead = state.escaped?.size ? 0.9 : 0.2;     // (an escape's door and night air go first)
   if (state.practice) { sfx('win', { delay: lead }); return; }
-  const you = me();
-  const yourSideWon = (state.won === 'humans') !== !!you?.possessed;
+  const end = endOf();
+  const you = end.reveal.find(r => r.seat === humanSeat);
+  const yourSideWon = (end.won === 'humans') !== !!you?.possessed;
   const side = yourSideWon ? (you?.possessed ? 'winPossessed' : 'win') : 'lose';
-  if (state.dawn) { sfx('dawn'); sfx(side, { delay: 3.2, volume: 0.8 }); } else sfx(side, { delay: lead });
+  if (end.dawn) { sfx('dawn'); sfx(side, { delay: 3.2, volume: 0.8 }); } else sfx(side, { delay: lead });
 }
 
 // --- Start: the main menu, or a direct link --------------------------------------------------------
@@ -2475,7 +2467,7 @@ function applyPixelRatio() { view.setPixelRatio(phase === 'menu' && !DIRECT && !
 function applySettings(name = null) {
   if (!name || name === 'graphics') applyPixelRatio();
   if (name === 'music' || name === 'sound') audio.applySettings();
-  if (name === 'botSpeed' && T().bots) movers.forEach((m, i) => { if (isBot(i)) m.speedScale = botWalkScale(); });
+  if (name === 'botSpeed' && table && !PRACTICE) movers.forEach((m, i) => { if (isBot(i)) m.speedScale = botWalkScale(); });
 }
 applySettings();
 
@@ -2583,7 +2575,7 @@ function frameLoop(now) {
       discovery.update();
       if (pendingArrival && !activeMover().walking && activeMover().path.length === 0) onArrive();
       // (a walk the table was told of that ended without crossing into a room: it is over all the same)
-      else if (!pendingArrival && refereed() && T().referee.walking && !activeMover().walking && !activeMover().path.length) table.local.arrived();
+      else if (!pendingArrival && table?.local.walking() && !activeMover().walking && !activeMover().path.length) table.local.arrived();
     });
     step('queued tap', replayQueuedTap);
     step('bots', () => tickBots(now));
@@ -2661,11 +2653,16 @@ function lobbyFrame(now, dt, time, prevLobby) {
 document.addEventListener('visibilitychange', () => { last = performance.now(); });
 
 // --- Debug / test hooks ------------------------------------------------------------------
-window.__game = {
+// The one place the page reaches the table's real game (table.local.debug: tests/seam-check.mjs holds it to this block).
+window.__game = (() => {
+  // the real game: the table's (behind the menu, the last table's; before the first table, the screens' own state)
+  const real = () => (table ?? lastTable)?.local.debug ?? { state, floor };
+  const bots = () => table?.local.debug.bots ?? null;
+  return {
   // the REAL game (the table's), for the tests' direct engine calls; handing it out marks the screens to catch up
   // before they read again (pull). What the screens read: presenterState, presenterFloor.
-  get state() { dirty = true; return realNow().state; },
-  get floor() { dirty = true; return realNow().floor; },
+  get state() { dirty = true; return real().state; },
+  get floor() { dirty = true; return real().floor; },
   presenterState: state, presenterFloor: floor,
   table: () => table,
   cfg, rules, hotel, grid, movers, rig, roomViews, doorways, characters, discovery, view, pathPreview, fog, screenTags,
@@ -2673,8 +2670,8 @@ window.__game = {
   begin, restart, endTurn: () => doEndTurn({ ask: false }),     // (tests: End turn with the question answered; the button asks)
   autoEnd: on => { if (on !== undefined) { autoEndOn = !!on; autoEndKey = ''; } return autoEndOn; }, autoEndFired: () => autoEndFired,     // (tests: the turn passing by itself when the actions run out, on or off)
   refresh,
-  activePlayer: () => { dirty = true; return activePlayer(realNow().state); },
-  nextPlayer: () => { dirty = true; return nextPlayer(realNow().state); },
+  activePlayer: () => { dirty = true; return activePlayer(real().state); },
+  nextPlayer: () => { dirty = true; return nextPlayer(real().state); },
   activeMover,
   walkTo: (x, z) => discovery.walkTo(x, z),
   moveToRoom,
@@ -2688,7 +2685,7 @@ window.__game = {
   cardViewId: () => hand.cardId,
   useBandage: id => onUseBandage(id),
   // Part 2: rooms with jobs and the new cards (same paths as the buttons).
-  roomJob: () => canUseRoom(realNow().state, realNow().floor, activePlayer(realNow().state)),
+  roomJob: () => canUseRoom(real().state, real().floor, activePlayer(real().state)),
   useRoom: () => onRoom(),
   useEspresso: id => onEspresso(id),
   useHandMirror: (id, targetId) => onHandMirror(id, targetId),
@@ -2707,7 +2704,7 @@ window.__game = {
   // whose turn, the menu and the lift.
   humanSeat: () => humanSeat,
   isBot: i => isBot(i),
-  bots: () => T().bots,
+  bots,
   botProfiles: () => botProfiles.map(p => (p ? { username: p.username, style: p.style } : null)),
   // Who you are (src/account/account.js: the saved profile, or null before the register), and the seats
   // of this table (src/table.js: id, username, colour, avatar), you marked.
@@ -2729,11 +2726,11 @@ window.__game = {
   chatSay: (id, about = null) => chat.send(id, about),
   chatOpen: () => chat.isOpen,
   chatPanel: () => chat.panelState(),
-  chatPost: msg => chatChannel.post(msg),
-  botsHeard: () => T().bots?.heardCount?.() ?? 0,
+  chatPost: msg => chatRoad.post(msg),
+  botsHeard: () => bots()?.heardCount?.() ?? 0,
   chatBubbles: () => screenTags.list('chat:'),
   chatRecent: () => chat.recent(),
-  chatter: () => T().chatter,
+  chatter: () => table?.local.debug.chatter ?? null,
   tips: () => tips.debug(),          // first-match tips (tests): the one showing, the ones waiting, the ones seen
   skipToEnd: () => skipToEnd(),
   backToMenu: () => backToMenu(),
@@ -2773,13 +2770,13 @@ window.__game = {
   // tile — so leaving the page cuts no download off)
   settled: () => !holdHotel && dressingDone && (!warmPrep || warmSettled)
     && characters.every(cv => { const d = cv.debug(); return !d.model || d.loaded; }),
-  publicLog: () => realNow().state.log.map(l => l.text),
-  notesOf: i => [...(realNow().state.players[i].notes || [])],
-  possessedIndexes: () => realNow().state.players.filter(p => p.possessed).map(p => p.index),
-  lanterns: () => activePlayer(realNow().state).hand.filter(c => c.type === 'lantern').length,
+  publicLog: () => real().state.log.map(l => l.text),
+  notesOf: i => [...(real().state.players[i].notes || [])],
+  possessedIndexes: () => real().state.players.filter(p => p.possessed).map(p => p.index),
+  lanterns: () => activePlayer(real().state).hand.filter(c => c.type === 'lantern').length,
   lockedRooms: () => [...state.lockedRooms],
   openLocks: () => [...state.openLocks.keys()],       // locked doors a key opened this turn
-  canEscape: () => canEscape(realNow().state, realNow().floor, activePlayer(realNow().state)),
+  canEscape: () => canEscape(real().state, real().floor, activePlayer(real().state)),
   escape: () => onEscape(),         // (the Exit icon's tap)
   openHand: cardId => hand.open(state, floor, cardId),
   rotate: steps => rig.rotate(steps),
@@ -2823,16 +2820,11 @@ window.__game = {
   // the random hotel: closed doors of the active guest's room, open one, stack the deck (tests)
   closedDoors: () => (floor.rooms.get(activePlayer(state).currentRoom)?.frontier || []).map(d => ({ id: d.id, side: d.side, jammed: d.jammed, center: d.center, fog: `${d.cell[0]},${d.cell[1]}` })),
   openDoor: id => onOpenDoor(id),
-  stackDeck: id => stackDeck(realNow().floor, id),
+  stackDeck: id => real().stackDeck?.(id),
   // Tests: put a particular room on the board (next to room `nextTo` if given), as if its door
-  // had been opened, without spending anyone's action points.
+  // had been opened, without spending anyone's action points (the table does it: src/net/localTable.js).
   revealTile: (id, nextTo = null) => {
-    W((S, F) => {
-      for (const room of growTo(F, id, { isLocked: r => isLocked(S, r) }, nextTo)) {
-        S.discovered.add(room.id);
-        if (room.locked && rules.lockedDoorsEnabled) S.lockedRooms.add(room.id);
-      }
-    });
+    real().revealTile?.(id, nextTo);
     rebuildGrid(); discovery.refresh(); syncViews(false); refresh();
     return floor.rooms.has(id) && (!nextTo || floor.rooms.get(id).neighbours.has(nextTo));
   },
@@ -2855,7 +2847,9 @@ window.__game = {
   renderInfo: () => ({ calls: view.renderer.info.render.calls, triangles: view.renderer.info.render.triangles,
     geometries: view.renderer.info.memory.geometries, textures: view.renderer.info.memory.textures, programs: view.renderer.info.programs.length }),
   setPixelRatio: cap => view.setPixelRatio(cap),
-};
+  };
+})();
+
 
 // Every hook reads the latest: a test may have changed the real game since it was handed out, so the screens catch up
 // first (pull). (The two getters above are left as they are.)
@@ -2871,7 +2865,7 @@ for (const [k, d] of Object.entries(Object.getOwnPropertyDescriptors(window.__ga
 function moveToRoom(destId) {
   const player = activePlayer(state);
   if (!floor.rooms.has(destId) || destId === player.currentRoom) return { ok: false, reason: 'noRoom' };
-  const plan = discovery.planToRoom(destId, standAtFor(player.index), real(player));
+  const plan = discovery.planToRoom(destId, standAtFor(player.index), walker(player));
   if (plan.ok) startWalk(plan);
   return plan;
 }

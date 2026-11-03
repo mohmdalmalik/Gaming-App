@@ -6,6 +6,9 @@
 //   applyView(target, view, received, { fresh, newMatch })   write `view` INTO `target` and return it
 //   viewAsState(view, received)                              the same into a new blank state (tests, one-off checks)
 //   blankState()                                             an empty presenter state
+//   idleView({ roster, seat, seed, hotelData, cfg })         { view, events }: the hotel behind the menu before any
+//                                                            table is set up (a practice deal nobody plays: its real
+//                                                            game is dropped at once, only its view leaves here)
 //
 // `received`: the events this device has been given for this match (src/net/playerView.js seatEvents: { o, ... }),
 // all of them or only the new ones: only those past what `target` already holds are added. Public events go to
@@ -30,6 +33,9 @@
 // does not continue, a finished match followed by one still running); `newMatch` (true / false) overrides that.
 // `fresh`: a reconnect, a seat switch, a restore or a skipped update: draw, don't animate.
 import { outfitOf } from '../data/wardrobe.js';
+import { createHotel } from '../game/hotel.js';
+import { createState } from '../game/state.js';
+import { playerView, seatEvents } from './playerView.js';
 
 // The placeholder for a card nobody here may see (one in the draw pile, one on each floor with something on it).
 export const HIDDEN_CARD = Object.freeze({ id: null, type: null, hidden: true });
@@ -50,6 +56,16 @@ export function blankState() {
 
 export function viewAsState(view, received = []) {
   return applyView(blankState(), view, received);
+}
+
+// What the screens show before the first table (the page's boot: the hotel behind the main menu, and behind a direct
+// link's "Tap to begin" card until its game is dealt): a practice deal of these seats from `seed`, exactly as the page
+// dealt it at boot before (the same hotel, the same card numbers), seen from `seat`. Nobody plays it.
+export function idleView({ roster, seat = 0, seed, hotelData, cfg }) {
+  const floor = createHotel(hotelData, cfg);
+  const state = createState(floor, roster, seed, { mode: 'practice' });
+  state.viewerIndex = seat;
+  return { view: playerView(state, floor, seat), events: seatEvents(state, seat).events };
 }
 
 const copy = x => (x == null ? null : JSON.parse(JSON.stringify(x)));

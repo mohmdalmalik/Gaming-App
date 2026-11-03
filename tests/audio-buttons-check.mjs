@@ -54,6 +54,9 @@ const EXPECT = {
   'btn-table-wardrobe': 'open', 'btn-table-wait': 'click', 'btn-table-dlg-no': 'click', 'btn-table-dlg-yes': 'click',
   // the review link's seat switch (src/ui/seatSwitch.js): "Show sam's screen"
   'btn-seat-switch': 'click',
+  // Co-op in the match (src/ui/coopMatch.js): the one card that stops or interrupts a match (Back to the table, Try
+  // again / Leave match, Play here instead / Main menu, OK)
+  'btn-coop-mc-a': 'click', 'btn-coop-mc-b': 'click',
   // the full-screen overlays
   'btn-begin': 'click', 'btn-notice-ok': 'click', 'btn-ask-no': 'click', 'btn-ask-yes': 'click',
   'btn-lock-cancel': 'close',            // the lock choice (src/ui/lockChoice.js): Not now; its "Use ..." buttons have no id, a plain click

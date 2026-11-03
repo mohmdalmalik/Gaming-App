@@ -250,6 +250,7 @@ export const ONLINE_TEXT = {
       discard: '{name} must discard',
       role: '{name} must read their role',
       screen: "{name} has a screen to read",
+      turn: "It's {name}'s turn",                    // (in the match: the other seat's own turn, nothing asked yet)
     },
   },
 };

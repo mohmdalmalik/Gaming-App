@@ -64,8 +64,12 @@ import { standable } from './game/moves.js';
 import { usePracticeWording, prepareSoulCards } from './ui/cards.js';
 import { redEyedAllies, knownPossessedIds } from './ui/allies.js';
 import { createMenu } from './ui/menu.js';
+import { createCoopMatch } from './ui/coopMatch.js';
 // (the screens' own state and hotel, written from what the table shows: src/net/, DESIGN §6.6-§6.7)
 import { createFloorCopy, syncFloor } from './net/floorCopy.js';
+import { isLocalHost } from './net/serverUrl.js';
+import { createPresentQueue } from './net/presentQueue.js';
+import { ONLINE, ONLINE_RULES } from './data/online.js';
 import { applyView, blankState, idleView } from './net/viewAsState.js';
 // (avatars: the wardrobe screen, the runtime portraits and the soul cards' faces from each seat's avatar)
 import { createWardrobe } from './ui/wardrobe/wardrobe.js';
@@ -82,7 +86,9 @@ import { matchSummary, isTestLink } from './matchSummary.js';
 import { honours } from './honours.js';
 import { ACHIEVEMENTS } from './data/achievements.js';
 import { showEndHonours } from './ui/honoursEnd.js';
-import { displayAvatar } from './data/wardrobe.js';
+import { displayAvatar, normaliseAvatar, outfitOf } from './data/wardrobe.js';
+// (Co-op: every word of the match's additions, src/data/onlineText.js)
+import { ONLINE_TEXT, fill, byRules } from './data/onlineText.js';
 import { createFeed } from './ui/feed.js';
 import { createChatUI } from './ui/chat.js';
 import { createTips } from './ui/tips.js';
@@ -159,6 +165,12 @@ let humanSeat = 0;            // the player's own seat (a match: random, like jo
 // (window.__game, tests/seam-check.mjs).
 let table = null;             // the table being played (none behind the menu: nobody thinks or talks there)
 let lastTable = null;         // the table last set up (behind the menu, the test hooks still hand out its game)
+// Co-op (an online table, src/net/onlineTable.js; the section "Co-op" below): commands waiting for their outcome (the
+// player's taps wait meanwhile), whether the player asked to end the turn on screen (else the table's clock ended it),
+// the role screen at the start read (netBegun) and turn 1 still waiting for the others' (netStarting), the role question
+// last shown, the results whose screens are up or were read.
+let netBusy = 0, endAsked = false, netBegun = true, netStarting = false, roleShownFor = null;
+const netShown = new Set();
 // The table's latest view, written into the screens' state and their copy of the hotel (DESIGN §6.6, §6.7).
 function present(view, events, { newMatch = null, fresh = false } = {}) {
   applyView(state, view, events, { newMatch, fresh });
@@ -167,11 +179,13 @@ function present(view, events, { newMatch = null, fresh = false } = {}) {
 // The table told the page that something changed (table.on): the screens' state follows at once. What the page shows of
 // it (a computer guest's walk or door, a meeting, the turn passing) waits for follow(), once the table's call is over.
 function onTableChange(t, { view, events, fresh, local = [] }) {
+  if (t.kind === 'online' && t !== table) return;      // (Co-op: a table not on screen, the review link's other seat)
   const newMatch = presented !== t;
   presented = t;
   // (an attack's screen shows the hearts its target lost: their health as it was just before)
   if (!newMatch) for (const e of events) if (e.type === 'attack') healthBefore.set(e.o, state.players[e.target]?.health);
-  present(view, events, { newMatch, fresh });
+  present(view, t.kind === 'online' ? t.received : events, { newMatch, fresh });
+  if (t.kind === 'online') { coopUI.update(view, { status: t.net?.status }); netQueue.push(fresh); netTableNews(events); }
   for (const ev of local) { if (ev.type === 'attackSeen') attackSeen = ev; else localNews.push(ev); }
   tableNews = true;
 }
@@ -182,7 +196,7 @@ let tableNews = false, localNews = [], seenO = 0, shown = null, attackSeen = nul
 const healthBefore = new Map();
 // The table builds its view again from its real game, and the screens follow (behind the menu: the last table's; before
 // the first table, the hotel behind the menu never changes).
-function syncTable() { (table ?? lastTable)?.local.sync(); }
+function syncTable() { (table ?? lastTable)?.local?.sync(); }
 // The screens never read anything stale: after a test hook handed out the real game (window.__game.state, .floor,
 // .activePlayer ...), everything that reads (refresh, discovery, any hook) catches up first, for the rest of that
 // frame: the real objects handed out may be changed at any moment until then. The next frame catches up once more and
@@ -191,13 +205,26 @@ function pull() { if (dirty) syncTable(); }
 function pullFrame() { if (dirty) { syncTable(); dirty = false; } }
 // The player's command to the table (DESIGN §6.3; its referee, src/net/referee.js, runs every game): synchronous, the
 // screens' state is current when it returns.
-const act = cmd => (table ? table.local.apply(cmd) : { ok: false, reason: 'notNow' });
+const act = cmd => (!table ? { ok: false, reason: 'notNow' } : online() ? netAct(cmd) : table.local.apply(cmd));
+// (Co-op: the table is the server's, and a command's outcome comes back a moment later. after(r, fn) runs fn with the
+// outcome: at once in Single player, whose table answers synchronously; at a Co-op table once the view after its reply
+// is in, and only while the same table is still on screen (the review link's seat switch may have changed it).)
+function after(r, fn) {
+  if (!r || typeof r.then !== 'function') return fn(r);
+  const t = table;
+  r.then(v => { if (table === t) fn(v); }, err => console.warn('a Co-op command failed:', err));
+  return undefined;
+}
+// An acknowledgement whose outcome nobody waits for.
+const tell = cmd => { if (!table) return; if (online()) table.send(cmd); else table.local.apply(cmd); };
+// A Co-op table (src/net/onlineTable.js), not this device's own.
+const online = () => table?.kind === 'online';
 // The table's private results for the player (found cards, a Hand Mirror): the ones there now, and the newest of a kind
 // that was not; a result is acknowledged once its screen closes (DESIGN §6.4).
 const resultIds = () => new Set((state.results || []).map(r => r.id));
 const newResult = (kind, had) => (state.results || []).filter(r => r.kind === kind && !had.has(r.id)).pop() || null;
 const newestResult = kind => (state.results || []).filter(r => r.kind === kind).pop() || null;
-const ackResult = id => { if (id != null && table) table.local.apply({ k: 'ack', what: 'result', id }); };
+const ackResult = id => { if (id != null && table) { if (online()) netSeen(id); tell({ k: 'ack', what: 'result', id }); } };
 let botProfiles = [];         // per seat: the bot's profile (username, style), or null for the player
 const cast = seatTable({ me: myIdentity(), seat: 0 });   // the seats at the table, in seat order (src/table.js; filled in place by setupGame)
 applyMode('practice', 1);
@@ -339,6 +366,9 @@ function followPoint() {
 const hud = createHud(document, cfg);
 const map = createMap(document, floor, cfg);
 const overlays = createOverlays(document);
+// Co-op's additions to the match (src/ui/coopMatch.js): Away on the strip, the stall banner, the reconnect pill, the
+// cards that end or interrupt a Co-op match, the end screen's words. Nothing of it shows in Single player.
+const coopUI = createCoopMatch(document, { text: ONLINE_TEXT, sfx });
 watchDialogs(document);      // the screens over the game take the keyboard focus and keep it (src/ui/focus.js)
 // How to play (src/ui/howToPlay.js: five pages, from the main menu and from the Menu) and the in-match Menu
 // panel (src/ui/gameMenu.js). The panel holds the game still exactly as a question does (the clock, the computer
@@ -394,7 +424,7 @@ const hand = createHand(document, cfg, { onUseBandage, onUnlock, onBarricade, on
 // The padlock of a locked door next to the guest, tapped: which key or pick to open it with (onLockTap, onUnlock).
 const lockChoice = createLockChoice(document, { onChoose: (cardId, roomId) => onUnlock(cardId, roomId) });
 const discard = createDiscard(document, cfg, {
-  onDiscard: cardId => { const r = act({ k: 'discard', card: cardId }); if (!r.ok) hud.toast('That card cannot be discarded.'); refresh(); },
+  onDiscard: cardId => after(act({ k: 'discard', card: cardId }), r => { if (!r.ok) hud.toast('That card cannot be discarded.'); refresh(); }),
 });
 // The hand, held as a fan of face-up cards; tapping one opens it large in the card view.
 const fan = createHandFan(document, { onOpen: cardId => { if (running && !uiBusy()) hand.open(state, floor, cardId); } });
@@ -408,9 +438,9 @@ const feed = createFeed(document);     // what the other guests just did (a matc
 const chatHeard = new Set();
 const chatRoad = {
   onMessage(fn) { chatHeard.add(fn); return () => chatHeard.delete(fn); },
-  waitFor: () => (table ? table.local.chatWait() : 0),
-  say: (seat, id, about = null) => (table ? table.local.say(id, about) : null),
-  post: msg => (table ? table.local.post(msg) : null),
+  waitFor: () => (!table ? 0 : online() ? table.chatWait() : table.local.chatWait()),
+  say: (seat, id, about = null) => (!table ? null : online() ? table.sayNow(id, about) : table.local.say(id, about)),
+  post: msg => (table && !online() ? table.local.post(msg) : null),
   reset() { /* a new table starts with nobody cooling down */ },
 };
 // (what a table says reaches the chat screen while it is the table being played)
@@ -431,10 +461,10 @@ const topLeftEl = document.querySelector('.hud-top-left');
 // `lines`: { k: 'ack', what: 'notes' } (DESIGN §6.3); never off the screens' copy)
 const notesRead = (p, lines = null) => {
   if (!table || p?.index !== humanSeat) return;
-  table.local.apply(lines ? { k: 'ack', what: 'notes', lines: [...lines] } : { k: 'ack', what: 'notes' });
+  tell(lines ? { k: 'ack', what: 'notes', lines: [...lines] } : { k: 'ack', what: 'notes' });
 };
 // (the role screen has been read: the start of a match, a role that changed)
-const roleRead = () => { if (table) table.local.apply({ k: 'ack', what: 'role' }); };
+const roleRead = () => { if (!table) return; if (online()) roleShownFor = state.ask?.kind === 'role' ? state.ask.id : roleShownFor; tell({ k: 'ack', what: 'role' }); };
 const handoff = createHandoff(document, { onNotesRead: p => notesRead(p) });
 // (`known`: the face-off's crimson ring, only on a guest the player certainly knows is possessed: the strip's own marker)
 const meeting = createMeeting(document, cfg, { isViewer: p => !PRACTICE && p.index === humanSeat, redEyes: p => redEyedAllies(state, me()).has(p.id),
@@ -470,12 +500,13 @@ let activeWalk = null;       // the confirmed walk under way (its plan), until t
 let walkCutShort = false;    // the clock ran out during this walk: it was cut short at the next room
 
 const uiBusy = () => map.isOpen || hand.isOpen || discard.isOpen || lockChoice.isOpen
-  || overlays.endOpen || overlays.noticeOpen || askUp() || handoff.isOpen || meeting.isOpen;
+  || overlays.endOpen || overlays.noticeOpen || askUp() || handoff.isOpen || meeting.isOpen || netBusy > 0 || coopUI.cardOpen;
 
 const discovery = createDiscovery({
   floor, grid, state, movers, cfg,
   // (crossing into a room is the table's to settle: the real game, then the screens' state at once)
-  enter: (p, roomId) => (table ? table.local.step(roomId) : { ok: false, reason: 'notNow' }),
+  // (Co-op: the server has settled the whole walk already, DESIGN §4.5: a crossing settles nothing)
+  enter: (p, roomId) => (!table ? { ok: false, reason: 'notNow' } : online() ? null : table.local.step(roomId)),
   before: () => pull(),
   on: {
     roomEntered(result) {
@@ -520,7 +551,7 @@ function syncChat(now) {
   const clear = screenClear() && !hand.isOpen;
   const ended = running && !PRACTICE && overlays.endOpen;
   chat.update({ clear, ended });
-  if (!table?.local.chats || !running || now < chatPollAt) return;
+  if (!table?.local?.chats || !running || now < chatPollAt) return;
   chatPollAt = now + CHAT.pollMs;
   table.local.chatTick(now, { hold: !clear && !ended });
 }
@@ -611,6 +642,7 @@ function begin() {
   // A match: the player reads their secret role first, then the first turn begins (the table waits for it: its referee
   // starts turn 1 when the role screen is acknowledged).
   inActionPhase = false;
+  if (online()) { netBegin(); return; }
   handoff.revealRole(me(), {}, () => { roleRead(); shown = turnNow(); beginTurn(); });
   if (!DIRECT) matchMarker.set();      // (a real match, not a direct test link: if the browser cuts it short, the next start says so)
 }
@@ -625,16 +657,19 @@ function noteLostMatch() {
 
 // A new turn: the player's own, or a computer guest's.
 let lockNews = '';
-function beginTurn() {
+// (`resume`, Co-op only: the turn is already under way, the review link's seat switch or a return to the table: no
+// "Your turn" again)
+function beginTurn({ resume = false } = {}) {
   if (state.finished) { showEnd(); return; }
   inActionPhase = false;
+  endAsked = false;
   stopTimer();
   hud.hideConfirm(); selectedMove = null; activeWalk = null; walkCutShort = false; queuedTap = null;
   const p = activePlayer(state);
   movers[p.index]?.halt();
   syncViews(false);
   refresh();
-  if (isBot(p.index)) { startBotTurn(p); return; }
+  if (isOther(p.index)) { startBotTurn(p); return; }
   // The player's turn: anything that happened to them meanwhile first (they were mirrored, a trade
   // they were dragged into), in private, then their actions.
   rig.recentre();
@@ -643,8 +678,10 @@ function beginTurn() {
     inActionPhase = true;
     startTimer();
     refresh();
-    hud.toast(`Your turn — ${rules.actionPointsPerTurn} actions.${lockNews ? ` ${lockNews}` : ''}`, lockNews ? 5 : undefined);
-    sfx('yourTurn');
+    if (!resume) {
+      hud.toast(`Your turn — ${rules.actionPointsPerTurn} actions.${lockNews ? ` ${lockNews}` : ''}`, lockNews ? 5 : undefined);
+      sfx('yourTurn');
+    }
     lockNews = '';
   };
   if (p.roleChangePending) {
@@ -669,7 +706,7 @@ function beginTurn() {
 let clockShown = false;
 function startTimer() {
   if (!rules.turnTimerEnabled) { hud.hideTimer(); timerLeft = 0; clockShown = false; return; }
-  const left = table ? table.local.timeLeft() : 0;
+  const left = !table ? 0 : online() ? (table.clockLeft() ?? 0) * 1000 : table.local.timeLeft();
   timerLeft = left > 0 ? left / 1000 : rules.turnTimerSeconds;
   clockShown = true;
   hud.showTimer(timerLeft, rules.turnTimerSeconds);
@@ -699,6 +736,7 @@ function holds() {
 // ticks out loud for its last ten seconds.
 function tickClock(now, dt) {
   if (!table) return;
+  if (online()) { netClock(now); return; }
   table.local.hold(holds());
   const turn = state.turn, before = timerLeft;
   if (table.local.tick(now, dt * 1000)) {
@@ -784,8 +822,11 @@ const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
 const turnNow = () => ({ game: gameToken, turn: state.turn, seat: state.activeIndex, sealed: [...(state.barricades?.keys() ?? [])], seq: state.eventSeq });
 function passTurn() {
   if (!table || state.finished || shown?.game !== gameToken || state.turn !== shown.turn) return;   // (passed already, and shown)
+  // (Co-op: the last discard passes the turn at the table by itself; the view shows the turn passing: follow)
+  if (online() && (endAsked || state.ask?.kind === 'discard')) return;
   // Never past the hand limit: anything that ends a turn goes through the discard screen first.
   if (overHandLimit(activePlayer(state)) > 0) { endTurnNow(); return; }
+  if (online()) { netEnd(); return; }
   const at = turnNow();
   const r = table.local.apply({ k: 'end' });
   if (!r.ok || (!state.finished && state.turn === at.turn)) return;      // (refused, or the discard question first)
@@ -834,7 +875,8 @@ function endTurnNow() {
     if (seconds === null) stopTimer();
     else { timerLeft = seconds; hud.showTimer(timerLeft, rules.turnTimerSeconds); }
     discardStamp = turnStamp();
-    table.local.apply({ k: 'end' });      // (the table's discard question: its clock gives the same allowance)
+    if (online()) netEnd();
+    else table.local.apply({ k: 'end' });      // (the table's discard question: its clock gives the same allowance)
     discard.open(p, passTurn, { seconds });
     return;
   }
@@ -852,8 +894,8 @@ let endTurnGuardUntil = 0;
 // `ask: false` ends the turn without the question: the bar's own End turn answer, and the tests' hook.
 function doEndTurn({ ask = true } = {}) {
   if (!running || state.finished || uiBusy()) return;
-  // Out of the match (dead) with the others still playing: the button skips to the result.
-  if (!PRACTICE && !me().alive) { skipToEnd(); return; }
+  // Out of the match (dead) with the others still playing: the button skips to the result (not at a Co-op table, TP5).
+  if (!PRACTICE && !me().alive) { if (!online()) skipToEnd(); return; }
   if (activeMover().walking || !myTurn() || !inActionPhase) return;
   if (performance.now() < endTurnGuardUntil) return;
   const left = activePlayer(state).actionPoints;
@@ -907,12 +949,12 @@ function tickAutoEnd(now) {
 // The active guest finished walking into a room. The Fire Exit is a safe zone (never a meeting);
 // escaping there is a separate action, the Exit icon (1 action: onEscape).
 function onArrive() {
-  if (table) table.local.arrived();       // (the table settles the arrival: a forced meeting there)
+  if (table && !online()) table.local.arrived();       // (the table settles the arrival: a forced meeting there)
   const player = activePlayer(state);
   const room = floor.rooms.get(player.currentRoom);
   pendingArrival = null;
   activeWalk = null;
-  if (room?.isExit && !isBot(player.index)) {
+  if (room?.isExit && !isOther(player.index)) {
     // The same words whoever you are, so they give nothing away about who is carrying what or who is
     // possessed. (Practice has nothing to hide: it says plainly what to do.)
     const cost = `${rules.actionCost.escape} action${rules.actionCost.escape === 1 ? '' : 's'}`;
@@ -949,7 +991,7 @@ let meetingLive = false;     // a meeting (or a proposed trade) is being played 
 let talk = null;
 const inMeeting = () => state.phase?.kind === 'meeting' || state.phase?.kind === 'offer';
 // The player's answer to the table's question `a` (DESIGN §6.3): synchronous, the screens' state is current after it.
-const answer = (a, value) => table.local.apply({ k: 'answer', ask: a.id, value });
+const answer = (a, value) => act({ k: 'answer', ask: a.id, value });
 
 let gameToken = 0;
 let foundThisGame = [];      // the cards the player's own searches found this game (the achievements: countHonours)
@@ -974,6 +1016,8 @@ function own(clear = null) {
 // (follow). A screen that is up carries on by itself when it closes.
 function talkNext() {
   if (!table || handoff.isOpen || tradeReveal.isOpen) return;
+  // (Co-op: the question comes with the view at once; it waits until the walk into the meeting has been seen)
+  if (online() && (pendingArrival || activeMover().walking || activeMover().path.length)) return;
   if (meeting.isOpen && !talk?.waiting) return;
   const res = (state.results || []).find(r => (r.kind === 'trade' || r.kind === 'noTrade' || r.kind === 'declined') && r.id !== talk?.result);
   if (res) { if (talk?.waiting) meeting.close(); talkResult(res); return; }
@@ -981,6 +1025,8 @@ function talkNext() {
   if (!a || a.id === talk?.ask || talk?.waiting === 'card') return;
   if (talk?.waiting === 'reply' && a.kind !== 'tradeCard') return;
   if (talk?.waiting) meeting.close();
+  // (Co-op: a question that reaches the player off their own turn, someone walked in or a Fire Exit offer, calls them)
+  if (online() && state.activeIndex !== humanSeat) sfx('yourTurn');
   if (a.kind === 'meetWhom') meetWhom(a);
   else if (a.kind === 'meetAct') meetAct(a);
   else if (a.kind === 'tradeCard') tradePick(a);
@@ -1010,9 +1056,12 @@ function meetAct(a) {
 function runAttack(P, Q, a, onBack = null) {
   meeting.attackPick(P, Q, weaponId => {
     const before = Q.health;
-    const r = answer(a, { attack: weaponId });
-    if (!r.ok) { hud.toast('You cannot attack now.'); onBack?.(); return; }
-    showAttack(P, Q, state.events.filter(e => e.type === 'attack' && e.by === P.index).pop(), before);
+    after(answer(a, { attack: weaponId }), r => {
+      if (!r.ok) { hud.toast('You cannot attack now.'); onBack?.(); return; }
+      // (Co-op: the weapon went if it left the hand: the table tells only the attacker that)
+      if (online() && !attackSeen) attackSeen = { by: P.index, target: Q.index, discarded: !me().hand.some(c => c.id === weaponId) };
+      showAttack(P, Q, state.events.filter(e => e.type === 'attack' && e.by === P.index).pop(), before);
+    });
   }, onBack);
 }
 
@@ -1048,10 +1097,12 @@ function tradePick(a) {
         mine: human.hand.find(c => c.id === id) || null, wasPossessed: !!human.possessed,
         allyBefore: redEyedAllies(state, human).has(other.id), markBefore: knownPossessedIds(state, human).has(other.id),
       };
-      if (!answer(a, id).ok) { t.ask = null; talkNext(); return; }
-      t.waiting = 'card';
-      meeting.waiting('A trade', `${other.name} is choosing a card…`);
-      talkNext();
+      after(answer(a, id), r => {
+        if (!r.ok) { t.ask = null; talkNext(); return; }
+        t.waiting = 'card';
+        meeting.waiting('A trade', `${other.name} is choosing a card…`);
+        talkNext();
+      });
     },
   });
 }
@@ -1108,13 +1159,13 @@ function onTrade() {
   const P = me();
   const others = playersInRoom(state, P.currentRoom, P.id);
   if (!others.length) return;
-  const ask = Q => {
-    if (!table.local.apply({ k: 'trade', with: Q.index }).ok) { refresh(); return; }
+  const ask = Q => after(act({ k: 'trade', with: Q.index }), r => {
+    if (!r.ok) { refresh(); return; }
     hud.hideConfirm(); selectedMove = null;
     meetingLive = true;
     talk = { waiting: 'reply' };
     meeting.waiting('A trade is proposed', `${Q.name} is thinking it over…`);
-  };
+  });
   if (others.length === 1) { ask(others[0]); return; }
   if (!canTradeVoluntarily(state, floor, P)) return;
   hud.hideConfirm(); selectedMove = null;
@@ -1141,6 +1192,8 @@ function checkPlayerOut() {
   if (PRACTICE || outNoticeShown || state.finished || me().alive) return;
   outNoticeShown = true;
   hand.close(); map.close(); hud.hideConfirm();
+  // (Co-op: other people are still playing, so it can't be skipped: watch, or leave the table, TP5)
+  if (online()) { const w = ONLINE_TEXT.dialogs.out; overlays.ask(w.title, w.line, { yes: w.buttons[1], no: w.buttons[0] }, () => leaveCoop()); return; }
   overlays.ask('You are out', 'Your guest has died. Everything you carried lies on the floor. Watch the others play on, or skip straight to how it ends.',
     { yes: 'Skip to the result', no: 'Watch' }, skipToEnd);
 }
@@ -1157,7 +1210,7 @@ const botPaceScale = () => (settings.choice('botSpeed')?.think ?? 1) * BOT_PACE 
 function botWalkScale() { return (settings.choice('botSpeed')?.walk ?? 1.45) * (me()?.alive ? 1 : 1.4); }
 
 function startBotTurn(p) {
-  movers[p.index].speedScale = botWalkScale();
+  movers[p.index].speedScale = online() ? NET_WALK : botWalkScale();
   startTimer();          // everyone's clock shows, as it would online
   if (focusIndex() === p.index) rig.recentre({ zoom: false });
   refresh();
@@ -1167,6 +1220,7 @@ function startBotTurn(p) {
 // whatever it did.
 function tickBots(now) {
   if (!table) return;
+  if (online()) { follow(); return; }
   table.local.hold(holds());
   follow({ acted: table.local.tick(now) });
 }
@@ -1188,10 +1242,26 @@ function follow({ acted = false, byClock = false } = {}) {
     const fresh = state.events.filter(e => e.seq > seenO);
     if (fresh.length) seenO = fresh[fresh.length - 1].seq;
     for (const e of fresh) showEvent(e);
+    // (Co-op: the other guests' walks, from their `enter` events; every figure where the table has it; until the role
+    // screen at the start is read, and while the others still read theirs, no turn is shown yet)
+    if (online()) {
+      // (a backlog of more than 3 s, a hidden page or a burst after a reconnection: drawn as it stands, not replayed)
+      let late = false;
+      for (let x = netQueue.next(); x; x = netQueue.next()) late ||= x.fresh || x.change === true;
+      if (late) { movers.forEach((m, i) => { if (i !== humanSeat || !netBusy) m.halt(); }); rebuildGrid(); discovery.refresh(); syncViews(false); } else netWalks(fresh);
+      netSnap();
+      if (state.end?.stopped) { netStopped(); return; }
+      if (!netBegun) return;
+      if (netStarting) {
+        if (state.phase?.kind === 'start' && !state.finished) return;
+        netStarting = false; shown = turnNow(); beginTurn(); return;
+      }
+    }
     // The turn passed by itself (a computer guest ended theirs, or the clock ended one): as passTurn shows it.
     if (shown?.game === gameToken && (state.turn !== shown.turn || (byClock && state.finished))) {
       const at = shown;
-      if (byClock) onTimeUp(at); else turnPassed(at);
+      // (Co-op: the player's own turn ended without their End turn: the server's clock ran it out)
+      if (byClock || (online() && at.seat === humanSeat && !endAsked && !state.finished)) onTimeUp(at); else turnPassed(at);
       return;
     }
     talkNext();
@@ -1200,6 +1270,7 @@ function follow({ acted = false, byClock = false } = {}) {
     if (state.finished && !meetingLive && !overlays.endOpen) { syncViews(false); refresh(); showEnd(); return; }
     if (!meetingLive && (acted || byClock || news.length || fresh.some(e => (e.seat ?? e.by) !== humanSeat))) { syncViews(false); refresh(); }
     if (shown?.game === gameToken) { shown.sealed = [...(state.barricades?.keys() ?? [])]; shown.seq = state.eventSeq; }
+    if (online()) netScreens();
   } finally { following = false; }
 }
 
@@ -1265,7 +1336,7 @@ function botWalk(ev) {
 // The player is out (dead): the rest of the match is played at once by the bots, through the same
 // rules (src/bots/autoplay.js, run by the table: table.local.skipToEnd), and the guests are put where the rules left them.
 function skipToEnd() {
-  if (state.finished || !table || PRACTICE) return;
+  if (state.finished || !table || PRACTICE || online()) return;
   if (meetingLive) { overlays.hideAsk(); hud.toast('A meeting is under way — skipping as soon as it ends.', 3); skipQueued = true; return; }
   skipQueued = false;
   overlays.hideAsk();
@@ -1300,9 +1371,17 @@ function onSearch() {
   if (!running || state.finished || uiBusy() || activeMover().walking || !myTurn()) return;
   const player = activePlayer(state);
   const had = resultIds();
-  const r = act({ k: 'search' });
-  if (!r.ok) { hud.toast(SEARCH_FAIL[r.reason] || 'Cannot search now.'); return; }
-  const res = newResult('found', had);     // (the table's private result: the cards, where, picked up?)
+  after(act({ k: 'search' }), r => {
+    if (!r.ok) { hud.toast(SEARCH_FAIL[r.reason] || 'Cannot search now.'); return; }
+    const res = newResult('found', had);     // (the table's private result: the cards, where, picked up?)
+    const found = res?.cards || [];
+    foundThisGame.push(...found);            // (your own finds, for the achievements at the end: the rules emit no event for them)
+    showFound(player, res);
+  });
+}
+// What a search found, on the player's own screen (and, at a Co-op table, a result whose screen was not seen yet).
+function showFound(player, res) {
+  if (res) netShown.add(res.id);
   const where = res?.where || 'the room';
   syncViews(false);
   // Everything found goes into the hand, even past the limit of 6 (approved rule): the limit is
@@ -1310,7 +1389,6 @@ function onSearch() {
   // it: the hand fan shows "Cards 8/6 · discard 2 at end of turn" the moment the reveal closes.
   const found = res?.cards || [];
   const pickup = !!res?.pickup;
-  foundThisGame.push(...found);            // (your own finds, for the achievements at the end: the rules emit no event for them)
   const then = () => { ackResult(res?.id); refresh(); };
   // Search results are PRIVATE: the others learn only that a search happened (the public log). The
   // found cards are shown large on the player's own screen, on a light backdrop with the room still in
@@ -1366,11 +1444,12 @@ function faceTowards([x, z]) {
 
 function onUseBandage(cardId) {
   if (!myTurn() || !inActionPhase) return;
-  const r = act({ k: 'card', type: 'bandage', card: cardId });
-  if (!r.ok) { hud.toast(r.reason === 'full' ? 'Already at full health.' : r.reason === 'ap' ? 'No actions left.' : 'Cannot use that now.'); return; }
-  hud.toast(`Bandaged — health ${me().health} of ${rules.maxHealth}.`);
-  sfx('bandage');
-  refresh();
+  after(act({ k: 'card', type: 'bandage', card: cardId }), r => {
+    if (!r.ok) { hud.toast(r.reason === 'full' ? 'Already at full health.' : r.reason === 'ap' ? 'No actions left.' : 'Cannot use that now.'); return; }
+    hud.toast(`Bandaged — health ${me().health} of ${rules.maxHealth}.`);
+    sfx('bandage');
+    refresh();
+  });
 }
 
 const doorBarricaded = name => `The ${name} door is barricaded: a key or pick cannot get you through it until the barricade comes down.`;
@@ -1382,23 +1461,24 @@ const doorBarricaded = name => `The ${name} door is barricaded: a key or pick ca
 function onUnlock(cardId, roomId) {
   if (!myTurn() || !inActionPhase) return;
   const type = me().hand.find(c => c.id === cardId)?.type ?? 'lockPick';
-  const r = act({ k: 'card', type, card: cardId, target: roomId });
-  const name = floor.rooms.get(roomId)?.name ?? 'locked room';
-  if (!r.ok) {
-    hud.toast(r.reason === 'ap' ? 'No actions left.'
-      : r.reason === 'sealed' ? doorBarricaded(name)
-        : 'Cannot use that here.');
-    return;
-  }
-  // (opened, or the pick snapped: what the table now shows — the door open until the end of the turn, or still locked)
-  const opened = state.openLocks.has(roomId);
-  const doorway = doorBetween(floor, me().currentRoom, roomId)?.id;
-  hud.toast(opened ? `The ${name} door is open until the end of your turn.`
-    : `The lock pick snapped. The ${name} door stays locked.`);
-  hand.close();
-  syncViews(false); refresh();
-  doorways.playUnlock(doorway, opened);
-  if (opened) sfx('doorOpen', { delay: 0.45 });
+  after(act({ k: 'card', type, card: cardId, target: roomId }), r => {
+    const name = floor.rooms.get(roomId)?.name ?? 'locked room';
+    if (!r.ok) {
+      hud.toast(r.reason === 'ap' ? 'No actions left.'
+        : r.reason === 'sealed' ? doorBarricaded(name)
+          : 'Cannot use that here.');
+      return;
+    }
+    // (opened, or the pick snapped: what the table now shows — the door open until the end of the turn, or still locked)
+    const opened = state.openLocks.has(roomId);
+    const doorway = doorBetween(floor, me().currentRoom, roomId)?.id;
+    hud.toast(opened ? `The ${name} door is open until the end of your turn.`
+      : `The lock pick snapped. The ${name} door stays locked.`);
+    hand.close();
+    syncViews(false); refresh();
+    doorways.playUnlock(doorway, opened);
+    if (opened) sfx('doorOpen', { delay: 0.45 });
+  });
 }
 
 // The padlock of a locked door (or that door) was tapped by the guest standing next to it (tapTarget 'lock'): the same
@@ -1435,22 +1515,24 @@ function lockPoint(roomId, part = 'sign') {
 
 function onBarricade(cardId, doorwayId) {
   if (!myTurn() || !inActionPhase) return;
-  const r = act({ k: 'card', type: 'barricade', card: cardId, target: doorwayId });
-  if (!r.ok) { hud.toast(r.reason === 'ap' ? 'No actions left.' : 'Cannot barricade that.'); return; }
-  hud.toast(`${cap(doorName(doorwayId, activePlayer(state).currentRoom))} barricaded until your next turn.`, 5);
-  hand.close();
-  syncViews(false); refresh();
+  after(act({ k: 'card', type: 'barricade', card: cardId, target: doorwayId }), r => {
+    if (!r.ok) { hud.toast(r.reason === 'ap' ? 'No actions left.' : 'Cannot barricade that.'); return; }
+    hud.toast(`${cap(doorName(doorwayId, activePlayer(state).currentRoom))} barricaded until your next turn.`, 5);
+    hand.close();
+    syncViews(false); refresh();
+  });
 }
 
 // Espresso (free): extra action points for this turn only.
 function onEspresso(cardId) {
   if (!myTurn() || !inActionPhase) return;
   const before = me().actionPoints;
-  const r = act({ k: 'card', type: 'espresso', card: cardId });
-  if (!r.ok) { hud.toast(r.reason === 'ap' ? 'No actions left.' : 'Cannot use that now.'); return; }
-  hud.toast(`Espresso — ${me().actionPoints - before} extra actions this turn.`);
-  sfx('espresso');
-  refresh();
+  after(act({ k: 'card', type: 'espresso', card: cardId }), r => {
+    if (!r.ok) { hud.toast(r.reason === 'ap' ? 'No actions left.' : 'Cannot use that now.'); return; }
+    hud.toast(`Espresso — ${me().actionPoints - before} extra actions this turn.`);
+    sfx('espresso');
+    refresh();
+  });
 }
 
 // Hand Mirror (1 action): another guest in the room shows the user their whole hand. What it shows
@@ -1468,9 +1550,14 @@ function onHandMirror(cardId, targetId) {
   if (activeMover().walking || pendingArrival) { hud.toast('Wait until you have arrived.'); return; }
   const player = activePlayer(state);
   const had = resultIds();
-  const r = act({ k: 'card', type: 'handMirror', card: cardId, target: targetId });
-  if (!r.ok) { hud.toast(MIRROR_FAIL[r.reason] || 'Cannot use that now.'); return; }
-  const res = newResult('mirror', had);    // (the table's private result: whose hand, and what was in it)
+  after(act({ k: 'card', type: 'handMirror', card: cardId, target: targetId }), r => {
+    if (!r.ok) { hud.toast(MIRROR_FAIL[r.reason] || 'Cannot use that now.'); return; }
+    showMirror(player, newResult('mirror', had), targetId);    // (the table's private result: whose hand, and what was in it)
+  });
+}
+// A Hand Mirror's private result on the player's own screen.
+function showMirror(player, res, targetId = null) {
+  if (res) netShown.add(res.id);
   const target = state.players[res?.target] ?? state.players.find(q => q.id === targetId);
   const seen = res?.hand || [];
   hand.close();
@@ -1513,9 +1600,10 @@ function onEscape() {
   if (!myTurn() || !inActionPhase) return;
   const player = activePlayer(state);
   if (!floor.rooms.get(player.currentRoom)?.isExit) return;
-  const r = act({ k: 'escape' });
-  if (r.ok) { syncViews(false); refresh(); showEnd(); return; }
-  hud.toast(escapeRefusal(player, r.reason));
+  after(act({ k: 'escape' }), r => {
+    if (r.ok) { syncViews(false); refresh(); showEnd(); return; }
+    hud.toast(escapeRefusal(player, r.reason));
+  });
 }
 // What a tap on the grey Exit icon says. No actions left is the same for everyone. Otherwise one sentence for
 // every guest the exit stays shut for, with their own Lantern count: a clean guest short of Lanterns and a
@@ -1537,21 +1625,23 @@ function onRoom() {
   const gate = canUseRoom(state, floor, player);
   if (!gate.ok) { hud.toast(roomRefusal(gate)); return; }
   if (gate.job === 'infirmary') {
-    const r = act({ k: 'job' });
-    if (!r.ok) { hud.toast(roomRefusal({ job: gate.job, ...r })); return; }
-    hud.toast(`Treated in the Infirmary — health ${me().health} of ${rules.maxHealth}.`);
-    refresh();     // (the icon turns to its "already used" look at once, for this Infirmary is spent for everyone)
+    after(act({ k: 'job' }), r => {
+      if (!r.ok) { hud.toast(roomRefusal({ job: gate.job, ...r })); return; }
+      hud.toast(`Treated in the Infirmary — health ${me().health} of ${rules.maxHealth}.`);
+      refresh();     // (the icon turns to its "already used" look at once, for this Infirmary is spent for everyone)
+    });
   } else if (gate.job === 'switchboard') {
-    const r = act({ k: 'job' });
-    if (!r.ok) { hud.toast(roomRefusal({ job: gate.job, ...r })); return; }
-    // (how many: the public event the whole table saw)
-    const count = state.events.filter(e => e.type === 'switchboard').pop()?.count ?? 0;
-    refresh();
-    // PUBLIC, for every guest: it stays up until the player taps Continue (the clock waits).
-    // Practice: nobody else is in the hotel, so there is nobody to count — say what it does in a match.
-    overlays.showNotice('The Switchboard', PRACTICE
-      ? 'You rang the Switchboard. In a match it tells everyone how many guests are possessed. You are alone in the hotel, so there is nobody to count.'
-      : `You rang the Switchboard. ${switchboardLine(count)}`, refresh);
+    after(act({ k: 'job' }), r => {
+      if (!r.ok) { hud.toast(roomRefusal({ job: gate.job, ...r })); return; }
+      // (how many: the public event the whole table saw)
+      const count = state.events.filter(e => e.type === 'switchboard').pop()?.count ?? 0;
+      refresh();
+      // PUBLIC, for every guest: it stays up until the player taps Continue (the clock waits).
+      // Practice: nobody else is in the hotel, so there is nobody to count — say what it does in a match.
+      overlays.showNotice('The Switchboard', PRACTICE
+        ? 'You rang the Switchboard. In a match it tells everyone how many guests are possessed. You are alone in the hotel, so there is nobody to count.'
+        : `You rang the Switchboard. ${switchboardLine(count)}`, refresh);
+    });
   }
 }
 
@@ -1566,7 +1656,7 @@ function endOf() {
     seat: p.index, possessed: !!p.possessed, convertedBy: p.convertedBy ?? null, alive: !!p.alive, escaped: !!state.escaped?.has(p.id) })) };
 }
 function showEnd() {
-  if (!DIRECT) matchMarker.clear();         // (the match ended: it is not one the browser cut short)
+  if (!DIRECT && !online()) matchMarker.clear();         // (the match ended: it is not one the browser cut short)
   stopTimer();
   if (discard.isOpen) discard.close();      // (a discard screen open as the match ends goes; the stopped clock discards nothing)
   meetingLive = false;
@@ -1617,6 +1707,8 @@ function showEnd() {
     verdict: yourSideWon ? END_WORDS.victory : END_WORDS.defeat,       // (whether or not you are alive or got out)
     recap: endRecap(revealed, humanSeat),
   });
+  // (Co-op: the table's own end buttons; its matches count nowhere yet, TP7)
+  if (online()) { netEndButtons(); return; }
   countRecord({ won: yourSideWon, possessed: !!yours.possessed, escaped: !!yours.escaped });
   countHonours();
 }
@@ -1658,16 +1750,24 @@ function countHonours() {
 }
 
 // A fresh hotel and a fresh deal for the guests at the table now.
-function resetWorld() {
+// (`net`: a Co-op match's table, src/net/onlineTable.js: dealt by the server, presented here from its view)
+function resetWorld(net = null) {
   gameToken++;
   foundThisGame = [];
-  seed = newSeed();
-  (table ?? lastTable)?.leave();
-  const t = newTable(seed);                // a new random hotel and a new deal, at a new table (src/net/localTable.js)
-  table = lastTable = t;
-  t.on(change => onTableChange(t, change));
-  t.onChat(hearChat(t));
-  syncTable();                             // (the screens' state and hotel: the new match)
+  if (net) {
+    if ((table ?? lastTable)?.kind === 'local') (table ?? lastTable).leave();
+    table = lastTable = net;
+    netReset();
+    onTableChange(net, { view: net.view, events: net.received, fresh: true });    // (the screens' state and hotel)
+  } else {
+    seed = newSeed();
+    (table ?? lastTable)?.leave();
+    const t = newTable(seed);                // a new random hotel and a new deal, at a new table (src/net/localTable.js)
+    table = lastTable = t;
+    t.on(change => onTableChange(t, change));
+    t.onChat(hearChat(t));
+    syncTable();                             // (the screens' state and hotel: the new match)
+  }
   clearRoomViews(roomViews, view.scene);
   releaseTileTextures();                   // (the old hotel's room light maps leave the graphics chip)
   doorways.reset();
@@ -1710,6 +1810,7 @@ let roleChoice = null;                     // the seat the player chose to be po
 // The end screen's main button, and Restart practice: practice starts again in a new hotel; a match
 // becomes a new match at a new table with the same choices (how many guests, your role).
 function restart() {
+  if (online()) { netRestart(); return; }
   if (PRACTICE) {
     audio.stopStinger();          // (from the end screen: the win jingle stops, as in playAgain / backToMenu)
     resetWorld();
@@ -1889,7 +1990,7 @@ async function warmScene(maxWaitMs) {
 }
 
 // From the menu into the game: the lift (unless switched off), black, the game, the lights come up.
-async function enterGame(plan, { guests = 3 } = {}) {
+async function enterGame(plan, { guests = 3, net = null } = {}) {
   prepareWarmUp();
   menu.leave();
   phase = 'intro';
@@ -1904,7 +2005,7 @@ async function enterGame(plan, { guests = 3 } = {}) {
   audio.setScene('none');          // (the lobby music goes with the picture)
   await fade(true, 650);
   menu.hide();
-  setupGame(plan);
+  if (net) setupCoop(net); else setupGame(plan);
   phase = 'game';
   view.compile();
   await warmUp(1500, { eyes: true });
@@ -1969,10 +2070,11 @@ async function playAgain() {
 }
 
 // Back to the main menu (from the end screen or the Menu button).
-async function backToMenu() {
+// (`screen`: the menu screen it opens on; Co-op's "Back to the table" opens the waiting room)
+async function backToMenu({ screen = 'main' } = {}) {
   if (!DIRECT) matchMarker.clear();         // (left on purpose, from the Menu, the end screen or the problem card: not one the browser cut short)
   // (a match left before its end: counted as left early, never as a win or a loss)
-  if (!PRACTICE && phase === 'game' && !state.finished && countedGame !== gameToken) { countedGame = gameToken; record.countLeft(); }
+  if (!PRACTICE && !online() && phase === 'game' && !state.finished && countedGame !== gameToken) { countedGame = gameToken; record.countLeft(); }
   audio.stopStinger();
   await fade(true, 450);
   gameToken++;
@@ -1991,13 +2093,14 @@ async function backToMenu() {
   screenTags.begin(); screenTags.end();
   movers.forEach(m => m.halt());
   meetingLive = false; talk = null;
+  if (online()) netAway();
   table = null;                          // (no computer guests think or talk behind the menu)
   if (lobbyReady) releaseTileTextures();  // (the menu shows the lobby scene: the hotel's maps are not drawn)
   lobby?.reset();
   linkUser = null;                       // (the menu plays as the profile its card shows)
   applyPixelRatio();
   container.classList.add('blurred');
-  menu.show('main');
+  menu.show(screen);
   document.title = 'Hotel Escape';
   await fade(false, 700);
 }
@@ -2153,10 +2256,15 @@ function offerMove(destId) {
 // Set off on a confirmed walk (the player's, or a computer guest's). The view comes back to the guest
 // so the walk can be followed (on another guest's turn, only if the view follows them: Settings).
 function startWalk(plan) {
+  if (online()) { netMove(plan); return; }
   if (table && !isBot(state.activeIndex)) {
     const r = table.local.apply({ k: 'move', to: plan.target ?? plan.dest });
     if (!r.ok) { const dest = floor.rooms.get(plan.target ?? plan.dest); if (dest) hud.toast(moveRefusal(r, dest, me()), 4); return; }
   }
+  walkFigure(plan);
+}
+// The active guest's figure sets off on a plan (the table has allowed the walk, or is asked: netMove).
+function walkFigure(plan) {
   activeWalk = plan;
   walkCutShort = false;
   if (focusIndex() === state.activeIndex) rig.recentre({ zoom: false });
@@ -2230,21 +2338,22 @@ function onOpenDoor(doorId) {
   if (!running || state.finished || !myTurn()) return;
   const player = activePlayer(state);
   const rooms = floor.roomList.length;
-  const r = act({ k: 'open', door: doorId });
-  if (!r.ok) { hud.toast(DOOR_FAIL[r.reason] || 'That door will not open.'); refresh(); syncViews(false); return; }
-  // (the room behind it: the one the table placed, as the screens' copy of the hotel now holds it)
-  const room = floor.roomList[rooms] || floor.roomList.at(-1);
-  const locked = state.lockedRooms.has(room.id);
-  rebuildGrid();
-  discovery.refresh();
-  syncViews(true);
-  refresh();
-  // Ease the view so the guest's room and the room just revealed are both in view (it may lie behind
-  // the room's far wall or under the interface otherwise).
-  const rect = q => [q.min[0], q.min[1], q.max[0], q.max[1]];
-  rig.showRooms([rect(floor.rooms.get(player.currentRoom)), rect(room)]);
-  hud.toast(room.isExit ? `The door opens onto the ${room.name}!`
-    : `The door opens: ${room.name}${locked ? ' — locked' : ''}${room.dark ? ' — dark' : ''}.`);
+  after(act({ k: 'open', door: doorId }), r => {
+    if (!r.ok) { hud.toast(DOOR_FAIL[r.reason] || 'That door will not open.'); refresh(); syncViews(false); return; }
+    // (the room behind it: the one the table placed, as the screens' copy of the hotel now holds it)
+    const room = floor.roomList[rooms] || floor.roomList.at(-1);
+    const locked = state.lockedRooms.has(room.id);
+    rebuildGrid();
+    discovery.refresh();
+    syncViews(true);
+    refresh();
+    // Ease the view so the guest's room and the room just revealed are both in view (it may lie behind
+    // the room's far wall or under the interface otherwise).
+    const rect = q => [q.min[0], q.min[1], q.max[0], q.max[1]];
+    rig.showRooms([rect(floor.rooms.get(player.currentRoom)), rect(room)]);
+    hud.toast(room.isExit ? `The door opens onto the ${room.name}!`
+      : `The door opens: ${room.name}${locked ? ' — locked' : ''}${room.dark ? ' — dark' : ''}.`);
+  });
 }
 
 // A tap on a ROOM made while the guest is still walking (or just arriving) is kept and answered as soon
@@ -2322,11 +2431,12 @@ hud.on('map', () => { if (!meeting.isOpen && !discard.isOpen && !overlays.endOpe
 // to the main menu. While a screen of the game is up (or a meeting is live) it does nothing, as it always did.
 // The clock: unchanged. The question held it still (askUp), and so does the panel that now comes first.
 hud.on('leave', () => {
-  if (overlays.endOpen) { backToMenu(); return; }
+  if (overlays.endOpen) { if (online()) leaveCoop(); else backToMenu(); return; }
   if (uiBusy() || meetingLive) return;
   gameMenu.open();
 });
 function askLeave() {
+  if (online()) { const w = ONLINE_TEXT.dialogs.leaveMatch; overlays.ask(w.title, w.line, { yes: w.buttons[1], no: w.buttons[0], safe: 'no' }, () => leaveCoop()); return; }
   overlays.ask(PRACTICE ? 'Leave practice?' : 'Leave the match?',
     PRACTICE ? 'This hotel and everything you have found will be lost.' : 'The others will carry on without you. This match will be lost.',
     { yes: 'Main menu', no: 'Keep playing', safe: 'no' }, backToMenu);
@@ -2342,7 +2452,7 @@ hud.onConfirm(
   () => doEndTurn({ ask: false }),      // (End turn, answered: the question was "You still have 3 actions. End turn?")
 );
 overlays.onRestart(restart);
-overlays.onMenu(backToMenu);
+overlays.onMenu(() => (online() ? leaveCoop() : backToMenu()));
 // Restart practice throws the whole hotel away, so it asks first (from the end screen it does not:
 // the match is over).
 hud.on('restartPractice', () => {
@@ -2404,6 +2514,8 @@ const menu = createMenu(document, {
   onScreenChange: (name, prev) => onMenuScreen(name, prev),
   onHowToPlay: opts => howTo.open(opts),
   onCards: opts => cardsGuide.open(opts),
+  onCoopMatch: (coop, info) => startCoopMatch(coop, info),     // (Co-op: a match dealt at the table, section "Co-op")
+  onCoopSeat: (i, coop) => netSeatSwitch(i, coop),             // (the review link: the other seat's screen, in a match)
 });
 // The Wardrobe (src/ui/wardrobe/wardrobe.js, the menu's 'avatar' screen): every pick shows at once on your
 // avatar in the lobby, which the lobby's wardrobe camera frames in the middle of the screen's stage, sharp
@@ -2575,11 +2687,11 @@ function frameLoop(now) {
       discovery.update();
       if (pendingArrival && !activeMover().walking && activeMover().path.length === 0) onArrive();
       // (a walk the table was told of that ended without crossing into a room: it is over all the same)
-      else if (!pendingArrival && table?.local.walking() && !activeMover().walking && !activeMover().path.length) table.local.arrived();
+      else if (!pendingArrival && table?.local?.walking() && !activeMover().walking && !activeMover().path.length) table.local.arrived();
     });
     step('queued tap', replayQueuedTap);
     step('bots', () => tickBots(now));
-  }
+  } else if (running && online()) step('table', () => follow());     // (Co-op: the view that ended the match came between frames)
   step('auto end', () => tickAutoEnd(now));      // (after the walk: an arrival and its meeting have started by now)
   // The lock choice stays only while it is still the player's own action phase (the clock may run out, the match end).
   step('lock choice', () => { if (lockChoice.isOpen && !(running && myTurn() && inActionPhase)) lockChoice.close(); });
@@ -2652,12 +2764,410 @@ function lobbyFrame(now, dt, time, prevLobby) {
 }
 document.addEventListener('visibilitychange', () => { last = performance.now(); });
 
+// --- Co-op: a match at a private table (DESIGN §4.5, §14.6, §16) ------------------------------------------------------
+// A Co-op match is played at an online table (src/net/onlineTable.js): the server's referee runs it (whole walks at
+// once, the server's clock, nothing on this device holds it), and the page presents it through the SAME screens and the
+// same presenter state as Single player (applyView, the floor copy: DESIGN §6.6-§6.7). What differs, here and at the
+// few `online()` branches above:
+//   - a command goes to the server, and its outcome is read once the view after its reply is in (netAct, after());
+//   - the player's own walk starts at the tap, on the page's own plan (netMove), and walks back if the server refuses
+//     it; the other guests' walks are drawn from their `enter` events (netWalks); every figure not walking stands
+//     where the table has its guest (netSnap);
+//   - the clock is the view's (view.clock, counted down from its arrival: table.clockLeft; netClock);
+//   - questions the page did not ask for itself (the role, a meeting someone walked into, a Fire Exit offer, a screen
+//     not read before the review link's seat switch) come with the view and are shown when nothing else is
+//     (talkNext, netScreens);
+//   - no Skip to the result (TP5); Co-op matches count in neither Your record nor the achievements (TP7);
+//   - the review link (?friends=demo) holds two seats: "Show sam's screen" presents the other seat's table, drawn fresh
+//     (netSeatSwitch), and offers itself when a question waits there (netOffer).
+let coopRun = null;           // the Co-op session on this device: { coops: [the coop of each seat held], demo }
+const netHeard = new WeakSet();   // the tables already listened to
+const NET_WALK = 1.45;        // the other guests' figures: a room in ONLINE.timing.walkMsPerRoom (8 m at 2.9 m/s × 1.45)
+// (a guest the page does not play itself: at a Co-op table everyone but the player, whoever plays them)
+const isOther = i => (online() ? i !== humanSeat : isBot(i));
+// (the results whose screens pause the player's clock until read: DESIGN §6.4)
+const SCREEN_RESULTS = new Set(['found', 'mirror', 'trade', 'noTrade', 'declined', 'notes']);
+
+// A command to the server; it settles once the view after its reply is in (or it could not be sent: 'offline').
+function netAct(cmd) {
+  const t = table;
+  netBusy++;
+  return t.send(cmd, { afterView: true })
+    .then(r => r || { ok: false, reason: 'offline' }, () => ({ ok: false, reason: 'offline' }))
+    .finally(() => { netBusy = Math.max(0, netBusy - 1); });
+}
+// (a result whose screen is up, or was read)
+function netSeen(id) { netShown.add(id); }
+// End the turn at the table (once: the last discard passes it by itself).
+function netEnd() {
+  if (endAsked) return;
+  endAsked = true;
+  after(act({ k: 'end' }), r => { if (!r.ok) endAsked = false; });
+}
+
+// The clock on screen: the table's (whose turn it is, and what is left), counted down between views.
+function netClock(now) {
+  const c = state.clock;
+  if (!c || state.finished || !netBegun) { if (clockShown) stopTimer(); return; }
+  const before = timerLeft;
+  const left = table.clockLeft(now) ?? 0;
+  if (clockShown && left === timerLeft) return;
+  timerLeft = left;
+  clockShown = true;
+  if (c.seat === humanSeat && c.running && timerLeft > 0 && timerLeft <= 10 && Math.ceil(timerLeft) < Math.ceil(before)) sfx('tick', { volume: timerLeft <= 3.5 ? 1 : 0.7 });
+  hud.showTimer(timerLeft, rules.turnTimerSeconds);
+  if (discard.isOpen) discard.tick(timerLeft);
+}
+
+// The start of a Co-op match on screen: the role first (the table starts turn 1 once everyone has read theirs, or after
+// a while); a match already under way (a return to the table, the seat switch) goes on from the turn as it stands.
+function netBegin() {
+  netBegun = false;
+  netStarting = false;
+  const done = () => {
+    roleRead();
+    netBegun = true;
+    netStarting = state.phase?.kind === 'start' && !state.finished;
+    if (!netStarting) { shown = turnNow(); beginTurn(); }
+    refresh();
+  };
+  const a = state.ask;
+  if (a?.kind === 'role' && !a.changed) { roleShownFor = a.id; handoff.revealRole(me(), {}, done); return; }
+  netBegun = true;
+  netStarting = state.phase?.kind === 'start' && !state.finished;
+  if (!netStarting) { shown = turnNow(); beginTurn({ resume: true }); }
+}
+
+// The other guests' walks, from their public `enter` events: the guest on turn walks the rooms it entered, the way a
+// computer guest's walk is drawn in Single player.
+function netWalks(events) {
+  let seat = null, rooms = null;
+  for (const e of events) {
+    if (e.type !== 'enter' || e.seat === humanSeat) continue;
+    if (seat !== e.seat) { if (rooms) netWalk(seat, rooms); seat = e.seat; rooms = [e.from]; }
+    rooms.push(e.to);
+  }
+  if (rooms) netWalk(seat, rooms);
+}
+function netWalk(seat, rooms) {
+  const p = state.players[seat], m = movers[seat];
+  const to = rooms[rooms.length - 1];
+  // (not the guest on turn any more, or already somewhere else: the figure is put in place instead, netSnap)
+  if (!p || !m || seat !== state.activeIndex || p.currentRoom !== to || !floor.rooms.has(to)) return;
+  const plan = discovery.planToRoom(to, standAtFor(seat), { ...p, currentRoom: rooms[0], actionPoints: Infinity });
+  if (!plan.ok || plan.dest !== to) return;
+  m.speedScale = NET_WALK;
+  walkFigure(plan);
+  pendingArrival = { online: true };      // (its arrival: a meeting there, onArrive)
+}
+// Every figure that is not walking stands in the room the table has its guest in (a fresh view, a walk cut off by the
+// turn passing, a guest the view moved while nobody watched). The player's own figure waits while a command is out.
+function netSnap() {
+  state.players.forEach((p, i) => {
+    const m = movers[i];
+    if (!m || m.walking || m.path.length || state.escaped?.has(p.id)) return;
+    if (i === humanSeat && netBusy > 0) return;
+    if (!floor.rooms.has(p.currentRoom) || roomAt(floor, m.x, m.z) === p.currentRoom) return;
+    const s = standingSlot(p.currentRoom, i);
+    m.reset(s.x, s.z);
+  });
+}
+
+// The player's own walk: the figure sets off at the tap, on the page's own plan, while the table is asked; a refusal
+// says why (as in Single player) and the figure walks back.
+function netMove(plan) {
+  const to = plan.target ?? plan.dest;
+  walkFigure(plan);
+  pendingArrival = { online: true };
+  after(act({ k: 'move', to }), r => {
+    if (r.ok) return;
+    const dest = floor.rooms.get(to);
+    if (dest) hud.toast(moveRefusal(r, dest, me()), 4);
+    const p = me(), m = movers[humanSeat];
+    m.halt();
+    const back = discovery.planToRoom(p.currentRoom, standAtFor(humanSeat), { ...p, actionPoints: Infinity });
+    if (back.ok) { activeWalk = back; discovery.go(back); } else { const s = standingSlot(p.currentRoom, humanSeat); m.reset(s.x, s.z); }
+  });
+}
+
+// What the table asks of the player that no screen of theirs is showing yet: a role to read, the discard, a result not
+// read before a seat switch. (Meetings and trades: talkNext.)
+function netScreens() {
+  if (!running || !netBegun || netStarting || state.finished || netBusy > 0 || talk) return;
+  if (handoff.isOpen || tradeReveal.isOpen || meeting.isOpen || discard.isOpen || overlays.noticeOpen || overlays.endOpen || askUp()) return;
+  if (pendingArrival || activeMover().walking || activeMover().path.length) return;
+  const a = state.ask;
+  if (a?.kind === 'role' && a.id !== roleShownFor) {
+    roleShownFor = a.id;
+    inActionPhase = false;
+    handoff.revealRole(me(), a.changed ? { changed: true, by: state.players[a.by]?.name } : {}, () => {
+      roleRead();
+      if (myTurn() && !state.finished) inActionPhase = true;
+      refresh();
+    });
+    return;
+  }
+  if (a?.kind === 'discard' && myTurn()) {
+    endAsked = true;
+    hand.close(); map.close(); hud.hideConfirm(); selectedMove = null;
+    const seconds = discardAllowance(timerLeft, rules.turnTimerEnabled);
+    discardStamp = turnStamp();
+    discard.open(me(), passTurn, { seconds });
+    return;
+  }
+  const r = (state.results || []).find(x => (x.kind === 'found' || x.kind === 'mirror') && !netShown.has(x.id));
+  if (r) { inActionPhase = myTurn(); if (r.kind === 'found') showFound(me(), r); else showMirror(me(), r); }
+}
+
+// A match dealt at a Co-op table (src/ui/coopMenu.js calls it for each seat this device holds; a new table each match).
+function startCoopMatch(coop, { seat = 0, demo = false } = {}) {
+  const t = coop?.table;
+  if (!t?.view || typeof t.on !== 'function') return false;      // (the pretend server's match has nothing to play)
+  if (!coopRun || coopRun.demo !== demo) coopRun = { coops: [], demo };
+  coopRun.coops[seat] = coop;
+  if (!netByeHeard.has(coop)) { netByeHeard.add(coop); coop.on?.('bye', b => netBye(coop, b?.why)); coop.on?.('lobby', lv => netLobby(coop, lv)); }
+  netWatch(t);
+  netOffer();
+  if (seat !== (menu.coopSeat ?? 0) || table === t) return true;     // (the review link's other seat: kept for the switch)
+  enterCoop(t).catch(err => { console.error('the Co-op match could not be shown:', err); overlays.showError('The match could not be shown. Go back to the menu.', { title: 'Something went wrong', menu: true }); });
+  return true;
+}
+// Every table of the session is listened to once: the one on screen is presented, the other (the review link's other
+// seat) only tells the switch what waits there.
+function netWatch(t) {
+  if (netHeard.has(t)) return;
+  netHeard.add(t);
+  t.on(change => { onTableChange(t, change); netOffer(); });
+  t.onChat(hearChat(t));
+  t.net?.onStatus?.(s => netStatus(t, s));
+}
+// Into the match: from the menu by the lift, as a match against bots; from the end screen (Play again) by the fade.
+async function enterCoop(t) {
+  if (phase === 'menu') {
+    portraits.resume();
+    portraits.prepare(t.view.players.flatMap(p => [p.avatar, { avatar: p.avatar, possessed: true }]));
+    await enterGame(null, { guests: 3, net: t });
+    return;
+  }
+  if (phase !== 'game') return;
+  audio.stopStinger();
+  await fade(true, 450);
+  setupCoop(t);
+  await warmUp(1500, { eyes: true });
+  await ownSoulDrawn();
+  begin();
+  await frame();
+  await fade(false, 700);
+  soulsRest();
+}
+// Seat a Co-op match from its first view: the guests as the table shows them, the player in their own seat.
+function setupCoop(t) {
+  holdHotel = false;
+  PRACTICE = false;
+  const v = t.view;
+  cast.length = 0;
+  cast.push(...shownHere(v.players.map(p => {
+    const avatar = normaliseAvatar(p.avatar, { trusted: true });
+    return { id: p.id, name: p.name, color: p.color, avatar, outfit: outfitOf(avatar) };
+  })));
+  humanSeat = v.seat;
+  botProfiles = cast.map(() => null);
+  applyMode('match', cast.length);
+  rules.turnTimerEnabled = v.table?.clockOn !== false;     // (the table's clock: test links change nothing here, TP6)
+  roleChoice = null;
+  movers.length = 0;
+  cast.forEach((_, i) => movers.push(createPlayer(cfg, startSpot(i))));
+  castCharacters();
+  usePracticeWording(false);
+  ownSoul = prepareSoulCards([cast[humanSeat].id]);
+  table = null;
+  hud.rebuild();
+  resetWorld(t);
+  movers.forEach((m, i) => { m.speedScale = i === humanSeat ? 1 : NET_WALK; });
+  document.body.classList.add('coop-match');
+  document.title = `Hotel Escape — ${cast.length} guests`;
+  refresh();
+}
+// (a new Co-op table on screen: nothing of the last one's is waited for)
+function netReset() {
+  netBusy = 0; endAsked = false; netBegun = true; netStarting = false; roleShownFor = null;
+  netShown.clear(); netQueue.clear(); netDownSince = null;
+}
+// What the table says about the people at it (no `o`: not the game's events): in the feed, with today's words.
+const netQueue = createPresentQueue({ maxBacklogMs: 3000 });
+function netTableNews(events) {
+  const F = ONLINE_TEXT.match.feed;
+  for (const e of events || []) {
+    if (e?.o != null || e.seat === humanSeat) continue;
+    const name = state.players[e.seat]?.name;
+    if (!name) continue;
+    const line = e.type === 'away' ? byRules(F.dropped, ONLINE_RULES.approved) : e.type === 'back' ? F.back : e.type === 'left' ? byRules(F.left, ONLINE_RULES.approved) : null;
+    if (line) feed.say(fill(line, { name }), 'table');
+  }
+}
+// The connection of the table on screen: the pill (coopUI), "You're back at the table." once it is live again after
+// the pill showed, the card after 20 s, and the restart notice once a restored match is back.
+let netDownSince = null;
+const netRestartSeen = new WeakSet();
+function netStatus(t, s) {
+  if (t !== table) return;
+  coopUI.pill(s);
+  if (s === 'live') {
+    if (netDownSince != null && performance.now() - netDownSince >= ONLINE.timing.reconnectPillMs) hud.toast(ONLINE_TEXT.recovery.back);
+    netDownSince = null;
+    if (coopUI.cardKind === 'lost') coopUI.hideCard();
+    const coop = coopRun?.coops.find(c => c?.table === t);
+    if (coop?.restarted && !netRestartSeen.has(coop) && phase === 'game' && !state.finished) { netRestartSeen.add(coop); coopUI.card('restarted', { ok: () => refresh() }); }
+    return;
+  }
+  if (s === 'reconnecting' || s === 'lost') netDownSince ??= performance.now();
+  if (s === 'lost' && !coopUI.cardOpen && phase === 'game') coopUI.card('lost', { retry: () => {}, leave: () => leaveCoop() });
+}
+// A goodbye from the table while its match is on screen (removed, closed, another device, an update, a full server):
+// the menu's Co-op screen shows its card (src/ui/coopMenu.js already holds it). A restart says nothing: it comes back.
+const netByeHeard = new WeakSet();
+function netBye(coop, why) {
+  if (!['removed', 'closed', 'elsewhere', 'update', 'serverOld', 'busy'].includes(why)) return;
+  if (!online() || coopRun?.coops.every(c => c !== coop) || coop.table !== table) return;
+  coopRun = null;
+  backToMenu({ screen: 'coop' });
+}
+// The end screen while the host starts the next match: "The next match starts in 5…" (the countdown of the table).
+let netCountTimer = null;
+function netLobby(coop, lv) {
+  clearInterval(netCountTimer); netCountTimer = null;
+  if (!online() || coop.table !== table || !overlays.endOpen || lv?.phase !== 'starting' || lv.startsInMs == null) { coopUI.endNote(null); return; }
+  const until = performance.now() + lv.startsInMs;
+  const show = () => coopUI.endNote(fill(ONLINE_TEXT.match.end.nextIn, { n: Math.max(1, Math.ceil((until - performance.now()) / 1000)) }));
+  show();
+  netCountTimer = setInterval(() => { if (!overlays.endOpen || performance.now() > until + 2000) { clearInterval(netCountTimer); netCountTimer = null; return; } show(); }, 250);
+}
+// The page leaves the Co-op match on screen (to the menu: the table itself is left, or kept, by the caller).
+function netAway() {
+  document.body.classList.remove('coop-match');
+  coopUI.hide();
+  menu.coopSwitch?.offer(null);
+}
+
+// The review link's switch, in a match: the other seat's table, drawn fresh from its own view (as after a reconnection),
+// so each screen shows only its own cards. Whatever was open is closed; what still waits is asked again (netScreens).
+function netSeatSwitch(i, coop) {
+  const t = coop?.table;
+  if (!t || !online() || phase !== 'game') return false;
+  if (t !== table) presentSeat(t);
+  netOffer();
+  return true;
+}
+function presentSeat(t) {
+  hand.close(); map.close(); discard.close(); handoff.close(); meeting.close(); lockChoice.close();
+  overlays.hideAsk(); overlays.hideNotice(); hud.hideConfirm();
+  table = lastTable = t;
+  humanSeat = t.view.seat;
+  presented = t;
+  present(t.view, t.received, { newMatch: null, fresh: true });
+  pendingArrival = null; selectedMove = null; activeWalk = null; walkCutShort = false; queuedTap = null;
+  talk = null; meetingLive = inMeeting(); outNoticeShown = !me()?.alive; lockNews = '';
+  tableNews = false; localNews = []; healthBefore.clear(); attackSeen = null;
+  netReset();
+  seenO = state.eventSeq; shown = turnNow();
+  for (const m of movers) m.halt();
+  rebuildGrid(); discovery.refresh(); netSnap(); syncViews(false);
+  hud.rebuild();
+  ownSoul = prepareSoulCards([cast[humanSeat].id]);
+  rig.setFocus(...followPoint(), true);
+  mood.snap(activePlayer(state).currentRoom);
+  feed.skip(state);
+  stopTimer();
+  inActionPhase = false;
+  refresh();
+  if (state.finished) { showEnd(); return; }
+  netBegin();
+}
+// When a question waits on the review link's other seat, the switch says so ("sam must choose a card"); on that seat's
+// own turn, that it is theirs.
+function netOffer() {
+  const sw = menu.coopSwitch;
+  if (!sw || !coopRun?.demo) return;
+  const other = coopRun.coops[(menu.coopSeat ?? 0) === 0 ? 1 : 0];
+  const v = online() && phase === 'game' ? other?.table?.view : null;
+  sw.offer(v ? netWaitLine(v) : null);
+}
+function netWaitLine(v) {
+  if (v.finished || v.end) return null;
+  const W = ONLINE_TEXT.demo.waits;
+  const name = v.players?.[v.seat]?.name || '';
+  const kind = v.ask?.kind === 'tradeCard' ? 'card' : v.ask?.kind;
+  if (kind && W[kind]) return fill(W[kind], { name });
+  if ((v.results || []).some(r => SCREEN_RESULTS.has(r.kind))) return fill(W.screen, { name });
+  if (v.phase?.kind === 'turn' && v.activeSeat === v.seat && W.turn) return fill(W.turn, { name });
+  return null;
+}
+
+// The end screen's buttons at a Co-op table (DESIGN §14.6): the host plays again; a guest goes back to the table (the
+// host starts the next match); either may leave the table.
+const endMenuBtn = document.getElementById('btn-end-menu');
+const END_MENU_WORD = endMenuBtn?.textContent ?? '';
+const endRestartBtn = document.getElementById('btn-restart');
+function netIsHost() {
+  const lv = coopRun?.coops[menu.coopSeat ?? 0]?.lobby;
+  return !!lv && lv.host === lv.you;
+}
+function netEndButtons() {
+  const lv = coopRun?.coops[menu.coopSeat ?? 0]?.lobby;
+  coopUI.endButtons(state, netIsHost(), lv?.people?.find(p => p.pid === lv.host)?.name || '');
+}
+// The table stopped the match without a result (TP3's long wait, a fault, a slow or updated server): its card, then
+// back to the table (the match counts nowhere).
+let netStopShown = null;
+function netStopped() {
+  if (netStopShown === table) return;
+  netStopShown = table;
+  stopTimer();
+  hand.close(); map.close(); discard.close(); handoff.close(); meeting.close(); overlays.hideAsk(); hud.hideConfirm();
+  meetingLive = false; talk = null; selectedMove = null;
+  const why = state.end?.stopped;
+  coopUI.card(why === 'stall' ? 'stopped' : why === 'update' ? 'update' : 'fault', { back: () => backToTable() });
+}
+function netRestart() {
+  const coop = coopRun?.coops[menu.coopSeat ?? 0];
+  if (!coop || !netIsHost()) { backToTable(); return; }
+  // Play again: the table goes back to waiting and starts again at once (its countdown: the others can still stop it).
+  coop.lobbyOp({ k: 'again' })
+    .then(r => (r.ok || r.reason === 'notNow' ? coop.lobbyOp({ k: 'start' }) : r))
+    .then(r => { if (!r?.ok && table === coop.table) backToTable(); })
+    .catch(() => backToTable());
+}
+// Back to the waiting room (the seat is kept: the next match, when the host starts it, comes in by the lift).
+function backToTable() {
+  if (endMenuBtn) endMenuBtn.textContent = END_MENU_WORD;
+  backToMenu({ screen: 'table' });
+}
+// Leave the Co-op table (the Menu's Leave, the end screen's Leave table, "You are out"): the seats this device holds
+// are given up (src/ui/coopMenu.js), and the main menu.
+function leaveCoop() {
+  overlays.hideAsk();
+  if (endMenuBtn) endMenuBtn.textContent = END_MENU_WORD;
+  try { menu.leaveCoop?.(); } catch (err) { console.warn('leaving the Co-op table:', err); }
+  coopRun = null;
+  return backToMenu();
+}
+// (tests, on this machine only: a command sent as the player's seat would send it, and the seat's own view)
+if (isLocalHost(location)) {
+  window.__net = {
+    send: cmd => (online() ? table.send(cmd, { afterView: true }) : Promise.resolve({ ok: false, reason: 'notNow' })),
+    view: () => (online() ? table.view : null),
+    seat: () => (online() ? humanSeat : null),
+    // (what the page is waiting for: commands out, an End turn asked, the start, the turn on screen)
+    debug: () => ({ netBusy, endAsked, netBegun, netStarting, shown: shown && { turn: shown.turn, seat: shown.seat, game: shown.game }, gameToken, turn: state.turn, phase: state.phase?.kind, ask: state.ask?.kind ?? null, results: (state.results || []).map(r => r.kind), clock: state.clock, stall: state.stall, end: state.end && { won: state.end.won, stopped: state.end.stopped ?? null } }),
+  };
+}
+
 // --- Debug / test hooks ------------------------------------------------------------------
 // The one place the page reaches the table's real game (table.local.debug: tests/seam-check.mjs holds it to this block).
 window.__game = (() => {
   // the real game: the table's (behind the menu, the last table's; before the first table, the screens' own state)
-  const real = () => (table ?? lastTable)?.local.debug ?? { state, floor };
-  const bots = () => table?.local.debug.bots ?? null;
+  const real = () => (table ?? lastTable)?.local?.debug ?? { state, floor };
+  const bots = () => table?.local?.debug.bots ?? null;
   return {
   // the REAL game (the table's), for the tests' direct engine calls; handing it out marks the screens to catch up
   // before they read again (pull). What the screens read: presenterState, presenterFloor.
@@ -2730,7 +3240,7 @@ window.__game = (() => {
   botsHeard: () => bots()?.heardCount?.() ?? 0,
   chatBubbles: () => screenTags.list('chat:'),
   chatRecent: () => chat.recent(),
-  chatter: () => table?.local.debug.chatter ?? null,
+  chatter: () => table?.local?.debug.chatter ?? null,
   tips: () => tips.debug(),          // first-match tips (tests): the one showing, the ones waiting, the ones seen
   skipToEnd: () => skipToEnd(),
   backToMenu: () => backToMenu(),
@@ -2762,8 +3272,8 @@ window.__game = (() => {
   // the turn clock (seconds; the table's own clock, src/net/referee.js, counts milliseconds): what is left, run it out now,
   // set what is left (tests: the clock's last seconds)
   timeLeft: () => timerLeft,
-  forceTimeUp: () => { if (table?.local.setTimeLeft(0.1)) timerLeft = 0.0001; },
-  setTimeLeft: secs => { if (timerLeft > 0 && table?.local.setTimeLeft(secs * 1000)) timerLeft = secs; },
+  forceTimeUp: () => { if (table?.local?.setTimeLeft(0.1)) timerLeft = 0.0001; },
+  setTimeLeft: secs => { if (timerLeft > 0 && table?.local?.setTimeLeft(secs * 1000)) timerLeft = secs; },
   inActionPhase: () => inActionPhase,
   dressingDone: () => dressingDone,
   // (tests: nothing of the page is still downloading — the hotel behind the menu, its guests, the warm-up

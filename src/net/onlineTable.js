@@ -38,13 +38,18 @@
 //                                    just happened (numbered events, plus the table's own { type: 'away' | 'back' |
 //                                    'left', seat } without an `o`); fresh: after a reconnect, a restore or a gap in
 //                                    the message numbers `n` (draw, don't animate)
-//   table.send(cmd) -> Promise<{ ok, reason?, result? }>   a command (DESIGN §6.3) as `do` with a fresh id and the
-//                                    turn this device believes. Answers and acks are sent again after a reconnect
-//                                    and wait for their reply; an act that could not be sent, or whose socket died
-//                                    before the reply, gives { ok: false, reason: 'offline' } (the fresh view shows
+//   table.send(cmd, { afterView }) -> Promise<{ ok, reason?, result? }>   a command (DESIGN §6.3) as `do` with a fresh
+//                                    id and the turn this device believes. Answers and acks are sent again after a
+//                                    reconnect and wait for their reply; an act that could not be sent, or whose socket
+//                                    died before the reply, gives { ok: false, reason: 'offline' } (the fresh view shows
 //                                    what happened). A command the protocol would refuse is never sent: 'unknown'.
+//                                    afterView: the server sends its reply, then the views it changed: settle only once
+//                                    the view right after the reply has reached the listeners (or the next message is
+//                                    not a view, or AFTER_VIEW_MS pass), so the screens read the command's outcome.
 //   table.say(id, about?) -> Promise<msg | null>   quick chat (null: cooling down, a bad line, or offline); everyone's
-//                                    lines, mine included, arrive through table.onChat(fn) -> unsubscribe
+//                                    lines, mine included, arrive through table.onChat(fn) -> unsubscribe.
+//                                    table.sayNow(id, about?) is the same, synchronous (the chat screen shows a line, or
+//                                    its cooldown, at once); table.chatWait() -> ms still to wait before another line
 //   table.clockLeft(now)             seconds left on the clock shown (from view.clock and when it arrived), or null
 //   table.leave()                    coop.leave()
 //   table.net                        { status, onStatus(fn), lobby, lobbyOp(op), back() } (back: "I'm back", pending R7)
@@ -66,6 +71,7 @@ const ID_LETTERS = 'abcdefghijkmnpqrstuvwxyz23456789';
 const KINDS = ['lobby', 'status', 'error', 'peeked', 'match', 'bye'];
 const ENDS_SEAT = new Set(['removed', 'closed']);       // goodbyes after which this device has no table any more
 const encoder = new TextEncoder();
+const AFTER_VIEW_MS = 150;     // (a reply whose command changed nothing this seat sees is followed by no view)
 
 function deepFreeze(o) {
   if (o && typeof o === 'object' && !Object.isFrozen(o)) { Object.freeze(o); for (const v of Object.values(o)) deepFreeze(v); }
@@ -125,7 +131,9 @@ export function openCoop({
   let lastN = null;            // the last numbered message on this socket
   let gap = false;             // a numbered message went missing: draw the next view fresh
   let matchOver = false;       // the table went back to waiting: the next view is a new match
-  const replies = new Map();   // id -> { resolve, kind: 'act' | 'answer' | 'op' }
+  const replies = new Map();   // id -> { resolve, kind: 'act' | 'answer' | 'op', afterView }
+  const afterView = [];        // replies received, settled once the view that follows them is in (send's afterView)
+  let afterTimer = null;
 
   // --- the wire -------------------------------------------------------------------------------------------------------
   // Send a message the protocol accepts (a malformed one would get this socket closed: never sent).
@@ -151,8 +159,24 @@ export function openCoop({
     replies.delete(id);
     r.resolve(value);
   }
+  // A reply that waits for the view after it (send's afterView): kept until the next message is handled.
+  function settleAfterView(id, value) {
+    const r = replies.get(id);
+    if (!r) return;
+    if (!r.afterView) { settle(id, value); return; }
+    replies.delete(id);
+    afterView.push(() => r.resolve(value));
+    if (afterTimer == null) afterTimer = timer(flushAfterView, AFTER_VIEW_MS);
+  }
+  function flushAfterView() {
+    if (afterTimer != null) { untimer(afterTimer); afterTimer = null; }
+    for (const fn of afterView.splice(0)) fn();
+  }
+  const timer = (fn, ms) => (setTimer ? setTimer(fn, ms) : setTimeout(fn, ms));
+  const untimer = h => (clearTimer ? clearTimer(h) : clearTimeout(h));
   // The socket went away: acts and waiting-room requests will not be answered (answers and acks are sent again).
   function dropUnsent({ all = false } = {}) {
+    flushAfterView();
     for (const [id, r] of [...replies]) if (all || r.kind !== 'answer') settle(id, { ok: false, reason: 'offline' });
   }
 
@@ -186,11 +210,12 @@ export function openCoop({
       if (lastN != null && m.n !== lastN + 1) gap = true;
       lastN = m.n;
     }
+    if (afterView.length && m.t !== 'view') flushAfterView();     // (the reply's command changed no view of ours)
     switch (m.t) {
       case 'welcome': return onWelcome(m);
       case 'lobby': return onLobby(m.lobby);
-      case 'view': return onView(m);
-      case 'res': return settle(m.id, reply(m));
+      case 'view': { onView(m); if (afterView.length) flushAfterView(); return undefined; }
+      case 'res': return settleAfterView(m.id, reply(m));
       case 'chat': return table?._chat(m.msg);
       case 'peeked': return emit('peeked', { code: m.code, host: m.host ?? '' });
       case 'err': return onErr(m);
@@ -306,28 +331,30 @@ export function openCoop({
       received: numbered(firstEvents),
       local: undefined,
       on(fn) { on.add(fn); return () => on.delete(fn); },
-      send(cmd) {
+      send(cmd, { afterView: waitView = false } = {}) {
         const id = newId();
         const msg = { t: 'do', id, turn: Number.isInteger(t.view?.turn) ? t.view.turn : 0, cmd };
         const answer = resendable(msg);
         return new Promise(resolve => {
           if (left || conn.status === 'closed') return resolve({ ok: false, reason: 'offline' });
-          replies.set(id, { resolve, kind: answer ? 'answer' : 'act' });
+          replies.set(id, { resolve, kind: answer ? 'answer' : 'act', afterView: !!waitView });
           const sent = sendChecked(msg);
           if (sent === null) settle(id, { ok: false, reason: 'unknown' });
           else if (!sent && !answer) settle(id, { ok: false, reason: 'offline' });
         });
       },
-      say(id, about = null) {
+      say(id, about = null) { return Promise.resolve(t.sayNow(id, about)); },
+      sayNow(id, about = null) {
         const at = wallNow();
-        if (lastSaid != null && at - lastSaid < CHAT.cooldownMs) return Promise.resolve(null);
+        if (lastSaid != null && at - lastSaid < CHAT.cooldownMs) return null;
         const msg = cleanMessage({ seat: t.seat, id, about, at }, t.view?.seats ?? Infinity, at);
-        if (!msg) return Promise.resolve(null);
+        if (!msg) return null;
         const out = msg.about != null ? { t: 'say', id: msg.id, about: msg.about } : { t: 'say', id: msg.id };
-        if (!sendChecked(out)) return Promise.resolve(null);
+        if (!sendChecked(out)) return null;
         lastSaid = at;
-        return Promise.resolve(msg);
+        return msg;
       },
+      chatWait() { return lastSaid == null ? 0 : Math.max(0, CHAT.cooldownMs - (wallNow() - lastSaid)); },
       onChat(fn) { chat.add(fn); return () => chat.delete(fn); },
       clockLeft(nowMs = now()) {
         const c = t.view?.clock;

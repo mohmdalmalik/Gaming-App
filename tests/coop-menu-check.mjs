@@ -3,7 +3,7 @@ import { launch, GUARD_WAIT, openSinglePlayer } from './smoke-lib.mjs';
 // src/ui/seatSwitch.js, coop.css), in headless Chromium (software WebGL: a few frames a second), against the pretend
 // server of development (src/net/fakeLobby.js, ?coop=fake, localhost only), and the review link's in-page server (the
 // real src/net/rooms.js behind src/net/loopback.js). One browser at a time (the build's lock):
-//   node tests/coop-menu-check.mjs [--url http://127.0.0.1:PORT/] [--only menu,fit,keyboard,link,soon,live,demo,resume,flows]
+//   node tests/coop-menu-check.mjs [--url http://127.0.0.1:PORT/] [--only menu,fit,keyboard,link,soon,live,demo,resume,flows,server]
 //                                  [--sizes 1024x694,1024x768,1180x820,1366x1024] [--shots DIR] [--no-shots]
 // Without --url it serves the repo itself on 127.0.0.1 (a free port). Screenshots: tests/shots/coop-menu/ (git-ignored).
 //
@@ -25,13 +25,18 @@ import { launch, GUARD_WAIT, openSinglePlayer } from './smoke-lib.mjs';
 //             fetched; the review link (?friends=demo) works there too, with its in-page server
 //   demo      the review link's two seats on one device (?friends=demo), once with the pretend server and once with the
 //             in-page server (?pace=fast): start a table, "Show sam's screen", type the code as sam, join, switch back,
-//             Start, the match dealt
+//             Start, the match dealt (the pretend server) or the match itself on screen, and the switch inside it (the
+//             in-page server: sam's own seat and hand, then yours again)
 //   resume    a table remembered on this device (the last 6 hours) and no ?join=: "Rejoining your table…" · Cancel, and
 //             Cancel forgets it (here the server is a port nobody listens on, so the rejoin never finishes)
 //   flows     the waiting room's working parts: Invite friends (the share sheet asked inside the tap) and Copy link (and
 //             the link to copy by hand when copying fails), size and lock, the joined / left / new host toasts, Remove,
 //             Start alone (Play with bots), the Wardrobe and back, a guest's countdown, being removed, every error
 //             while opening (with Try again keeping the code), the switchboard waking up, Back while opening, offline
+//   server    against a real local server (server/index.js in this process, a free port, TIME_SCALE 20), three devices:
+//             the host creates a table, a friend joins by the code typed, the host locks it (a third device is turned
+//             away: "This table is locked"), unlocks it, removes the friend ("You've left the table"; the code no longer
+//             seats them), the third joins, Start: the countdown, and both devices go into the match (onCoopMatch)
 import fs from 'node:fs';
 import http from 'node:http';
 import net from 'node:net';
@@ -43,7 +48,7 @@ const args = process.argv.slice(2);
 const opt = (name, dflt) => (args.includes(name) ? args[args.indexOf(name) + 1] : dflt);
 const here = path.dirname(new URL(import.meta.url).pathname);
 const root = path.join(here, '..');
-const only = opt('--only', 'menu,fit,keyboard,link,soon,live,demo,resume,flows').split(',');
+const only = opt('--only', 'menu,fit,keyboard,link,soon,live,demo,resume,flows,server').split(',');
 const SIZES = opt('--sizes', '1024x694,1024x768,1180x820,1366x1024').split(',').map(s => s.split('x').map(Number));
 const shots = args.includes('--no-shots') ? null : opt('--shots', path.join(here, 'shots', 'coop-menu'));
 if (shots) fs.mkdirSync(shots, { recursive: true });
@@ -414,7 +419,7 @@ if (only.includes('live')) {
     await tap(page, '#btn-coop-start');
     check(await waitScreen(page, 'menu-table', 20000) && /^[A-Z]{5}$/.test(await text(page, '#table-code') || '') && await text(page, '#btn-seat-switch') === fill(T.demo.showSeat, { name: T.demo.secondName }),
       `...Start a table: the code ${await text(page, '#table-code')} from the in-page server, and "${await text(page, '#btn-seat-switch')}"`);
-    check(!fetched.some(p => /fakeLobby\.js$/.test(p)) && fetched.some(p => /loopback\.js$/.test(p)) && await page.evaluate(() => window.__fakeLobby === undefined && window.__coop === undefined),
+    check(!fetched.some(p => /fakeLobby\.js$/.test(p)) && fetched.some(p => /loopback\.js$/.test(p)) && await page.evaluate(() => window.__fakeLobby === undefined && window.__coop === undefined && window.__net === undefined),
       '...through the in-page server (?coop=fake does nothing here: the pretend server is never fetched), and no test hooks exist');
     if (shots) await page.screenshot({ path: path.join(shots, 'live-review-link.png') });
   } catch (err) { check(false, `live: ${err.message.split('\n')[0]}`); if (shots) await page.screenshot({ path: path.join(shots, 'error-live.png') }).catch(() => {}); }
@@ -455,9 +460,32 @@ for (const [label, query, tag] of [['the pretend server', 'coop=fake&fake=quiet&
     await tap(page, '#btn-table-start');
     await page.waitForFunction(() => !document.getElementById('table-countdown').hidden, null, { timeout: 5000 }).catch(() => {});
     check(await shown(page, '#table-countdown'), '...Start: the countdown');
-    await page.waitForFunction(t => document.getElementById('table-status').textContent === t, T.demo.dealt, { timeout: 30000 }).catch(() => {});
-    check(await text(page, '#table-status') === T.demo.dealt, `...then "${await text(page, '#table-status')}"`);
-    await fit(page, `${tag}-dealt`, '1024x694');
+    if (tag === 'demo') {
+      // (the pretend server deals nothing to play: its waiting room says so)
+      await page.waitForFunction(t => document.getElementById('table-status').textContent === t, T.demo.dealt, { timeout: 30000 }).catch(() => {});
+      check(await text(page, '#table-status') === T.demo.dealt, `...then "${await text(page, '#table-status')}"`);
+      await fit(page, `${tag}-dealt`, '1024x694');
+    } else {
+      // (the in-page server deals a real match: the page goes into it, P4)
+      const inMatch = await page.waitForFunction(() => window.__game.phase() === 'game' && window.__game.isRunning() && !!window.__net?.view(), null, { timeout: 60000, polling: 100 }).then(() => true, () => false);
+      check(inMatch && await page.evaluate(() => document.getElementById('menu').hidden), '...then the match itself: the menu goes, the hotel and the table on screen');
+      const me0 = await page.evaluate(() => ({ seat: window.__net.seat(), name: window.__net.view().players[window.__net.seat()].name, role: window.__game.handoffKind() }));
+      check(me0.name === 'tester' && me0.role === 'role', `...your guest is "${me0.name}" (seat ${me0.seat}), your secret role on screen`);
+      check(await shown(page, '#btn-seat-switch'), `...the switch stays in the match: "${await text(page, '#btn-seat-switch')}"`);
+      if (shots) await page.screenshot({ path: path.join(shots, `${tag}-match.png`) });
+      await page.waitForTimeout(GUARD_WAIT);
+      await page.click('#btn-seat-switch');
+      await page.waitForFunction(s => window.__net.seat() !== s, me0.seat, { timeout: 10000, polling: 100 }).catch(() => {});
+      const sam = await page.evaluate(() => { const v = window.__net.view(); return { seat: window.__net.seat(), name: v.players[v.seat].name, hand: v.me.hand.map(c => c.id).sort().join(','), fan: window.__game.fanIds().slice().sort().join(',') }; });
+      check(sam.name === T.demo.secondName && sam.seat !== me0.seat, `...Show sam's screen: the presenter is sam's seat now (seat ${sam.seat}, "${sam.name}")`);
+      check(!sam.fan || sam.fan === sam.hand, `...the hand on screen is sam's own (${sam.fan ? sam.fan.split(',').length : 0} cards shown)`);
+      await page.waitForTimeout(GUARD_WAIT);
+      await page.click('#btn-seat-switch');
+      await page.waitForFunction(s => window.__net.seat() === s, me0.seat, { timeout: 10000, polling: 100 }).catch(() => {});
+      check(await page.evaluate(() => window.__net.seat()) === me0.seat, '...and back to your own seat');
+      await page.evaluate(() => window.__game.settled()).catch(() => {});
+      await page.waitForFunction(() => window.__game.settled(), null, { timeout: 60000, polling: 250 }).catch(() => {});
+    }
   } catch (err) { check(false, `demo (${label}): ${err.message.split('\n')[0]}`); if (shots) await page.screenshot({ path: path.join(shots, `error-${tag}.png`) }).catch(() => {}); }
   check(quiet(messages).length === 0, `console clean${quiet(messages).length ? `: ${quiet(messages).slice(0, 3).join(' | ')}` : ''}`);
   await browser.close();
@@ -649,6 +677,79 @@ if (only.includes('flows')) {
   } catch (err) { check(false, `flows: ${err.message.split('\n')[0]}`); if (shots) await page.screenshot({ path: path.join(shots, 'error-flows.png') }).catch(() => {}); }
   check(quiet(messages).length === 0, `console clean${quiet(messages).length ? `: ${quiet(messages).slice(0, 3).join(' | ')}` : ''}`);
   await browser.close();
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+if (only.includes('server')) {
+  console.log('\nserver. three devices at a real local server (create, join by code, lock, remove, start)');
+  const { startServer } = await import('../server/index.js');
+  const srv = await startServer({ port: 0, host: '127.0.0.1', timeScale: 20, limitsScale: 5, botChat: false, log: () => {} });
+  const q = `server=${encodeURIComponent(`ws://127.0.0.1:${srv.port}`)}`;
+  const devs = [];
+  try {
+    for (const name of ['nora', 'sam', 'ivy']) devs.push({ name, ...(await launch({ width: 1024, height: 694, profile: { username: name, id: `local-${name}` } })) });
+    const [nora, sam, ivy] = devs;
+    // 1. nora creates a table
+    await openPage(nora.page, q);
+    await tap(nora.page, '#btn-menu-coop');
+    await waitScreen(nora.page, 'menu-coop');
+    await tap(nora.page, '#btn-coop-start');
+    check(await waitScreen(nora.page, 'menu-table', 30000), 'nora: Start a table, the waiting room');
+    const code = await text(nora.page, '#table-code');
+    check(/^[A-Z]{5}$/.test(code) && await text(nora.page, '#table-kicker') === fill(T.table.kickerHost, {}), `...the code ${code}, "${await text(nora.page, '#table-kicker')}"`);
+    const people = page => page.evaluate(() => [...document.querySelectorAll('#table-seats .cs-seat.person .cs-name')].map(e => e.textContent.trim()));
+    // 2. sam types the code on his own device
+    const joinByCode = async (dev, typed) => {
+      await openPage(dev.page, q);
+      await tap(dev.page, '#btn-menu-coop');
+      await waitScreen(dev.page, 'menu-coop');
+      await dev.page.fill('#coop-code', typed);
+      await tap(dev.page, '#btn-coop-join');
+    };
+    await joinByCode(sam, code.toLowerCase());
+    check(await waitScreen(sam.page, 'menu-table', 30000) && await text(sam.page, '#table-kicker') === fill(T.table.kickerGuest, { host: 'nora' }), `sam: joins by the code typed, "${await text(sam.page, '#table-kicker')}"`);
+    await nora.page.waitForFunction(() => document.querySelectorAll('#table-seats .cs-seat.person').length === 2, null, { timeout: 15000, polling: 100 }).catch(() => {});
+    check((await people(nora.page)).includes('sam'), `...nora sees him at the table (${(await people(nora.page)).join(', ')})`);
+    // 3. nora locks: ivy is turned away
+    await tap(nora.page, '#table-lock .seg-btn[data-value="true"]');
+    await nora.page.waitForTimeout(600);
+    await joinByCode(ivy, code);
+    await waitScreen(ivy.page, 'menu-coop');
+    await ivy.page.waitForFunction(t => document.getElementById('coop-card-title')?.textContent === t, T.errors.locked.title, { timeout: 15000, polling: 100 }).catch(() => {});
+    check(await text(ivy.page, '#coop-card-title') === T.errors.locked.title, `nora locks the table: ivy's code gets "${await text(ivy.page, '#coop-card-title')}"`);
+    await tap(nora.page, '#table-lock .seg-btn[data-value="false"]');
+    await nora.page.waitForTimeout(600);
+    // 4. nora removes sam: he is told, and his code no longer seats him
+    await nora.page.waitForTimeout(GUARD_WAIT);
+    await nora.page.click('#table-seats .cs-seat.person:not(.you) button.cs-box', { timeout: 15000 });
+    await nora.page.waitForFunction(() => !document.getElementById('table-dialog').hidden, null, { timeout: 10000, polling: 100 }).catch(() => {});
+    await tap(nora.page, '#btn-table-dlg-yes');
+    await sam.page.waitForFunction(t => document.getElementById('coop-card-title')?.textContent === t, T.errors.removed.title, { timeout: 15000, polling: 100 }).catch(() => {});
+    check(await text(sam.page, '#coop-card-title') === T.errors.removed.title, `nora removes sam: "${await text(sam.page, '#coop-card-title')}"`);
+    await nora.page.waitForFunction(() => document.querySelectorAll('#table-seats .cs-seat.person').length === 1, null, { timeout: 15000, polling: 100 }).catch(() => {});
+    check((await people(nora.page)).length === 1, `...and he is gone from nora's table (${(await people(nora.page)).join(', ')})`);
+    await sam.page.evaluate(() => window.__game.menuShow('main'));
+    await joinByCode(sam, code);
+    await sam.page.waitForFunction(t => document.getElementById('coop-card-title')?.textContent === t, T.errors.removed.title, { timeout: 15000, polling: 100 }).catch(() => {});
+    check(await text(sam.page, '#coop-card-title') === T.errors.removed.title, `...his code no longer seats him: "${await text(sam.page, '#coop-card-title')}"`);
+    // 5. ivy joins now, and nora starts: both devices go into the match
+    await ivy.page.evaluate(() => window.__game.menuShow('main'));
+    await joinByCode(ivy, code);
+    check(await waitScreen(ivy.page, 'menu-table', 30000), 'ivy: unlocked, her code seats her');
+    await nora.page.waitForFunction(() => document.querySelectorAll('#table-seats .cs-seat.person').length === 2, null, { timeout: 15000, polling: 100 }).catch(() => {});
+    await tap(nora.page, '#btn-table-start');
+    for (const d of [nora, ivy]) {
+      const inMatch = await d.page.waitForFunction(() => window.__game.phase() === 'game' && window.__game.isRunning() && !!window.__net?.view(), null, { timeout: 90000, polling: 200 }).then(() => true, () => false);
+      const me = inMatch ? await d.page.evaluate(() => { const v = window.__net.view(); return { name: v.players[v.seat].name, seats: v.players.length, kind: v.table?.kind }; }) : {};
+      check(inMatch && me.name === d.name && me.seats === 6 && me.kind === 'friends', `Start: ${d.name}'s device goes into the match (onCoopMatch): her guest ${me.name}, ${me.seats} seats, a ${me.kind} table`);
+    }
+    if (shots) await nora.page.screenshot({ path: path.join(shots, 'server-match.png') });
+    for (const d of [nora, ivy]) await d.page.waitForFunction(() => window.__game.settled(), null, { timeout: 60000, polling: 250 }).catch(() => {});
+  } catch (err) { check(false, `server: ${err.message.split('\n')[0]}`); for (const d of devs) if (shots) await d.page.screenshot({ path: path.join(shots, `error-server-${d.name}.png`) }).catch(() => {}); }
+  const own = devs.flatMap(d => quiet(d.messages).map(m => `${d.name}: ${m}`));
+  check(own.length === 0, `console clean${own.length ? `: ${own.slice(0, 3).join(' | ')}` : ''}`);
+  for (const d of devs) await d.browser.close();
+  await srv.close();
 }
 
 server?.close();

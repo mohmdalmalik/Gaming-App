@@ -196,7 +196,7 @@ console.log('\n4. no screen file reads a hidden field');
 // --- 5. the real game stays behind the test hooks -------------------------------------------------------------------
 console.log('\n5. the real game is reached only by the test hooks');
 {
-  check(!!HOOKS && /table \?\? lastTable\)\?\.local\.debug/.test(HOOKS), `main.js's window.__game block found (${HOOKS.split('\n').length} lines), and it is where the real game is reached`);
+  check(!!HOOKS && /table \?\? lastTable\)\?\.local\??\.debug/.test(HOOKS), `main.js's window.__game block found (${HOOKS.split('\n').length} lines), and it is where the real game is reached`);
   const bad = [];
   for (const f of ALL) {
     const src = code(f === MAIN ? withoutHooks(mainSrc) : read(f));

@@ -3,7 +3,8 @@
 // in `on`, so the rules stay reusable.
 // `state` and `floor` are what the screens draw: in the page, its presenter state and its own copy of the hotel
 // (src/net/viewAsState.js, src/net/floorCopy.js). Crossing into a room is the table's to decide: `enter(player,
-// roomId)` settles it and returns its result, with `state` already up to date (without `enter`, nothing is settled).
+// roomId)` settles it and returns its result, with `state` already up to date (without `enter`, or when it returns
+// null, nothing is settled: a Co-op table settles a whole walk at once, DESIGN §4.5).
 // `before()` (optional) runs before the walking cells are worked out again, so they follow the latest state.
 import { roomAt } from './game/hotel.js';
 import { activePlayer } from './game/state.js';
@@ -59,6 +60,7 @@ export function createDiscovery({ floor, grid, state, movers, cfg, on = {}, ente
       if (!roomId || roomId === player.currentRoom) return null;
       if (!enter) return null;
       const result = enter(player, roomId);
+      if (result == null) return null;        // (nothing to settle: a Co-op walk was settled whole by the server)
       allowed = buildAllowed(state, floor, grid);
       on.roomEntered?.(result);
       return result;

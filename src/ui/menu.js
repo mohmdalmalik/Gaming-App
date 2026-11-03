@@ -58,7 +58,7 @@ const ROLE_CHOICES = [
 const BOT_CHOICES = Array.from({ length: rules.maxBots - rules.minBots + 1 }, (_, i) => rules.minBots + i);     // the computer guests to play with: 3, 4 or 5 (rules.js: a table of 4 to 6)
 
 export function createMenu(doc, { onPlayBots, onPractice, onSettingChanged, onScreenChange, onHowToPlay, onCards, account = null,
-  onCoopMatch = null, loc = globalThis.location } = {}) {
+  onCoopMatch = null, onCoopSeat = null, loc = globalThis.location } = {}) {
   const $ = id => doc.getElementById(id);
   const root = $('menu');
   // (looked up when shown: a screen another module adds to the page, #menu-avatar, is found too)
@@ -93,6 +93,7 @@ export function createMenu(doc, { onPlayBots, onPractice, onSettingChanged, onSc
     resolveServer: serverFor,
     openCoop: fake ? async o => (await loadFake()).openFakeCoop(o) : openCoop,
     onMatch: onCoopMatch,
+    onSeat: onCoopSeat,
     onSinglePlayer: () => show('single'),
     account,
     sfx,
@@ -352,5 +353,9 @@ export function createMenu(doc, { onPlayBots, onPractice, onSettingChanged, onSc
       const loading = $('menu-loading'); if (loading) loading.hidden = true;
     },
     matchmake,
+    // Co-op, for the match (src/main.js): the seat shown (the review link holds two), its switch, and leaving the table.
+    get coopSeat() { return coop.seat; },
+    get coopSwitch() { return coop.switcher; },
+    leaveCoop: () => coop.leaveAll(),
   };
 }

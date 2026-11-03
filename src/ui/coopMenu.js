@@ -23,6 +23,7 @@ import { makePortrait } from './portrait.js';
 import { outfitOf } from '../data/wardrobe.js';
 import { SEAT_COLORS } from '../table.js';
 import { createSeatSwitch } from './seatSwitch.js';
+import { holdWakeLock } from '../net/wakeLock.js';
 
 // What each can't-join card's buttons do, in order (the words: text.errors[kind].buttons, text.soon, text.recovery).
 const CARD_ACTIONS = {
@@ -46,6 +47,7 @@ export function createCoopMenu(doc, {
   openCoop = () => Promise.reject({ code: 'comingSoon' }),
   transport = null,
   onMatch = null,
+  onSeat = null,              // (the review link, in a match) (i, coop) → true when the match shows seat i now
   onSinglePlayer = null,
   account = null,
   sfx = () => {},
@@ -114,7 +116,10 @@ export function createCoopMenu(doc, {
     seat.coop = null; seat.lobby = null; seat.pending = null; seat.dealt = false; seat.status = 'closed'; seat.screen = 'coop';
     stopCount(seat);
     if (seat === seats[0]) switcher?.show(false);
+    awake();
   }
+  // (the screen stays awake while this device sits at a table: the waiting room and the match, src/net/wakeLock.js)
+  const awake = () => holdWakeLock(seats.some(s => !!s.lobby));
 
   // --- opening a table, joining one, coming back to one -----------------------------------------------------------
   async function open(seat, intent, kind) {
@@ -173,6 +178,7 @@ export function createCoopMenu(doc, {
     }
     if (lv.phase === 'starting' && lv.startsInMs != null) startCount(seat, lv.startsInMs); else stopCount(seat);
     if (lv.phase === 'waiting') seat.dealt = false;
+    if (!prev) awake();
     draw(seat, 'table');
   }
 
@@ -207,7 +213,9 @@ export function createCoopMenu(doc, {
   function onDealt(seat) {
     seat.dealt = true;
     stopCount(seat);
-    if (onMatch) { try { onMatch(seat.coop, { seat: seats.indexOf(seat), demo }); } catch (err) { console.error('starting the Co-op match failed:', err); } }
+    // (onMatch answers false for a match it cannot show: the pretend server's has no table to play)
+    seat.shown = false;
+    if (onMatch) { try { seat.shown = onMatch(seat.coop, { seat: seats.indexOf(seat), demo }) !== false; } catch (err) { console.error('starting the Co-op match failed:', err); } }
     draw(seat);
   }
 
@@ -330,7 +338,7 @@ export function createCoopMenu(doc, {
     // the status line: seats taken; the server gone a moment; the match dealt
     let status = isHost ? words('table.seatsTaken', { n: lv.people.length, size: lv.size }) : '';
     if (seat.status && !['live', 'closed'].includes(seat.status)) status = words('recovery.pill');
-    if (seat.dealt && !onMatch) status = words('demo.dealt');
+    if (seat.dealt && !seat.shown) status = words('demo.dealt');
     el.tStatus.textContent = status;
     // the buttons, or the countdown
     const starting = lv.phase === 'starting';
@@ -561,7 +569,13 @@ export function createCoopMenu(doc, {
       names: () => seats.map(nameOf),
       text,
       guard,
-      onSwitch: i => { active = i; closeDialogQuiet(); go(seats[i].lobby ? 'table' : 'coop'); },
+      // (in a match the page presents that seat's table, src/main.js; in the menu, its screen)
+      onSwitch: i => {
+        active = i;
+        closeDialogQuiet();
+        if (menuScreen() == null && onSeat && seats[i].coop?.table) { try { if (onSeat(i, seats[i].coop)) return; } catch (err) { console.error('showing the other seat failed:', err); } }
+        go(seats[i].lobby ? 'table' : 'coop');
+      },
     });
     switcher.show(!!seats[0].lobby);
     return true;
@@ -619,6 +633,9 @@ export function createCoopMenu(doc, {
     // A new look (the Wardrobe's Save look) reaches everyone at the table.
     look(avatar) { const seat = seats[0]; if (seat.coop && seat.lobby && avatar) op(seat, { k: 'look', avatar }); },
     startDemo,
+    // Leave the table with every seat this device holds (the match's Leave, Leave table, "You are out").
+    leaveAll() { for (const seat of seats) drop(seat); active = 0; switcher?.show(false); },
+    get switcher() { return switcher; },
     get hasTable() { return !!S().lobby; },
     get demo() { return demo; },
     get seat() { return active; },

@@ -14,8 +14,10 @@
 //   peek { code } · create { size? } · join { code, wait? } · lobby { id, op } · do { id, turn, cmd }
 //   say { id, about? } · vis { v } · leave {} · ping { at }
 // Server -> device (DESIGN §7.2):
-//   welcome { v, token, server, place } · peeked { code, host } · lobby { n, lobby } · view { n, view, events, fresh? }
+//   welcome { v, token, server, place, restored? } · peeked { code, host } · lobby { n, lobby } · view { n, view, events, fresh? }
 //   res { id, ok, reason?, result? } · chat { n, msg } · err { code, retryMs? } · bye { why, retryMs? } · pong { at, server }
+//   (welcome.restored: the first welcome after a server restart that brought this seat's table back: 'match' (the
+//   match goes on) or 'update' (it was stopped, the rules data changed). Older devices ignore it.)
 // Never accepted from a device: a seat for itself, a role, a seed, a result, a roll or a time (only `ping.at`,
 // which the server echoes and never trusts).
 import { ONLINE } from '../data/online.js';

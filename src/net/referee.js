@@ -227,6 +227,8 @@ function build(R, opts) {
   function running(now) {
     if (!counting()) return false;
     if (local) return !(R.limits.devicePauses && R.hold.clock);
+    // (a clock moved later by shift(), a restored table's grace: it waits until then, as leftAt says)
+    if (clockMode === 'server' && now < R.clock.at) return false;
     return pauseEnd() <= now;
   }
   // The server clock's time left at `now` (without changing anything).

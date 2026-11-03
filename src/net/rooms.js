@@ -22,7 +22,8 @@
 //     tablesOpen             false: nobody can start a new table (err busy; the TABLES_OPEN=false switch)
 //     botChat                the computer guests' quick chat (src/bots/chatter.js); tests of exact traffic turn it off
 //   ->
-//   rooms.connect(conn, { ip })     a socket opened (ip: the client address, IPv6 grouped by /64, server/clientIp.js)
+//   rooms.connect(conn, { ip })     a socket opened (ip: the client address, IPv6 grouped by /64, server/clientIp.js;
+//                                   wrong codes and tables count an IPv6 address by its /56 and /48: addressGroups)
 //   rooms.message(conn, msg)        one message, already checked by protocol.validate (src/net/protocol.js)
 //   rooms.disconnect(conn)          the socket closed
 //   rooms.tick(now)                 every ONLINE.timing.tickMs: deadlines, bots, countdowns, presence, close timers
@@ -77,6 +78,11 @@ const CHATTER_AFTER_END_MS = 60000;      // ...and for this long after the match
 const PRUNE_EVERY_MS = MINUTE;           // forgotten guests and old rate counters are swept this often
 const GUEST_FORGET_MS = 30 * MINUTE;     // a guest with no socket and no seat is forgotten after this
 const LOBBY_OPS_KEPT = 16;
+const ALIVE_ID = 'alive';                // the store's heartbeat record (not a table: table ids start t_)
+const ALIVE_EVERY_MS = 2000;             // ...written this often while a match plays, so a crash's outage is measured
+                                         // from near the crash, not from the table's last save (DESIGN §10.5)
+// A refusal decided before the referee changed anything: no save, no views (a flood of them costs almost nothing).
+const NOTHING_CHANGED = new Set(['notYourTurn', 'stale', 'notYourCard', 'badAsk', 'unknown', 'notNow']);
 const TIMED = ['turnMs', 'discardMinMs', 'meetMs', 'cardMs', 'offerMs', 'screenCapMs', 'startAckMs', 'stallMs', 'standInGraceMs'];
 
 const copy = x => (x == null ? x : JSON.parse(JSON.stringify(x)));
@@ -88,6 +94,18 @@ export function scaledRules(rules, timeScale = 1) {
   const out = { ...rules };
   for (const k of TIMED) if (Number.isFinite(out[k])) out[k] = out[k] / timeScale;
   return out;
+}
+
+// The groups a client address counts in for wrong codes and tables (server/clientIp.js gives an IPv4 address or an
+// IPv6 /64). addr: the address itself, an IPv6 address widened to its /56 (a home is often given a whole /56 or
+// /48, RIPE-690, so a /64 per guess would multiply every limit). block: an IPv6 /48 (its own, larger share); an IPv4
+// address is its own block.
+export function addressGroups(ip) {
+  const s = String(ip ?? 'unknown');
+  const m = /^([0-9a-f]{1,4}):([0-9a-f]{1,4}):([0-9a-f]{1,4}):([0-9a-f]{1,4})::\/64$/.exec(s);
+  if (!m) return { addr: s, block: s };
+  const g = (parseInt(m[4], 16) & 0xff00).toString(16);
+  return { addr: `${m[1]}:${m[2]}:${m[3]}:${g}::/56`, block: `${m[1]}:${m[2]}:${m[3]}::/48` };
 }
 
 export function createRooms({
@@ -107,11 +125,15 @@ export function createRooms({
 
   const clients = new Map();      // conn -> C { conn, ip, at, guest, n, vis, sent }
   const guests = new Map();       // tokenHash -> G { th, conn: C | null, name, avatar, code, seenAt, ops }
-  const tables = new Map();       // code -> T (a closed table stays a day, so its code is not given out again)
-  const ipLog = new Map();        // ip -> { wrong: [t], creates: [t] }
+  const tables = new Map();       // code -> T (a closed table stays a day as a small record, so its code is not given out again)
+  const closedOrder = new Map();  // code -> closedAt of every closed table, oldest first (the day's expiry and the cap)
+  const ipLog = new Map();        // address (addressGroups addr) -> { wrong: [t], creates: [t], missAt }
+  const blockLog = new Map();     // IPv6 /48 -> { wrong: [t] }
+  const allMisses = [];           // every unknown code the server was asked about in the last minute (the brake)
   const tokenLog = new Map();     // tokenHash -> { hellos: [t], creates: [t] }
   const bornAt = clock();
   let prunedAt = bornAt;
+  let aliveAt = -Infinity;
 
   // --- small tools ---------------------------------------------------------------------------------------------
   const bytes = n => { const b = new Uint8Array(n); randomBytes(b); return b; };
@@ -141,7 +163,8 @@ export function createRooms({
     while (i > 0 && list[i - 1] > at - ms) i--;
     return list.length - i >= max ? Math.max(1, list[list.length - max] + ms - at) : 0;
   }
-  const ipOf = ip => { let r = ipLog.get(ip); if (!r) { r = { wrong: [], creates: [] }; ipLog.set(ip, r); } return r; };
+  const ipOf = ip => { let r = ipLog.get(ip); if (!r) { r = { wrong: [], creates: [], missAt: null }; ipLog.set(ip, r); } return r; };
+  const blockOf = C => { if (C.block === C.addr) return null; let r = blockLog.get(C.block); if (!r) { r = { wrong: [] }; blockLog.set(C.block, r); } return r; };
   const tokOf = th => { let r = tokenLog.get(th); if (!r) { r = { hellos: [], creates: [] }; tokenLog.set(th, r); } return r; };
 
   function out(C, msg, numbered = false) {
@@ -191,7 +214,7 @@ export function createRooms({
   function lobbyFor(T, P, at) {
     const ps = peopleIn(T);
     const marks = guestMarks(ps.map(p => p.name));
-    const enough = ps.length >= ONLINE.table.minPeople;
+    const enough = ps.length >= ONLINE.table.minPeople && ps.length <= T.size;
     return {
       code: T.code,
       phase: T.phase,
@@ -255,7 +278,7 @@ export function createRooms({
       v: ROOMS_VERSION, id: T.id, code: T.code, created: T.created, phase: T.phase, size: T.size, locked: T.locked,
       host: T.host,
       people: T.people.map(P => ({ pid: P.pid, tokenHash: P.th, name: P.name, avatar: P.avatar, joinedAt: P.joinedAt, seat: P.seat, away: !!P.away, left: !!P.left })),
-      removed: [...T.removed], queued: [], closedAt: T.closedAt, startsAt: T.startsAt, waitingSince: T.waitingSince,
+      removed: [...T.removed], removedNames: [...(T.removedNames || [])], queued: [], closedAt: T.closedAt, startsAt: T.startsAt, waitingSince: T.waitingSince,
       endedAt: T.endedAt, lastUsed: T.lastUsed, pidSeq: T.pidSeq, matchCount: T.matchCount, creator: T.creator ?? null,
       savedAt: at,
       match: M ? {
@@ -295,9 +318,9 @@ export function createRooms({
     const T = {
       id: s.id, code: s.code, created: s.created, phase: s.phase, size: s.size, locked: !!s.locked, host: s.host,
       people: (s.people || []).map(p => ({ pid: p.pid, th: p.tokenHash, name: p.name, avatar: p.avatar, joinedAt: p.joinedAt, seat: p.seat ?? null, away: !!p.away, left: !!p.left, awaySince: null, hiddenAt: null })),
-      removed: [...(s.removed || [])], closedAt: s.closedAt ?? null, startsAt: s.startsAt ?? null, waitingSince: s.waitingSince ?? s.created,
+      removed: [...(s.removed || [])], removedNames: [...(s.removedNames || [])], closedAt: s.closedAt ?? null, startsAt: s.startsAt ?? null, waitingSince: s.waitingSince ?? s.created,
       endedAt: s.endedAt ?? null, lastUsed: s.lastUsed ?? s.created, pidSeq: s.pidSeq || 0, matchCount: s.matchCount || 0, creator: s.creator ?? null,
-      match: null, faults: [], slow: 0, emptySince: null, saved: s,
+      match: null, faults: [], slowAt: [], emptySince: null, saved: s,
     };
     return T;
   }
@@ -320,6 +343,8 @@ export function createRooms({
   // never a person's), every role Random (TP1), every random number from crypto.
   function deal(T, at) {
     const ps = peopleIn(T);
+    if (ps.length > T.size) throw new Error(`${ps.length} people for ${T.size} seats`);
+    T.slowAt = [];
     const seats = shuffled([...Array(T.size).keys()]);
     ps.forEach((P, k) => { P.seat = seats[k]; });
     const nBots = T.size - ps.length;
@@ -369,28 +394,32 @@ export function createRooms({
 
   // One step at one table, the commit rule: run it, save, then (the caller) send. A throw: back to the last save.
   // `ifChanged`: fn returns whether anything changed, and the table is saved only then (a clock tick).
-  function commit(T, at, fn, { ifChanged = false } = {}) {
+  // `unchanged(r)`: true when fn's answer says it changed nothing (a refused command): no save either.
+  function commit(T, at, fn, { ifChanged = false, unchanged = null } = {}) {
     const t0 = clock();
-    let r;
+    let r, saveMs = 0;
     try {
       r = fn();
       const phaseMoved = afterStep(T, at);
-      if (!ifChanged || r || phaseMoved) save(T, at);
+      if (phaseMoved || (ifChanged ? r : !unchanged?.(r))) { const s0 = clock(); save(T, at); saveMs = clock() - s0; }
       if (phaseMoved) broadcastLobby(T, at);
     } catch (e) {
       fault(T, at, e);
       return { ok: false, reason: 'error', fault: true };
     }
-    watch(T, at, clock() - t0);
+    watch(T, at, clock() - t0 - saveMs);
     return r;
   }
 
-  // A table whose steps keep taking over ONLINE.limits.slowStepMs: its match is ended politely (§10.4 watchdog).
+  // A table whose steps keep taking over ONLINE.limits.slowStepMs: its match is ended politely (§10.4 watchdog). Two
+  // slow steps within ONLINE.timing.faultWindowMs, in the same match; the store's own write is not counted (a slow
+  // disk is not a runaway table).
   function watch(T, at, ms) {
     if (!(ms > L.slowStepMs)) return;
-    T.slow = (T.slow || 0) + 1;
+    T.slowAt = (T.slowAt || []).filter(t => at - t < T_.faultWindowMs);
+    T.slowAt.push(at);
     log(`table ${T.id}: a step took ${Math.round(ms)} ms`);
-    if (T.slow >= 2 && T.match) { T.slow = 0; endPolitely(T, at, 'slow'); }
+    if (T.slowAt.length >= 2 && T.match) { T.slowAt = []; endPolitely(T, at, 'slow'); }
   }
 
   function fault(T, at, e) {
@@ -400,6 +429,12 @@ export function createRooms({
     try {
       if (T.faults.length >= 2 && T.match) { endPolitely(T, at, 'fault'); return; }
       reload(T, at);
+      // A table with no match that keeps failing (its deal, its waiting-room step): a countdown is cancelled (the
+      // host can start again), and a third fault in the window closes the table, so it never reloads for ever.
+      if (T.faults.length >= 2 && !T.match) {
+        if (T.faults.length >= 3) { closeTable(T, at, 'faults'); return; }
+        if (T.phase === 'starting') { T.phase = 'waiting'; T.startsAt = null; save(T, at); broadcastLobby(T, at); }
+      }
     } catch (e2) {
       log(`table ${T.id}: could not recover: ${String(e2?.message || e2).slice(0, 160)}`);
       try { T.match = null; closeTable(T, at); } catch { tables.delete(T.code); }
@@ -412,11 +447,13 @@ export function createRooms({
     if (!s) throw new Error('nothing saved');
     const R = tableFromSave(s);
     const M = s.match ? rebuildMatch(R, s.match) : null;
-    const keep = { faults: T.faults, slow: T.slow };
+    const keep = { faults: T.faults, slowAt: T.slowAt, creatorIp: T.creatorIp, creatorBlock: T.creatorBlock };
     const oldMatch = T.match;
     Object.assign(T, R, keep);
     T.match = M;
-    if (M && oldMatch) { M.tevents = oldMatch.tevents; M.chatter = oldMatch.chatter; M.checkAt = 0; }
+    // (the bots' chatter is not carried over: it reads the state it was made with, which the reload just replaced;
+    // a reloaded match's bots stay quiet, as after a restart)
+    if (M && oldMatch) { M.tevents = oldMatch.tevents; M.checkAt = 0; }
     for (const P of T.people) if (live(P)) touchPresence(T, P, at);   // (the saved Away flags stand; the referee is told who is here)
   }
 
@@ -457,8 +494,38 @@ export function createRooms({
     T.closedAt = at;
     T.match = null;
     T.startsAt = null;
-    save(T, at);
+    // What is kept of a closed table, for a day, is only its code (so it is not given out again) and when it closed:
+    // a small record in memory and in the store, at most L.closedCodesKept of them (the oldest go first).
+    const C = closedRecord(T);
+    tables.set(T.code, C);
+    keepClosed(C);
+    store.save(C.id, JSON.stringify({ v: ROOMS_VERSION, id: C.id, code: C.code, created: C.created, phase: 'closed', closedAt: C.closedAt, savedAt: at }));
     log(`table ${T.id} closed (${why})`);
+    capClosed();
+  }
+  // (only what anything asks of a closed table: its phase, code, id and when it closed; nobody is seated at it)
+  const NOBODY = Object.freeze([]);
+  function closedRecord(T) {
+    return { id: T.id, code: T.code, created: T.created ?? null, phase: 'closed', closedAt: T.closedAt ?? null, people: NOBODY, removed: NOBODY, match: null };
+  }
+  function keepClosed(C) { closedOrder.delete(C.code); closedOrder.set(C.code, { at: C.closedAt ?? 0, id: C.id }); }
+  function forgetClosed(code, id) {
+    closedOrder.delete(code);
+    if (tables.get(code)?.phase === 'closed') tables.delete(code);
+    try { store.remove(id); } catch { /* gone */ }
+  }
+  // Closed tables past their day, and past the cap (oldest first).
+  function expireClosed(at) {
+    for (const [code, c] of closedOrder) {
+      if (at - c.at < scaled(T_.closedFilesKeepMs)) break;
+      forgetClosed(code, c.id);
+    }
+  }
+  function capClosed() {
+    for (const [code, c] of closedOrder) {
+      if (closedOrder.size <= L.closedCodesKept) break;
+      forgetClosed(code, c.id);
+    }
   }
 
   // --- the waiting room ------------------------------------------------------------------------------------------------
@@ -532,7 +599,11 @@ export function createRooms({
     const T = seatedAt(G);
     const P = personOf(T, G);
     const place = !T || !P || P.left || T.phase === 'closed' ? 'none' : (T.match ? 'match' : 'lobby');
-    out(C, { t: 'welcome', v: PROTOCOL, token, server: at, place });
+    // restored: this person's first welcome since the server came back with their table (DESIGN §10.5, §14.7):
+    // 'match' (the match goes on: "The hotel's server restarted"), 'update' (it was stopped: other rules data)
+    const restored = place !== 'none' && P.restored ? P.restored : null;
+    if (restored) P.restored = null;
+    out(C, restored ? { t: 'welcome', v: PROTOCOL, token, server: at, place, restored } : { t: 'welcome', v: PROTOCOL, token, server: at, place });
     if (place === 'none') { if (T && (!P || P.left || T.phase === 'closed')) G.code = null; return; }
     const changed = touchPresence(T, P, at);
     sendLobby(T, P, at);
@@ -540,20 +611,34 @@ export function createRooms({
     if (changed) { if (T.match) fanOut(T, at); if (T.phase !== 'playing') broadcastLobby(T, at); }
   }
 
-  // A code guessed or peeked: the wrong-code limits (§7.5) of this address. Returns the wait (ms), 0 when allowed.
+  // A code guessed or peeked: the wrong-code limits (§7.5) of this address and of its IPv6 /48, and the server-wide
+  // brake: while unknown codes pour in (over L.wrongCodesPerMinAll in a minute), an address that asked about one in
+  // the last ten minutes waits. Returns the wait (ms), 0 when allowed.
   function codeLimit(C, at) {
-    const r = ipOf(C.ip).wrong;
-    return Math.max(waitFor(r, at, MINUTE, L.wrongCodesPerIpPerMin), waitFor(r, at, 10 * MINUTE, L.wrongCodesPerIpPer10Min));
+    const A = ipOf(C.addr), r = A.wrong, B = blockOf(C);
+    let wait = Math.max(waitFor(r, at, MINUTE, L.wrongCodesPerIpPerMin), waitFor(r, at, 10 * MINUTE, L.wrongCodesPerIpPer10Min));
+    if (B) wait = Math.max(wait, waitFor(B.wrong, at, MINUTE, L.wrongCodesPerBlockPerMin), waitFor(B.wrong, at, 10 * MINUTE, L.wrongCodesPerBlockPer10Min));
+    if (A.missAt != null && at - A.missAt < 10 * MINUTE && within(allMisses, at, MINUTE) >= L.wrongCodesPerMinAll) {
+      wait = Math.max(wait, 1, allMisses[allMisses.length - L.wrongCodesPerMinAll] + MINUTE - at);
+    }
+    return wait;
   }
-  const countWrong = (C, at) => ipOf(C.ip).wrong.push(at);
+  const countWrong = (C, at) => { ipOf(C.addr).wrong.push(at); blockOf(C)?.wrong.push(at); };
+  // An unknown code (no table has it, or it is not a code at all): the server-wide brake counts it.
+  function countMiss(C, at) {
+    ipOf(C.addr).missAt = at;
+    allMisses.push(at);
+    if (allMisses.length > 4 * L.wrongCodesPerMinAll) allMisses.splice(0, allMisses.length - 2 * L.wrongCodesPerMinAll);
+  }
 
   function onPeek(C, m, at) {
     const wait = codeLimit(C, at);
     if (wait) return err(C, ERR.tooMany, { retryMs: wait });
     countWrong(C, at);                        // (every peek counts: §8.3)
     const code = normaliseCode(m.code);
-    if (!code) return err(C, ERR.badCode);
+    if (!code) { countMiss(C, at); return err(C, ERR.badCode); }
     const T = tables.get(code);
+    if (!T) countMiss(C, at);
     if (!T || (T.phase !== 'waiting' && T.phase !== 'starting')) return err(C, ERR.notFound);
     const host = T.people.find(P => P.pid === T.host);
     out(C, { t: 'peeked', code, host: host?.name ?? '' });
@@ -565,20 +650,21 @@ export function createRooms({
     const here = seatedAt(G);
     if (here && personOf(here, G) && here.phase !== 'closed') return err(C, ERR.notNow);
     const open = [...tables.values()].filter(T => T.phase !== 'closed');
-    const ip = ipOf(C.ip), tok = tokOf(G.th);
+    const ip = ipOf(C.addr), tok = tokOf(G.th);
     if (!tablesOpen || open.length >= L.maxTables
       || waitFor(ip.creates, at, MINUTE, L.createsPerIpPerMin) || waitFor(tok.creates, at, MINUTE, L.createsPerTokenPerMin)
       || open.filter(T => T.creator === G.th).length >= L.openTablesPerToken
-      || open.filter(T => T.creatorIp === C.ip).length >= L.openTablesPerIp) return err(C, ERR.busy);
+      || open.filter(T => T.creatorIp === C.addr).length >= L.openTablesPerIp
+      || (C.block !== C.addr && open.filter(T => T.creatorBlock === C.block).length >= L.openTablesPerBlock)) return err(C, ERR.busy);
     ip.creates.push(at); tok.creates.push(at);
     let code = null;
     for (let tries = 0; tries < 50 && !code; tries++) { const c = newCode(randomBytes); if (!tables.has(c)) code = c; }
     if (!code) return err(C, ERR.busy);
     const size = ONLINE.table.sizes.includes(m.size) ? m.size : ONLINE.table.defaultSize;
     const T = {
-      id: newId('t_', 10), code, created: at, phase: 'waiting', size, locked: false, host: null, people: [], removed: [],
+      id: newId('t_', 10), code, created: at, phase: 'waiting', size, locked: false, host: null, people: [], removed: [], removedNames: [],
       closedAt: null, startsAt: null, waitingSince: at, endedAt: null, lastUsed: at, pidSeq: 0, matchCount: 0,
-      creator: G.th, creatorIp: C.ip, match: null, faults: [], slow: 0, emptySince: null, saved: null,
+      creator: G.th, creatorIp: C.addr, creatorBlock: C.block, match: null, faults: [], slowAt: [], emptySince: null, saved: null,
     };
     tables.set(code, T);
     const P = seatPerson(T, G, at);
@@ -593,15 +679,18 @@ export function createRooms({
     const wait = codeLimit(C, at);
     if (wait) return err(C, ERR.tooMany, { retryMs: wait });
     const code = normaliseCode(m.code);
-    if (!code) { countWrong(C, at); return err(C, ERR.badCode); }
+    if (!code) { countWrong(C, at); countMiss(C, at); return err(C, ERR.badCode); }
     const T = tables.get(code);
-    if (!T) { countWrong(C, at); return err(C, ERR.notFound); }
+    if (!T) { countWrong(C, at); countMiss(C, at); return err(C, ERR.notFound); }
     if (T.phase === 'closed') return err(C, ERR.closed);
     const P0 = personOf(T, G);
-    // Already seated here: straight back to that seat, at any time (a left guest comes back to their own guest).
+    // Already seated here: straight back to that seat, at any time (a left guest comes back to their own guest). A
+    // guest who left an ENDED table comes back only while there is room: friends may have taken the seat since, and
+    // the next match deals exactly T.size seats.
     if (P0 && (live(P0) || T.match)) {
       const elsewhere = seatedAt(G);
       if (elsewhere && elsewhere !== T && personOf(elsewhere, G) && live(personOf(elsewhere, G))) return err(C, ERR.notNow);
+      if (!live(P0) && T.phase !== 'playing' && peopleIn(T).length >= T.size) return err(C, ERR.full);
       P0.left = false;
       G.code = T.code;
       return commitJoin(T, P0, C, at);
@@ -609,7 +698,7 @@ export function createRooms({
     if (!G.name) return err(C, ERR.badName);
     const elsewhere = seatedAt(G);
     if (elsewhere && elsewhere !== T && elsewhere.phase !== 'closed' && personOf(elsewhere, G) && live(personOf(elsewhere, G))) return err(C, ERR.notNow);
-    if (T.removed.includes(G.th)) return err(C, ERR.removed);
+    if (T.removed.includes(G.th) || (T.removedNames || []).some(n => sameName(n, G.name))) return err(C, ERR.removed);
     if (T.phase === 'playing') return err(C, ERR.midMatch);
     if (T.locked) return err(C, ERR.locked);
     if (peopleIn(T).length >= T.size) return err(C, ERR.full);
@@ -638,6 +727,8 @@ export function createRooms({
     const P = personOf(T, G);
     if (!T || !P || P.left || T.phase === 'closed') return reply(false, ERR.notNow);
     const op = m.op;
+    // (the same look again changes nothing: no save, and nobody is sent the waiting room again)
+    if (op.k === 'look' && JSON.stringify(normaliseAvatar(op.avatar, { trusted: true })) === JSON.stringify(P.avatar)) return reply(true);
     const host = T.host === P.pid;
     if (['size', 'lock', 'remove', 'start', 'wait', 'again'].includes(op.k) && !host) return reply(false, ERR.notHost);
     const waiting = T.phase === 'waiting' || T.phase === 'starting';
@@ -654,12 +745,14 @@ export function createRooms({
           if (!waiting || !X || X === P) return res = 'notNow';
           removePerson(T, X);
           if (!T.removed.includes(X.th)) T.removed.push(X.th);
+          // (the name too, so a fresh device key under the same name is not seated again either)
+          T.removedNames = [...new Set([...(T.removedNames || []), X.name, guests.get(X.th)?.name].filter(Boolean))].slice(-50);
           removed = X;
           cancelCountdownIfShort(T);
           break;
         }
         case 'start':
-          if (T.phase !== 'waiting' || peopleIn(T).length < ONLINE.table.minPeople) return res = 'notNow';
+          if (T.phase !== 'waiting' || peopleIn(T).length < ONLINE.table.minPeople || peopleIn(T).length > T.size) return res = 'notNow';
           T.phase = 'starting';
           T.startsAt = at + scaled(T_.startCountdownMs);
           break;
@@ -699,6 +792,9 @@ export function createRooms({
     if (!M || !P || P.left || P.seat == null || T.phase === 'closed' || M.stopped) return out(C, { t: 'res', id: m.id, ok: false, reason: 'notNow' });
     const seat = P.seat;
     const kept = (M.doIds[seat] ||= []);
+    // (a refusal the referee made before changing anything is not saved and changes no view: a flood of refused
+    // commands costs a reply each, not a save and a view for every seat. Its reply is kept, in memory only.)
+    const quiet = x => !x.ok && NOTHING_CHANGED.has(x.reason);
     const r = commit(T, at, () => {
       const cmd = fromAliases(M, seat, m.cmd);
       const res = cmd.reason ? { ok: false, reason: cmd.reason } : M.ref.do(seat, { ...cmd, turn: m.turn }, at);
@@ -706,9 +802,9 @@ export function createRooms({
       kept.push([m.id, reply]);
       if (kept.length > L.doIdsKept) kept.shift();
       return reply;
-    });
+    }, { unchanged: quiet });
     out(C, { t: 'res', id: m.id, ...(r.fault ? { ok: false, reason: 'error' } : r) });
-    if (!r.fault) fanOut(T, at);
+    if (!r.fault && !quiet(r)) fanOut(T, at);
   }
   // A command's card aliases back to the engine's ids (§6.5): `card` (a card, a discard), and an answer that names a
   // card (a trade card, an attack's weapon). An alias this seat does not hold: notYourCard.
@@ -790,10 +886,7 @@ export function createRooms({
       case 'waiting': case 'starting': return waitingTick(T, at);
       case 'playing': return playingTick(T, at);
       case 'ended': return endedTick(T, at);
-      case 'closed':
-        if (at - T.closedAt >= scaled(T_.closedFilesKeepMs)) { tables.delete(T.code); try { store.remove(T.id); } catch { /* gone */ } }
-        return;
-      default: return;
+      default: return;            // (closed: expired in prune)
     }
   }
 
@@ -805,9 +898,11 @@ export function createRooms({
 
   function waitingTick(T, at) {
     let changed = awayFlags(T, at);
-    // A person away this long loses their seat; a host away this long hands it on (§8.5, §8.6).
+    // A person away this long loses their seat; a host away this long hands it on (§8.5, §8.6). The last person at
+    // the table keeps theirs (the host who went to Messages to send the invite): an unused table closes after
+    // ONLINE.timing.idleWaitingCloseMs instead.
     for (const P of [...T.people]) {
-      if (live(P) && P.away && P.awaySince != null && at - P.awaySince >= scaled(T_.lobbyAwayFreeMs)) {
+      if (live(P) && P.away && P.awaySince != null && at - P.awaySince >= scaled(T_.lobbyAwayFreeMs) && peopleIn(T).length > 1) {
         removePerson(T, P);
         const G = guests.get(P.th);
         if (G && G.code === T.code) G.code = null;
@@ -856,7 +951,16 @@ export function createRooms({
 
   function endedTick(T, at) {
     const M = T.match;
-    if (awayFlags(T, at)) { save(T, at); broadcastLobby(T, at); if (M) fanOut(T, at); }
+    let changed = awayFlags(T, at);
+    // The waiting room's host rule on the end screen too: a host away this long hands it on to someone here, so
+    // somebody can press Play again (in a match the host has no powers; on the end screen they have this one).
+    const H = T.people.find(P => P.pid === T.host && live(P));
+    if (!H || (H.away && H.awaySince != null && at - H.awaySince >= scaled(T_.hostAwayMs))) {
+      const before = T.host;
+      if (peopleIn(T).some(P => P.pid !== before && !P.away)) passHost(T);
+      if (T.host !== before) changed = true;
+    }
+    if (changed) { save(T, at); broadcastLobby(T, at); if (M) fanOut(T, at); }
     if (M && at - (M.endedAt ?? T.endedAt ?? at) < CHATTER_AFTER_END_MS) talk(T, at);
     if (!peopleIn(T).length) return closeTable(T, at, 'everyone left');
     if (at - Math.max(T.endedAt ?? 0, T.lastUsed ?? 0) >= scaled(T_.afterMatchCloseMs)) closeTable(T, at, 'unused');
@@ -877,8 +981,14 @@ export function createRooms({
 
   function prune(at) {
     prunedAt = at;
+    expireClosed(at);
     for (const [th, G] of guests) if (!G.conn && !G.code && at - G.seenAt > GUEST_FORGET_MS) guests.delete(th);
-    for (const [ip, r] of ipLog) { within(r.wrong, at, 10 * MINUTE); within(r.creates, at, MINUTE); if (!r.wrong.length && !r.creates.length) ipLog.delete(ip); }
+    for (const [ip, r] of ipLog) {
+      within(r.wrong, at, 10 * MINUTE); within(r.creates, at, MINUTE);
+      if (!r.wrong.length && !r.creates.length && !(r.missAt != null && at - r.missAt < 10 * MINUTE)) ipLog.delete(ip);
+    }
+    for (const [b, r] of blockLog) { within(r.wrong, at, 10 * MINUTE); if (!r.wrong.length) blockLog.delete(b); }
+    within(allMisses, at, MINUTE);
     for (const [th, r] of tokenLog) { within(r.hellos, at, MINUTE); within(r.creates, at, MINUTE); if (!r.hellos.length && !r.creates.length) tokenLog.delete(th); }
   }
 
@@ -886,7 +996,8 @@ export function createRooms({
   const rooms = {
     connect(conn, { ip = 'unknown' } = {}) {
       const at = clock();
-      clients.set(conn, { conn, ip: String(ip), at, guest: null, n: 0, vis: 'visible', sent: null, helloDone: false });
+      const { addr, block } = addressGroups(ip);
+      clients.set(conn, { conn, ip: String(ip), addr, block, at, guest: null, n: 0, vis: 'visible', sent: null, helloDone: false });
     },
 
     message(conn, msg) {
@@ -936,10 +1047,18 @@ export function createRooms({
       for (const C of [...clients.values()]) {
         if (!C.guest && !C.helloDone && at - C.at >= T_.helloTimeoutMs) { clients.delete(C.conn); shut(C, BYE.noHello, 'no hello'); }
       }
-      for (const T of [...tables.values()]) {
+      const open = [];
+      for (const T of tables.values()) if (T.phase !== 'closed') open.push(T);
+      for (const T of open) {
         try { stepTable(T, at); } catch (e) { fault(T, at, e); }
       }
       if (at - prunedAt >= PRUNE_EVERY_MS) prune(at);
+      // The heartbeat record: while a match plays, the store learns every ALIVE_EVERY_MS that the server still runs,
+      // so after a crash (kill -9) the outage is counted from about then (restore), not from each table's last save.
+      if (at - aliveAt >= ALIVE_EVERY_MS && open.some(T => T.phase === 'playing')) {
+        aliveAt = at;
+        try { store.save(ALIVE_ID, JSON.stringify({ alive: at })); } catch { /* the next one */ }
+      }
     },
 
     // Every saved table back, before the server listens (§10.5). Matches move every time they hold later by the
@@ -947,15 +1066,17 @@ export function createRooms({
     // their device reconnects. A match saved under other rules data ends politely instead.
     restore(at = clock()) {
       let n = 0, matches = 0, stopped = 0;
-      for (const s of store.load()) {
+      const saves = store.load();
+      // (the server's last heartbeat: a crash happened after it, so the outage is counted from there at the latest)
+      const alive = saves.find(s => s && !s.code && Number.isFinite(s.alive))?.alive ?? -Infinity;
+      for (const s of saves) {
         try {
           if (!s || s.v !== ROOMS_VERSION || !s.code) continue;
-          const T = tableFromSave(s);
-          T.creatorIp = null;
+          let T = tableFromSave(s);
           if (T.phase === 'starting') { T.phase = 'waiting'; T.startsAt = null; }
-          tables.set(T.code, T);
           n++;
-          if (T.phase === 'closed') continue;
+          if (T.phase === 'closed') { T = closedRecord(T); tables.set(T.code, T); keepClosed(T); continue; }
+          tables.set(T.code, T);
           for (const P of T.people) {
             P.away = true; P.awaySince = at; P.hiddenAt = null;
             if (!live(P)) continue;
@@ -966,22 +1087,33 @@ export function createRooms({
           if (s.match && s.match.dataHash !== dataHash()) {
             T.match = rebuildMatchSafe(T, s.match);
             endPolitely(T, at, 'update');
+            for (const P of T.people) if (live(P)) P.restored = 'update';
             stopped++;
             continue;
           }
           if (s.match) {
             const M = rebuildMatch(T, s.match);
-            M.ref.shift(Math.max(0, at - (s.savedAt ?? at)) + scaled(T_.restoreGraceMs));
+            const since = Math.max(s.savedAt ?? at, alive);
+            M.ref.shift(Math.max(0, at - since) + scaled(T_.restoreGraceMs));
             T.match = M;
             for (const seat of M.people) M.ref.setPresence(seat, 'gone', at);
             M.due = M.ref.nextDue();
-            if (T.phase === 'playing') matches++;
+            if (T.phase === 'playing') {
+              matches++;
+              // (each person's device is told, on its first welcome, that the server restarted and the match is back)
+              for (const P of T.people) if (live(P) && P.seat != null) P.restored = 'match';
+            }
           }
           save(T, at);
         } catch (e) {
           log(`a saved table could not be restored: ${String(e?.message || e).slice(0, 160)}`);
         }
       }
+      // (closed codes oldest first, for the day's expiry and the cap)
+      const order = [...closedOrder.entries()].sort((a, b) => a[1].at - b[1].at);
+      closedOrder.clear();
+      for (const [code, c] of order) closedOrder.set(code, c);
+      capClosed();
       log(`restored ${n} tables (${matches} matches running, ${stopped} stopped for new rules data)`);
       return { tables: n, matches, stopped };
     },

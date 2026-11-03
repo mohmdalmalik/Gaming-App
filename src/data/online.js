@@ -69,7 +69,13 @@ export const ONLINE = {
     hellosPerTokenPerMin: 20,
     createsPerIpPerMin: 5, createsPerTokenPerMin: 3, openTablesPerToken: 2, openTablesPerIp: 6,
     maxTables: 300,
+    // An "address" here is an IPv4 address or an IPv6 /56 (a home is often given a whole /56 or /48, RIPE-690; sockets
+    // still count by the /64). An IPv6 /48 ("block") has its own share on top, and the whole server has a brake.
     wrongCodesPerIpPerMin: 10, wrongCodesPerIpPer10Min: 30,
+    wrongCodesPerBlockPerMin: 40, wrongCodesPerBlockPer10Min: 120, openTablesPerBlock: 30,
+    wrongCodesPerMinAll: 600,    // server-wide: past this many unknown codes in a minute, an address that tried one
+                                 // in the last 10 minutes waits (a guessing run from many addresses slows down)
+    closedCodesKept: 20000,      // closed tables remembered (code only) so their codes are not given out again; oldest go first
     sendBufferBytes: 262144,     // unsent bytes before a socket is dropped (it reconnects)
     doIdsKept: 16,               // each seat's last replies kept, so a repeated command acts once
     maxBotStepsPerTick: 50,      // per table per tick

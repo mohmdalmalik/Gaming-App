@@ -45,7 +45,8 @@ import { clientIp } from './clientIp.js';
 export const DEFAULT_ORIGIN = 'https://mohmdalmalik.github.io';
 const LOCAL_ORIGIN = /^http:\/\/(localhost|127\.0\.0\.1)(:\d{1,5})?$/;
 const SCALED_LIMITS = ['socketsPerIp', 'newSocketsPerIpPerMin', 'hellosPerTokenPerMin', 'createsPerIpPerMin', 'createsPerTokenPerMin',
-  'openTablesPerToken', 'openTablesPerIp', 'wrongCodesPerIpPerMin', 'wrongCodesPerIpPer10Min'];
+  'openTablesPerToken', 'openTablesPerIp', 'wrongCodesPerIpPerMin', 'wrongCodesPerIpPer10Min',
+  'wrongCodesPerBlockPerMin', 'wrongCodesPerBlockPer10Min', 'openTablesPerBlock', 'wrongCodesPerMinAll'];
 
 // The settings from the environment. Throws (with a plain message) on a setting that must not be used.
 export function readEnv(env = {}) {

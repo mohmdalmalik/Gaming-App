@@ -8,8 +8,10 @@
 // socket's own address is used. The server's tests start it with TRUST_PROXY=render and give each simulated device its
 // own X-Forwarded-For, so one test machine can act as many devices (BUILD-PLAN P2A).
 //
-// An IPv6 address is grouped by its /64 (one home or one phone usually has a whole /64), so the limits can't be
-// dodged by walking through addresses. An IPv4 address written as IPv6 (::ffff:1.2.3.4) is the IPv4 address.
+// An IPv6 address is grouped by its /64 (one phone usually has a whole /64), so the limits can't be dodged by walking
+// through addresses. Sockets are counted by that /64; the server's brain widens it again for wrong codes and tables
+// (a /56, and a share per /48: a home is often given a whole /56 or /48, RIPE-690; addressGroups in src/net/rooms.js).
+// An IPv4 address written as IPv6 (::ffff:1.2.3.4) is the IPv4 address.
 import net from 'node:net';
 
 export function normaliseIp(raw) {

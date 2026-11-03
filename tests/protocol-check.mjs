@@ -5,12 +5,14 @@
 //   node tests/protocol-check.mjs
 //
 //   1. settings and addresses: the test-only switches refused in production; HOTEL_RULES=pending only on a local
-//      server; the client address is the right-most X-Forwarded-For entry, IPv6 grouped by /64
+//      server; the client address is the right-most X-Forwarded-For entry, IPv6 grouped by /64 (and by /56 and /48
+//      for wrong codes and tables)
 //   2. origins: a foreign page and a missing Origin get HTTP 403; a page on http://127.0.0.1:* or localhost is
 //      admitted (not in production); the live site's origin is admitted
 //   3. hello: a device key; an old or newer protocol or other shared data (bye update / serverOld, 4004 / 4005); no
 //      hello in time (4010); a bad name
-//   4. codes: create, peek, join by code, link or lower case; bad and unknown codes; the wrong-code limits
+//   4. codes: create, peek, join by code, link or lower case; bad and unknown codes; the wrong-code limits (one IPv4
+//      address; one IPv6 home: its /64s share a /56's limit, its /56s a /48's)
 //   5. the waiting room: host-only operations, size, lock, removal sticks, start fills the empty seats with bots,
 //      a person mid-match can't join, Play again
 //   6. a match: refusals (out of turn, stale, not your card, bad answer), the same command id twice acts once, a
@@ -43,6 +45,7 @@ try {
 }
 const { startServer, readEnv, originAllowed } = await import('../server/index.js');
 const { clientIp, normaliseIp } = await import('../server/clientIp.js');
+const { addressGroups } = await import('../src/net/rooms.js');
 const { ONLINE } = await import('../src/data/online.js');
 const { dataHash } = await import('../src/net/dataHash.js');
 const { applyView, blankState } = await import('../src/net/viewAsState.js');
@@ -149,6 +152,9 @@ console.log('1. settings and the client address');
   check(normaliseIp('2001:db8:aa:bb:1:2:3:4') === '2001:db8:aa:bb::/64' && normaliseIp('2001:db8:aa:bb::99') === '2001:db8:aa:bb::/64'
     && normaliseIp('2001:db8::1') === '2001:db8:0:0::/64' && normaliseIp('nonsense') === 'unknown',
     'IPv6 addresses are grouped by their /64');
+  check(json(addressGroups('2001:db8:aa:bb::/64')) === json({ addr: '2001:db8:aa:0::/56', block: '2001:db8:aa::/48' })
+    && addressGroups('2001:db8:aa:1ff::/64').addr === '2001:db8:aa:100::/56' && json(addressGroups('203.0.113.9')) === json({ addr: '203.0.113.9', block: '203.0.113.9' }),
+    'wrong codes and tables count an IPv6 /64 in its /56 (and its /48\'s share); an IPv4 address is its own');
   check(originAllowed('http://127.0.0.1:9151', { devOrigins: true }) && originAllowed('http://localhost:8123', { devOrigins: true })
     && !originAllowed('http://127.0.0.1:9151', { devOrigins: false }) && !originAllowed('http://127.0.0.1.evil.test', { devOrigins: true })
     && !originAllowed('https://evil.test', { devOrigins: true }) && originAllowed('https://mohmdalmalik.github.io'), 'the origin rule (unit)');
@@ -243,7 +249,24 @@ console.log('\n4. codes and the wrong-code limits');
   const after = await g.wait('err', g.count('err') + 1);
   check(!g.closed && thirty?.code === 'notFound' && after?.code === 'tooMany' && after.retryMs > 60000,
     `30 in ten minutes is the other limit, peeks counted too: a fresh minute still waits (retry in ${Math.round((after?.retryMs ?? 0) / 1000)} s)`);
-  for (const d of [nora, sam, ivy, g]) d.close();
+  // One home on IPv6 (SEC-1): a /56 holds 256 /64s, a /48 holds 256 /56s. A guess from each of its /64s shares ONE
+  // address's limit; its /56s share the /48's.
+  const hex2 = i => i.toString(16).padStart(2, '0');
+  const home = [];
+  for (let i = 0; i < 12; i++) home.push(await device(S, { name: `home${i}`, ip: `2001:db8:aa:bb${hex2(i)}::${i + 1}` }));
+  const homeErrs = [];
+  for (const d of home) { d.send({ t: 'join', code: 'ZZZZZ' }); homeErrs.push((await d.wait('err'))?.code); }
+  check(homeErrs.slice(0, 10).every(c => c === 'notFound') && homeErrs.slice(10).every(c => c === 'tooMany'),
+    `12 /64s of one IPv6 /56, one wrong code each: the /56's limit (10 a minute) holds for all of them (${homeErrs.filter(c => c === 'notFound').length} answered)`);
+  const block = [];
+  for (let i = 0; i < 5; i++) block.push(await device(S, { name: `blk${i}`, ip: `2001:db8:cc:${hex2(i)}00::1` }));
+  let blockAnswered = 0;
+  for (const d of block) {
+    for (let k = 0; k < 9; k++) { await sleep(110); d.send({ t: 'join', code: 'ZZZZZ' }); if ((await d.wait('err', k + 1))?.code === 'notFound') blockAnswered++; }
+  }
+  check(blockAnswered === ONLINE.limits.wrongCodesPerBlockPerMin,
+    `5 /56s of one IPv6 /48, 9 wrong codes each: the /48's share (${ONLINE.limits.wrongCodesPerBlockPerMin} a minute) holds (${blockAnswered} answered)`);
+  for (const d of [nora, sam, ivy, g, ...home, ...block]) d.close();
 }
 
 // --- 5. the waiting room ------------------------------------------------------------------------------------------------

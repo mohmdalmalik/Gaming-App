@@ -21,6 +21,9 @@
 //      an oversized frame (1009, "the spike's crash": the process keeps serving), the heartbeat cutting a silent socket
 //   8. limits that bind: sockets per address (HTTP 429), table creations and open tables, the table cap, the
 //      TABLES_OPEN kill switch, close timers (an ended table, an unused waiting room, a match with nobody connected)
+//  8b. the table's life after the review (Nov 2026): a guest who left an ended table can't come back past the seat
+//      count, a host who is gone hands on Play again, the last person keeps their seat, refusals cost no save, a closed
+//      table is a small record, a restored match says so and its clock waits out the grace
 //   9. render.yaml's build filter equals the server's real import graph
 //  10. a 5,000-message fuzz: nothing stops the server, and a normal table still works after it
 //  11. the wire scan: 30 matches of 2-3 scripted people and bots, every message each device received (replies
@@ -52,6 +55,7 @@ const { applyView, blankState } = await import('../src/net/viewAsState.js');
 const { createFloorCopy, syncFloor } = await import('../src/net/floorCopy.js');
 const { createBotTable } = await import('../src/bots/index.js');
 const { makeRng } = await import('../src/game/cards.js');
+const { createMemoryStore } = await import('../src/net/store.js');
 const { hotel } = await import('../src/data/hotel.js');
 const { config } = await import('../src/config.js');
 
@@ -67,7 +71,7 @@ const nextIp = () => `198.51.${(++ipSeq >> 8) & 255}.${ipSeq & 255}`;
 // --- servers and devices ----------------------------------------------------------------------------------------------
 const servers = [];
 async function server(opts = {}) {
-  const clock = { now: 1_800_000_000_000 };
+  const clock = { now: opts.startAt ?? 1_800_000_000_000 };      // (startAt: a server started after another one stopped)
   const logs = [];
   const srv = await startServer({ port: 0, host: '127.0.0.1', trustProxy: 'render', now: () => clock.now, autoTick: false,
     heartbeatMs: 60000, log: l => logs.push(l), botChat: false, ...opts });
@@ -455,6 +459,105 @@ console.log('\n8. limits that bind, and close timers');
   await W.advance(ONLINE.timing.startCountdownMs + 300);
   check(PT.phase === 'playing' && PT.match.n === 2 && await until(() => p2.msgs.filter(x => x.m.t === 'view' && x.m.fresh).length >= 2), 'a second match at the same table (fresh views)');
   PT.match.ref.skipToEnd?.(W.clock.now);
+}
+
+// --- 8b. the review's fixes to the table's life -------------------------------------------------------------------------------
+console.log('\n8b. the table\'s life: overflow, the host on the end screen, the last person, quiet refusals, closed records, a restore');
+{
+  const R = await server({ timeScale: 20 });
+  const health = srv => fetch(`http://127.0.0.1:${srv.port}/health`).then(r => r.json());
+  // a table of 4, full; one leaves mid-match; at the end a new friend takes the seat; the one who left can't come back
+  const four = await Promise.all(['ova', 'ovb', 'ovc', 'ovd'].map(name => device(R, { name })));
+  const oc = await table(R, four, 4);
+  const OT = await startMatch(R, four, oc);
+  four[3].send({ t: 'leave' });
+  await until(() => OT.people.find(p => p.name === 'ovd')?.left);
+  for (let g = 0; g < 4000 && OT.phase === 'playing'; g++) await R.advance(1000);
+  const late = await device(R, { name: 'ove' });
+  late.send({ t: 'join', code: oc });
+  await until(() => late.lobby || late.last('err'));
+  const back = await reopen(R, four[3]);
+  back.send({ t: 'join', code: oc });
+  const backErr = await back.wait('err');
+  check(OT.phase === 'ended' && late.lobby?.code === oc && backErr?.code === 'full' && OT.people.filter(p => !p.left).length === 4,
+    `a guest who left comes back to an ENDED table only while there is a seat: a new friend took it, so err ${backErr?.code} (4 people for 4 seats)`);
+  const faults0 = R.logs.filter(l => /fault/.test(l)).length;
+  check((await four[0].op({ k: 'again' }))?.ok && (await four[0].op({ k: 'start' }))?.ok, 'Play again and Start are accepted');
+  await R.advance(ONLINE.timing.startCountdownMs / 20 + 500);
+  check(OT.phase === 'playing' && OT.match?.n === 2 && OT.match.state.players.length === 4 && R.logs.filter(l => /fault/.test(l)).length === faults0,
+    'the next match deals its 4 seats, with no fault');
+  // quiet refusals: commands refused before anything changed cost no save and send nobody a view
+  await R.advance(ONLINE.timing.roleAckMs / 20 + 1000);
+  const off = [four[0], four[1], four[2], late].find(d => d.view && d.view.activeSeat !== d.view.seat);
+  const watcher = [four[0], four[1], four[2], late].find(d => d !== off);
+  const saves0 = (await health(R)).saves.n, views0 = watcher.count('view');
+  const reasons = new Set();
+  let refusedNow = 0;
+  for (let i = 0; i < 20; i++) { await sleep(110); const r = await off.do({ k: 'end' }); if (r && !r.ok) { refusedNow++; reasons.add(r.reason); } }
+  const savesAfter = (await health(R)).saves.n;
+  check(refusedNow === 20 && savesAfter === saves0 && watcher.count('view') === views0,
+    `20 commands that can't be made now: ${refusedNow} refused (${[...reasons].join(', ')}), ${savesAfter - saves0} saves, ${watcher.count('view') - views0} views to the others`);
+  OT.match.ref.skipToEnd?.(R.clock.now);
+  for (const d of [...four, late, back]) d.close();
+
+  // the host's device is gone during the match: on the end screen the host passes on, so a friend can play again
+  const trio = await Promise.all(['hsa', 'hsb', 'hsc'].map(name => device(R, { name })));
+  const hc = await table(R, trio, 4);
+  const HT = await startMatch(R, trio, hc);
+  trio[0].close();
+  await until(() => trio[0].closed);
+  for (let g = 0; g < 4000 && HT.phase === 'playing'; g++) await R.advance(1000);
+  await R.advance(ONLINE.timing.hostAwayMs / 20 + 1000);
+  const newHost = HT.people.find(p => p.pid === HT.host)?.name;
+  const againR = await trio[1].op({ k: 'again' });
+  check(HT.phase === 'waiting' && newHost === 'hsb' && againR?.ok, `the host's device gone, the match over: the host passed to ${newHost}, whose Play again is accepted`);
+  for (const d of trio) d.close();
+
+  // the only person at a waiting table goes away (to send the invite): the seat and the table are kept
+  const lone = await device(R, { name: 'lone_h' });
+  lone.send({ t: 'create', size: 4 });
+  await until(() => lone.lobby);
+  const lc = lone.lobby.code;
+  lone.send({ t: 'vis', v: 'hidden' });
+  await R.advance(40000 / 20);
+  lone.close();
+  await until(() => lone.closed);
+  await R.advance(3 * ONLINE.timing.lobbyAwayFreeMs / 20);
+  const friend = await device(R, { name: 'lone_f' });
+  friend.send({ t: 'join', code: lc });
+  await until(() => friend.lobby || friend.last('err'));
+  const loneBack = await reopen(R, lone);
+  check(R.rooms.debug.table(lc)?.phase === 'waiting' && friend.lobby?.code === lc && loneBack.last('welcome')?.place === 'lobby',
+    'the only person away from a waiting table (6 minutes, scaled): their seat and the table are kept; a friend joins; they come back to it');
+  // a closed table is a small record (its code is not given out again for a day)
+  loneBack.send({ t: 'leave' }); friend.send({ t: 'leave' });
+  await until(() => R.rooms.debug.table(lc)?.phase === 'closed');
+  const rec = R.rooms.debug.table(lc);
+  check(rec?.phase === 'closed' && rec.people.length === 0 && Object.keys(rec).length <= 8 && (rec.saved ?? null) === null,
+    `a closed table keeps only ${Object.keys(rec || {}).join(', ')}`);
+  for (const d of [loneBack, friend]) d.close();
+
+  // a restore: the first welcome says so; the clock waits out the grace (running false), then runs
+  const mem = createMemoryStore();
+  const A = await server({ store: mem, autoTick: false });
+  const pair = await Promise.all(['rsa', 'rsb'].map(name => device(A, { name })));
+  const rc = await table(A, pair, 4);
+  await startMatch(A, pair, rc);
+  for (const d of pair) if (d.view?.ask?.kind === 'role') await d.do({ k: 'ack', what: 'role' });
+  let mover = null;
+  for (let g = 0; g < 400 && !mover; g++) { await A.advance(250); mover = pair.find(d => d.view?.activeSeat === d.view?.seat && d.view.phase.kind === 'turn' && d.view.clock?.running); }
+  const leftBefore = mover ? A.rooms.debug.table(rc).match.ref.extras(mover.view.seat, A.clock.now).clock.leftMs : null;
+  await A.drain();
+  const B = await server({ store: mem, startAt: A.clock.now + 2000 });
+  const moverBack = await reopen(B, mover);
+  await until(() => moverBack.view);
+  const v0 = moverBack.view;
+  check(moverBack.last('welcome')?.restored === 'match' && v0?.clock?.running === false && Math.abs((v0?.clock?.leftMs ?? 0) - leftBefore) <= 500,
+    `after a restart the first welcome says restored ('${moverBack.last('welcome')?.restored}'); the clock shows ${v0?.clock?.leftMs} ms, waiting (running ${v0?.clock?.running})`);
+  await B.advance(ONLINE.timing.restoreGraceMs + 1500);
+  check(moverBack.view?.clock?.running === true && moverBack.view.turn === v0.turn, '...and runs once the grace is over (a view says so)');
+  const other = await reopen(B, pair.find(d => d !== mover));
+  check(other.last('welcome')?.restored === 'match' && (await reopen(B, mover)).last('welcome')?.restored == null, 'every person is told once');
 }
 
 // --- 9. the build filter ----------------------------------------------------------------------------------------------------

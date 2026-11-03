@@ -240,6 +240,9 @@ try {
   check(end.same && end.won && end.end, 'at the end the presenter reveals every role and the result exactly as the real game has them');
 
   // Practice: the same honest screens, the game itself run by the table (its referee, from P1C S3).
+  // (first nothing still downloading: Skip to the result reveals the last rooms, whose models load now, and leaving the
+  // page mid-download cuts them off, which the page reports as a console warning, "dressing: room … failed")
+  await waitFor(() => window.__game.settled(), null, 60000).catch(() => {});
   await page.goto(`${base}?mode=practice&seed=${seed}&intro=off`, { waitUntil: 'domcontentloaded' });
   await waitFor(() => window.__game && !document.getElementById('btn-begin').disabled, null, 120000);
   await game(() => { window.__game.cfg.player.speed = 30; window.__game.setPixelRatio(0.5); });

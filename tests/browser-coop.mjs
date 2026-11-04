@@ -63,7 +63,11 @@ const people = page => page.evaluate(() => [...document.querySelectorAll('#table
 const cardTitle = page => text(page, '#coop-card-title');
 const waitCard = (page, title, timeout = 20000) => waitFor(page, t => !document.getElementById('coop-card')?.hidden && document.getElementById('coop-card-title')?.textContent === t, title, timeout);
 const consoleCheck = (devs, label) => {
-  const own = devs.flatMap(d => ownMessages(d.messages).map(m => `${d.name}: ${m}`));
+  // (a device the test took offline may fail to fetch a room's model while it is offline: listed, not counted. The room
+  // then stays without its model until a reload, a known small issue in docs/DECISIONS.md, Single player's too)
+  const offlineFetch = (d, m) => d.wentOffline && /^warning: dressing: room "[^"]+" failed: Failed to fetch/.test(m);
+  for (const d of devs) for (const m of ownMessages(d.messages)) if (offlineFetch(d, m)) info(`(${d.name}, offline: ${m})`);
+  const own = devs.flatMap(d => ownMessages(d.messages).filter(m => !offlineFetch(d, m)).map(m => `${d.name}: ${m}`));
   check(own.length === 0, `${label}: console clean${own.length ? `: ${own.slice(0, 4).join(' | ')}` : ''}`);
 };
 
@@ -527,6 +531,7 @@ if (only.includes('match')) {
       const fed = (o, line, timeout) => waitFor(o.page, l => (window.__feedSeen || []).some(t => t.includes(l)), line, timeout, 250);
       const tDrop = Date.now();
       await C3.context.setOffline(true);
+      C3.wentOffline = true;
       C3.relay.cut();
       const awayAt = await waitFor(others[0].page, i => document.querySelectorAll('#strip-cards .mini-player')[i]?.classList.contains('away'), C3.seat, 55000, 250).then(ok => ok && Date.now() - tDrop);
       check(awayAt !== false, `${others[0].name}'s strip shows ${C3.name} Away (${awayAt !== false ? `${Math.round(awayAt / 1000)} s after the drop` : 'never'}): "${await others[0].page.evaluate(i => document.querySelectorAll('#strip-cards .mini-player')[i]?.querySelector('.mini-away')?.textContent, C3.seat)}"`);

@@ -1257,7 +1257,9 @@ function follow({ acted = false, byClock = false } = {}) {
       if (!netBegun) return;
       if (netStarting) {
         if (state.phase?.kind === 'start' && !state.finished) return;
-        netStarting = false; shown = turnNow(); beginTurn(); return;
+        netStarting = false; shown = turnNow(); beginTurn();
+        tableNews = true;      // (a question that came with the first turn: talkNext and netScreens, next frame)
+        return;
       }
     }
     // The turn passed by itself (a computer guest ended theirs, or the clock ended one): as passTurn shows it.
@@ -1265,6 +1267,9 @@ function follow({ acted = false, byClock = false } = {}) {
       const at = shown;
       // (Co-op: the player's own turn ended without their End turn: the server's clock ran it out)
       if (byClock || (online() && at.seat === humanSeat && !endAsked && !state.finished)) onTimeUp(at); else turnPassed(at);
+      // (Co-op: one view can bring the turn passing and a question for the player, a guest who walked in on them while the
+      // page was hidden: follow looks again next frame, when the turn is shown)
+      if (online()) tableNews = true;
       return;
     }
     talkNext();
@@ -2833,12 +2838,14 @@ function netBegin() {
     netStarting = state.phase?.kind === 'start' && !state.finished;
     if (!netStarting) { shown = turnNow(); beginTurn(); }
     refresh();
+    tableNews = true;      // (a question or a result waiting since before a seat switch or a rejoin: follow shows it)
   };
   const a = state.ask;
   if (a?.kind === 'role' && !a.changed) { roleShownFor = a.id; handoff.revealRole(me(), {}, done); return; }
   netBegun = true;
   netStarting = state.phase?.kind === 'start' && !state.finished;
   if (!netStarting) { shown = turnNow(); beginTurn({ resume: true }); }
+  tableNews = true;
 }
 
 // The other guests' walks, from their public `enter` events: the guest on turn walks the rooms it entered, the way a

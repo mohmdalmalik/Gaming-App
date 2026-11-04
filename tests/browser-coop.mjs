@@ -40,7 +40,7 @@ import { ONLINE_TEXT as T, fill } from '../src/data/onlineText.js';
 import { ONLINE } from '../src/data/online.js';
 import {
   ROOT, SIZES, checks, freePort, staticServer, childServer, person, ownMessages, text, shown, tap, waitScreen,
-  waitFor, screenNow, openPage, still, inMatch, coopCard, shots as makeShots, drive, pageHolds, truthFromSave, readSave, scanHits,
+  waitFor, screenNow, openPage, still, inMatch, coopCard, shots as makeShots, drive, pageHolds, truthFromSave, readSave, scanHits, relay,
 } from './lib/coop.mjs';
 
 const args = process.argv.slice(2);
@@ -279,7 +279,6 @@ if (only.includes('match')) {
   const sport = Number(opt('--server-port2', 0)) || await freePort();
   const srv = childServer({ port: sport, dataDir, timeScale: TS, limitsScale: 5 });
   check(await srv.start(), `the server: node server/index.js on 127.0.0.1:${sport}, DATA_DIR ${dataDir}`);
-  const q = `server=${encodeURIComponent(`ws://127.0.0.1:${sport}`)}`;
   const devs = [];
   const shoot = (d, name, caption, sizes = 'own') => S.shoot(d.page, name, { caption, who: d.name, section: 'match', sizes });
   let code = null;
@@ -425,16 +424,18 @@ if (only.includes('match')) {
       person({ name: 'ivy', width: 1024, height: 694 }),
     ]);
     devs.push(nora, sam, ivy);
+    // (each device reaches the server through its own relay, so the drop below can be a dead network: relay in lib/coop.mjs)
+    for (const d of devs) { d.relay = await relay(sport); d.q = `server=${encodeURIComponent(`ws://127.0.0.1:${d.relay.port}`)}`; }
     // (--debug-ws: every do / res / err / bye / welcome frame of each device, after the server was first killed)
     if (args.includes('--debug-ws')) for (const d of devs) d.page.on('websocket', ws => { const t = f => { if (!sc.killedAt) return; const x = String(f.payload); if (/"t":"(do|res|err|bye|welcome|hello)"/.test(x)) console.log(`  ws   ${d.name} ${Math.round((Date.now() - sc.killedAt) / 1000)}s ${x.slice(0, 260)}`); }; ws.on('framesent', f => t({ payload: '> ' + f.payload })); ws.on('framereceived', f => t({ payload: '< ' + f.payload })); });
-    await openPage(nora.page, baseUrl, q);
+    await openPage(nora.page, baseUrl, nora.q);
     await tap(nora.page, '#btn-menu-coop');
     await waitScreen(nora.page, 'menu-coop');
     await tap(nora.page, '#btn-coop-start');
     check(await waitScreen(nora.page, 'menu-table', 30000), 'nora: Start a table');
     code = await text(nora.page, '#table-code');
     for (const g of [sam, ivy]) {
-      await openPage(g.page, baseUrl, `${q}&join=${code}`);
+      await openPage(g.page, baseUrl, `${g.q}&join=${code}`);
       check(await waitScreen(g.page, 'menu-table', 60000), `${g.name}: the link ?join=${code} seats them`);
     }
     await waitFor(nora.page, () => document.querySelectorAll('#table-seats .cs-seat.person').length === 3, null, 20000);
@@ -526,6 +527,7 @@ if (only.includes('match')) {
       const fed = (o, line, timeout) => waitFor(o.page, l => (window.__feedSeen || []).some(t => t.includes(l)), line, timeout, 250);
       const tDrop = Date.now();
       await C3.context.setOffline(true);
+      C3.relay.cut();
       const awayAt = await waitFor(others[0].page, i => document.querySelectorAll('#strip-cards .mini-player')[i]?.classList.contains('away'), C3.seat, 55000, 250).then(ok => ok && Date.now() - tDrop);
       check(awayAt !== false, `${others[0].name}'s strip shows ${C3.name} Away (${awayAt !== false ? `${Math.round(awayAt / 1000)} s after the drop` : 'never'}): "${await others[0].page.evaluate(i => document.querySelectorAll('#strip-cards .mini-player')[i]?.querySelector('.mini-away')?.textContent, C3.seat)}"`);
       const droppedLine = fill(T.match.feed.dropped.today, { name: C3.name });
@@ -535,6 +537,7 @@ if (only.includes('match')) {
       await shoot(C3, 'drop-pill', `${C3.name} offline: Reconnecting…`);
       const left = 60000 - (Date.now() - tDrop);
       if (left > 0) await sleep(left);
+      C3.relay.mend();
       await C3.context.setOffline(false);
       const t2 = Date.now();
       const toast = await waitFor(C3.page, w => !document.getElementById('toast')?.hidden && document.getElementById('toast')?.textContent.includes(w), T.recovery.back, 40000, 100).then(ok => ok && Date.now() - t2);
@@ -580,11 +583,14 @@ if (only.includes('match')) {
     await tap(ivy.page, '#btn-restart');
     check(await waitScreen(ivy.page, 'menu-table', 30000), 'ivy: Back to the table, the waiting room');
     const turnBefore = await nora.page.evaluate(() => window.__net.view()?.turn);
+    // (the countdown is 5 s / TIME_SCALE, on pages drawing a hotel in software: each screen records the moment its
+    // countdown appears, as it happens (a MutationObserver), so a page too busy to be polled in time still counts)
+    await sam.page.evaluate(() => { const el = document.getElementById('coop-end-line'); window.__countSeen = null; const note = () => { const t = el?.textContent || ''; if (!window.__countSeen && /^The next match starts in \d/.test(t)) window.__countSeen = t; }; note(); if (el) new MutationObserver(note).observe(el, { childList: true, characterData: true, subtree: true }); });
+    await ivy.page.evaluate(() => { const el = document.getElementById('table-countdown'); window.__countSeen = null; const note = () => { if (!window.__countSeen && el && !el.hidden) window.__countSeen = el.textContent.replace(/\s+/g, ' ').trim() || 'shown'; }; note(); if (el) new MutationObserver(note).observe(el, { attributes: true, attributeFilter: ['hidden'], childList: true, characterData: true, subtree: true }); });
     await tap(nora.page, '#btn-restart');
-    // (the countdown is 5 s / TIME_SCALE: both screens are watched at once)
     const [nextIn, ivyCount] = await Promise.all([
-      sam.page.waitForFunction(() => { const t = document.getElementById('coop-end-line')?.textContent || ''; return /^The next match starts in \d/.test(t) ? t : false; }, null, { timeout: 15000, polling: 50 }).then(h => h.jsonValue(), () => null),
-      waitFor(ivy.page, () => !document.getElementById('table-countdown').hidden, null, 15000, 50),
+      waitFor(sam.page, () => !!window.__countSeen, null, 15000, 100).then(ok => ok ? sam.page.evaluate(() => window.__countSeen) : null),
+      waitFor(ivy.page, () => !!window.__countSeen, null, 15000, 100),
     ]);
     await Promise.all([shoot(sam, 'end-countdown', 'Play again: the next match starts in 5…'), shoot(ivy, 'again-countdown', 'Play again: the countdown in the waiting room')]);
     check(!!nextIn, `nora taps Play again: sam's end screen says "${nextIn}"`);
@@ -597,7 +603,7 @@ if (only.includes('match')) {
     for (const d of devs) await d.page.evaluate(() => window.__game.settled?.()).catch(() => {});
   } catch (err) { check(false, `match: ${err.message.split('\n')[0]}`); for (const d of devs) await S.shoot(d.page, `error-${d.name}`, { caption: `match error (${d.name})`, who: d.name, section: 'match' }).catch(() => {}); }
   consoleCheck(devs, 'match');
-  for (const d of devs) await d.close();
+  for (const d of devs) { await d.close(); await d.relay?.close(); }
   await srv.kill('SIGKILL');
   fs.mkdirSync(shotDir, { recursive: true });      // (with --no-shots the folder may not exist yet)
   fs.writeFileSync(path.join(shotDir, 'match-server.log'), srv.log);

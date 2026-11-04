@@ -55,6 +55,34 @@ export async function staticServer(root = ROOT, port = 0) {
   return { url: `http://127.0.0.1:${server.address().port}/`, close: () => new Promise(r => server.close(() => r())) };
 }
 
+// A relay between one device and the server (the match's drop). It passes the bytes both ways. cut() makes it a dead
+// network, as a lost Wi-Fi is: nothing passes either way and nothing is closed, so the server's heartbeat has to find
+// the silence (Chromium's offline mode alone can leave an open socket answering the server's pings). mend() closes the
+// dead connections and lets new ones through again. A server restart closes the device's side too, so it reconnects.
+export async function relay(targetPort, host = '127.0.0.1') {
+  const pairs = new Set();
+  let dead = false;
+  const server = net.createServer(c => {
+    if (dead) { c.destroy(); return; }
+    const u = net.connect(targetPort, host);
+    const p = { c, u, dead: false };
+    pairs.add(p);
+    c.on('data', d => { if (!p.dead) u.write(d); });
+    u.on('data', d => { if (!p.dead) c.write(d); });
+    // (a closed end closes the other, except on a dead network, where the far side hears nothing)
+    const end = () => { if (p.dead) return; pairs.delete(p); c.destroy(); u.destroy(); };
+    c.on('close', end); u.on('close', end);
+    c.on('error', () => {}); u.on('error', () => {});
+  });
+  await new Promise(r => server.listen(0, host, r));
+  return {
+    port: server.address().port,
+    cut() { dead = true; for (const p of pairs) p.dead = true; },
+    mend() { dead = false; for (const p of [...pairs]) if (p.dead) { pairs.delete(p); p.c.destroy(); p.u.destroy(); } },
+    close: () => new Promise(r => { for (const p of pairs) { p.c.destroy(); p.u.destroy(); } server.close(() => r()); }),
+  };
+}
+
 // The Co-op server as a child process (`node server/index.js`), so a test can kill it hard (SIGKILL) or politely
 // (SIGTERM) and start it again on the same port and DATA_DIR.
 export function childServer({ port, dataDir = null, timeScale = 1, limitsScale = 1, root = ROOT, env = {} }) {

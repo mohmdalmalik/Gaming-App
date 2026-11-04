@@ -16,7 +16,7 @@ reviewed (security, fairness, the table's life, the screens) and fixed.
   the waiting room (lock, remove, Start with a countdown), the match with Away, reconnecting and the server's own
   clock, saving every table after every step so a server restart doesn't end a match, Play again. Each device receives
   only what its own guest may know. Tested end to end against the real server: six devices at one table, a whole
-  three-person match with the server killed mid-trade and restarted, a 40-second drop, a polite restart, Play again.
+  three-person match with the server killed mid-trade and restarted, a 60-second drop, a polite restart, Play again.
 - **The review link** for the owner: `https://mohmdalmalik.github.io/Gaming-App/?friends=demo` plays a whole Co-op
   match on one iPad with two seats (yours and sam's), through the real Co-op screens.
 - **Waiting for the owner** (the decisions list handed over with this build; nothing blocks Single player): the

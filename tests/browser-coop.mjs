@@ -599,6 +599,7 @@ if (only.includes('match')) {
   consoleCheck(devs, 'match');
   for (const d of devs) await d.close();
   await srv.kill('SIGKILL');
+  fs.mkdirSync(shotDir, { recursive: true });      // (with --no-shots the folder may not exist yet)
   fs.writeFileSync(path.join(shotDir, 'match-server.log'), srv.log);
   fs.rmSync(dataDir, { recursive: true, force: true });
 }

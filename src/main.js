@@ -954,6 +954,9 @@ function onArrive() {
   const room = floor.rooms.get(player.currentRoom);
   pendingArrival = null;
   activeWalk = null;
+  // (Co-op: a question that waited for this walk to be seen, a trade card when someone walked in on the player, is shown
+  // now: follow looks again next frame, even if the table has no news meanwhile)
+  if (online()) tableNews = true;
   if (room?.isExit && !isOther(player.index)) {
     // The same words whoever you are, so they give nothing away about who is carrying what or who is
     // possessed. (Practice has nothing to hide: it says plainly what to do.)

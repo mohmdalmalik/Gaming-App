@@ -167,20 +167,32 @@ console.log('\n5. the notice the guest reads');
   check(!/possess|soul/i.test(line) && /^Time ran out\. The game discarded your [A-Z][\w ]+(, your [A-Z][\w ]+)* and your [A-Z][\w ]+\.$/.test(line.replace(/your (\d) /g, 'your ')), `the line from a real random discard names ordinary cards only ("${line}")`);
 }
 
-// --- 6. the wiring in src/main.js --------------------------------------------------------------------------------
+// --- 6. the wiring in src/main.js, and in src/net/referee.js -----------------------------------------------------
+// (From the multiplayer build's P1C S4 the clock itself is the table's: src/net/referee.js counts it, and at zero
+// discards and passes the turn (timeUp); a computer guest's turn ends there too (endTurnNow). The page holds the clock
+// (timerPaused, every frame) and shows what the table did (onTimeUp, endTurnByClock). Same checks, at that new home.)
 console.log('\n6. the wiring (read from the code: no browser here)');
 {
   const main = fs.readFileSync(path.join(root, 'src/main.js'), 'utf8');
+  const referee = fs.readFileSync(path.join(root, 'src/net/referee.js'), 'utf8');
   const def = name => new RegExp(`${name}[^]*?;\\n`).exec(main)?.[0] || '';
+  const inner = name => new RegExp(`function ${name}\\(now\\) \\{[^]*?\\n  \\}`).exec(referee)?.[0] || '';     // (a function inside the referee)
   const paused = def('const timerPaused = ');
   check(paused.includes('askUp()') && paused.includes('meeting.isOpen') && paused.includes('handoff.isOpen') && paused.includes('meetingLive'), 'the clock still waits for the Menu panel and questions, meetings and private screens');
   check(!/discard\.isOpen/.test(paused) && /discard\.finishing/.test(paused), 'the discard screen is no longer one of them: the clock runs on (it stands still only for the half second the last card leaves)');
-  const onUp = /function onTimeUp\(\) \{[^]*?\n\}/.exec(main)?.[0] || '';
-  check(/atZero\(overHandLimit\(/.test(onUp) && /endTurnByClock\(/.test(onUp), 'the end of the clock asks the rule (atZero) and ends the turn through endTurnByClock');
+  const holds = /function holds\(\) \{[^]*?\n\}/.exec(main)?.[0] || '';
+  check(/clock: timerPaused\(\)/.test(holds) && /table\.local\.hold\(holds\(\)\)/.test(main), "the page holds the table's clock with exactly that list, every frame (holds)");
+  const onUp = /function onTimeUp\([^)]*\) \{[^]*?\n\}/.exec(main)?.[0] || '';
+  check(/atZero\(/.test(onUp) && /endTurnByClock\(/.test(onUp), 'the end of the clock asks the rule (atZero) and ends the turn through endTurnByClock');
+  const timeUp = inner('timeUp');
   const byClock = /function endTurnByClock\([^)]*\) \{[^]*?\n\}/.exec(main)?.[0] || '';
-  check(/discardRandomDown\(state, /.test(byClock) && /passTurn\(\)/.test(byClock) && /discard\.note\(/.test(byClock) && !/endTurnByTimeout|Math\.random/.test(byClock), "it discards with the engine's own discardRandomDown (no choice of its own), passes the turn through passTurn and shows the guest the notice");
+  check(/A\.discardRandomDown\(S, p, random \|\| undefined\)/.test(timeUp) && /passTurn\(now\)/.test(timeUp) && /addResult\(seat, 'autoDiscarded'/.test(timeUp)
+    && /discard\.note\(discardedLine\(/.test(byClock) && !/endTurnByTimeout|Math\.random/.test(timeUp + byClock) && !/discardRandomDown\(/.test(byClock),
+  "it discards with the engine's own discardRandomDown (no choice of its own: referee.js timeUp), passes the turn through passTurn and shows the guest the notice (main.js endTurnByClock)");
   const endNow = /function endTurnNow\(\) \{[^]*?\n\}/.exec(main)?.[0] || '';
-  check(/discardAllowance\(timerLeft, rules\.turnTimerEnabled\)/.test(endNow) && /discard\.open\(p, passTurn, \{ seconds \}\)/.test(endNow) && /botDiscardDown\(p\)/.test(endNow), 'ending the turn over the limit opens the screen with the allowance; a computer guest still discards by itself');
+  check(/discardAllowance\(timerLeft, rules\.turnTimerEnabled\)/.test(endNow) && /discard\.open\(p, passTurn, \{ seconds \}\)/.test(endNow) && /botDiscardDown\(p\)/.test(inner('endTurnNow'))
+    && /Math\.max\(left, R\.limits\.discardMinMs/.test(inner('enterDiscard')),
+  "ending the turn over the limit opens the screen with the allowance (the table's discard clock gives the same: referee.js enterDiscard); a computer guest still discards by itself (referee.js endTurnNow)");
   check(/function showEnd\(\) \{[^]*?discard\.close\(\)/.test(main), 'the end of the match closes an open discard screen');
   const flow = fs.readFileSync(path.join(root, '.github/workflows/tests.yml'), 'utf8');
   check(/suite: \[[^\]]*\bdiscard-clock-check\b/.test(flow), 'CI (and tests/run-fast.mjs) runs this suite');

@@ -1,17 +1,22 @@
 // Ties pathfinding, action points and room discovery together for the active player (main.js
 // turns a tap on a room into a planned walk here). Talks to the renderer only through the callbacks
 // in `on`, so the rules stay reusable.
+// `state` and `floor` are what the screens draw: in the page, its presenter state and its own copy of the hotel
+// (src/net/viewAsState.js, src/net/floorCopy.js). Crossing into a room is the table's to decide: `enter(player,
+// roomId)` settles it and returns its result, with `state` already up to date (without `enter`, or when it returns
+// null, nothing is settled: a Co-op table settles a whole walk at once, DESIGN §4.5).
+// `before()` (optional) runs before the walking cells are worked out again, so they follow the latest state.
 import { roomAt } from './game/hotel.js';
-import { enterRoom, activePlayer } from './game/state.js';
+import { activePlayer } from './game/state.js';
 import { buildAllowed, planMove, planRoomMove } from './game/moves.js';
 
 // `movers` are the movement objects (src/player.js), one per entry in state.players.
-export function createDiscovery({ floor, grid, state, movers, cfg, on = {} }) {
+export function createDiscovery({ floor, grid, state, movers, cfg, on = {}, enter = null, before = null }) {
   let allowed = buildAllowed(state, floor, grid);
 
   return {
     get allowed() { return allowed; },
-    refresh() { allowed = buildAllowed(state, floor, grid); },
+    refresh() { before?.(); allowed = buildAllowed(state, floor, grid); },
     activeMover() { return movers[state.activeIndex]; },
 
     // Work out a walk for the active player without committing it.
@@ -22,9 +27,9 @@ export function createDiscovery({ floor, grid, state, movers, cfg, on = {} }) {
     },
     // Work out a walk into room `roomId` for the active player without committing it: the fewest-rooms
     // route, one move per room entered, ending early in a room where a meeting is forced (planRoomMove).
-    // `standAt(roomId)` gives the standing spot [x, z] in the room the walk ends in.
-    planToRoom(roomId, standAt) {
-      const player = activePlayer(state);
+    // `standAt(roomId)` gives the standing spot [x, z] in the room the walk ends in. `player`: the active guest as the
+    // rules see them (their action points), when the screens' record does not hold them (a computer guest's).
+    planToRoom(roomId, standAt, player = activePlayer(state)) {
       const mover = movers[player.index];
       return planRoomMove(state, floor, grid, cfg, player, [mover.x, mover.z], roomId, standAt, allowed);
     },
@@ -53,7 +58,9 @@ export function createDiscovery({ floor, grid, state, movers, cfg, on = {} }) {
       const mover = movers[player.index];
       const roomId = roomAt(floor, mover.x, mover.z);
       if (!roomId || roomId === player.currentRoom) return null;
-      const result = enterRoom(state, floor, player, roomId);
+      if (!enter) return null;
+      const result = enter(player, roomId);
+      if (result == null) return null;        // (nothing to settle: a Co-op walk was settled whole by the server)
       allowed = buildAllowed(state, floor, grid);
       on.roomEntered?.(result);
       return result;

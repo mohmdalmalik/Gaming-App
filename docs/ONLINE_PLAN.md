@@ -4,6 +4,12 @@
 Store rules changed a lot in 2024–2026 and some are still in court, so each policy point below gives its
 date and source. Check them again before each launch.*
 
+*__Update, 3 Nov 2026 (v0.12).__ Step 2 below is done, and step 3 is built and waiting for the owner's decisions:
+the Co-op server, private tables with a code, reconnection and bots in empty seats are built and tested on this
+computer, and the live site shows "Coming soon" until the owner approves the online rule list and opens a hosting
+account. How it was built, and what differs from this plan (a device key instead of guest accounts for now, Render
+Free first), is in `docs/ONLINE_DESIGN.md`. The rest of this file is the plan as written on 12 Oct.*
+
 ---
 
 ## The short version
@@ -33,10 +39,15 @@ date and source. Check them again before each launch.*
    - you need to decide whether bots in online matches are shown as bots.
 8. **The very next step after the current work:** make the game's screens read **only one player's view**
    (step 2). It changes nothing you can see, but it is the foundation that everything online is built on.
+   *(Done in v0.12, and step 3 built on it: see the update at the top.)*
 
 ---
 
 ## Where the game stands today
+
+*(Written 12 Oct 2026. Every item under "What has to change before going online" was done in v0.12: the screens read
+only the player's own view, the seed and the room deck stay with the table, the view carries each placed tile and
+how it is turned, and a table can be saved and restored. The rule questions are now the owner's rule list, R1-R12.)*
 
 **What already helps:**
 - **The rules can already run on a server.** They are pure code with no graphics, so a server could run
@@ -363,6 +374,10 @@ Each step is something you can see and test before the next one starts.
 - **Cost:** $0.
 
 ### Step 2: Per-player view inside the game (the foundation)
+- **Done (v0.12, 3 Nov 2026).** Single player now runs through a table (`src/net/localTable.js` and the referee,
+  `src/net/referee.js`), and the screens read only the player's own view (`src/net/playerView.js`), written into one
+  presenter state. Matches play exactly as before; `tests/browser-honesty.mjs` and `tests/seam-check.mjs` prove the
+  screens receive and read nothing secret.
 - **What it does:** a "table connection" sits between the screens and the rules. Today it runs the rules
   and bots on the iPad ("local table"); later the same connection talks to the server ("online table").
   - The screens read **only your view**: the public board, your hand and role, and your private events.
@@ -374,6 +389,12 @@ Each step is something you can see and test before the next one starts.
 - **Cost:** $0.
 
 ### Step 3: Server, guest accounts and private tables with friends
+- **Built (v0.12, 3 Nov 2026), waiting for the owner's decisions.** The `server/` program, the main menu's Co-op
+  button, "Start a table" and "Join with a code", the waiting room, the server's turn clock, reconnection, saving
+  tables across restarts, and bots in empty seats are built and tested on this computer, including a whole match
+  against the real server killed and restarted. Players see "Coming soon" until the owner approves the online rule
+  list and opens a Render account. A device key stands in for guest accounts for now (no names claimed on the
+  server yet). Design, as built: `docs/ONLINE_DESIGN.md`; the owner's review link: `?friends=demo`.
 - **What it does:**
   - the `server/` program on Render;
   - guest accounts with names claimed on the server;
@@ -459,8 +480,8 @@ Each step is something you can see and test before the next one starts.
 | Step | You get | You decide | Money | Rough effort* |
 |---|---|---|---|---|
 | 1. Profile and avatar | Name, look, earnable items on the device | Avatar system, first items, name rules | $0 | 1–2 weeks |
-| 2. Per-player view | No visible change; ready for online | — (just test that play is unchanged) | $0 | 2–3 weeks |
-| 3. Server + private tables | Play with friends by code; bots fill seats | Rule additions (meetings, disconnects), domain | about $8/mo + about $12/yr | 3–5 weeks |
+| 2. Per-player view (done, v0.12) | No visible change; ready for online | — (just test that play is unchanged) | $0 | 2–3 weeks |
+| 3. Server + private tables (built, v0.12; waiting for the owner) | Play with friends by code; bots fill seats | Rule additions (meetings, disconnects), domain | about $8/mo + about $12/yr | 3–5 weeks |
 | 4. Matchmaking + safety | "Play online" with strangers; report, block, delete account | Wait time, bot labels, minimum age | about $8–15/mo | 1–2 weeks |
 | 5. Web store | Buy cosmetics on the web; owned everywhere | Prices, payment company, company or individual | Apple $99/yr; database $6–20/mo; about 5% per sale | 3–4 weeks |
 | 6. iOS + Android | Apps in the stores with in-app purchase | Phones or tablets, store texts, Small Business Program | Google $25 once | 4–6 weeks + review waits |
@@ -474,6 +495,9 @@ sales.
 ---
 
 ## The first concrete next step after the current work
+
+*(Done: step 2 and step 3 were built in v0.12. The next steps are the owner's: the online rule list and a Render
+account, then the first two-device test on Render Free with `?coop=preview`.)*
 
 **Start step 2.** First, a new file, `src/net/playerView.js`. It takes the bots' `botView()` and adds what
 a person's screen needs: guest names and looks, your seat, and tile placements. A test runs real matches

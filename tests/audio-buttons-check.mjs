@@ -44,6 +44,19 @@ const EXPECT = {
   'end-honours': 'open', 'btn-hn-done': 'close',
   'btn-mm-cancel': 'close', 'btn-tips-again': 'select', 'btn-settings-done': 'close',
   'btn-record-back': 'close', 'btn-record-reset': 'click', 'btn-record-keep': 'click', 'btn-record-yes': 'click',
+  // the menu split (src/ui/menu.js): Single player and Co-op open their screens; Single player's Back
+  'btn-menu-single': 'open', 'btn-menu-coop': 'open', 'btn-single-back': 'close',
+  // Co-op (src/ui/coopMenu.js): Start a table, Join, Back, Cancel (rejoining); the card's two buttons (a Back or Main
+  // menu among them closes: the script sets its data-sfx); the waiting room (the Wardrobe opens); Wait; the questions
+  'btn-coop-start': 'click', 'btn-coop-join': 'click', 'btn-coop-back': 'close', 'btn-coop-cancel': 'close',
+  'btn-coop-card-a': 'click', 'btn-coop-card-b': 'click',
+  'btn-table-invite': 'click', 'btn-table-copy': 'click', 'btn-table-start': 'click', 'btn-table-leave': 'click',
+  'btn-table-wardrobe': 'open', 'btn-table-wait': 'click', 'btn-table-dlg-no': 'click', 'btn-table-dlg-yes': 'click',
+  // the review link's seat switch (src/ui/seatSwitch.js): "Show sam's screen"
+  'btn-seat-switch': 'click',
+  // Co-op in the match (src/ui/coopMatch.js): the one card that stops or interrupts a match (Back to the table, Try
+  // again / Leave match, Play here instead / Main menu, OK)
+  'btn-coop-mc-a': 'click', 'btn-coop-mc-b': 'click',
   // the full-screen overlays
   'btn-begin': 'click', 'btn-notice-ok': 'click', 'btn-ask-no': 'click', 'btn-ask-yes': 'click',
   'btn-lock-cancel': 'close',            // the lock choice (src/ui/lockChoice.js): Not now; its "Use ..." buttons have no id, a plain click

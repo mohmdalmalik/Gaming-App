@@ -1,0 +1,181 @@
+/* Co-op in the menu (src/ui/coopMenu.js, src/ui/menu.js, src/ui/seatSwitch.js; the words: src/data/onlineText.js):
+   the Single player screen, the Co-op screen and its card, Your private table (the waiting room), the invite line
+   above the register, the toasts and the review link's seat switch. The look is the menu's own (styles.css "Main
+   menu"): the same panel, kicker, headings, buttons and segmented rows, colours and serif. Every button is 44 px or
+   more; states are words (Host, You, Away), never colour alone. The match's Co-op additions are coop-match.css. */
+
+/* Things these screens hide with the hidden attribute (each has a display of its own below). */
+.coop-form[hidden], .coop-card[hidden], .coop-countdown[hidden], .ccc-actions[hidden], .ccc-locked[hidden],
+.coop-link[hidden], .coop-opts[hidden], .coop-dialog[hidden], .table-body[hidden], .coop-quiet[hidden],
+.coop-footer[hidden], #menu-coop .menu-btn[hidden], #menu-table .menu-btn[hidden], .seat-switch[hidden],
+.coop-toast[hidden], .su-invite[hidden], .cc-guests[hidden] { display: none; }
+
+/* --- Single player ------------------------------------------------------------------------------------------------ */
+#menu-single .menu-actions { margin-top: 18px; }
+
+/* --- Co-op: "A private table" ---------------------------------------------------------------------------------------- */
+.coop-line { margin: 0 0 16px; font-family: var(--serif); font-size: 16.5px; line-height: 1.45; color: var(--ivory-dim); text-wrap: pretty; }
+.coop-quiet { margin: -10px 0 12px; font-size: 13.5px; line-height: 1.35; font-style: italic; color: var(--muted); }
+.coop-start { width: 100%; }
+.coop-code-label { display: block; margin: 18px 0 8px; }
+.coop-code-row { display: flex; gap: 10px; margin: 0; }
+.coop-code {
+  flex: 1 1 auto; min-width: 0; width: auto; padding: 0 14px;
+  text-transform: uppercase; letter-spacing: 0.2em; -webkit-user-select: text; user-select: text;
+}
+.coop-code::placeholder { text-transform: none; letter-spacing: 0.02em; }
+.coop-code:disabled { opacity: 0.5; }
+.coop-code-row .menu-btn { flex: none; min-width: 104px; min-height: 56px; }
+.coop-status { min-height: 1.4em; margin-top: 10px; font-size: 14px; line-height: 1.4; color: var(--muted); text-wrap: pretty; }
+.coop-status.bad { color: #eaa898; }
+#menu-coop .menu-actions { margin-top: 14px; }
+#menu-coop.offline .coop-start, #menu-coop.offline .coop-code-row { opacity: 0.55; }
+.coop-card .coop-line { margin-bottom: 4px; }
+.coop-card .coop-line + .coop-line { margin-top: 6px; }
+/* the card's buttons: the closer (Back, Main menu) on the left, the gold one on the right, as on every other menu
+   screen (the button ids keep their meaning: -a is the card's main action) */
+#coop-card #btn-coop-card-a { order: 2; }
+
+/* The iPad's on-screen keyboard covers about half the screen in landscape: while the code field has the focus and
+   the keyboard is up, the panel goes to the top and keeps only what typing a code needs (src/ui/coopMenu.js). */
+.menu-panel.kbd { top: max(12px, calc(var(--safe-top) + 8px)); transform: none; transition: none; }   /* (at once: the keyboard is already up) */
+.menu-panel.kbd #coop-line, .menu-panel.kbd .coop-start, .menu-panel.kbd #coop-demo { display: none; }
+.menu-panel.kbd .coop-code-label { margin-top: 4px; }
+
+/* --- Your private table (the waiting room): a wider panel ------------------------------------------------------------ */
+.menu-panel:has(> :where(#menu-table:not([hidden]))) { width: min(560px, 52vw); }
+
+/* the code card: the code big, Invite friends and Copy link beside it */
+.coop-code-card {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 10px 12px 10px 16px; border-radius: 14px;
+  background: rgba(16, 18, 26, 0.86); border: 1px solid var(--line); box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.5), 0 10px 28px rgba(0, 0, 0, 0.3);
+}
+.ccc-code { flex: 1 1 auto; min-width: 0; }
+.ccc-label { font-size: 11px; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; color: var(--muted); }
+.ccc-letters {
+  font-family: var(--serif); font-size: 40px; line-height: 1.1; font-weight: 700; letter-spacing: 0.32em; white-space: nowrap;
+  color: var(--brass-bright); -webkit-user-select: text; user-select: text;
+}
+.ccc-actions { display: flex; gap: 8px; flex: none; }
+.ccc-actions .menu-btn.small { min-height: 46px; padding: 8px 14px; font-size: 16px; }
+.ccc-locked { flex: 0 1 46%; margin: 0; font-family: var(--serif); font-style: italic; font-size: 15px; line-height: 1.35; color: var(--ivory-dim); }
+.coop-link {
+  display: block; width: 100%; height: 44px; margin-top: 8px; padding: 0 12px; border-radius: 10px;
+  background: rgba(10, 12, 18, 0.9); border: 1px solid var(--line); color: var(--ivory); font: 14px var(--sans);
+  -webkit-user-select: text; user-select: text;
+}
+
+/* the seats: two columns of three */
+.coop-seats { list-style: none; margin: 12px 0 0; padding: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.cs-box {
+  display: grid; grid-template-columns: 26px 34px minmax(0, 1fr); align-items: center; gap: 9px; width: 100%; min-height: 52px;
+  padding: 3px 10px; border-radius: 11px; background: rgba(16, 18, 26, 0.72); border: 1px solid var(--line-soft);
+  color: var(--ivory); font: inherit; text-align: left;
+}
+button.cs-box { appearance: none; cursor: pointer; transition: transform 0.12s ease, border-color 0.2s ease; }
+button.cs-box:active { transform: scale(0.98); }
+button.cs-box:focus-visible { outline: 2px solid var(--brass-bright); outline-offset: 2px; }
+.cs-seat.you .cs-box { border-color: var(--brass); }
+.cs-ring {
+  width: 26px; height: 26px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+  border: 2px solid var(--player-color, var(--brass)); background: rgba(0, 0, 0, 0.35);
+  font-size: 11.5px; font-weight: 800; color: var(--ivory);
+}
+.cs-face { width: 34px; height: 44px; border-radius: 7px; overflow: hidden; border: 1px solid var(--line); background: var(--panel-solid); }
+.cs-face img { width: 100%; height: 100%; object-fit: cover; display: block; -webkit-user-drag: none; }
+.cs-text { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.cs-name { font-family: var(--serif); font-size: 17px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cs-seat.you .cs-name { color: var(--brass-bright); }
+.cs-tags { min-height: 1.2em; font-size: 11px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--brass); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cs-seat.away .cs-ring { border-color: var(--muted); }
+.cs-seat.away .cs-face { filter: grayscale(0.85) brightness(0.7); }
+.cs-seat.away .cs-tags { color: var(--ivory-dim); }
+.cs-seat.empty .cs-box { grid-template-columns: 26px minmax(0, 1fr); border-style: dashed; background: rgba(16, 18, 26, 0.5); }
+.cs-seat.empty .cs-ring { border: 1px dashed var(--line); background: none; }
+.cs-seat.empty .cs-text { font-size: 13.5px; line-height: 1.25; font-style: italic; color: var(--muted); animation: mmWait 1.6s ease-in-out infinite; }
+
+/* the host's choices: Guests at the table 4 · 5 · 6, New guests Welcome · Locked */
+.coop-opts { margin-top: 12px; }
+.coop-opts .menu-field { margin-bottom: 0; }
+.coop-opts .mf-label { margin-bottom: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.coop-opts .seg-btn { min-height: 44px; padding: 6px 8px; }
+/* a choice that can't be made now (a size below the people seated; everything during the countdown) looks it */
+#menu-table .seg-btn:disabled { opacity: 0.4; cursor: default; }
+.coop-hint { margin: 6px 0 0; min-height: 0; }
+.coop-note { margin: 8px 0 0; min-height: 1.35em; font-size: 13.5px; line-height: 1.35; color: var(--muted); text-wrap: pretty; }
+#menu-table .coop-status { margin-top: 4px; min-height: 1.3em; font-size: 14px; color: var(--ivory-dim); }
+.coop-actions { margin-top: 10px; }
+.coop-actions .menu-btn.quiet { flex: 0 0 auto; background: transparent; border-color: var(--line-soft); color: var(--ivory-dim); box-shadow: none; }
+.coop-footer { margin: 10px 0 0; font-size: 13px; line-height: 1.35; color: var(--muted); }
+.coop-footer.warn { margin-top: 4px; color: var(--brass-bright); }
+
+/* the countdown: "The lift is on its way… 5", the lift dial's brass arc going round (Reduce Motion: the number only) */
+.coop-countdown {
+  display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-top: 10px; min-height: 66px; padding: 6px 12px;
+  border-radius: 14px; border: 1px solid var(--brass); background: rgba(40, 32, 14, 0.62);
+}
+.cc-dial {
+  position: relative; flex: none; width: 52px; height: 52px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+  border: 2px solid var(--brass-dim); background: radial-gradient(circle, rgba(201, 162, 78, 0.18), rgba(0, 0, 0, 0.3));
+}
+.cc-dial::before {
+  content: ''; position: absolute; inset: -2px; border-radius: 50%; border: 2px solid transparent; border-top-color: var(--brass-bright);
+  animation: ccTurn 1s linear infinite;
+}
+@keyframes ccTurn { to { transform: rotate(360deg); } }
+.cc-n { font-family: var(--serif); font-size: 26px; font-weight: 700; color: var(--brass-bright); }
+.cc-text { flex: 1 1 160px; min-width: 0; font-family: var(--serif); font-size: 19px; font-weight: 700; color: var(--ivory); }
+.cc-guests { flex: 1 1 100%; margin: -6px 0 2px 66px; font-size: 14px; color: var(--ivory-dim); }
+.coop-countdown .menu-btn { flex: none; min-width: 96px; }
+
+.cs-why { font-weight: 600; font-style: italic; letter-spacing: 0.01em; text-transform: none; }
+
+/* one question at a time, in place of the room (its heading takes the room's) */
+.coop-dialog {
+  padding: 18px 20px 20px; border-radius: 14px; background: rgba(16, 18, 26, 0.9); border: 1px solid var(--line);
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.5), 0 10px 28px rgba(0, 0, 0, 0.35);
+}
+.coop-dialog .menu-h2 { margin-bottom: 8px; font-size: 28px; }
+.coop-dialog .menu-actions { margin-top: 16px; }
+#menu-table.asking #table-title, #menu-table.asking #table-demo { display: none; }
+
+/* --- the register: "You're invited to nora's table." ----------------------------------------------------------------- */
+.su-invite { margin: 0 0 10px; font-family: var(--serif); font-style: italic; font-size: 17px; line-height: 1.35; color: var(--brass-bright); }
+
+/* --- toasts ("sam joined.", "Link copied…"), bottom right, clear of the panel ----------------------------------------- */
+.coop-toast {
+  position: fixed; right: calc(var(--safe-right) + 24px); bottom: calc(var(--safe-bottom) + 24px); z-index: 2; max-width: min(420px, 40vw);
+  padding: 11px 18px; border-radius: 12px; font-size: 15px; line-height: 1.35; color: var(--ivory);
+  background: var(--panel); border: 1px solid var(--line); box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.5), 0 8px 20px rgba(0, 0, 0, 0.5);
+  animation: ccToast 0.2s ease-out;
+}
+@keyframes ccToast { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+
+/* --- the review link's seat switch: "Show sam's screen", top right, above the menu ---------------------------------- */
+.seat-switch {
+  position: fixed; top: calc(var(--safe-top) + 14px); right: calc(var(--safe-right) + 14px); z-index: 45;
+  min-height: 46px; max-width: 40vw; padding: 8px 18px; border-radius: 12px; cursor: pointer;
+  font-family: var(--serif); font-size: 17px; font-weight: 700; color: var(--ivory); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  background: rgba(16, 18, 26, 0.92); border: 1px solid var(--brass); box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.5), 0 8px 22px rgba(0, 0, 0, 0.45);
+}
+.seat-switch:active { transform: scale(0.98); }
+.seat-switch.offer { background: linear-gradient(180deg, #e9cb7c, #c69c47); border-color: var(--brass-bright); color: #1f1608; animation: ssCall 1.6s ease-in-out infinite; }
+@keyframes ssCall { 50% { box-shadow: 0 0 0 4px rgba(232, 202, 128, 0.35), 0 8px 22px rgba(0, 0, 0, 0.45); } }
+
+/* --- short screens (the 1024 x 694 Safari window): a little tighter -------------------------------------------------- */
+@media (max-height: 760px) {
+  #menu-table .menu-h2, #menu-coop .menu-h2 { margin-bottom: 10px; font-size: 28px; }
+  #menu-table .ccc-letters { font-size: 34px; }
+  .coop-seats { gap: 6px; margin-top: 10px; }
+  #menu-table .cs-box { min-height: 48px; }
+  .coop-opts { margin-top: 10px; }
+  .coop-line { margin-bottom: 12px; font-size: 15.5px; }
+  .coop-code-label { margin-top: 14px; }
+}
+
+/* Reduce Motion (src/motion.js): the dial's arc, the waiting seats and the switch's call stand still. */
+@media (prefers-reduced-motion: reduce) {
+  .cc-dial::before { display: none; }
+  .cs-seat.empty .cs-text { animation: none; opacity: 0.75; }
+  .seat-switch.offer, .coop-toast { animation: none; }
+}

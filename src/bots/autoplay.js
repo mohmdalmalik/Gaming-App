@@ -54,18 +54,30 @@ export function runTrade(state, floor, table, P, Q) {
   return A.resolveTrade(state, floor, P, Q, cp, cq);
 }
 
+// The walk a move to room `to` would make for guest `p`, without making it: the fewest-rooms route (roomRoute),
+// cut at the first room on the way where a meeting is forced (encountersIn), and only if every step of it can
+// be paid for (canAffordRoute). Returns { ok: true, rooms } (the route, starting with the room `p` is in) or
+// { ok: false, reason }: the route's own blocked reason, 'here' (under 2 rooms) or canAffordRoute's reason.
+// Changes nothing. (runAction's move below, and a referee that walks a guest room by room.)
+export function planWalk(state, floor, p, to) {
+  let route = roomRoute(state, floor, p, to);
+  if (!Array.isArray(route)) return { ok: false, reason: route.blocked };
+  if (route.length < 2) return { ok: false, reason: 'here' };
+  for (let i = 1; i < route.length - 1; i++) {
+    if (encountersIn(state, floor, p, route[i]).length) { route = route.slice(0, i + 1); break; }
+  }
+  const can = canAffordRoute(state, floor, p, route);
+  if (!can.ok) return { ok: false, reason: can.reason };
+  return { ok: true, rooms: route };
+}
+
 // Carry out one action for the active guest `p`. Returns { ok, reason?, ... }.
 export function runAction(state, floor, table, p, a, meetings = null) {
   switch (a?.k) {
     case 'move': {
-      let route = roomRoute(state, floor, p, a.to);
-      if (!Array.isArray(route)) return { ok: false, reason: route.blocked };
-      if (route.length < 2) return { ok: false, reason: 'here' };
-      for (let i = 1; i < route.length - 1; i++) {
-        if (encountersIn(state, floor, p, route[i]).length) { route = route.slice(0, i + 1); break; }
-      }
-      const can = canAffordRoute(state, floor, p, route);
-      if (!can.ok) return { ok: false, reason: can.reason };
+      const plan = planWalk(state, floor, p, a.to);
+      if (!plan.ok) return plan;
+      const route = plan.rooms;
       for (let i = 1; i < route.length; i++) enterRoom(state, floor, p, route[i]);
       const meeting = runMeeting(state, floor, table, p, meetings);
       return { ok: true, rooms: route, meeting };

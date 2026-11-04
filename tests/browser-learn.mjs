@@ -16,7 +16,7 @@
 //      Victory or Defeat for your side whether or not you are alive or got out, the recap, fitting, both sides
 //   c  a possessed player's role screen, chip and end screen (the same form and words as a clean guest's)
 //   d  practice: the Menu panel says Leave practice and has the version line too, the end screen has no Victory or Defeat
-import { launch, GUARD_WAIT, settle } from './smoke-lib.mjs';
+import { launch, GUARD_WAIT, settle, openSinglePlayer } from './smoke-lib.mjs';
 import { LANTERN_TRADE_NOTE } from '../src/data/tips.js';
 import { versionLine } from '../src/version.js';
 import fs from 'node:fs';
@@ -73,10 +73,12 @@ if (only.includes('a')) {
     const { browser, page, messages } = await launch({ width: W, height: H });
     try {
       await openMenu(page);
+      await openSinglePlayer(page);     // (the menu split: Practice alone and its hint are on the Single player screen, above its Back)
       const hint = await page.evaluate(() => { const h = document.getElementById('menu-hint'); return h.hidden ? null : h.textContent; });
       check(hint === 'New to Hotel Escape? Practice alone is the best place to start.', `a new player sees the hint: "${hint}"`);
-      const hb = await box(page, '#menu-hint'), pb = await box(page, '#btn-menu-practice'), rb = await box(page, '.menu-row2');
-      check(hb && pb && rb && hb.t >= pb.b - 6 && hb.b <= rb.t + 2, `...under Practice alone, above the first row of small buttons (hint ${Math.round(hb?.t)}-${Math.round(hb?.b)}, Practice ends ${Math.round(pb?.b)}, the row starts ${Math.round(rb?.t)})`);
+      const hb = await box(page, '#menu-hint'), pb = await box(page, '#btn-menu-practice'), rb = await box(page, '#btn-single-back');
+      check(hb && pb && rb && hb.t >= pb.b - 6 && hb.b <= rb.t + 2, `...under Practice alone, above Back (hint ${Math.round(hb?.t)}-${Math.round(hb?.b)}, Practice ends ${Math.round(pb?.b)}, Back starts ${Math.round(rb?.t)})`);
+      await page.evaluate(() => window.__game.menuShow('main')); await page.waitForTimeout(900);
       const panel = await box(page, '.menu-panel');
       check(panel.t >= 0 && panel.b <= H, `the main menu still fits (${Math.round(panel.t)}-${Math.round(panel.b)} of ${H})`);
       const row = await page.evaluate(() => [...document.querySelectorAll('.menu-row2 .menu-btn')].map(b => { const r = b.getBoundingClientRect(); return { id: b.id, w: r.width, h: r.height, y: Math.round(r.top), over: b.scrollWidth > b.clientWidth + 1 }; }));

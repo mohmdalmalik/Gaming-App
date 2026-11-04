@@ -1,0 +1,43 @@
+/* Co-op in the match (src/ui/coopMatch.js and the Co-op section of src/main.js): Away on a guest, the reconnect pill
+   and card, the stall banner, the ask ring and the end buttons (DESIGN §14.6-14.7). body.coop-match is set while a
+   Co-op match is on screen. */
+
+/* --- the review link's seat switch in the match: under the top-right buttons, clear of the clock and the guest strip -- */
+body.coop-match .seat-switch { top: calc(var(--safe-top) + 176px); right: calc(var(--safe-right) + 14px); font-size: 16px; min-height: 44px; }
+/* While a centred full-screen card is up (the role screen, a meeting, a notice, a question, the discard), the switch
+   waits in the bottom-right corner, clear of the card (at 1024 x 694 it covered the role card's top-right corner). */
+body.coop-match:has(#handoff-overlay:not([hidden]), #encounter-overlay:not([hidden]), #notice-overlay:not([hidden]),
+  #ask-overlay:not([hidden]), #start-overlay:not([hidden]), #discard-overlay:not([hidden])) .seat-switch {
+  top: auto; bottom: calc(var(--safe-bottom) + 14px);
+}
+
+/* --- Away on a guest of the strip: a grey ring and the word ---------------------------------------------------------- */
+.mini-player.away .mini-portrait { filter: grayscale(0.85) brightness(0.8); box-shadow: 0 0 0 2px #8a8f9c; }
+.mini-away {
+  box-sizing: border-box; max-width: calc(100% + 2px); height: 20px; margin-top: 1px; padding: 0 8px; border-radius: 10px;
+  background: #3a3e4a; border: 1px solid #8a8f9c; color: var(--ivory); font: 800 13px/18px var(--sans); white-space: nowrap; text-align: center;
+}
+
+/* --- the reconnect pill and the stall banner, top centre under the strip --------------------------------------------- */
+.coop-pill, .coop-stall {
+  position: fixed; left: 50%; transform: translateX(-50%); z-index: 46; pointer-events: none; text-align: center;
+  background: var(--panel); border: 1px solid var(--line); box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.5), 0 8px 20px rgba(0, 0, 0, 0.5);
+  color: var(--ivory); font-family: var(--sans);
+}
+.coop-pill { top: calc(var(--safe-top) + 178px); padding: 7px 16px; border-radius: 18px; font-size: 15px; font-weight: 700; }
+.coop-stall { top: calc(var(--safe-top) + 178px); padding: 9px 18px; border-radius: 12px; max-width: min(520px, 70vw); }
+.coop-stall .cst-who { font-family: var(--serif); font-size: 17px; font-weight: 700; color: var(--brass-bright); }
+.coop-stall .cst-count { margin-top: 2px; font-size: 14.5px; color: var(--ivory-dim); }
+.coop-pill[hidden], .coop-stall[hidden], .coop-end-line[hidden] { display: none; }
+.coop-pill:not([hidden]) ~ .coop-stall { top: calc(var(--safe-top) + 222px); }
+
+/* --- a card that ends or interrupts the match: above the game's own screens, under the black fade -------------------- */
+.coop-match-card { z-index: 47; }
+
+/* --- the end screen's next-match line, and the seconds ring on a timed question (pending rules only) ----------------- */
+.coop-end-line { margin: 6px 0 0; font-size: 15px; }
+.coop-ring {
+  position: absolute; top: 12px; right: 12px; width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+  border: 3px solid var(--brass); color: var(--ivory); font: 800 16px/1 var(--sans); background: rgba(16, 18, 26, 0.9);
+}
+.coop-ring.crimson { border-color: var(--crimson); color: #ffd9d4; }

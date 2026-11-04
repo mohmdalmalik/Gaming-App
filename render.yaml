@@ -1,0 +1,53 @@
+# The Co-op server on Render (a Render "Blueprint", DESIGN §17). No secrets: every value below is a plain setting.
+# Nothing here runs until the owner opens a Render account and applies this Blueprint (owner decision D7):
+#   render.com -> Sign up with GitHub -> New -> Blueprint -> choose Gaming-App -> check the region (Singapore) -> Apply,
+#   then send us the ...onrender.com address; it goes into ONLINE.server.live (src/data/online.js). server/README.md
+#   has the same steps.
+# Render deploys again only when a file the server imports changes (buildFilter below). tests/protocol-check.mjs
+# compares that list with the server's real import graph, so the two can't drift apart.
+# The heap cap: a table needs about half a megabyte of live memory (300 tables: about 150 MB), but without a cap Node
+# lets garbage pile up when memory looks plentiful (600 MB at 300 tables in tools/load/coop-load.mjs). 256 MB keeps
+# the whole process well under the free plan's 512 MB.
+services:
+  - type: web
+    name: hotel-escape
+    runtime: node
+    region: singapore          # can't be changed later (owner decision D7)
+    plan: free                 # sleeps after 15 minutes without traffic; tables live in memory (no disk)
+    buildCommand: cd server && npm ci
+    startCommand: node --max-old-space-size=256 server/index.js   # a heap cap: the free plan has 512 MB (see the top)
+    healthCheckPath: /health
+    autoDeploy: true
+    buildFilter:
+      paths:
+        - server/**
+        - src/net/**
+        - src/game/**
+        - src/bots/**
+        - src/social/**
+        - src/table.js
+        - src/config.js
+        - src/account/username.js
+        - src/data/chat.js
+        - src/data/hotel.js
+        - src/data/names.js
+        - src/data/online.js
+        - src/data/partsIndex.js
+        - src/data/randomAvatar.js
+        - src/data/rules.js
+        - src/data/wardrobe.js
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: NODE_ENV
+        value: production
+      - key: TRUST_PROXY
+        value: render
+      - key: ALLOWED_ORIGINS
+        value: https://mohmdalmalik.github.io
+    # On a paid plan (Starter), a disk keeps tables through restarts and deploys:
+    # disk:
+    #   name: tables
+    #   mountPath: /var/data
+    #   sizeGB: 1
+    # and one more setting:  - key: DATA_DIR   value: /var/data

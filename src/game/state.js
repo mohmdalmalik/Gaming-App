@@ -7,32 +7,41 @@
 // hand and the hidden possession flag are per guest.
 import { rules } from '../data/rules.js';
 import {
-  makeRng, buildDrawDeck, buildPossessionSupply, deal, shuffle, hasEscapeLanterns, countableCount,
+  makeRng, buildDrawDeck, buildPossessionSupply, deal, shuffle, hasEscapeLanterns, countableCount, nextCardId,
 } from './cards.js';
 import { resetHotel } from './hotel.js';
 
 // `opts.mode`: 'practice' (one guest, no hidden role, no meetings) or 'match' (the default: 4-6 guests).
+// The engine options (`opts.rng`, `opts.hotelRng`, `opts.perTableIds`) are resetState's, below.
 export function createState(floor, roster, seed = 1, opts = {}) {
   const mode = opts.mode === 'practice' || opts.practice ? 'practice' : 'match';
   const state = { roster, mode, practice: mode === 'practice' };
-  resetState(state, floor, seed);
+  resetState(state, floor, seed, opts);
   return state;
 }
 
 // Deal a new game: the hotel, the deck, the hands and the hidden role all come from `seed`, so the same seed
 // plays the same game (the tests and a server rely on it). A seed is always given; a missing one is a bug.
-export function resetState(state, floor, seed) {
-  if (!Number.isFinite(seed)) throw new Error('resetState needs a seed (a number)');
-  const rng = makeRng(seed);
+// Engine options (all optional; Single player passes none, and without them everything is exactly as before):
+//   opts.rng          () => [0, 1): the source for the deal, the possessed seat, reshuffles and Lock Picks
+//                     (kept as state.rng) in place of makeRng(seed). With it `seed` may be null (state.seed null).
+//   opts.hotelRng     () => [0, 1): the source for the hotel (resetHotel) in place of one made from the seed.
+//   opts.perTableIds  true: this table numbers its own cards c1, c2, ... (state.cardSeq, nextCardId in cards.js)
+//                     instead of the module-wide counter, so many tables can share one process.
+export function resetState(state, floor, seed, opts = {}) {
+  if (!opts.rng && !Number.isFinite(seed)) throw new Error('resetState needs a seed (a number)');
+  const rng = opts.rng || makeRng(seed);
   const practice = !!state.practice;
-  state.seed = seed;
+  state.seed = Number.isFinite(seed) ? seed : null;
   state.rng = rng;                       // kept: reshuffles and Lock Picks draw from it later
-  resetHotel(floor, seed ?? 1);          // a new random hotel: the lobby and a shuffled room deck
+  if (opts.perTableIds) state.cardSeq = 0; else delete state.cardSeq;
+  const newId = () => nextCardId(state); // null without perTableIds: the module counter, as always
+  resetHotel(floor, Number.isFinite(seed) ? seed : 1, opts.hotelRng || null);   // a new random hotel: the lobby and a shuffled room deck
   state.discovered = new Set([floor.start.room]);   // every placed room is revealed
 
   // Deal from a shuffled draw pile: 1 Lantern + 3 other cards each (deal() in cards.js); the
   // remaining Lanterns are found only by searching.
-  const drawPile = shuffle(buildDrawDeck(rules.deck), rng);
+  const drawPile = shuffle(buildDrawDeck(rules.deck, newId), rng);
   const { hands, deck } = deal(drawPile, state.roster.length, rng);
   state.drawPile = deck;
   state.discardPile = [];                // reshuffled into a new draw pile when the deck runs out
@@ -65,7 +74,7 @@ export function resetState(state, floor, seed) {
     inbox: [],                 // PRIVATE structured events for this guest only (emitPrivate below)
   }));
   // (their own souls: every Possession card carries its owner, src/game/cards.js)
-  if (possessedIndex >= 0) state.players[possessedIndex].hand.push(...buildPossessionSupply(state.players[possessedIndex].id));
+  if (possessedIndex >= 0) state.players[possessedIndex].hand.push(...buildPossessionSupply(state.players[possessedIndex].id, newId));
 
   state.roomDrops = new Map();           // roomId -> cards lying on the floor (a dead guest's hand)
   state.lockedRooms = new Set();         // locked rooms whose (single) door is locked right now

@@ -85,6 +85,9 @@ export function createHud(doc, cfg) {
     confirmCancel: doc.getElementById('btn-confirm-cancel'),
   };
   let toastTimer = 0;
+  // A kept toast (Co-op's "You're back at the table.") stays at least `keep` ms: a toast asked for meanwhile waits and
+  // shows after it (the latest one only). Single player never keeps one, so its toasts behave as before.
+  let toastKeepUntil = 0, toastKeepTimer = 0, toastNext = null;
   let pressedConfirm = false;   // a press began on the Move/Cancel bar since it appeared (onConfirm)
   let confirmKind = 'move';     // what the bar asks: 'move' (Move / Cancel) or 'end' (End turn / Keep playing)
   let confirmShownAt = 0;       // when the bar last began asking something else (the double-tap guard of 'end')
@@ -402,7 +405,18 @@ export function createHud(doc, cfg) {
     },
     hideTimer() { el.timer.hidden = true; el.timer.classList.remove('low'); },
     // `seconds`: how long it stays (default cfg.ui.toastDuration); a longer message asks for longer.
-    toast(message, seconds = cfg.ui.toastDuration) {
+    toast(message, seconds = cfg.ui.toastDuration, { keep = 0 } = {}) {
+      const now = performance.now();
+      if (!keep && now < toastKeepUntil) { toastNext = [message, seconds]; return; }
+      if (keep) {
+        toastKeepUntil = now + keep;
+        clearTimeout(toastKeepTimer);
+        toastKeepTimer = setTimeout(() => {
+          toastKeepUntil = 0;
+          const next = toastNext; toastNext = null;
+          if (next) hud.toast(next[0], next[1]);
+        }, keep);
+      }
       // (shown first, then written: a screen reader speaks text that appears in a live region it can already reach,
       // so a refusal like "No actions left." is heard, not only seen)
       el.toast.hidden = false;

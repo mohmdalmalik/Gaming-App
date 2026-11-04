@@ -42,22 +42,10 @@ import { makePortrait } from './portrait.js';
 import { sfx } from '../audio/bus.js';
 import { holdAlly, releaseAlly } from './allies.js';
 
-export const TRADE_OUTCOMES = ['swap', 'blocked', 'blockedMe', 'possessed', 'possessedThem', 'soulSpent', 'alreadyPossessed', 'soulsCrossed', 'noTrade'];
-
-// Which outcome a trade (resolveTrade's events) or a skipped trade (skipTrade's) was, for `me`.
-// (`spent`: a soul used up on a guest already possessed — one entry, or two when both gave a soul.)
-export function tradeOutcome(events, me, other) {
-  if (!events?.ok || events.skipped) return 'noTrade';
-  if (events.blocks?.some(b => b.blocker === me.id)) return 'blocked';
-  if (events.blocks?.some(b => b.revealed === me.id)) return 'blockedMe';
-  if (events.possessed?.some(p => p.newly === me.id)) return 'possessed';
-  if (events.possessed?.some(p => p.newly === other.id && p.by === me.id)) return 'possessedThem';
-  const spentByMe = events.spent?.some(x => x.by === me.id), spentOnMe = events.spent?.some(x => x.at === me.id);
-  if (spentByMe && spentOnMe) return 'soulsCrossed';
-  if (spentOnMe) return 'soulSpent';
-  if (spentByMe) return 'alreadyPossessed';
-  return 'swap';
-}
+// Which outcome a trade was, for `me` (resolveTrade's or skipTrade's events): one pure function, shared with the table's
+// referee (src/net/outcomes.js), so the page and the table always name it alike.
+import { TRADE_OUTCOMES } from '../net/outcomes.js';
+export { tradeOutcome, TRADE_OUTCOMES } from '../net/outcomes.js';
 
 const NUM = ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine'];
 const aCard = type => {
@@ -73,7 +61,9 @@ const MAIN_CUE = {
   soulSpent: 'possessOther', alreadyPossessed: 'possessOther', soulsCrossed: 'possessOther', noTrade: 'noTrade',
 };
 
-export function createTradeReveal(doc, { handoff }) {
+// `onNotesRead(player, lines)`: this trade's own notes are said by this screen, so the table takes them off the waiting
+// list (src/main.js passes it on). Without it they are taken off here, as before.
+export function createTradeReveal(doc, { handoff, onNotesRead = null }) {
   const overlay = doc.getElementById('handoff-overlay');
   const box = doc.getElementById('handoff-card');
   const kicker = doc.getElementById('handoff-kicker');
@@ -618,7 +608,10 @@ export function createTradeReveal(doc, { handoff }) {
       const outcome = TRADE_OUTCOMES.includes(spec.outcome) ? spec.outcome : 'swap';
       const { me, other } = spec;
       const own = new Set(spec.notes || []);
-      if (Array.isArray(me.notes)) for (let i = me.notes.length - 1; i >= 0; i--) if (own.has(me.notes[i])) me.notes.splice(i, 1);
+      if (Array.isArray(me.notes) && me.notes.some(n => own.has(n))) {
+        if (onNotesRead) onNotesRead(me, [...own]);
+        else for (let i = me.notes.length - 1; i >= 0; i--) if (own.has(me.notes[i])) me.notes.splice(i, 1);
+      }
       // The private screen, as a note: any OTHER waiting notes still show under the reveal.
       handoff.privateNote(me, [], () => { stop(); onContinue?.(); });
       const reduced = reducedMotion();

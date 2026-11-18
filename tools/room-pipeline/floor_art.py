@@ -12,7 +12,7 @@ OUT = os.path.abspath(os.path.join(HERE, '..', '..', 'assets', 'models', 'rooms'
 SIZE = 1024
 # Per picture, where the original needs it: colour strength and brightness (1 = as made).
 TONE = {
-    'exit': dict(sat=0.80, bright=0.90),      # the painted green was neon next to the hotel's colours
+    # e.g. 'exit': dict(sat=0.80, bright=0.90)   (none needed for the pictures in use)
 }
 
 def main(src):

@@ -16,15 +16,16 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 export function guestLight(m, rim) {          // the game's rim + fill (src/render/avatar.js guestLight), same shader
   if (!rim) return m;
-  const color = new THREE.Color(rim.color), k = new THREE.Vector2(rim.rim, rim.fill);
+  const color = new THREE.Color(rim.color), k = new THREE.Vector3(rim.rim, rim.fill, rim.sat ?? 1);
   m.onBeforeCompile = shader => {
     shader.uniforms.uRimColor = { value: color }; shader.uniforms.uRim = { value: k };
-    shader.fragmentShader = 'uniform vec3 uRimColor;\nuniform vec2 uRim;\n' + shader.fragmentShader.replace('#include <opaque_fragment>', `
+    shader.fragmentShader = 'uniform vec3 uRimColor;\nuniform vec3 uRim;\n' + shader.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
+      diffuseColor.rgb = max(mix(vec3(dot(diffuseColor.rgb, vec3(0.2126, 0.7152, 0.0722))), diffuseColor.rgb, uRim.z), 0.0);`).replace('#include <opaque_fragment>', `
       float rimK = pow(1.0 - clamp(abs(dot(normal, normalize(vViewPosition))), 0.0, 1.0), 2.4);
       outgoingLight += uRimColor * rimK * uRim.x * (0.35 + 0.65 * diffuseColor.rgb) + diffuseColor.rgb * uRim.y;
       #include <opaque_fragment>`);
   };
-  m.customProgramCacheKey = () => 'guestLight1';
+  m.customProgramCacheKey = () => 'guestLight2';
   return m;
 }
 

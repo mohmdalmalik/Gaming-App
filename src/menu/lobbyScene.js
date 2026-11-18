@@ -46,7 +46,9 @@ import { LOOKS, geometryKey, lookAlike, lookOf } from '../data/wardrobe.js';
 import { wardrobeKeyLight } from './wardrobeLight.js';
 
 // The lobby's own rim light on the guests (src/menu/lobbyCast.js): the player's avatar gets the same.
-const LOBBY_RIM = { color: '#ffd9a8', rim: 0.55, fill: 0.08 };
+// `sat` is the same colour richness the board uses (GAME_RIM in src/render/avatar.js), so a colour picked in the
+// Wardrobe is the colour seen in a match.
+const LOBBY_RIM = { color: '#ffd9a8', rim: 0.55, fill: 0.08, sat: 1.3 };
 
 const D2R = Math.PI / 180;
 const ease = t => (t <= 0 ? 0 : t >= 1 ? 1 : t * t * (3 - 2 * t));

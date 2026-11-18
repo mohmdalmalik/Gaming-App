@@ -41,7 +41,7 @@ export const BAKED_TILES = {
 // A room's own floor (graphics round 2, 18 Nov 2026): one square picture laid over the whole tile, north at the
 // top, in place of the shared stone-and-red-rug floor, so every room reads as its own place at a glance and the
 // rooms with a job carry their sign in the floor (the Switchboard's brass dial, the Infirmary's red cross, the
-// Linen Store's folded napkin, the Fire Exit's green arrows pointing at the exit door). The baked light and the
+// Linen Store's folded napkin, the Fire Exit's green carpet running to the exit door). The baked light and the
 // furniture's shadows stay: the picture replaces the floor's colour only (src/render/bakedRoom.js). The corridors
 // keep the lobby's stone and red runners, which lead through their doorways. `art` is the file in
 // assets/models/rooms/floors/ (the two Infirmaries and the two Linen Stores share one each); `gain` scales the

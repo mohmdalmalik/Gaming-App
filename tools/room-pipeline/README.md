@@ -75,6 +75,10 @@ stay dim in the game.
   `make_room.py --room <r> --lamps <file>` (and `make_lobby.py --lamps <file>`), which stop before the bake and the
   export, so nothing shipped changes. `build_all.sh` runs it at the end; run it by hand after changing a room's
   lamps or sconces without a re-bake. (The door spill lights and the EXIT sign's green light are bake-only: no halo.)
+- `floor_art.py` — saves the rooms' own floor pictures for the game (graphics round 2): takes a folder of square
+  originals named `<name>.png`, writes `assets/models/rooms/floors/<name>.jpg` (1024 x 1024 JPEG) and tones the Fire
+  Exit's green down. No Blender and no re-bake. `floors.md` is the notes: the prompt, each picture's description and
+  Higgsfield job, and how to change or add one.
 - `shrink_maps.py` — saves the shipped light maps at the size the game uses: each room's two maps at 512
   (baked at 1024, then shrunk: the same look on the iPad at a quarter of the graphics memory), and the
   lobby's atlas at 1024. Run it after any re-bake (rooms or lobby).

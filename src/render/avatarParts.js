@@ -60,6 +60,10 @@ const DEFAULT_MATERIALS = {
   Glasses: 'frame', Eye: 'eye', Shine: 'eye',
 };
 const EYE_MATERIALS = ['Eye', 'Shine'];       // the eye mesh, in this order (its groups)
+// How much bigger every face's eyes are drawn than the face files hold them (the owner's character sheets have big, glossy
+// eyes). Each eye grows about its own centre, once, where a face piece is parsed (enlargeEyes), so everything measured
+// from the eyes afterwards (the red possessed eyes, the glasses' fit, the portraits, the menu lobby's people) follows.
+export const EYE_SCALE = 1.3;
 const HIDE_WEIGHT = 0.5;                      // a vertex is under a hiding piece when this much of its skin follows its bones
 const IDLE_KEEP = 3;                          // assemblies nobody holds, kept for a quick return (about 1.2 MB each)
 let PART_KEEP = 24;                           // parsed pieces no assembly uses, kept for a quick return (25-400 kB each)
@@ -113,6 +117,33 @@ function useParts(keys, d) {
     if (parts.has(k)) touchUnused(k);
   }
 }
+// Make the eyes of a face piece bigger: the 'Eye' ovals and the 'Shine' catchlights (where a face has them) grow across the
+// face (x and y) by `k` about the centre of THEIR OWN eye (left and right separately; the catchlights about the same centre,
+// so they stay in the same place on the eye). The depth stays as it is. The prims' geometries are this piece's own, parsed
+// once, so this runs once per parsed piece (never twice on the same one).
+export function enlargeEyes(prims, k = EYE_SCALE) {
+  const eye = prims.find(p => p.name === 'Eye');
+  if (!eye || k === 1) return;
+  const centre = [null, null];                    // [x < 0, x >= 0]: the middle of each eye's box
+  const pos = eye.geometry.attributes.position;
+  const box = [[1e9, 1e9, -1e9, -1e9], [1e9, 1e9, -1e9, -1e9]];
+  for (let i = 0; i < pos.count; i++) {
+    const b = box[pos.getX(i) < 0 ? 0 : 1], x = pos.getX(i), y = pos.getY(i);
+    b[0] = Math.min(b[0], x); b[1] = Math.min(b[1], y); b[2] = Math.max(b[2], x); b[3] = Math.max(b[3], y);
+  }
+  for (let s = 0; s < 2; s++) if (box[s][2] > box[s][0]) centre[s] = [(box[s][0] + box[s][2]) / 2, (box[s][1] + box[s][3]) / 2];
+  for (const pr of prims) {
+    if (pr.name !== 'Eye' && pr.name !== 'Shine') continue;
+    const a = pr.geometry.attributes.position;
+    for (let i = 0; i < a.count; i++) {
+      const c = centre[a.getX(i) < 0 ? 0 : 1];
+      if (c) a.setXY(i, c[0] + (a.getX(i) - c[0]) * k, c[1] + (a.getY(i) - c[1]) * k);
+    }
+    a.needsUpdate = true;
+    pr.geometry.computeBoundingBox(); pr.geometry.computeBoundingSphere();
+  }
+}
+
 // A parsed piece: its primitives (one per material, in the file's order), its scene extras, the rig's extras and
 // clips (the body), and its bones' names in joint order.
 function readPart(key, gltf) {
@@ -129,6 +160,7 @@ function readPart(key, gltf) {
     name: m.material.name, geometry: m.geometry, color: m.material.color ? m.material.color.clone() : new THREE.Color(1, 1, 1),
     side: m.material.side, entry: own[m.material.name] || DEFAULT_MATERIALS[m.material.name] || 'fixed',
   }));
+  if (/\/face_[^/~]+$/.test(key)) enlargeEyes(prims);     // (a face piece: 'm/face_marcus')
   const skeleton = meshes[0].skeleton;
   return {
     key, scene: gltf.scene, meshes, prims, extras, rig, hash: extras.hash || null,

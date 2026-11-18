@@ -13,11 +13,14 @@
 //   7. docs/VERSIONS.md has a row for the version in src/version.js
 //   8. docs/PROGRESS.md and the README name only DECISIONS.md sections that exist
 //   9. the README gives no hard-coded count of assertions or checks
+//  10. every room's own floor picture (FLOOR_ART): the file exists, is a 1024 x 1024 JPEG, is listed in
+//      tools/room-pipeline/floors.md; no corridor and not the lobby has one
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { rules } from '../src/data/rules.js';
 import { VERSION } from '../src/version.js';
+import { FLOOR_ART, roomDressings } from '../src/data/dressing.js';
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const read = f => fs.readFileSync(path.join(root, f), 'utf8');
@@ -118,6 +121,41 @@ console.log('\nDECISIONS.md sections named elsewhere');
   }
   const lost = refs.filter(([, name]) => !all.includes(name.toLowerCase()));
   check(refs.length > 5 && lost.length === 0, `${refs.length} section names in PROGRESS.md and the README are found in DECISIONS.md (so no section was renamed or deleted)${lost.length ? '; not found: ' + lost.map(([f, n]) => `${f}: "${n}"`).join('; ') : ''}`);
+}
+
+// --- 10. the rooms' own floor pictures --------------------------------------------------------------------------------
+console.log('\nthe rooms\' floor pictures (FLOOR_ART)');
+{
+  // The size of a JPEG, read from its header: the first start-of-frame marker holds height then width.
+  const jpegSize = file => {
+    const b = fs.readFileSync(path.join(root, file));
+    if (b[0] !== 0xff || b[1] !== 0xd8) return null;
+    let i = 2;
+    while (i + 9 < b.length) {
+      if (b[i] !== 0xff) { i++; continue; }
+      const m = b[i + 1];
+      if (m === 0xff) { i++; continue; }
+      if (m >= 0xc0 && m <= 0xcf && ![0xc4, 0xc8, 0xcc].includes(m)) return { h: b.readUInt16BE(i + 5), w: b.readUInt16BE(i + 7) };
+      i += 2 + b.readUInt16BE(i + 2);
+    }
+    return null;
+  };
+  const notes = fs.readFileSync(path.join(root, 'tools/room-pipeline/floors.md'), 'utf8');
+  const ids = Object.keys(FLOOR_ART);
+  const arts = [...new Set(ids.map(id => FLOOR_ART[id].art))];
+  const noFile = arts.filter(a => !exists(`assets/models/rooms/floors/${a}.jpg`));
+  check(ids.length === 16 && noFile.length === 0, `${ids.length} rooms have a floor picture, in ${arts.length} files, and every file exists${noFile.length ? '; missing: ' + noFile.join(', ') : ''}`);
+  const badSize = arts.filter(a => { const z = exists(`assets/models/rooms/floors/${a}.jpg`) && jpegSize(`assets/models/rooms/floors/${a}.jpg`); return !z || z.w !== 1024 || z.h !== 1024; });
+  check(badSize.length === 0, `every floor picture is a 1024 x 1024 JPEG${badSize.length ? '; not: ' + badSize.join(', ') : ''}`);
+  const unlisted = arts.filter(a => !notes.includes('`' + a + '`'));
+  check(unlisted.length === 0, `every floor picture is listed in tools/room-pipeline/floors.md${unlisted.length ? '; not listed: ' + unlisted.join(', ') : ''}`);
+  const stray = fs.readdirSync(path.join(root, 'assets/models/rooms/floors')).filter(f => !arts.includes(f.replace(/\.jpg$/, '')));
+  check(stray.length === 0, `no picture in the floors folder is unused${stray.length ? ': ' + stray.join(', ') : ''}`);
+  const wrong = ids.filter(id => !roomDressings[id] || /orridor/.test(id) || id === 'lobby');
+  const withArt = Object.keys(roomDressings).filter(id => (/orridor/.test(id) || id === 'lobby') && roomDressings[id].floorArt);
+  check(wrong.length === 0 && withArt.length === 0 && !roomDressings.lobby?.floorArt, 'no corridor and not the lobby has a floor picture');
+  const nodes = ids.filter(id => roomDressings[id].floorArt !== `rooms/floors/${FLOOR_ART[id].art}.jpg`);
+  check(nodes.length === 0, 'every room with a floor picture points the dressing at its file');
 }
 
 console.log(`\n${failures ? failures + ' FAILED' : 'ALL PASSED'}`);

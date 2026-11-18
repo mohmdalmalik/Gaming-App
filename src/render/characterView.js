@@ -13,6 +13,7 @@ import { bodyTypes, outfits } from '../data/characters.js';
 import { xrayGuest } from './xray.js';
 import { createPossessedEyes } from './possessedLook.js';
 import { loadBase, createAvatarModel, GAME_RIM } from './avatar.js';
+import { enlargeEyes } from './avatarParts.js';
 import { LOOK_LABELS, genderOf, geometryKey, item, lookOf } from '../data/wardrobe.js';
 
 const gltfLoader = new GLTFLoader();
@@ -73,6 +74,7 @@ export function createCharacterView(playerDef, cfg, scene) {
   const b = bodyTypes[outfit.body];
   const c = cfg.character;
   const female = outfit.body === 'female';
+  const guestScale = c.guestScale ?? 1;
   const top = outfit.jacket ?? outfit.bodice;
   const legColor = outfit.trousers ?? b.skin;
   const sleeveColor = female ? (outfit.sleeves === 'long' ? outfit.bodice : b.skin) : outfit.jacket;
@@ -152,11 +154,12 @@ export function createCharacterView(playerDef, cfg, scene) {
       dropModel();
       dropPlaceholder();
       model = createAvatarModel(base, av, { rim: GAME_RIM });
+      model.root.scale.setScalar(guestScale);   // (a little larger on the board: every height below follows it)
       body.add(model.root);
       eyes = { set: v => model.setPossessed(v), get on() { return model.eyes.on; } };
       eyes.set(possessedWanted);
-      strideLength = base.strideLength;
-      headY = base.height > 0.8 && base.height < 2.4 ? base.height : headY;
+      strideLength = base.strideLength * guestScale;   // (the bigger figure's step is as much bigger: no sliding feet)
+      headY = base.height > 0.8 && base.height < 2.4 ? base.height * guestScale : headY;
       marker.position.y = headY + c.markerHeight;
       startClips(model.root, base.clips.idle, base.clips.walk);
       model.mesh.material.forceSinglePass = true;   // (drawFront: one pass when drawn after the ring, as when opaque)
@@ -198,10 +201,12 @@ export function createCharacterView(playerDef, cfg, scene) {
       if (disposed) return;
       const root = gltf.scene;
       ownGltf = root;
+      const eyePrims = [];
       root.traverse(o => {
         if (o.userData && typeof o.userData.strideLength === 'number') strideLength = o.userData.strideLength;
         if (!o.isMesh) return;
         o.frustumCulled = false;
+        if (!Array.isArray(o.material)) eyePrims.push({ name: o.material.name, geometry: o.geometry });
         const flatten = (src) => {
           const m = new THREE.MeshLambertMaterial({ color: src.color ? src.color.clone() : new THREE.Color('#cccccc') });
           if (src.map) m.map = src.map;
@@ -214,6 +219,7 @@ export function createCharacterView(playerDef, cfg, scene) {
         };
         o.material = Array.isArray(o.material) ? o.material.map(flatten) : flatten(o.material);
       });
+      enlargeEyes(eyePrims);    // (the same bigger eyes as the guests made from pieces)
       body.add(root);
       eyes = createPossessedEyes(root);
       eyes.set(possessedWanted);

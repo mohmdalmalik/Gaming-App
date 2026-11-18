@@ -72,6 +72,7 @@ export const config = {
     ringLightOpacity: 0.55,       // the thin light edge outside that: a ring still shows on a dark floor (the red rug)
     ringLightActiveOpacity: 0.7,
     markerHeight: 0.16,       // how far the active marker floats above the head
+    guestScale: 1.1,          // the guests (the pieces-built figures) are drawn this much bigger than their files (a standing guest: 1.66 m -> 1.83 m); where they stand and the rings are unchanged
   },
 
   grid: {

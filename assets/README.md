@@ -10,6 +10,7 @@ from a sub-path), so keep paths relative.
 | `characters/<guest>.glb` | the six guest models (the six looks of the wardrobe) | `src/data/wardrobe.js` (the looks), `src/data/characters.js`, `src/menu/lobbyCast.js` (the lobby's guests) |
 | `portraits/<guest>.jpg`, `<guest>-possessed.jpg` | stock portraits, shown until a portrait drawn from the player's own avatar is ready | `PORTRAIT_ART` in `src/ui/portrait.js` |
 | `models/lobby/`, `models/rooms/` | the baked rooms: one model and two light maps per room, one shared albedo | `src/render/bakedRoom.js`, listed in `src/data/dressing.js` |
+| `models/rooms/floors/<name>.jpg` | the rooms' own floor pictures: 14 square JPEGs, 1024 x 1024, north at the top (the Infirmaries share one, the Linen Stores share one); 16 rooms use them, the corridors and the lobby do not. A picture that fails to load leaves the room its old floor. Made with Higgsfield (`tools/room-pipeline/floors.md`) | `FLOOR_ART` in `src/data/dressing.js`, drawn by `src/render/bakedRoom.js` |
 | `icons/` | the app icon (README inside) | `index.html`, `manifest.webmanifest` |
 
 Everything here is made by the tools in `tools/` (card faces: `tools/card-pipeline/`; guests: `tools/char-pipeline/`; rooms:

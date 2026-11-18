@@ -37,7 +37,7 @@ export function wardrobeKeyLight(model) {
     uKeyCol: { value: new THREE.Color(WARDROBE_KEY.color) },
     uKey: { value: new THREE.Vector3(0, WARDROBE_KEY.wrap, 1) },     // x: strength, y: wrap, z: the lobby's light × this
   };
-  const own = m => m && m.isMeshLambertMaterial && m.customProgramCacheKey?.() === 'guestPalette1';
+  const own = m => m && m.isMeshLambertMaterial && m.customProgramCacheKey?.() === 'guestPalette2';
   const eyes = model.eyeMesh ? [].concat(model.eyeMesh.material) : [];
   for (const m of [model.mesh.material, ...eyes]) {
     if (!own(m)) continue;          // (the iris and the red eyes have their own shader: as they are)

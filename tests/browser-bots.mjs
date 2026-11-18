@@ -237,10 +237,20 @@ console.log('\n3b. quick chat: two tabs, a line about a guest, bubbles and the f
   // A double tap on a line about a guest opens "Choose a guest" and chooses nobody.
   const at = sel => game(s => { const b = document.querySelector(s).getBoundingClientRect(); return [b.left + b.width / 2, b.top + b.height / 2]; }, sel);
   const line = await at('[data-chat="distrustX"]');
-  await page.mouse.click(line[0], line[1]);
-  await page.waitForTimeout(50);
-  const tile = await game(() => { const t = document.querySelector('.cp-guest'); if (!t) return null; const b = t.getBoundingClientRect(); return [b.left + b.width / 2, b.top + b.height / 2]; });
-  if (tile) await page.mouse.click(tile[0], tile[1]);
+  // The second tap is a double tap only if it follows the first at once (the guard is 300 ms, src/ui/tapGuard.js). On a
+  // busy machine finding the tile can take longer than that, and the tap would then rightly choose a guest: so a slow
+  // try is put away with Back and made again (up to four tries), and only a quick one is judged.
+  for (let tries = 0; tries < 4; tries++) {
+    const t0 = Date.now();
+    await page.mouse.click(line[0], line[1]);
+    await page.waitForTimeout(50);
+    const tile = await game(() => { const t = document.querySelector('.cp-guest'); if (!t) return null; const b = t.getBoundingClientRect(); return [b.left + b.width / 2, b.top + b.height / 2]; });
+    if (tile && Date.now() - t0 < 220) { await page.mouse.click(tile[0], tile[1]); break; }
+    if (tries === 3) break;
+    await page.waitForTimeout(500);
+    await tap('.cp-back');
+    await page.waitForTimeout(500);
+  }
   await settle();
   const st = await game(() => window.__game.chatPanel());
   const alive = await game(() => { const g = window.__game; return g.state.players.filter(p => p.index !== g.humanSeat() && p.alive && !g.state.escaped.has(p.id)).map(p => p.index); });

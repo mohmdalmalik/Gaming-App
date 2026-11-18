@@ -170,6 +170,7 @@ export function releaseTileTextures() {
     if (!model.startsWith('rooms/')) continue;
     loading.then(({ light, floorLight }) => { light.dispose(); floorLight.dispose(); }, () => {});
   }
+  for (const loading of floorArts.values()) loading.then(t => t?.dispose());   // the rooms' own floor pictures
 }
 
 // ---- Room tiles --------------------------------------------------------------------------------
@@ -192,28 +193,64 @@ function sharedAlbedo(path) {
   return albedo;
 }
 
+// A room's own floor picture (`floorArt` in src/data/dressing.js): one square image laid over the whole tile
+// exactly as the floor's light map is (straight down, north at the top), in place of the shared stone and rugs.
+// A picture that will not load is forgotten, so the room keeps its baked floor and the next visit tries again.
+const floorArts = new Map();
+function floorArt(path) {
+  if (!path) return Promise.resolve(null);
+  if (!floorArts.has(path)) {
+    floorArts.set(path, loadTexture(BASE + path).then(t => {
+      t.flipY = false; t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4;
+      t.wrapS = t.wrapT = THREE.ClampToEdgeWrapping;
+      return t;
+    }, () => { floorArts.delete(path); console.warn(`baked room: no floor picture ${path}`); return null; }));
+  }
+  return floorArts.get(path);
+}
+// The floor's parts read the picture through their FIRST set of texture coordinates, like every other textured
+// part (so the picture needs no shader of its own): a twin of each floor part whose first set IS its light-map
+// set, sharing all its data. One twin per model part, kept for every later match.
+const artGeometry = new WeakMap();
+function floorArtGeometry(src) {
+  let g = artGeometry.get(src);
+  if (!g) {
+    g = new THREE.BufferGeometry();
+    g.setIndex(src.index);
+    for (const [name, attr] of Object.entries(src.attributes)) g.setAttribute(name, attr);
+    g.setAttribute('uv', src.attributes.uv1);
+    g.boundingBox = src.boundingBox; g.boundingSphere = src.boundingSphere;
+    artGeometry.set(src, g);
+  }
+  return g;
+}
+
 // A tile's materials, made from the model's: `convert(src, isFloor)` (one material per kind, shared).
-function tileConverter(spec, { light, floorLight }, map, view = null) {
+// `art`: the room's own floor picture, if it has one and it loaded (every part of the floor then shows it).
+function tileConverter(spec, { light, floorLight }, map, view = null, art = null) {
   const intensity = LM_SCALE * Math.PI * (spec.exposure ?? 1);
   const mats = new Map();
   return (src, isFloor) => {
-    const key = `${src.name}|${isFloor}`;
+    const painted = isFloor && art && src.name !== 'glow';
+    const key = painted ? 'floorArt' : `${src.name}|${isFloor}`;
     let m = mats.get(key);
     if (m) return m;
     const lm = isFloor ? floorLight : light;
-    if (src.name === 'glow') m = new THREE.MeshBasicMaterial({ vertexColors: true, color: new THREE.Color(SHADE_GAIN, SHADE_GAIN, SHADE_GAIN), toneMapped: false });
+    const lit = painted ? intensity * (spec.floorGain ?? 1) : intensity;
+    if (painted) m = new THREE.MeshBasicMaterial({ map: art, lightMap: lm, lightMapIntensity: lit });
+    else if (src.name === 'glow') m = new THREE.MeshBasicMaterial({ vertexColors: true, color: new THREE.Color(SHADE_GAIN, SHADE_GAIN, SHADE_GAIN), toneMapped: false });
     else if (src.name === 'tex') m = new THREE.MeshBasicMaterial({ map, lightMap: lm, lightMapIntensity: intensity });
     else m = new THREE.MeshBasicMaterial({ vertexColors: true, lightMap: lm, lightMapIntensity: intensity });
-    m.name = src.name;
+    m.name = painted ? 'floorArt' : src.name;
     applyXray(m);                           // fades out where it would hide the guest (xray.js)
     mats.set(key, m);
-    if (m.lightMap && view) (view.bakedMats ||= []).push({ mat: m, base: intensity });   // (mood.js flickers these)
+    if (m.lightMap && view) (view.bakedMats ||= []).push({ mat: m, base: lit });   // (mood.js flickers these)
     return m;
   };
 }
 
 // A copy of the tile's model with its game materials, and its nodes by name.
-function tileModel(gltf, convert) {
+function tileModel(gltf, convert, art = null) {
   const root = gltf.scene.clone(true);
   const nodes = new Map();
   root.traverse(o => {
@@ -222,7 +259,9 @@ function tileModel(gltf, convert) {
   for (const [name, node] of nodes) {
     const isFloor = name === 'floor' || name.startsWith('floor');
     node.traverse(o => {
-      if (o.isMesh) o.material = Array.isArray(o.material) ? o.material.map(m => convert(m, isFloor)) : convert(o.material, isFloor);
+      if (!o.isMesh) return;
+      o.material = Array.isArray(o.material) ? o.material.map(m => convert(m, isFloor)) : convert(o.material, isFloor);
+      if (isFloor && art && o.geometry.attributes.uv1) o.geometry = floorArtGeometry(o.geometry);
     });
   }
   return { root, nodes };
@@ -232,13 +271,13 @@ function tileModel(gltf, convert) {
 // of a game (main.js warmUp): drawn once out of sight behind the black screen, so the shaders a room
 // tile needs are built then, not in the middle of play the first time a door opens.
 export async function warmTile(spec) {
-  const [assets, map] = await Promise.all([loadAssets(spec), sharedAlbedo(spec.albedo)]);
-  return tileModel(assets.gltf, tileConverter(spec, assets, map)).root;
+  const [assets, map, art] = await Promise.all([loadAssets(spec), sharedAlbedo(spec.albedo), floorArt(spec.floorArt)]);
+  return tileModel(assets.gltf, tileConverter(spec, assets, map, null, art), art).root;
 }
 
 export async function dressBakedTile(view, spec, cfg) {
-  const [assets, map] = await Promise.all([loadAssets(spec), sharedAlbedo(spec.albedo)]);
-  const { root, nodes } = tileModel(assets.gltf, tileConverter(spec, assets, map, view));
+  const [assets, map, art] = await Promise.all([loadAssets(spec), sharedAlbedo(spec.albedo), floorArt(spec.floorArt)]);
+  const { root, nodes } = tileModel(assets.gltf, tileConverter(spec, assets, map, view, art), art);
   for (const child of view.group.children) child.visible = false;
   // The tile turns about its centre: a quarter turn clockwise (seen from above) per step of
   // `room.rotation`, exactly as src/game/hotel.js turns the tile's doorways and furniture.

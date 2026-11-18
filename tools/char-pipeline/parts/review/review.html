@@ -32,8 +32,8 @@ const scene = new THREE.Scene();
 const cam = new THREE.PerspectiveCamera(30, W / HT, 0.05, 200);
 
 // ---- light setups ------------------------------------------------------------------------------------------------
-const GAME_RIM = { color: '#ffe2b8', rim: 0.42, fill: 0.1 };          // src/render/avatar.js
-const LOBBY_RIM = { color: '#ffd9a8', rim: 0.55, fill: 0.08 };        // src/menu/lobbyScene.js
+const GAME_RIM = { color: '#ffe2b8', rim: 0.5, fill: 0.42, sat: 1.3 };   // src/render/avatar.js
+const LOBBY_RIM = { color: '#ffd9a8', rim: 0.55, fill: 0.08, sat: 1.3 };  // src/menu/lobbyScene.js
 const groups = {};
 function group(name, build) { const g = new THREE.Group(); g.name = name; build(g); g.visible = false; scene.add(g); groups[name] = g; }
 group('studio', g => {                     // the pipeline's neutral studio (preview_glb.html): grey, hemisphere + key

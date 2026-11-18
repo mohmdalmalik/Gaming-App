@@ -38,10 +38,28 @@ export const BAKED_TILES = {
   corridorS: 0.55, stairs: 0.32, backCorridor: 0.59, cloakroom: 0.61, cornerCorridor: 0.55, infirmary1: 0.51,
   infirmary2: 0.49, linenStore1: 0.52, linenStore2: 0.52, suite416: 0.7, housekeeping: 0.31, exit: 0.5,
 };
+// A room's own floor (graphics round 2, 18 Nov 2026): one square picture laid over the whole tile, north at the
+// top, in place of the shared stone-and-red-rug floor, so every room reads as its own place at a glance and the
+// rooms with a job carry their sign in the floor (the Switchboard's brass dial, the Infirmary's red cross, the
+// Linen Store's folded napkin, the Fire Exit's green arrows pointing at the exit door). The baked light and the
+// furniture's shadows stay: the picture replaces the floor's colour only (src/render/bakedRoom.js). The corridors
+// keep the lobby's stone and red runners, which lead through their doorways. `art` is the file in
+// assets/models/rooms/floors/ (the two Infirmaries and the two Linen Stores share one each); `gain` scales the
+// baked light on that floor alone, where a pale or a dark design needs it. The pictures were made with Higgsfield
+// (tools/room-pipeline/floors.md lists each one's prompt).
+export const FLOOR_ART = {
+  lounge: { art: 'lounge' }, ballroom: { art: 'ballroom' }, dining: { art: 'dining' }, library: { art: 'library' },
+  kitchen: { art: 'kitchen' }, cloakroom: { art: 'cloakroom' }, suite416: { art: 'suite416' },
+  switchboard: { art: 'switchboard' }, infirmary1: { art: 'infirmary' }, infirmary2: { art: 'infirmary' },
+  linenStore1: { art: 'linenStore' }, linenStore2: { art: 'linenStore' }, exit: { art: 'exit' },
+  storage: { art: 'storage', gain: 1.45 }, housekeeping: { art: 'housekeeping', gain: 1.25 }, stairs: { art: 'stairs', gain: 1.6 },
+};
 for (const [id, exposure] of Object.entries(BAKED_TILES)) {
   roomDressings[id] = {
     style: 'baked', tile: true, exposure,
     model: `rooms/${id}.glb`, light: `rooms/${id}-light.jpg`, floorLight: `rooms/${id}-floor.jpg`,
     albedo: 'rooms/albedo.jpg',
   };
+  const f = FLOOR_ART[id];
+  if (f) Object.assign(roomDressings[id], { floorArt: `rooms/floors/${f.art}.jpg`, floorGain: f.gain ?? 1 });
 }

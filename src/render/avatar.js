@@ -26,18 +26,26 @@ import { item } from '../data/wardrobe.js';
 
 // The faint warm rim + fill only the guests get (no scene light, no extra draw call): a navy suit still
 // reads in a dark room. The game's values; the menu lobby passes its own (same shader, other numbers).
-export const GAME_RIM = { color: '#ffe2b8', rim: 0.42, fill: 0.1 };
+//   rim   how much warm light the edges turned away from the camera get
+//   fill  a flat share of the guest's own colour added everywhere, so skin and clothes stay bright and rich however dim the
+//         room is (a navy suit is only lifted a little; a dark room still looks dark around the guest)
+//   sat   colour richness: 1 leaves the colours as painted, more makes them richer (the owner's character sheets are
+//         saturated); the menu's lobby and the Wardrobe leave it out (= 1)
+export const GAME_RIM = { color: '#ffe2b8', rim: 0.5, fill: 0.42, sat: 1.3 };
 export function guestLight(m, rim = GAME_RIM) {
-  const color = new THREE.Color(rim.color), k = new THREE.Vector2(rim.rim, rim.fill);
+  const color = new THREE.Color(rim.color), k = new THREE.Vector3(rim.rim, rim.fill, rim.sat ?? 1);
   m.onBeforeCompile = shader => {
     shader.uniforms.uRimColor = { value: color };
     shader.uniforms.uRim = { value: k };
-    shader.fragmentShader = 'uniform vec3 uRimColor;\nuniform vec2 uRim;\n' + shader.fragmentShader.replace('#include <opaque_fragment>', `
+    shader.fragmentShader = 'uniform vec3 uRimColor;\nuniform vec3 uRim;\n' + shader.fragmentShader
+      .replace('#include <color_fragment>', `#include <color_fragment>
+      diffuseColor.rgb = max(mix(vec3(dot(diffuseColor.rgb, vec3(0.2126, 0.7152, 0.0722))), diffuseColor.rgb, uRim.z), 0.0);`)
+      .replace('#include <opaque_fragment>', `
       float rimK = pow(1.0 - clamp(abs(dot(normal, normalize(vViewPosition))), 0.0, 1.0), 2.4);
       outgoingLight += uRimColor * rimK * uRim.x * (0.35 + 0.65 * diffuseColor.rgb) + diffuseColor.rgb * uRim.y;
       #include <opaque_fragment>`);
   };
-  m.customProgramCacheKey = () => 'guestLight1';     // (the same program as src/render/characterView.js's)
+  m.customProgramCacheKey = () => 'guestLight2';     // (the same look as a guest's own material, for a whole-guest file)
   return m;
 }
 
@@ -49,21 +57,22 @@ function guestMaterial({ palette = WHITE, rim = GAME_RIM, color = 0xffffff, side
   const m = new THREE.MeshLambertMaterial({ color, vertexColors: true, side });
   m.name = name;
   const r = rim || { color: '#000000', rim: 0, fill: 0 };
-  const uniforms = { uPalette: { value: palette }, uRimColor: { value: new THREE.Color(r.color) }, uRim: { value: new THREE.Vector2(r.rim, r.fill) } };
+  const uniforms = { uPalette: { value: palette }, uRimColor: { value: new THREE.Color(r.color) }, uRim: { value: new THREE.Vector3(r.rim, r.fill, r.sat ?? 1) } };
   m.userData.palette = palette;
   m.onBeforeCompile = shader => {
     Object.assign(shader.uniforms, uniforms);
     shader.vertexShader = `attribute float paletteSlot;\nuniform vec3 uPalette[${PALETTE_SIZE}];\nvarying vec3 vPalette;\n` + shader.vertexShader.replace('#include <color_vertex>', `#include <color_vertex>
       vPalette = uPalette[int(paletteSlot + 0.5)];`);
-    shader.fragmentShader = 'uniform vec3 uRimColor;\nuniform vec2 uRim;\nvarying vec3 vPalette;\n' + shader.fragmentShader
+    shader.fragmentShader = 'uniform vec3 uRimColor;\nuniform vec3 uRim;\nvarying vec3 vPalette;\n' + shader.fragmentShader
       .replace('#include <color_fragment>', `#include <color_fragment>
-      diffuseColor.rgb *= vPalette;`)
+      diffuseColor.rgb *= vPalette;
+      diffuseColor.rgb = max(mix(vec3(dot(diffuseColor.rgb, vec3(0.2126, 0.7152, 0.0722))), diffuseColor.rgb, uRim.z), 0.0);`)
       .replace('#include <opaque_fragment>', `
       float rimK = pow(1.0 - clamp(abs(dot(normal, normalize(vViewPosition))), 0.0, 1.0), 2.4);
       outgoingLight += uRimColor * rimK * uRim.x * (0.35 + 0.65 * diffuseColor.rgb) + diffuseColor.rgb * uRim.y;
       #include <opaque_fragment>`);
   };
-  m.customProgramCacheKey = () => 'guestPalette1';
+  m.customProgramCacheKey = () => 'guestPalette2';
   return m;
 }
 
@@ -76,7 +85,7 @@ export function loadBase(av) {
 // The avatar's palette: linear RGB per entry (src/render/avatarParts.js writePalette).
 export function paletteFor(av, out = new Float32Array(PALETTE_SIZE * 3)) { return writePalette(out, av); }
 
-// One avatar. `rim`: the guests' rim light (GAME_RIM), other values ({ color, rim, fill }), or false (portraits).
+// One avatar. `rim`: the guests' rim light (GAME_RIM), other values ({ color, rim, fill, sat? }), or false (portraits).
 export function createAvatarModel(base, avatar, { rim = GAME_RIM } = {}) {
   base.retain();
   const root = SkeletonUtils.clone(base.rig);

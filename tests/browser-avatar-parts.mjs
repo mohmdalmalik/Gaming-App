@@ -58,6 +58,10 @@ const CALLS = `o => { let n = 0; o.traverse(x => { if (!x.isMesh || !x.visible) 
     const pal = P.writePalette(new Float32Array(48), look);
     const ENTRY = { Skin: 'skin', Hair: 'hair', Brow: 'brow', Stache: 'brow', Jacket: 'main', Trouser: 'main', Lapel: 'lapel', Shade: 'shade', Tie: 'accent' };
     const oldParts = [];
+    // (the reference gets the same bigger eyes the pieces' faces are given when parsed: P.enlargeEyes)
+    const oldPrims = [];
+    old.scene.traverse(o => { if (o.isSkinnedMesh) oldPrims.push({ name: o.material.name, geometry: o.geometry }); });
+    P.enlargeEyes(oldPrims);
     old.scene.traverse(o => {
       if (!o.isSkinnedMesh) return;
       o.frustumCulled = false;

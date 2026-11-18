@@ -1,5 +1,15 @@
 # PROGRESS
 
+## Graphics round 2 (2026-11-18): every room a floor of its own, the guests look better (v0.13)
+
+The owner asked, graphics only, for rooms that look different from each other, the Switchboard and the Infirmary easier to recognise, and better-looking guests. Pictures made with Higgsfield.
+- **Done: a floor of its own for 16 rooms** (14 pictures): the Switchboard's brass telephone dial, the Infirmaries' red cross, the Linen Stores' folded napkin, the Fire Exit's green arrows at its door, and a carpet, tiles or boards for the Lounge, Ballroom, Dining Room, Library, Kitchen, Cloakroom, Suite 416, Storage, Housekeeping and the Service Stairs. The corridors and the lobby keep their stone. No re-bake, no new shader, no extra draw call (measured: the same draw calls and shader programs as before); each picture is about 240 KB to download and about 5.6 MB of graphics memory.
+- **Done: the guests** have eyes 30% bigger (the red possessed eyes too), warmer, richer colour and more light on the board, and are 10% taller. The menu lobby and the Wardrobe now get the same richer colour (not the board's extra light), so a colour picked in the Wardrobe is the colour seen in a match. The Wardrobe's tile pictures and the six stock portraits were redrawn to show the bigger eyes.
+- **Tests:** all 26 fast suites pass; `tests/docs-check.mjs` now checks every floor picture (exists, 1024 x 1024 JPEG, listed in `floors.md`, none on a corridor or the lobby); the browser suites lobby, rooms, practice, reliability and polish were run (results in the lead's report). One pin moved on purpose: the avatar-parts comparison of a guest from pieces against the whole file now gives the file the same eyes and look first (its 0.5 limit is unchanged).
+- **Not done:** no new guest models, no wall colours or new furniture, no re-bake. The taller guests' fit through doorways was judged by pictures only. The old whole-guest test path gets the bigger eyes only. Why 3 more textures than before are counted right at the start was not traced.
+- **Next:** the owner looks at it on the iPad (rooms side by side; a Switchboard and an Infirmary; the guests in the lobby, on the board and in the Wardrobe) and says which floors to redo; wall colours are the next step for telling rooms apart.
+- No rule or rule number changed. Details: docs/DECISIONS.md 'Graphics round 2'; how to change a floor: `tools/room-pipeline/floors.md`.
+
 ## v0.12 (2026-11-03): Co-op built and tested, not open yet; Single player through the table
 
 The owner asked for multiplayer: the main menu split into Single player and Co-op, friends each on their own device.

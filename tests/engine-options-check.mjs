@@ -279,7 +279,8 @@ console.log('\ncard ids');
 console.log('\nsrc/data/online.js and src/data/onlineText.js');
 {
   check(ONLINE.protocol === 1 && ONLINE.minProtocol === 1 && PROTOCOL === 1 && MIN_PROTOCOL === 1, 'protocol 1 (min 1)');
-  check(ONLINE.server.open === false && ONLINE.server.live === null, 'the gates are shut: no live server, server.open false (the live site says Coming soon)');
+  check(ONLINE.server.open === false && ONLINE.server.live === 'wss://hotel-escape.onrender.com',
+    'the live server is the owner\'s Render service, and the gate is shut: server.open false (the live site says Coming soon, except on the owner\'s ?coop=preview link)');
   check(ONLINE_RULES.approved === false && activeOnlineRules() === ONLINE_RULES.today, 'ONLINE_RULES.approved is false, so Co-op uses today\'s rules, never the pending proposal');
   const T = ONLINE_RULES.today, P = ONLINE_RULES.pending;
   check(T.turnMs === rules.turnTimerSeconds * 1000 && T.discardMinMs === rules.discardMinSeconds * 1000 && T.meetMs === null && T.cardMs === null
@@ -363,8 +364,9 @@ console.log('\nsrc/net/serverUrl.js');
   check(resolveServer(loc('http://localhost:9100/?server=ws://evil.example:80')).url === ONLINE.server.local, '...never another ws:// host');
   check(resolveServer(loc('http://127.0.0.1:9100/?coop=soon')).comingSoon === true, 'on 127.0.0.1: ?coop=soon forces Coming soon');
   check(resolveServer(loc('https://mohmdalmalik.github.io/Gaming-App/')).comingSoon === true
-    && resolveServer(loc('https://mohmdalmalik.github.io/Gaming-App/?server=wss://x.onrender.com&coop=preview')).comingSoon === true,
-  'the live site: Coming soon (no live server yet), and ?server= is ignored there');
+    && resolveServer(loc('https://mohmdalmalik.github.io/Gaming-App/?server=wss://x.onrender.com')).comingSoon === true
+    && resolveServer(loc('https://mohmdalmalik.github.io/Gaming-App/?server=wss://x.onrender.com&coop=preview')).url === live,
+  'the live site: Coming soon while shut, the preview link reaches the live server, and ?server= is ignored there');
   ONLINE.server.live = 'wss://hotel.example';
   const preview = resolveServer(loc('https://mohmdalmalik.github.io/Gaming-App/?coop=preview')).url;
   const shut = resolveServer(loc('https://mohmdalmalik.github.io/Gaming-App/')).comingSoon;

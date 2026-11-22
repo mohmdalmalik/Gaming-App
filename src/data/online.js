@@ -27,8 +27,9 @@ import { rules } from './rules.js';
 
 export const ONLINE = {
   protocol: 1, minProtocol: 1,
-  // live: the wss:// address once the owner has a hosting account (null: none yet). local: a server on this computer.
-  server: { live: null, local: 'ws://localhost:8787', open: false },
+  // live: the owner's Co-op server, a Render service on the free plan (render.yaml), since 22 Nov 2026; null = none.
+  // local: a server on this computer. open: Co-op for everyone (until then only the owner's ?coop=preview link).
+  server: { live: 'wss://hotel-escape.onrender.com', local: 'ws://localhost:8787', open: false },
   // Table codes: 5 letters from 18 consonants (no vowels or Y, so no words; no L or Q). inputMax: what the code
   // field accepts, so a whole pasted invite link fits (normaliseCode in src/net/codes.js cleans it).
   code: { alphabet: 'BCDFGHJKMNPRSTVWXZ', length: 5, reuseHours: 24, inputMax: 200 },

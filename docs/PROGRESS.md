@@ -1,5 +1,24 @@
 # PROGRESS
 
+## The Co-op server is online (2026-11-22, v0.15)
+
+The owner asked for the simplest way to play online with friends: a website for now (no App Store), and the Co-op
+server on Render's free plan.
+- **Done:** the owner opened the Render account from `render.yaml` (service `hotel-escape`, free plan). The game points
+  at `wss://hotel-escape.onrender.com` (`ONLINE.server.live`). Checked from the cloud before publishing: `/health` is ok;
+  the game's own page is let in and another site's is refused (403); two headless devices, playing this tree under its
+  real address, made a table on the real server, joined by the invite, started, and played (each its own seat, the
+  match running with bots). The 26 fast suites pass.
+- **Not done (waiting for the owner):** Co-op is still **Coming soon** to players (`ONLINE.server.open` is false). The
+  owner decides how it opens: with today's rules unchanged plus the technical stand-ins (recommended for a first test
+  with friends), or after approving the online rule list (D2). Optional: the button's name ("Co-op" or "Play with
+  friends"). Phones: most are narrower than the game's 900 px minimum (only the Plus / Pro Max iPhones pass).
+- **Next:** the owner's two-device test with `https://mohmdalmalik.github.io/Gaming-App/?coop=preview` (both devices
+  open that link; one starts a table, the other types its code); then the decision above; then `server.open` and publish.
+- **The free plan:** the server sleeps after 15 minutes unused (the first device waits up to about a minute: "The
+  hotel's switchboard is waking up…"); a restart or a server update ends a match in progress (no disk). Upgrade path:
+  Render Starter with a disk (about $7.25 a month), or the owner's Azure VM.
+
 ## Graphics round 2 (2026-11-18): every room a floor of its own, the guests look better (v0.13)
 
 The owner asked, graphics only, for rooms that look different from each other, the Switchboard and the Infirmary easier to recognise, and better-looking guests. Pictures made with Higgsfield.

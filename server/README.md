@@ -5,8 +5,10 @@ page runs: the rules (`src/game/`), the computer guests (`src/bots/`), the refer
 (`src/net/`). This folder is only the wire around it: the web socket, the safety limits, saving tables, and coming
 back after a restart. The design is `docs/ONLINE_DESIGN.md` (§7-§12, §17).
 
-Nothing here is live yet. Co-op shows "Coming soon" on the live site until the owner has approved the online rules
-and opened a hosting account (`src/data/online.js`: `ONLINE.server.live` and `ONLINE.server.open`).
+Live since 22 Nov 2026: the owner's Render service `hotel-escape` (free plan, from `render.yaml`), at
+`wss://hotel-escape.onrender.com` (`https://hotel-escape.onrender.com/health` says how it is). Co-op still shows
+"Coming soon" to players until `ONLINE.server.open` is set (`src/data/online.js`); the owner's `?coop=preview` link
+reaches it already.
 
 ## Files
 
@@ -67,7 +69,7 @@ open tables, the matches being played, the people connected and the uptime, plus
 
 `tests/fairness-check.mjs` checks the server's brain (`src/net/rooms.js`) without a network.
 
-## Putting it online (the owner, from the iPad, about 10 minutes, later)
+## Putting it online (the owner, from the iPad, about 10 minutes; steps 1-4 done 22 Nov 2026)
 
 Nothing here costs money on the free plan, and nothing changes for players until the last step.
 
@@ -79,7 +81,9 @@ Nothing here costs money on the free plan, and nothing changes for players until
 4. Send us the address Render shows (it ends in `.onrender.com`). We put its `wss://` form in `ONLINE.server.live`
    (`src/data/online.js`) and publish. Co-op still says "Coming soon" to players.
 5. Try it yourself on two devices with the live link plus `?coop=preview`
-   (`https://mohmdalmalik.github.io/Gaming-App/?coop=preview`): only that link reaches the server.
+   (`https://mohmdalmalik.github.io/Gaming-App/?coop=preview`): only that link reaches the server. The waiting room's
+   invite link does not carry `?coop=preview` (on purpose: it would let anyone in before Co-op opens), so the second
+   device opens the preview link too and types the code.
 6. When the online rule list is approved and the test went well, we set `ONLINE.server.open` to true and publish:
    Co-op opens to players.
 

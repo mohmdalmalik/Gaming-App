@@ -1,12 +1,20 @@
 // WHO IS ASKING: the client address the server's limits count by (DESIGN §12.3).
 //
-//   clientIp(req, { trustProxy })   -> '203.0.113.7' | '2001:db8:1:2::/64' | 'unknown'
+//   whoIs(req, { trustProxy })      -> { ip: '203.0.113.7' | '2001:db8:1:2::/64' | 'unknown', from: 'cloudflare' | 'forwarded' | 'socket' }
+//   clientIp(req, { trustProxy })   -> whoIs(...).ip
 //
-// Behind Render (TRUST_PROXY=render) every request comes from Render's proxy, which ADDS the real client address as
-// the right-most entry of X-Forwarded-For. Entries to its left were sent by the client itself and can say anything,
-// so only the right-most one is trusted. Anywhere else (TRUST_PROXY=none, the default) the header is ignored and the
-// socket's own address is used. The server's tests start it with TRUST_PROXY=render and give each simulated device its
-// own X-Forwarded-For, so one test machine can act as many devices (BUILD-PLAN P2A).
+// Behind Render (TRUST_PROXY=render) every visitor reaches the server through Cloudflare, which Render runs in front of
+// every service, and then Render's own proxy. Cloudflare puts the address the visitor connected from in
+// CF-Connecting-IP, replacing anything the visitor sent under that name, so that is the address counted. X-Forwarded-For
+// is not relied on there (since 22 Nov 2026): Render adds to it without clearing what the visitor sent, and which entry
+// is the visitor's own depends on the proxies in between. Only a request with no usable CF-Connecting-IP (one that did
+// not come through Cloudflare, such as Render's own health check) falls back to the right-most X-Forwarded-For entry.
+// Behind another reverse proxy that appends the client address itself (Caddy, nginx: TRUST_PROXY=proxy) the right-most
+// X-Forwarded-For entry is counted and CF-Connecting-IP is ignored, since there a visitor could send it. Anywhere else
+// (TRUST_PROXY=none, the default) both headers are ignored and the socket's own address is used. The server's tests
+// start it with TRUST_PROXY=render and give each simulated device its own X-Forwarded-For (and no CF-Connecting-IP), so
+// one test machine can act as many devices (BUILD-PLAN P2A). GET /health tells whoever asks how it sees them
+// (their own address only), so the counting can be checked from outside.
 //
 // An IPv6 address is grouped by its /64 (one phone usually has a whole /64), so the limits can't be dodged by walking
 // through addresses. Sockets are counted by that /64; the server's brain widens it again for wrong codes and tables
@@ -43,11 +51,19 @@ function expandV6(ip) {
   return groups.map(g => (parseInt(g, 16) || 0).toString(16));
 }
 
-export function clientIp(req, { trustProxy = 'none' } = {}) {
+const firstValue = v => (Array.isArray(v) ? v[0] : v);
+
+export function whoIs(req, { trustProxy = 'none' } = {}) {
   if (trustProxy === 'render') {
+    const cf = normaliseIp(firstValue(req.headers?.['cf-connecting-ip']));
+    if (cf !== 'unknown') return { ip: cf, from: 'cloudflare' };
+  }
+  if (trustProxy === 'render' || trustProxy === 'proxy') {
     const xff = req.headers?.['x-forwarded-for'];
     const list = (Array.isArray(xff) ? xff.join(',') : String(xff ?? '')).split(',').map(s => s.trim()).filter(Boolean);
-    if (list.length) return normaliseIp(list[list.length - 1]);
+    if (list.length) return { ip: normaliseIp(list[list.length - 1]), from: 'forwarded' };
   }
-  return normaliseIp(req.socket?.remoteAddress);
+  return { ip: normaliseIp(req.socket?.remoteAddress), from: 'socket' };
 }
+
+export const clientIp = (req, opts) => whoIs(req, opts).ip;

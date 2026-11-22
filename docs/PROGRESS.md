@@ -18,7 +18,8 @@ server on Render's free plan.
 - **Security check (v0.16):** the server's per-visitor limits now count the address Cloudflare gives (they counted a
   header Render does not clean); `/health` shows a visitor how it counts them. Everything else checked was fine; the
   owner's account steps (two-step sign-in, Render's GitHub access, a ruleset on `main`, the public repository) are in
-  DECISIONS "The security check of the online setup".
+  DECISIONS "The security check of the online setup". The owner kept the repository public, all rights reserved
+  (`LICENSE`, v0.17).
 - **The free plan:** the server sleeps after 15 minutes unused (the first device waits up to about a minute: "The
   hotel's switchboard is waking up…"); a restart or a server update ends a match in progress (no disk). Upgrade path:
   Render Starter with a disk (about $7.25 a month), or the owner's Azure VM.

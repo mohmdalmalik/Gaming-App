@@ -1,5 +1,8 @@
 # Hotel Escape (working title)
 
+© 2026 mohmdalmalik. All rights reserved: this project is public so the game can be played and followed, but it is
+not open source and nothing in it may be copied or reused without permission ([LICENSE](LICENSE)).
+
 A hidden-role social game set in a trapped hotel. Players explore room by room, collect
 items, and must trade whenever they meet. One player secretly starts **possessed** and
 spreads possession through trades; the clean players win when one of them escapes by the Fire Exit

@@ -1,0 +1,12 @@
+Hotel Escape
+Copyright (c) 2026 mohmdalmalik (https://github.com/mohmdalmalik). All rights reserved.
+
+This project is public so that the game can be played in a web browser and its progress can be followed. It is not
+open source. Nobody may copy, change, share, publish, sell or reuse any part of it (the code, the art, the sounds,
+the game's rules and designs, or the documents) without the owner's written permission. Viewing it on GitHub (and
+what GitHub's own terms allow there) and playing the game at its official address are fine.
+
+Software made by others that the game uses is not part of this project and keeps its own licence: three.js (loaded
+from its CDN; MIT licence) and ws (installed for the Co-op server; MIT licence).
+
+To ask for permission, contact the owner through GitHub.

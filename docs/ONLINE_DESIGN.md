@@ -1183,7 +1183,10 @@ presentation queue also skips past 3 s of backlog).
    from `crypto` after a restore. Single player keeps `makeRng(seed)`.
 3. **Limits that bind** (§7.5): the client IP is the right-most `X-Forwarded-For` entry added by Render when
    `TRUST_PROXY=render` (the left-most is attacker-controlled), else the socket address; IPv6 grouped by /64; limits
-   generous enough for carrier-grade NAT and paired with per-token limits. (Tests: §7.5.)
+   generous enough for carrier-grade NAT and paired with per-token limits. (Tests: §7.5.) *[Amended 22 Nov 2026, the
+   security check: behind Render the address counted is Cloudflare's `CF-Connecting-IP` (Render runs Cloudflare in
+   front of every service and adds to `X-Forwarded-For` without clearing it); the right-most `X-Forwarded-For` entry is
+   the fallback, and `TRUST_PROXY=proxy` keeps it alone for Caddy or nginx. `server/clientIp.js`.]*
 4. **Origin allowlist** (`ALLOWED_ORIGINS`, default `https://mohmdalmalik.github.io`, plus `http://localhost:*` **and
    `http://127.0.0.1:*`** when `NODE_ENV !== 'production'`): anything else gets HTTP 403. *[Amended 2 Nov after
    critique, #29]* Every test serves the page on 127.0.0.1, and a page there sends `Origin: http://127.0.0.1:PORT`

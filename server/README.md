@@ -17,7 +17,7 @@ reaches it already.
 | `index.js` | The server: `GET /health`, the WebSocket upgrade (allowed pages only), per-socket limits, the heartbeat, the 250 ms tick, SIGTERM drain. Its brain is `src/net/rooms.js`. |
 | `README.md` | This page. |
 | `fileStore.js` | Tables saved as files when `DATA_DIR` is set (write to a temporary file, flush to the disk, rename). |
-| `clientIp.js` | The client address the limits count by (behind Render: the right-most `X-Forwarded-For` entry; IPv6 by /64). |
+| `clientIp.js` | The client address the limits count by (behind Render: Cloudflare's `CF-Connecting-IP`, else the right-most `X-Forwarded-For` entry; IPv6 by /64). `/health` shows whoever asks how it counts them (`you`). |
 | `package.json`, `package-lock.json` | The one package, `ws`, pinned to 8.22.0 (no other dependencies). |
 
 ## Run it on this computer (no account needed)
@@ -46,7 +46,7 @@ open tables, the matches being played, the people connected and the uptime, plus
 | `HOST` | Where to listen: 127.0.0.1, or 0.0.0.0 when `NODE_ENV=production` (Render needs it). |
 | `ALLOWED_ORIGINS` | The pages that may connect, comma-separated (`https://mohmdalmalik.github.io`). Any other page gets HTTP 403. |
 | `DATA_DIR` | Save tables as files there (a disk). Without it tables live in memory and a restart ends them. |
-| `TRUST_PROXY` | `render`: trust Render's own `X-Forwarded-For` entry for the client address. |
+| `TRUST_PROXY` | `render`: the client address is Cloudflare's `CF-Connecting-IP` (Render runs Cloudflare in front of every service), else the right-most `X-Forwarded-For` entry. `proxy` (Caddy, nginx, the Azure plan): the right-most `X-Forwarded-For` entry only. Anything else: the socket's own address. Never use `render` behind a proxy that is not Cloudflare: a visitor could send `CF-Connecting-IP` themselves. |
 | `TABLES_OPEN` | `false`: nobody can start a new table (the kill switch). |
 | `MAX_TABLES` | Open tables at most (300). |
 | `NODE_ENV` | `production` on Render. |

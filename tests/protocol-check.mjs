@@ -47,7 +47,7 @@ try {
   process.exit(1);
 }
 const { startServer, readEnv, originAllowed } = await import('../server/index.js');
-const { clientIp, normaliseIp } = await import('../server/clientIp.js');
+const { clientIp, normaliseIp, whoIs } = await import('../server/clientIp.js');
 const { addressGroups } = await import('../src/net/rooms.js');
 const { ONLINE } = await import('../src/data/online.js');
 const { dataHash } = await import('../src/net/dataHash.js');
@@ -153,6 +153,16 @@ console.log('1. settings and the client address');
     && clientIp(req('1.2.3.4, 203.0.113.9', '10.0.0.1')) === '10.0.0.1'
     && clientIp(req(null, '::ffff:10.1.2.3'), { trustProxy: 'render' }) === '10.1.2.3',
     'the client address: the right-most X-Forwarded-For entry behind Render, else the socket\'s own (IPv4-in-IPv6 unwrapped)');
+  const reqH = (headers, remote = '10.0.0.1') => ({ headers, socket: { remoteAddress: remote } });
+  const both = { 'cf-connecting-ip': '198.51.100.7', 'x-forwarded-for': '1.2.3.4, 203.0.113.9' };
+  check(clientIp(reqH(both), { trustProxy: 'render' }) === '198.51.100.7' && whoIs(reqH(both), { trustProxy: 'render' }).from === 'cloudflare'
+    && clientIp(reqH({ ...both, 'cf-connecting-ip': 'nonsense' }), { trustProxy: 'render' }) === '203.0.113.9'
+    && whoIs(reqH({ 'x-forwarded-for': '203.0.113.9' }), { trustProxy: 'render' }).from === 'forwarded'
+    && clientIp(reqH({ 'cf-connecting-ip': '2001:db8:aa:bb::5' }), { trustProxy: 'render' }) === '2001:db8:aa:bb::/64',
+    'behind Render: the address Cloudflare gives (CF-Connecting-IP) is counted; a missing or unreadable one falls back to X-Forwarded-For');
+  check(clientIp(reqH(both), { trustProxy: 'proxy' }) === '203.0.113.9' && clientIp(reqH(both)) === '10.0.0.1'
+    && whoIs(reqH(both)).from === 'socket' && readEnv({ TRUST_PROXY: 'proxy' }).trustProxy === 'proxy' && readEnv({ TRUST_PROXY: 'cloudflare' }).trustProxy === 'none',
+    'behind another proxy (TRUST_PROXY=proxy): the right-most X-Forwarded-For entry, never CF-Connecting-IP; with none: the socket\'s own');
   check(normaliseIp('2001:db8:aa:bb:1:2:3:4') === '2001:db8:aa:bb::/64' && normaliseIp('2001:db8:aa:bb::99') === '2001:db8:aa:bb::/64'
     && normaliseIp('2001:db8::1') === '2001:db8:0:0::/64' && normaliseIp('nonsense') === 'unknown',
     'IPv6 addresses are grouped by their /64');
@@ -373,6 +383,9 @@ console.log('\n7. each socket\'s own limits');
   f.ws.send('x'.repeat(ONLINE.limits.maxPayload + 1000));
   await until(() => f.closed);
   const g = await device(S, { name: 'g_x' });
+  const youH = await fetch(`http://127.0.0.1:${S.port}/health`, { headers: { 'x-forwarded-for': '203.0.113.77' } }).then(r => r.json());
+  check(youH.you?.seenAs === '203.0.113.77' && youH.you?.from === 'forwarded' && Object.keys(youH.you).length === 2,
+    '/health tells whoever asks how the limits count them: their own address and where it came from, nothing else');
   check(f.closed?.code === 1009 && g.last('welcome') && (await fetch(`http://127.0.0.1:${S.port}/health`).then(r => r.json())).ok === true,
     `an oversized frame: closed ${f.closed?.code}, and the process keeps serving ("the spike's crash" does not happen)`);
   g.close();

@@ -16,7 +16,8 @@
 //   ALLOWED_ORIGINS   the pages that may connect, comma-separated (https://mohmdalmalik.github.io by default). Unless
 //                     NODE_ENV=production, http://localhost:* and http://127.0.0.1:* are allowed too.
 //   DATA_DIR          save tables as files in this folder (a disk); without it they are kept in memory only
-//   TRUST_PROXY       'render': the client address is the right-most X-Forwarded-For entry (Render's own); else none
+//   TRUST_PROXY       'render': the client address is Cloudflare's CF-Connecting-IP (else the right-most X-Forwarded-For
+//                     entry); 'proxy' (Caddy, nginx): the right-most X-Forwarded-For entry; else the socket's own (clientIp.js)
 //   TABLES_OPEN       'false': nobody can start a new table (err busy). The kill switch.
 //   MAX_TABLES        open tables at most (300)
 //   NODE_ENV          'production' on Render
@@ -40,7 +41,7 @@ import { ONLINE, ONLINE_RULES, activeOnlineRules } from '../src/data/online.js';
 import { hotel } from '../src/data/hotel.js';
 import { config } from '../src/config.js';
 import { createFileStore } from './fileStore.js';
-import { clientIp } from './clientIp.js';
+import { clientIp, whoIs } from './clientIp.js';
 
 export const DEFAULT_ORIGIN = 'https://mohmdalmalik.github.io';
 const LOCAL_ORIGIN = /^http:\/\/(localhost|127\.0\.0\.1)(:\d{1,5})?$/;
@@ -83,7 +84,7 @@ export function readEnv(env = {}) {
     origins,
     devOrigins: !production,
     dataDir: env.DATA_DIR || null,
-    trustProxy: env.TRUST_PROXY === 'render' ? 'render' : 'none',
+    trustProxy: ['render', 'proxy'].includes(env.TRUST_PROXY) ? env.TRUST_PROXY : 'none',
     tablesOpen: env.TABLES_OPEN !== 'false',
     maxTables: num('MAX_TABLES', ONLINE.limits.maxTables),
     rules,
@@ -156,6 +157,9 @@ export async function startServer({
       h.heapMB = Math.round(mem.heapUsed / 1048576);
       h.saves = { n: saves.n, meanMs: saves.n ? Math.round((saves.ms / saves.n) * 1000) / 1000 : 0, maxMs: Math.round(saves.maxMs * 10) / 10 };
       h.sockets = { open: wss.clients.size, ...stats };
+      // how the limits count whoever is asking: their own address only (no-store: never cached for anyone else)
+      const who = whoIs(req, { trustProxy });
+      h.you = { seenAs: who.ip, from: who.from };
       res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' });
       res.end(JSON.stringify(h));
       return;

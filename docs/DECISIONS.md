@@ -3270,3 +3270,34 @@ The owner asked for the rooms to look different from each other, the rooms with 
   open the preview link and the second types the code.
 - `tests/engine-options-check.mjs` now expects the owner's server in `ONLINE.server.live` (it expected none) and checks
   that on the live site the preview link reaches it while `?server=` is still ignored there.
+
+## The security check of the online setup (22 Nov 2026 — the server's address counting, one diagnostic, tests, docs; no rule or rule number changed)
+The owner asked for the setup to be checked so nobody can damage or steal it. What was checked and found:
+- **The server's limits counted the wrong address.** Every limit per visitor (12 open sockets, 30 new a minute, 5 new
+  tables a minute, 10 wrong codes a minute, …) counted the right-most `X-Forwarded-For` entry, assumed to be the
+  visitor's address added by Render. Render runs Cloudflare in front of every service and adds to that header without
+  clearing what the visitor sent (Render's community and feedback boards), so which entry is the visitor's depends on
+  the proxies in between. Seen from outside: 40 sockets opened at once from this cloud session were all let in (it
+  leaves through at least 7 addresses, so that alone did not prove the fault). Now (`server/clientIp.js` `whoIs`)
+  `TRUST_PROXY=render` counts Cloudflare's `CF-Connecting-IP` (Cloudflare writes it, replacing anything the visitor
+  sent under that name), falling back to the right-most `X-Forwarded-For` entry only when it is missing (Render's own
+  health check). `TRUST_PROXY=proxy` is new: the right-most `X-Forwarded-For` entry alone, for Caddy or nginx (the
+  Azure plan), where `render` would let a visitor choose their own address.
+- **`/health` now says how it counts whoever asks** (`you: { seenAs, from }`): their own address only, and the page
+  is `no-store`, so it is never cached for someone else. It lets the counting be checked from outside (compare with
+  Cloudflare's own `/cdn-cgi/trace`).
+- **Fine as it was:** the server takes only commands (the referee decides everything; each device receives only its
+  own view); messages are at most 4 KB, 10 a second; table codes are guessed at most 10 a minute per address and 600 a
+  minute in all; only the game's page may open a socket (another site's page gets 403; a script can fake that header,
+  so it is not a lock, the limits are); only two web addresses, `/` and `/health`, both read-only; no admin route; no
+  secrets anywhere (none in the repo's whole history: 95 commits searched for key and token formats); the one package,
+  `ws` 8.22.0, has no known problem (`npm audit`); names are letters, digits and `_` only and every screen escapes
+  network text; chat is fixed phrases. The test automation (`.github/workflows/tests.yml`) has read-only permission
+  and no secrets, so a stranger's pull request can't publish or take anything.
+- **For the owner (accounts, not code):** the repository is public (anyone can read and copy the code, art and
+  documents; there is no licence file, so nobody may reuse them, but a copy can't be prevented: a web game's files are
+  downloadable by every visitor anyway); `main` has no branch rules (only the owner can push, but a ruleset blocking
+  force pushes and deletion costs nothing); two-step sign-in on GitHub and Render matters most, since whoever controls
+  the GitHub account controls both the website and the server; Render's access to GitHub should be this one
+  repository; `TABLES_OPEN=false` in Render's Environment is the emergency stop for new tables. The owner's email shows
+  on the author line of two early commits made on GitHub's site, not in any file.

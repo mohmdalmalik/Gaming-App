@@ -2,6 +2,6 @@
 // at the bottom of the in-match Menu panel and in the small print of the "Something went wrong" card, so a
 // screenshot or a bug report says which build it came from. (Not on the main menu itself.)
 // The lead sets both lines at each publish, together with its row in docs/VERSIONS.md (README > Publishing and rolling back).
-export const VERSION = 'v0.16';
+export const VERSION = 'v0.17';
 export const VERSION_DATE = '22 Nov 2026';
 export const versionLine = () => `Version ${VERSION} · ${VERSION_DATE}`;

@@ -3244,3 +3244,29 @@ The owner asked for the rooms to look different from each other, the rooms with 
 - **The guests (three changes, all in runtime code; the character files were not touched).** Eyes 30% bigger (`EYE_SCALE` 1.3 in `src/render/avatarParts.js`; across the face only, about the eye's own middle; the catchlights follow; the red possessed eyes and the glasses follow because they are measured from the grown eyes; 1.4 touched the eyebrows). Brighter and richer on the board (`GAME_RIM` in `src/render/avatar.js`: rim light 0.42 to 0.5, fill 0.1 to 0.42, colour richness 1.3 through the guests' one existing material; the program key is now `guestPalette2`; the menu lobby and the Wardrobe got the same colour richness in a later step, `sat: 1.3` in `LOBBY_RIM` in `src/menu/lobbyScene.js`, through the same material, and keep their own rim and fill, so a colour picked in the Wardrobe is the colour seen in a match; compared in a headless picture before and after, the skin is a little warmer and nothing clips, so 1.3 was kept). The Wardrobe's tile pictures (`tools/char-pipeline/parts/thumbs.mjs`) and the six stock portraits (`tools/char-pipeline/stock-portraits.mjs --write`) were redrawn so they show the bigger eyes; the parts review page (`tools/char-pipeline/parts/review/`) was brought to the game's light values. A little larger (`character.guestScale` 1.1 in `src/config.js`: about 1.66 m to 1.83 m; the figure's root is scaled, the marker height and the stride follow; the rings, the shadow and where guests stand are unchanged). No extra draw call or material.
 - **Test pins moved.** `tests/browser-avatar-parts.mjs` compares a guest built from pieces with the whole file; the file's eyes and lighting now get the same eye growth and richness first, so the unchanged 0.5 limit still holds. `tests/wardrobe-check` and the wardrobe light check look for the new program key.
 - **Not done, on purpose.** No new guest models (faces, bodies and clothes are as before: only eyes, light and size). No wall colours, no new furniture and no re-bake of any room (the walls and furniture are the baked ones). The doorway fit of the 10% taller guests was judged by pictures, not measured. The old whole-guest path (`outfit.model`, only old test fixtures) gets the bigger eyes but not the new light or size.
+
+## The Co-op server online, on Render's free plan (22 Nov 2026 — one data line, one test, docs; no rule or rule number changed)
+- **Website, not an app store app, for the friends' test.** The owner asked how to put the game online for themself and
+  friends. A store app needs a paid Apple developer account, a Mac or a paid build service, and Apple's review for
+  every update; the website already installs to the Home Screen (`manifest.webmanifest`, standalone, landscape) and
+  updates within minutes. The wrapper plan in "Path to mobile apps" above stands for later.
+- **Render's free plan, from `render.yaml`.** Simplest for a non-developer (a few taps, no server to look after, $0);
+  the owner's Azure VM stays the free option for regular play, Render Starter with a disk the paid one. The owner made
+  the service `hotel-escape` from the Blueprint; `ONLINE.server.live` is `wss://hotel-escape.onrender.com`.
+  `ONLINE.server.open` stays false: players see Coming soon, and only the owner's `?coop=preview` link reaches it.
+- **What the free plan means:** it sleeps after 15 minutes without traffic and wakes in up to about a minute (the
+  page says "The hotel's switchboard is waking up…" after 4 s and keeps retrying); tables live in memory, so a restart
+  or a deploy ends a match in progress. Render deploys again whenever a push to `main` changes a file in
+  `buildFilter` (`render.yaml`), `src/data/online.js` included: publish such changes when nobody is playing.
+- **Checked before publishing, from the cloud session** (its network now allows `hotel-escape.onrender.com`, with the
+  owner's approval): `/health` ok (protocol 1, data `0a07d6b0`); a WebSocket from `https://mohmdalmalik.github.io`
+  gets 101 and one from another site 403 (the origin allowlist through Render's proxy); and two headless devices
+  playing this tree under its real address (the page's files served from the checkout by the test, so the server
+  saw the game's own origin): Start a table, the invite link, Start, both in the match on their own seats, 16
+  updates each in 45 s. The tests' hook `window.__net` exists only on a local copy, so that check reads the screen.
+  The script: not kept in the repo (it needs the cloud session's proxy); the same flow is `tests/browser-coop.mjs`.
+- **The invite link** (`coopMenu.js` `inviteLink`) does not carry `?coop=preview`, on purpose: the gate is for the
+  owner's own test, so a forwarded invite can't let anyone in before Co-op opens. In the owner's test both devices
+  open the preview link and the second types the code.
+- `tests/engine-options-check.mjs` now expects the owner's server in `ONLINE.server.live` (it expected none) and checks
+  that on the live site the preview link reaches it while `?server=` is still ignored there.

@@ -110,9 +110,9 @@ Practice alone is the best place to start.", until you have played a match or fi
 Hot-seat (several people passing one iPad) was removed at the owner's request; old `?mode=hotseat`
 links open a match against bots instead.
 
-**Co-op (playing with friends online) is built and tested, but not open to players yet** (v0.12). Co-op on the
-live site shows **Coming soon** until the owner has approved the online rule list and opened a hosting account
-(see "Co-op" below). Underneath, Single player now runs through the same pieces as Co-op: a table
+**Co-op (playing with friends online) is built and tested, and its server is online, but it is not open to players
+yet** (v0.15). Co-op on the live site shows **Coming soon** to players until the owner decides how it opens (the online
+rule list, D2); the owner's own `?coop=preview` link already plays on the real server (see "Co-op" below). Underneath, Single player now runs through the same pieces as Co-op: a table
 (`src/net/localTable.js`) deals and runs the match, and the screens show only the player's own view of it; nothing
 you see or feel in Single player changed. There are still no online accounts and no database: your username, avatar,
 settings and record are kept on this device only.
@@ -193,11 +193,16 @@ armed, and a turn that ends with a discard looks like any other turn. iPads that
 themselves to the same seat ("Reconnecting…" after 1 second, "You're back at the table." on return); the others see
 that friend as **Away**.
 
-**Where it stands (v0.12).**
-- On the live site Co-op shows **Coming soon** (`src/data/online.js`: `ONLINE.server.live` is null and
-  `ONLINE.server.open` is false). A `?join=` link says "Co-op isn't open yet". Nothing opens a connection.
-- It waits for two owner decisions: the online rule list (D2: what happens when a friend's iPad falls asleep, when
-  someone never picks a card, who may start) and a hosting account (D7: Render; the steps are in `server/README.md`).
+**Where it stands (v0.15).**
+- The server is online since 22 Nov 2026: the owner's Render service `hotel-escape` on the free plan
+  (`ONLINE.server.live` = `wss://hotel-escape.onrender.com`; health at `https://hotel-escape.onrender.com/health`).
+- On the live site Co-op still shows **Coming soon** to players (`ONLINE.server.open` is false); only the owner's
+  `?coop=preview` link reaches the server. A `?join=` link without it says "Co-op isn't open yet" (so in the
+  owner's test the second device opens the preview link and types the code).
+- It waits for one owner decision: the online rule list (D2: what happens when a friend's iPad falls asleep, when
+  someone never picks a card, who may start), or the owner's choice to open with today's rules. The hosting (D7) is
+  done: Render, free plan (it sleeps after 15 minutes unused and wakes in about a minute; a restart or a server
+  update ends a match in progress, since the free plan has no disk).
 - Until the rule list is approved, a Co-op table plays **today's rules unchanged plus marked technical stand-ins**
   (TP1-TP9 in `src/data/online.js`; none of them is a rule, and `docs/GAME_RULES.md` is untouched):
   - every role is dealt at random (no role picker);
@@ -443,8 +448,8 @@ outsiders, and CLAUDE.md fixes "no build step for now". This is the cheapest net
 screen way back, a warning when a fast suite fails. If outside players ever arrive, the next step is to let
 Pages publish from a workflow, so a red run blocks the publish (Settings → Pages → Source: GitHub Actions).
 
-**Publishing and the Co-op server.** Until the owner opens a hosting account there is no server online, and nothing
-here applies: the live site's Co-op says Coming soon. Once there is one, the page and the server must agree on the
+**Publishing and the Co-op server.** The server is online (Render, since 22 Nov 2026; on the free plan a server
+update ends any match in progress, so publish changes the server imports when nobody is playing). The page and the server must agree on the
 protocol version (`ONLINE.protocol` in `src/data/online.js`) and the shared data: `dataHash()` (`src/net/dataHash.js`),
 an 8-character fingerprint of the hotel, the rule numbers, the quick-chat ids and the name rules. Render deploys the
 server again by itself when a file it imports reaches `main` (`buildFilter` in `render.yaml`;
